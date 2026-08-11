@@ -113,6 +113,8 @@ class ChatPromptAssembler:
                 '"reply_segments":["可见对白"],"mem":"","sticker":"none"}。'
             ),
             "- 兼容旧调用：reply 可作为单气泡文本保留；不该接话时 reply_segments 为空且 reply 为 PASS。",
+            "- 引用只决定回复哪条消息，不改变本轮段数、单段字数或总长度；不要因引用把话一次说完。",
+            "- 不要用「行啊」「好呀」这类无信息软答应起手；先接具体人、事、情绪或结论。",
         ])
 
     @classmethod

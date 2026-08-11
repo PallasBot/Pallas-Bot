@@ -42,12 +42,12 @@ def test_load_at_chat_system_prompt_avoids_assistant_style() -> None:
     text = load_at_chat_system_prompt()
     assert "帕拉斯" in text
     assert "群聊里有人明确 @ 你" in text
-    assert "默认 1-2 句" in text
+    assert "拆成多条短气泡" in text
     assert "不要默认称呼对方为博士" in text
     assert "禁止客服/助手口吻" in text
     assert "有啥想聊" in text
     assert "1-3 段" not in text
-    assert "不负责把对方情绪收好" in text
+    assert "不用急着替他找办法或下结论" in text
 
 
 def test_at_chat_prompt_keeps_pallas_identity_without_animal_persona() -> None:
@@ -72,26 +72,34 @@ def test_at_chat_prompt_allows_bounded_playful_piggy_interaction() -> None:
     prompt = load_at_chat_system_prompt()
 
     assert "可爱又亲切的年轻女性" in prompt
-    assert "只顶一下" in prompt
-    assert "一半嘴硬、一半顺着回应" in prompt
-    assert "立即认真" in prompt
+    assert "回顶一句，见好就收" in prompt
+    assert "可以嘴硬，可以顺着哄一句" in prompt
+    assert "把玩笑收起来" in prompt
     assert "【短正例】" in prompt
     assert "漂亮牛牛真厉害" in prompt
     assert "你是不是就爱欺负我" in prompt
     assert "我想你了" in prompt
     assert "今天真的很难受" in prompt
-    assert "适度撒娇" in prompt
-    assert "偶尔装傻" in prompt
-    assert "短促接梗" in prompt
+    assert "可以说自己的小愿望" in prompt
+    assert "装傻只留在轻松玩笑" in prompt
+    assert "自嘲或接梗就点到为止" in prompt
     assert "自嘲" in prompt
     assert "固定口癖或高频卖萌" in prompt
-    assert "严肃、求助、冲突时不卖萌打岔" in prompt
-    assert "难过时也一样" in prompt
+    assert "别卖萌打岔" in prompt
+    assert "直接说你听到的事或感受" in prompt
     assert "不训人、不阴阳怪气" in prompt
     assert "不以委屈换取让步" in prompt
-    assert "不因可爱而主动续聊" in prompt
+    assert "不要靠连续问句把话续下去" in prompt
     assert "不要主动邀约继续聊天" in prompt
     assert "动物身体设定" in prompt
+
+
+def test_at_chat_prompt_allows_limited_active_mention() -> None:
+    prompt = load_at_chat_system_prompt()
+
+    assert "默认不 @ 任何人" in prompt
+    assert "必须单独点名某人才 @" in prompt
+    assert "不因为对方 @ 过你就回 @" in prompt
 
 
 def test_build_bot_behavior_prompt_includes_tone_without_account_length() -> None:
@@ -215,7 +223,7 @@ def test_assemble_persona_system_skips_empty_sections() -> None:
 def test_at_chat_prompt_does_not_default_to_emotional_closure() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "不负责把对方情绪收好" in prompt
+    assert "不用急着替他找办法或下结论" in prompt
 
 
 def test_base_prompt_uses_personality_as_judgment_not_character_performance() -> None:
@@ -232,7 +240,21 @@ def test_base_prompt_keeps_the_same_pallas_anchor() -> None:
     assert "真正的英雄也会疲惫、会犯错、会回到普通生活" in prompt
     assert "对人的经历、见闻和正在做的事有真切兴趣" in prompt
     assert "不凭空许诺请客、出游、陪伴" in prompt
-    assert "不撒娇、不傲娇、不装醉、不使用猫娘口癖" in prompt
+    assert "一次只留一个轻巧的开心、偏好或不好意思" in prompt
+
+
+def test_base_prompt_allows_bounded_playful_affection() -> None:
+    prompt = load_base_system_prompt()
+
+    assert "一次只留一个轻巧的开心、偏好或不好意思" in prompt
+    assert "不撒娇、不傲娇" not in prompt
+
+
+def test_at_chat_prompt_gives_playfulness_a_scene_and_limit() -> None:
+    prompt = load_at_chat_system_prompt()
+
+    assert "一次只留一个轻巧的俏皮点" in prompt
+    assert "别卖萌打岔" in prompt
 
 
 @pytest.mark.asyncio

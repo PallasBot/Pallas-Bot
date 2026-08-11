@@ -473,6 +473,9 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     assert "短句轻怼。" in submit_request.system_prompt
     assert "【回复形状与输出契约】" in submit_request.system_prompt
     assert '"reply_segments"' in submit_request.system_prompt
+    assert "引用只决定回复哪条消息" in submit_request.system_prompt
+    assert "不要因引用把话一次说完" in submit_request.system_prompt
+    assert "「行啊」「好呀」" in submit_request.system_prompt
     assert "【本轮表达去重】" not in "\n".join(submit_request.style_user_hints)
     assert "【收尾变化参考】" not in "\n".join(submit_request.style_user_hints)
     assert "本轮直接回答当前问题，别补一整套客套。" not in "\n".join(submit_request.style_user_hints)

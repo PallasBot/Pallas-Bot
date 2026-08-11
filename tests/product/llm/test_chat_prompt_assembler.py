@@ -59,3 +59,34 @@ def test_chat_prompt_assembler_uses_fixed_order_without_aliases_or_duplicates() 
     assert "登录昵称" not in prompt
     assert "学习别名" not in prompt
     assert '"reply_segments"' in prompt
+
+
+def test_chat_prompt_assembler_keeps_quote_replies_within_casual_shape() -> None:
+    prompt = ChatPromptAssembler().assemble(
+        core_persona="核心",
+        self_identity="自称",
+        turn_policy=TurnPolicy(
+            reply_target="answer",
+            seriousness="casual",
+            social_action="ANSWER",
+            allow_teasing=True,
+            allow_affection=True,
+            needs_tool=False,
+            needs_grounding=False,
+        ),
+        context=ChatContextBundle(),
+        group_expression=None,
+        reply_shape=ReplyShapePolicy(
+            preferred_bubbles=2,
+            max_bubbles=3,
+            target_chars_min=4,
+            target_chars_max=18,
+            total_length_band="short",
+            rhythm="multi",
+            max_output_tokens=80,
+        ),
+    )
+
+    assert "引用只决定回复哪条消息" in prompt
+    assert "不要因引用把话一次说完" in prompt
+    assert "「行啊」「好呀」" in prompt
