@@ -321,6 +321,62 @@ def test_catalog_marks_pyproject_plugin_with_config(monkeypatch) -> None:
     assert by_name["acme_demo_plugin"]["has_config"] is True
 
 
+def test_catalog_hides_nested_nonebot_plugin_modules(monkeypatch) -> None:
+    class FakeLoadedPlugin:
+        name = "uniseg"
+        module = type(
+            "Mod",
+            (),
+            {
+                "__name__": "nonebot_plugin_alconna.uniseg",
+                "__file__": "/tmp/site-packages/nonebot_plugin_alconna/uniseg/__init__.py",
+            },
+        )()
+        metadata = type("Meta", (), {"name": "Universal Segment 插件", "extra": {}})()
+
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.discover_plugin_packages", list)
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.discover_extra_plugin_packages", dict)
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.discover_pyproject_plugin_modules", list)
+    monkeypatch.setattr(
+        "pallas.console.webui.plugin_catalog._loaded_plugin_index",
+        lambda: ({"uniseg": FakeLoadedPlugin()}, {"uniseg": FakeLoadedPlugin()}),
+    )
+    monkeypatch.setattr("nonebot.get_loaded_plugins", lambda: [FakeLoadedPlugin()])
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.module_has_config_module", lambda _module_name: False)
+
+    rows = build_plugin_catalog_rows()
+
+    assert "uniseg" not in {row["name"] for row in rows}
+
+
+def test_catalog_keeps_pyproject_declared_nested_nonebot_plugin_module(monkeypatch) -> None:
+    class FakeLoadedPlugin:
+        name = "uniseg"
+        module = type(
+            "Mod",
+            (),
+            {"__name__": "nonebot_plugin_alconna.uniseg"},
+        )()
+        metadata = type("Meta", (), {"name": "Universal Segment 插件", "extra": {}})()
+
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.discover_plugin_packages", list)
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.discover_extra_plugin_packages", dict)
+    monkeypatch.setattr(
+        "pallas.console.webui.plugin_catalog.discover_pyproject_plugin_modules",
+        lambda: ["nonebot_plugin_alconna.uniseg"],
+    )
+    monkeypatch.setattr(
+        "pallas.console.webui.plugin_catalog._loaded_plugin_index",
+        lambda: ({"uniseg": FakeLoadedPlugin()}, {"uniseg": FakeLoadedPlugin()}),
+    )
+    monkeypatch.setattr("nonebot.get_loaded_plugins", lambda: [FakeLoadedPlugin()])
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.module_has_config_module", lambda _module_name: False)
+
+    rows = build_plugin_catalog_rows()
+
+    assert "uniseg" in {row["name"] for row in rows}
+
+
 def test_catalog_exposes_resolved_identity_for_official_pip_plugin(monkeypatch) -> None:
     class FakeLoadedPlugin:
         name = "pallas_plugin_draw"

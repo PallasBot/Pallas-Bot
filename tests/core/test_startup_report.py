@@ -134,7 +134,7 @@ def test_startup_summary_lists_failed_and_slow_plugins() -> None:
         },
     )
 
-    assert "[插件] 已成功载入 32 个插件：本地 8，内置 12，官方 12；跳过 2" in info_lines
+    assert "[插件] 已成功载入 32 个插件：本地 8，内置 12，官方 12；配置跳过 2" in info_lines
     assert "[插件] 载入失败：weather、bilibili" in info_lines
     assert "[插件] 载入较慢：ai_media 1.42 秒、protocol 1.08 秒" in info_lines
     assert warning_lines == []
@@ -147,7 +147,7 @@ def test_format_helpers_cover_common_facts() -> None:
         "已就绪：版本 4.0.0，Provider chain，模型 moonshot，智能对话已启用"
     )
     assert startup_report._format_plugins("local=8 src=12 official=12 nonebot=3 pypi=3 community=4 extra=2 skip=2") == (
-        "已成功载入 41 个插件：本地 8，内置 12，官方 12，NoneBot 3，社区 4，额外目录 2；跳过 2"
+        "已成功载入 41 个插件：本地 8，内置 12，官方 12，NoneBot 3，社区 4，额外目录 2；配置跳过 2"
     )
     assert startup_report._format_plugins("local=1 modules=12/14 official=3 pypi=2 extra=0") == (
         "已成功载入 16 个插件：本地 1，内置 12/14，官方 3"

@@ -176,7 +176,7 @@ def _format_plugins(raw: str) -> str:
     if parts:
         text += "：" + "，".join(parts)
     if "skip" in kv:
-        text += f"；跳过 {kv['skip']}"
+        text += f"；配置跳过 {kv['skip']}"
     return text
 
 

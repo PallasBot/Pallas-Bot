@@ -799,6 +799,8 @@ def build_plugin_catalog_rows(
             continue
         mod = getattr(p, "module", None)
         module_name = getattr(mod, "__name__", "") if mod is not None else ""
+        if "." in module_name:
+            continue
         short = module_name.rsplit(".", 1)[-1] if module_name else ""
         if short in seen_packages:
             continue

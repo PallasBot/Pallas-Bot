@@ -8,6 +8,7 @@ from pallas.core.platform.bot_runtime import plugin_loader
 
 def test_load_discovered_plugin_modules_applies_skip_rules(monkeypatch):
     calls: list[tuple[str, str, set[str]]] = []
+    records: list[tuple[str, tuple[object, ...]]] = []
 
     def fake_load(module_path: str, *, role_label: str, loaded_short: set[str]) -> bool:
         calls.append((module_path, role_label, set(loaded_short)))
@@ -15,6 +16,11 @@ def test_load_discovered_plugin_modules_applies_skip_rules(monkeypatch):
         return True
 
     monkeypatch.setattr(plugin_loader, "_load_plugin_module", fake_load)
+    monkeypatch.setattr(
+        plugin_loader,
+        "logger",
+        SimpleNamespace(info=lambda message, *args: records.append((message, args))),
+    )
 
     loaded_short = {"already"}
     count = plugin_loader._load_discovered_plugin_modules(
@@ -33,6 +39,11 @@ def test_load_discovered_plugin_modules_applies_skip_rules(monkeypatch):
     assert count == 1
     assert calls == [("packages.keep", "worker", {"already"})]
     assert loaded_short == {"already", "keep"}
+    assert records == [
+        ("启动：{} 跳过 {}（配置排除）", ("worker", "packages.skip_by_path")),
+        ("启动：{} 跳过 {}（配置禁用）", ("worker", "packages.skip_me")),
+        ("启动：{} 跳过 {}（同名插件已加载）", ("worker", "packages.already")),
+    ]
 
 
 def test_load_discovered_plugin_modules_skips_canonical_alias(monkeypatch):

@@ -335,7 +335,14 @@ def _load_discovered_plugin_modules(
     for mod in module_paths:
         short = _short_name(mod)
         slot = _load_slot_key(mod)
-        if mod in skip_module_paths or short in skip_short or slot in loaded_short:
+        if mod in skip_module_paths:
+            logger.info("启动：{} 跳过 {}（配置排除）", role_label, mod)
+            continue
+        if short in skip_short:
+            logger.info("启动：{} 跳过 {}（配置禁用）", role_label, mod)
+            continue
+        if slot in loaded_short:
+            logger.info("启动：{} 跳过 {}（同名插件已加载）", role_label, mod)
             continue
         if _load_plugin_module(mod, role_label=role_label, loaded_short=loaded_short):
             count += 1
@@ -364,7 +371,7 @@ def _load_toml_extra_plugin_dirs(
                 continue
             if _load_slot_key(entry.name) in loaded_short:
                 sub_rel = f"{rel_dir.rstrip('/')}/{entry.name}"
-                logger.debug(
+                logger.info(
                     "启动：{} 跳过 {}（同名插件已加载）",
                     role_label,
                     sub_rel,
@@ -475,6 +482,7 @@ def load_plugins_for_role() -> None:
     from pallas.core.platform.bot_runtime.kernel_runtime import register_kernel_runtime
 
     reset_startup_plugin_load_diagnostics()
+    logger.info("[插件] 载入中...")
 
     if is_unified_role():
         loaded_short: set[str] = set()
