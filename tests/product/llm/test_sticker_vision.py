@@ -101,10 +101,67 @@ async def test_enqueue_sticker_vision_job_records_durable_delivery_target(monkey
         fallback_cq_code="[CQ:image,file=a.jpg]",
     )
 
-    job = store.enqueue.await_args.args[0]
+    job = next(call.args[0] for call in store.enqueue.await_args_list if call.args[0].kind == "sticker_vision.select")
     assert job.payload["delivery"] == {
         "state": "pending",
         "bot_id": 100,
         "group_id": 200,
         "fallback_cq_code": "[CQ:image,file=a.jpg]",
+        "cooldown_sec": 90,
     }
+
+
+@pytest.mark.asyncio
+async def test_enqueue_sticker_vision_labels_only_explicit_candidates(monkeypatch) -> None:
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from pallas.product.llm import sticker_vision
+
+    label_candidate = AsyncMock(return_value=True)
+    monkeypatch.setattr("pallas.product.llm.sticker_label_jobs.enqueue_sticker_label_candidate", label_candidate)
+    store = SimpleNamespace(enqueue=AsyncMock(side_effect=lambda job: job))
+    monkeypatch.setattr(sticker_vision, "build_work_job_store", lambda: store)
+
+    await sticker_vision.enqueue_sticker_vision_job(
+        [("[CQ:image,file=one.image]", b"one")],
+        user_text="test",
+        timeout_sec=8,
+        idempotency_key="sticker_vision.test:100:200:300",
+        bot_id=100,
+        group_id=200,
+        fallback_cq_code="[CQ:image,file=one.image]",
+    )
+
+    label_candidate.assert_awaited_once_with(
+        cache_key="[CQ:image,file=one.image]",
+        content=b"one",
+        source="test_candidate",
+    )
+
+
+@pytest.mark.asyncio
+async def test_vision_dispatch_rechecks_guard_and_does_not_send_when_it_is_closed(monkeypatch) -> None:
+    from unittest.mock import AsyncMock, MagicMock
+
+    from pallas.product.llm import sticker_vision
+
+    bot = MagicMock()
+    bot.call_api = AsyncMock()
+    payload = {
+        "job_id": "job-guarded",
+        "vision_result": {"selected_cq_code": "[CQ:image,file=new-key]"},
+        "delivery": {"bot_id": 100, "group_id": 200, "cooldown_sec": 90},
+    }
+    monkeypatch.setattr(sticker_vision, "claim_sticker_vision_delivery", AsyncMock(return_value=payload))
+    monkeypatch.setattr("nonebot.get_bots", lambda: {"100": bot})
+    monkeypatch.setattr("pallas.core.shared.utils.media_cache.get_image", AsyncMock(return_value=b"same-content"))
+    monkeypatch.setattr(
+        "pallas.product.llm.sticker_followup.should_send_repeater_image", lambda *_args, **_kwargs: False
+    )
+    save = AsyncMock()
+    monkeypatch.setattr(sticker_vision, "save_sticker_vision_delivery", save)
+
+    assert await sticker_vision.dispatch_sticker_vision_delivery_once()
+    bot.call_api.assert_not_awaited()
+    save.assert_awaited_once_with("job-guarded", payload, state="failed", error="表情图发送条件已失效")

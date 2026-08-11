@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.1.32-53-gc48827e3-dirty",
+    "version": "v4.1.32-70-g7020dfb8-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -2685,16 +2685,6 @@
             "description": "编译用人设原文；可空"
           },
           {
-            "name": "purpose",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "default": "chat",
-              "title": "Purpose"
-            }
-          },
-          {
             "name": "mode",
             "in": "query",
             "required": false,
@@ -2702,16 +2692,6 @@
               "type": "string",
               "default": "normal",
               "title": "Mode"
-            }
-          },
-          {
-            "name": "include_repeater_overlay",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "default": false,
-              "title": "Include Repeater Overlay"
             }
           },
           {
@@ -2778,6 +2758,25 @@
         "operationId": "_llm_persona_group_style_get_pallas_api_common_config_llm_persona_group_style_get",
         "parameters": [
           {
+            "name": "bot_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bot QQ；提供后合并对应 bot/group/scene 的 semantic snapshot",
+              "title": "Bot Id"
+            },
+            "description": "Bot QQ；提供后合并对应 bot/group/scene 的 semantic snapshot"
+          },
+          {
             "name": "group_id",
             "in": "query",
             "required": true,
@@ -2788,15 +2787,15 @@
             }
           },
           {
-            "name": "window_hours",
+            "name": "scene",
             "in": "query",
             "required": false,
             "schema": {
-              "type": "integer",
-              "maximum": 720,
-              "minimum": 1,
-              "default": 168,
-              "title": "Window Hours"
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "default": "group_chat",
+              "title": "Scene"
             }
           },
           {
@@ -2837,7 +2836,168 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse_GroupExpressionProfile_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/persona/sticker-labels": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Sticker Label Overview Get",
+        "operationId": "_sticker_label_overview_get_pallas_api_common_config_llm_persona_sticker_labels_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse__StickerLabelOverviewData_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/persona/sticker-labels/manage": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Sticker Label Maintenance Post",
+        "operationId": "_sticker_label_maintenance_post_pallas_api_common_config_llm_persona_sticker_labels_manage_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/_StickerLabelRequeueBody"
+                  },
+                  {
+                    "$ref": "#/components/schemas/_StickerLabelPauseBody"
+                  },
+                  {
+                    "$ref": "#/components/schemas/_StickerLabelClearBody"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "action",
+                  "mapping": {
+                    "requeue": "#/components/schemas/_StickerLabelRequeueBody",
+                    "pause": "#/components/schemas/_StickerLabelPauseBody",
+                    "clear": "#/components/schemas/_StickerLabelClearBody"
+                  }
+                },
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse_Union__StickerLabelRequeueResult___StickerLabelPauseResult___StickerLabelClearResult__"
+                }
               }
             }
           },
@@ -15780,7 +15940,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse__PersonaObserveData_"
+                }
               }
             }
           },
@@ -15840,6 +16002,18 @@
             }
           },
           {
+            "name": "scene",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "default": "group_chat",
+              "title": "Scene"
+            }
+          },
+          {
             "name": "token",
             "in": "query",
             "required": false,
@@ -15877,7 +16051,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse__SemanticStyleStatusData_"
+                }
               }
             }
           },
@@ -15940,9 +16116,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": true,
-                "title": "Body"
+                "$ref": "#/components/schemas/_SemanticStyleManageBody"
               }
             }
           }
@@ -15952,7 +16126,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse_Union__SemanticStyleStatusData___SemanticStyleQualityData__"
+                }
               }
             }
           },
@@ -23878,6 +24054,50 @@
   },
   "components": {
     "schemas": {
+      "AccountPersonaProfile": {
+        "properties": {
+          "energy": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": -1.0,
+            "title": "Energy",
+            "default": 0.0
+          },
+          "warmth": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": -1.0,
+            "title": "Warmth",
+            "default": 0.0
+          },
+          "mischief": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": -1.0,
+            "title": "Mischief",
+            "default": 0.0
+          },
+          "restraint": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": -1.0,
+            "title": "Restraint",
+            "default": 0.0
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "derived",
+              "manual",
+              "legacy_migrated"
+            ],
+            "title": "Source",
+            "default": "derived"
+          }
+        },
+        "type": "object",
+        "title": "AccountPersonaProfile"
+      },
       "Body__community_gallery_create_pallas_api_community_gallery_post": {
         "properties": {
           "text": {
@@ -24114,6 +24334,139 @@
         "additionalProperties": false,
         "type": "object",
         "title": "GitMirrorProbeBody"
+      },
+      "GroupExpressionAggregate": {
+        "properties": {
+          "sample_count": {
+            "type": "integer",
+            "title": "Sample Count",
+            "default": 0
+          },
+          "window_hours": {
+            "type": "integer",
+            "title": "Window Hours",
+            "default": 0
+          },
+          "message_count": {
+            "type": "integer",
+            "title": "Message Count",
+            "default": 0
+          },
+          "answer_count": {
+            "type": "integer",
+            "title": "Answer Count",
+            "default": 0
+          },
+          "distinct_answer_keywords": {
+            "type": "integer",
+            "title": "Distinct Answer Keywords",
+            "default": 0
+          },
+          "active_hour_count": {
+            "type": "integer",
+            "title": "Active Hour Count",
+            "default": 0
+          },
+          "messages_per_active_hour": {
+            "type": "number",
+            "title": "Messages Per Active Hour",
+            "default": 0.0
+          },
+          "message_length": {
+            "$ref": "#/components/schemas/MessageLengthDistribution"
+          },
+          "answer_ratio": {
+            "type": "number",
+            "title": "Answer Ratio",
+            "default": 0.0
+          },
+          "repetition_rate": {
+            "type": "number",
+            "title": "Repetition Rate",
+            "default": 0.0
+          },
+          "forced_teach_weight": {
+            "type": "number",
+            "title": "Forced Teach Weight",
+            "default": 0.0
+          },
+          "contamination_skipped_messages": {
+            "type": "integer",
+            "title": "Contamination Skipped Messages",
+            "default": 0
+          },
+          "contamination_skipped_answers": {
+            "type": "integer",
+            "title": "Contamination Skipped Answers",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "GroupExpressionAggregate"
+      },
+      "GroupExpressionProfile": {
+        "properties": {
+          "aggregate": {
+            "$ref": "#/components/schemas/GroupExpressionAggregate"
+          },
+          "examples_summary": {
+            "$ref": "#/components/schemas/SemanticExamplesSummary"
+          },
+          "reply_shape": {
+            "$ref": "#/components/schemas/GroupReplyShapeHint"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "title": "GroupExpressionProfile"
+      },
+      "GroupReplyShapeHint": {
+        "properties": {
+          "length_pref": {
+            "type": "string",
+            "enum": [
+              "short",
+              "medium",
+              "long",
+              "any"
+            ],
+            "title": "Length Pref",
+            "default": "any"
+          },
+          "bubble_count_p50": {
+            "type": "integer",
+            "title": "Bubble Count P50",
+            "default": 0
+          },
+          "bubble_count_p90": {
+            "type": "integer",
+            "title": "Bubble Count P90",
+            "default": 0
+          },
+          "segment_char_length_p50": {
+            "type": "integer",
+            "title": "Segment Char Length P50",
+            "default": 0
+          },
+          "segment_char_length_p90": {
+            "type": "integer",
+            "title": "Segment Char Length P90",
+            "default": 0
+          },
+          "rhythm_distribution": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Rhythm Distribution"
+          }
+        },
+        "type": "object",
+        "title": "GroupReplyShapeHint"
       },
       "HTTPValidationError": {
         "properties": {
@@ -24356,6 +24709,27 @@
         "type": "object",
         "title": "LogsData"
       },
+      "MessageLengthDistribution": {
+        "properties": {
+          "average": {
+            "type": "number",
+            "title": "Average",
+            "default": 0.0
+          },
+          "p50": {
+            "type": "integer",
+            "title": "P50",
+            "default": 0
+          },
+          "p90": {
+            "type": "integer",
+            "title": "P90",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "MessageLengthDistribution"
+      },
       "PluginConfigData": {
         "properties": {
           "plugin": {
@@ -24594,6 +24968,69 @@
         },
         "type": "object",
         "title": "PluginGovernanceRuntimeData"
+      },
+      "SemanticExamplesSummary": {
+        "properties": {
+          "profile_ref": {
+            "type": "string",
+            "title": "Profile Ref",
+            "default": ""
+          },
+          "scene": {
+            "type": "string",
+            "title": "Scene",
+            "default": ""
+          },
+          "sample_count": {
+            "type": "integer",
+            "title": "Sample Count",
+            "default": 0
+          },
+          "direct_example_count": {
+            "type": "integer",
+            "title": "Direct Example Count",
+            "default": 0
+          },
+          "direct_pair_count": {
+            "type": "integer",
+            "title": "Direct Pair Count",
+            "default": 0
+          },
+          "rewrite_seed_count": {
+            "type": "integer",
+            "title": "Rewrite Seed Count",
+            "default": 0
+          },
+          "intensity_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Intensity Counts"
+          },
+          "form_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Form Counts"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "title": "SemanticExamplesSummary",
+        "description": "Stable snapshot metadata; mutable admission and delivery quotas stay in their owner."
       },
       "ShardObservabilityData": {
         "properties": {
@@ -25269,6 +25706,28 @@
         ],
         "title": "_ApiOkResponse[CommunityConnectivityCheckData]"
       },
+      "_ApiOkResponse_GroupExpressionProfile_": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/GroupExpressionProfile"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "_ApiOkResponse[GroupExpressionProfile]"
+      },
       "_ApiOkResponse_IngressDispatchData_": {
         "properties": {
           "ok": {
@@ -25422,6 +25881,69 @@
           "data"
         ],
         "title": "_ApiOkResponse[ShardObservabilityData]"
+      },
+      "_ApiOkResponse_Union__SemanticStyleStatusData___SemanticStyleQualityData__": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/_SemanticStyleStatusData"
+              },
+              {
+                "$ref": "#/components/schemas/_SemanticStyleQualityData"
+              }
+            ],
+            "title": "Data"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "_ApiOkResponse[Union[_SemanticStyleStatusData, _SemanticStyleQualityData]]"
+      },
+      "_ApiOkResponse_Union__StickerLabelRequeueResult___StickerLabelPauseResult___StickerLabelClearResult__": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/_StickerLabelRequeueResult"
+              },
+              {
+                "$ref": "#/components/schemas/_StickerLabelPauseResult"
+              },
+              {
+                "$ref": "#/components/schemas/_StickerLabelClearResult"
+              }
+            ],
+            "title": "Data"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "_ApiOkResponse[Union[_StickerLabelRequeueResult, _StickerLabelPauseResult, _StickerLabelClearResult]]"
       },
       "_ApiOkResponse__AiExtensionTestData_": {
         "properties": {
@@ -25577,6 +26099,50 @@
         ],
         "title": "_ApiOkResponse[_LlmRuntimeOverviewData]"
       },
+      "_ApiOkResponse__PersonaObserveData_": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/_PersonaObserveData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "_ApiOkResponse[_PersonaObserveData]"
+      },
+      "_ApiOkResponse__SemanticStyleStatusData_": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/_SemanticStyleStatusData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "_ApiOkResponse[_SemanticStyleStatusData]"
+      },
       "_ApiOkResponse__ServiceGatewaysConnectivityCheckData_": {
         "properties": {
           "ok": {
@@ -25598,6 +26164,28 @@
           "data"
         ],
         "title": "_ApiOkResponse[_ServiceGatewaysConnectivityCheckData]"
+      },
+      "_ApiOkResponse__StickerLabelOverviewData_": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/_StickerLabelOverviewData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "_ApiOkResponse[_StickerLabelOverviewData]"
       },
       "_BotConfigPatch": {
         "properties": {
@@ -25676,14 +26264,12 @@
           "persona": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/_BotPersonaPatch"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Persona"
+            ]
           },
           "group_style_enabled": {
             "anyOf": [
@@ -25700,6 +26286,23 @@
         "additionalProperties": false,
         "type": "object",
         "title": "_BotConfigPatch"
+      },
+      "_BotPersonaPatch": {
+        "properties": {
+          "account_profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccountPersonaProfile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "_BotPersonaPatch"
       },
       "_CommonConfigSectionPatchBody": {
         "properties": {
@@ -26678,26 +27281,6 @@
             "type": "string",
             "title": "Drunk",
             "default": ""
-          },
-          "repeater_fallback": {
-            "type": "string",
-            "title": "Repeater Fallback",
-            "default": ""
-          },
-          "repeater_polish": {
-            "type": "string",
-            "title": "Repeater Polish",
-            "default": ""
-          },
-          "repeater_polish_lite": {
-            "type": "string",
-            "title": "Repeater Polish Lite",
-            "default": ""
-          },
-          "repeater_select": {
-            "type": "string",
-            "title": "Repeater Select",
-            "default": ""
           }
         },
         "additionalProperties": false,
@@ -27628,6 +28211,116 @@
         ],
         "title": "_OfficialExtensionPackageBody"
       },
+      "_PersonaObserveBotRow": {
+        "properties": {
+          "account": {
+            "type": "integer",
+            "title": "Account"
+          },
+          "group_style_enabled": {
+            "type": "boolean",
+            "title": "Group Style Enabled",
+            "default": true
+          },
+          "account_profile": {
+            "$ref": "#/components/schemas/AccountPersonaProfile"
+          },
+          "base": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Base"
+          },
+          "base_hints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Base Hints"
+          },
+          "resolved": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved"
+          },
+          "resolved_hints": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Resolved Hints"
+          }
+        },
+        "type": "object",
+        "required": [
+          "account",
+          "account_profile",
+          "base"
+        ],
+        "title": "_PersonaObserveBotRow"
+      },
+      "_PersonaObserveData": {
+        "properties": {
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "group_style_snapshot": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Style Snapshot"
+          },
+          "affect_refine": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Affect Refine"
+          },
+          "affect_triggers": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Affect Triggers"
+          },
+          "bots": {
+            "items": {
+              "$ref": "#/components/schemas/_PersonaObserveBotRow"
+            },
+            "type": "array",
+            "title": "Bots"
+          }
+        },
+        "type": "object",
+        "title": "_PersonaObserveData"
+      },
       "_PluginConfigRawBody": {
         "properties": {
           "toml": {
@@ -27878,6 +28571,297 @@
         ],
         "title": "_RequestBatchGroupRow"
       },
+      "_SemanticStyleManageBody": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "status",
+              "overrides",
+              "clear",
+              "rebuild",
+              "quality",
+              "recover",
+              "disable"
+            ],
+            "title": "Action"
+          },
+          "bot_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Id"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "scene": {
+            "type": "string",
+            "title": "Scene",
+            "default": "group_chat"
+          },
+          "overrides": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/_SemanticStyleOverridesPatch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "_SemanticStyleManageBody"
+      },
+      "_SemanticStyleOverridesData": {
+        "properties": {
+          "aggressive": {
+            "type": "boolean",
+            "title": "Aggressive"
+          },
+          "nonsense": {
+            "type": "boolean",
+            "title": "Nonsense"
+          },
+          "direct": {
+            "type": "boolean",
+            "title": "Direct"
+          },
+          "image": {
+            "type": "boolean",
+            "title": "Image"
+          }
+        },
+        "type": "object",
+        "required": [
+          "aggressive",
+          "nonsense",
+          "direct",
+          "image"
+        ],
+        "title": "_SemanticStyleOverridesData"
+      },
+      "_SemanticStyleOverridesPatch": {
+        "properties": {
+          "aggressive": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Aggressive"
+          },
+          "nonsense": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nonsense"
+          },
+          "direct": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Direct"
+          },
+          "image": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Image"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "_SemanticStyleOverridesPatch"
+      },
+      "_SemanticStyleProfileSummaryData": {
+        "properties": {
+          "profile_ref": {
+            "type": "string",
+            "title": "Profile Ref"
+          },
+          "scene": {
+            "type": "string",
+            "title": "Scene"
+          },
+          "sample_count": {
+            "type": "integer",
+            "title": "Sample Count",
+            "default": 0
+          },
+          "direct_example_count": {
+            "type": "integer",
+            "title": "Direct Example Count",
+            "default": 0
+          },
+          "direct_pair_count": {
+            "type": "integer",
+            "title": "Direct Pair Count",
+            "default": 0
+          },
+          "rewrite_seed_count": {
+            "type": "integer",
+            "title": "Rewrite Seed Count",
+            "default": 0
+          },
+          "intensity_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Intensity Counts"
+          },
+          "form_counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Form Counts"
+          },
+          "bubble_count_p50": {
+            "type": "integer",
+            "title": "Bubble Count P50",
+            "default": 0
+          },
+          "bubble_count_p90": {
+            "type": "integer",
+            "title": "Bubble Count P90",
+            "default": 0
+          },
+          "segment_char_length_p50": {
+            "type": "integer",
+            "title": "Segment Char Length P50",
+            "default": 0
+          },
+          "segment_char_length_p90": {
+            "type": "integer",
+            "title": "Segment Char Length P90",
+            "default": 0
+          },
+          "rhythm_distribution": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Rhythm Distribution"
+          },
+          "updated_at": {
+            "type": "integer",
+            "title": "Updated At",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "profile_ref",
+          "scene"
+        ],
+        "title": "_SemanticStyleProfileSummaryData"
+      },
+      "_SemanticStyleQualityData": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/_SemanticStyleStatusData"
+          },
+          "label_version": {
+            "type": "integer",
+            "title": "Label Version"
+          },
+          "positive_bot_style_count": {
+            "type": "integer",
+            "title": "Positive Bot Style Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "label_version"
+        ],
+        "title": "_SemanticStyleQualityData"
+      },
+      "_SemanticStyleStatusData": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          },
+          "overrides": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/_SemanticStyleOverridesData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "example_count": {
+            "type": "integer",
+            "title": "Example Count",
+            "default": 0
+          },
+          "profile_count": {
+            "type": "integer",
+            "title": "Profile Count",
+            "default": 0
+          },
+          "backfill_cursor": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Backfill Cursor"
+          },
+          "profile_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/_SemanticStyleProfileSummaryData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "_SemanticStyleStatusData"
+      },
       "_ServiceGatewaysConnectivityCheckData": {
         "properties": {
           "lines": {
@@ -28074,6 +29058,235 @@
           "ok"
         ],
         "title": "_ServiceProbeResultData"
+      },
+      "_StickerLabelClearBody": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "const": "clear",
+            "title": "Action"
+          },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "Content Hash"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "content_hash"
+        ],
+        "title": "_StickerLabelClearBody"
+      },
+      "_StickerLabelClearResult": {
+        "properties": {
+          "cleared": {
+            "type": "boolean",
+            "title": "Cleared"
+          }
+        },
+        "type": "object",
+        "required": [
+          "cleared"
+        ],
+        "title": "_StickerLabelClearResult"
+      },
+      "_StickerLabelJobErrorData": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id",
+            "default": ""
+          },
+          "created_at": {
+            "type": "number",
+            "title": "Created At",
+            "default": 0
+          },
+          "state": {
+            "type": "string",
+            "title": "State",
+            "default": ""
+          },
+          "error": {
+            "type": "string",
+            "title": "Error",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "_StickerLabelJobErrorData"
+      },
+      "_StickerLabelJobStatsData": {
+        "properties": {
+          "pending": {
+            "type": "integer",
+            "title": "Pending",
+            "default": 0
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed",
+            "default": 0
+          },
+          "recent_errors": {
+            "items": {
+              "$ref": "#/components/schemas/_StickerLabelJobErrorData"
+            },
+            "type": "array",
+            "title": "Recent Errors"
+          }
+        },
+        "type": "object",
+        "title": "_StickerLabelJobStatsData"
+      },
+      "_StickerLabelOverviewData": {
+        "properties": {
+          "labels": {
+            "$ref": "#/components/schemas/_StickerLabelStatsData"
+          },
+          "jobs": {
+            "$ref": "#/components/schemas/_StickerLabelJobStatsData"
+          },
+          "lazy_labels_paused": {
+            "type": "boolean",
+            "title": "Lazy Labels Paused",
+            "default": false
+          },
+          "label_circuit_open": {
+            "type": "boolean",
+            "title": "Label Circuit Open",
+            "default": false
+          },
+          "vlm_refine_avoided": {
+            "type": "integer",
+            "title": "Vlm Refine Avoided",
+            "default": 0
+          },
+          "vlm_refine_actual": {
+            "type": "integer",
+            "title": "Vlm Refine Actual",
+            "default": 0
+          },
+          "send_hits": {
+            "type": "integer",
+            "title": "Send Hits",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "labels",
+          "jobs"
+        ],
+        "title": "_StickerLabelOverviewData"
+      },
+      "_StickerLabelPauseBody": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "const": "pause",
+            "title": "Action"
+          },
+          "paused": {
+            "type": "boolean",
+            "title": "Paused"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "paused"
+        ],
+        "title": "_StickerLabelPauseBody"
+      },
+      "_StickerLabelPauseResult": {
+        "properties": {
+          "lazy_labels_paused": {
+            "type": "boolean",
+            "title": "Lazy Labels Paused"
+          }
+        },
+        "type": "object",
+        "required": [
+          "lazy_labels_paused"
+        ],
+        "title": "_StickerLabelPauseResult"
+      },
+      "_StickerLabelRequeueBody": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "const": "requeue",
+            "title": "Action"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "_StickerLabelRequeueBody"
+      },
+      "_StickerLabelRequeueResult": {
+        "properties": {
+          "requeued": {
+            "type": "integer",
+            "title": "Requeued",
+            "default": 0
+          },
+          "queued": {
+            "type": "integer",
+            "title": "Queued",
+            "default": 0
+          },
+          "skipped": {
+            "type": "integer",
+            "title": "Skipped",
+            "default": 0
+          },
+          "missing_cache": {
+            "type": "integer",
+            "title": "Missing Cache",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "_StickerLabelRequeueResult"
+      },
+      "_StickerLabelStatsData": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          },
+          "sticker": {
+            "type": "integer",
+            "title": "Sticker",
+            "default": 0
+          },
+          "not_sticker": {
+            "type": "integer",
+            "title": "Not Sticker",
+            "default": 0
+          },
+          "current_version": {
+            "type": "integer",
+            "title": "Current Version",
+            "default": 0
+          },
+          "low_confidence": {
+            "type": "integer",
+            "title": "Low Confidence",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "_StickerLabelStatsData"
       },
       "_SystemRestartBody": {
         "properties": {
