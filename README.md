@@ -5,7 +5,7 @@
   <pre><code>「我是来自米诺斯的祭司帕拉斯，会在罗德岛休息一段时间......虽然这么说，我渴望以美酒和戏剧被招待，更渴望走向战场。」</code></pre>
 
   <p>
-    <a href="https://github.com/PallasBot/Pallas-Bot-Docs">安装文档</a> ·
+    <a href="https://PallasBot.github.io/Pallas-Bot-Docs/guide/quickstart">安装文档</a> ·
     <a href="https://github.com/PallasBot/Pallas-Bot/issues/new/choose">报告 Bug</a> ·
     <a href="https://github.com/PallasBot/Pallas-Bot/issues/new/choose">提出新特性</a>
   </p>
@@ -19,7 +19,7 @@
 [![stars](https://img.shields.io/github/stars/PallasBot/Pallas-Bot?style=social)](https://github.com/PallasBot/Pallas-Bot/stargazers)
 
 ![learning-repeater](https://img.shields.io/badge/Core-%E5%AD%A6%E4%B9%A0%E5%9E%8B%E5%A4%8D%E8%AF%BB-8A2BE2)
-![community-bots](https://img.shields.io/endpoint?url=https%3A%2F%2Fstats.pallasbot.top%2Fv1%2Fbadges%2Fbots-online)
+[![community-bots](https://img.shields.io/endpoint?url=https%3A%2F%2Fstats.pallasbot.top%2Fv1%2Fbadges%2Fbots-online)](https://stats.pallasbot.top/)
 [![tencent-qq](https://img.shields.io/badge/%E7%BE%A4-开发者群-red?style=flat&logo=tencent-qq)](https://qm.qq.com/q/yIiAajYwms)
 [![tencent-qq](https://img.shields.io/badge/%E7%BE%A4-拉牛牛-c73e7e?style=flat&logo=tencent-qq)](#qq-群)
 

@@ -33,7 +33,7 @@ npm install
 npm run build   # → dist/；写入 console-version.json
 ```
 
-主仓 CI / Release 从 **Pallas-Bot-WebUI** 仓库根构建，经 `tools/build_webui_dist.sh` 打包 **`dist.zip`**（zip 根为 `public-react/`），随 **Pallas-Bot Release** 附件发布。Bot 启动时解压到 **`data/pb_webui`**。
+WebUI 仓库 Release 提供 **`dist.zip`**（zip 根为 `public-react/`）；Bot 启动时解压到 **`data/pb_webui`**。
 
 本地手动部署：将构建产物放入 `data/pb_webui/public-react/`，或解压 Release 的 `dist.zip` 到 `data/pb_webui/`。
 
@@ -42,7 +42,7 @@ npm run build   # → dist/；写入 console-version.json
 unzip -d data/pb_webui dist.zip
 ```
 
-自动更新默认从 **`PallasBot/Pallas-Bot`** Release 下载 `dist.zip`（配置项 `pallas_webui_dist_zip_repo`）。
+自动更新默认从 **`PallasBot/Pallas-Bot-WebUI`** Release 下载 `dist.zip`（配置项 `pallas_webui_dist_zip_repo`）。如需固定兼容版本或使用自建源，可覆盖该配置。
 
 ## OpenAPI 契约
 

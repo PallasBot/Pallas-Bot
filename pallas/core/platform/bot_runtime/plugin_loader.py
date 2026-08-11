@@ -4,13 +4,23 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import json
+import subprocess
 import sys
+import time
+from collections import Counter
+from operator import itemgetter
+from typing import TYPE_CHECKING
 
 import nonebot
 from nonebot import logger
 
+if TYPE_CHECKING:
+    from pathlib import Path
+
 from pallas.core.foundation.apscheduler_runtime import register_apscheduler_startup_hook
 from pallas.core.foundation.config.repo_settings import (
+    AUTO_LOCAL_PLUGINS_DIR,
     normalize_load_bundled_extra_mode,
     resolve_extra_plugin_dirs,
 )
@@ -37,6 +47,68 @@ _PLUGINS_ROOT = PROJECT_ROOT / "packages"
 _PYPROJECT = PROJECT_ROOT / "pyproject.toml"
 _APSCHEDULER_MODULE = "nonebot_plugin_apscheduler"
 _BUNDLED_PLUGIN_ENTRY_SUBMODULES: dict[str, tuple[str, ...]] = {}
+_PLUGIN_LOAD_SLOW_SECONDS = 1.0
+_PLUGIN_LOAD_DIAGNOSTIC_LIMIT = 3
+_startup_plugin_load_failures: list[str] = []
+_startup_plugin_load_slow: list[tuple[str, float]] = []
+_startup_plugin_skip_sources: Counter[str] = Counter()
+
+
+def reset_startup_plugin_load_diagnostics() -> None:
+    _startup_plugin_load_failures.clear()
+    _startup_plugin_load_slow.clear()
+    _startup_plugin_skip_sources.clear()
+
+
+def _record_startup_plugin_skip(module_path: str) -> None:
+    if module_path.startswith("packages."):
+        source = "src"
+    elif module_path.startswith("pallas_plugin_"):
+        source = "official"
+    elif module_path.startswith("nonebot_plugin_"):
+        source = "nonebot"
+    else:
+        source = "extra"
+    _startup_plugin_skip_sources[source] += 1
+
+
+def startup_plugin_skip_source_fact() -> str:
+    return ",".join(f"{source}:{count}" for source, count in sorted(_startup_plugin_skip_sources.items()))
+
+
+def _plugin_display_name(module_path: str) -> str:
+    return module_path.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1].rsplit(".", 1)[-1]
+
+
+def record_startup_plugin_load_failure(module_path: str) -> None:
+    _startup_plugin_load_failures.append(_plugin_display_name(module_path))
+
+
+def record_startup_plugin_load_success(module_path: str, *, elapsed_sec: float) -> None:
+    if elapsed_sec >= _PLUGIN_LOAD_SLOW_SECONDS:
+        _startup_plugin_load_slow.append((_plugin_display_name(module_path), elapsed_sec))
+
+
+def startup_plugin_load_diagnostic_facts() -> dict[str, str]:
+    facts: dict[str, str] = {}
+    if _startup_plugin_load_failures:
+        names = _startup_plugin_load_failures[:_PLUGIN_LOAD_DIAGNOSTIC_LIMIT]
+        if remaining := len(_startup_plugin_load_failures) - len(names):
+            names.append(f"+{remaining}")
+        facts["plugin_failures"] = ",".join(names)
+    if _startup_plugin_load_slow:
+        entries = sorted(_startup_plugin_load_slow, key=itemgetter(1), reverse=True)
+        selected = entries[:_PLUGIN_LOAD_DIAGNOSTIC_LIMIT]
+        values = [f"{name}={elapsed:.2f}" for name, elapsed in selected]
+        if remaining := len(entries) - len(selected):
+            values.append(f"+{remaining}")
+        facts["plugin_slow"] = ",".join(values)
+    return facts
+
+
+def register_startup_plugin_load_diagnostics() -> None:
+    for key, value in startup_plugin_load_diagnostic_facts().items():
+        register_startup_fact(key, value)
 
 
 def _discover_plugin_modules(*, load_bundled_extra: bool | str | None = None) -> list[str]:
@@ -61,6 +133,51 @@ def _short_name(module_path: str) -> str:
     return module_path.rsplit(".", 1)[-1]
 
 
+def split_site_local_plugin_dirs(plugin_dirs: list[str]) -> tuple[list[str], list[str]]:
+    site_local: list[str] = []
+    custom: list[str] = []
+    community_dir = AUTO_LOCAL_PLUGINS_DIR.replace("\\", "/").rstrip("/")
+    for plugin_dir in plugin_dirs:
+        normalized = plugin_dir.strip().replace("\\", "/").rstrip("/").removeprefix("./")
+        (site_local if normalized == community_dir else custom).append(plugin_dir)
+    return site_local, custom
+
+
+def plugin_directory_git_origin(plugin_dir: Path) -> str:
+    try:
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=plugin_dir,
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def is_community_plugin_directory(plugin_dir: Path) -> bool:
+    index_path = plugin_dir / "community-index.entry.json"
+    try:
+        entry = json.loads(index_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        entry = None
+    if isinstance(entry, dict):
+        plugin_id = str(entry.get("id") or entry.get("plugin_id") or "").strip()
+        if plugin_id == plugin_dir.name:
+            return True
+
+    origin = plugin_directory_git_origin(plugin_dir).lower().removesuffix(".git")
+    return bool(origin and not origin.endswith("github.com/pallasbot/pallas-bot"))
+
+
+def classify_site_local_plugins(plugin_dirs: list[Path]) -> tuple[int, int]:
+    community = sum(is_community_plugin_directory(plugin_dir) for plugin_dir in plugin_dirs)
+    return len(plugin_dirs) - community, community
+
+
 def _load_slot_key(module_path: str) -> str:
     from pallas.core.platform.bot_runtime.plugin_package_aliases import canonical_plugin_package
 
@@ -68,7 +185,7 @@ def _load_slot_key(module_path: str) -> str:
 
 
 def _prioritize_scheduler_modules(module_paths: list[str]) -> list[str]:
-    """nonebot_plugin_apscheduler 须先于依赖 scheduler 的 src 插件加载。"""
+    """nonebot_plugin_apscheduler 须先于依赖 scheduler 的外部插件加载。"""
     sched = [m for m in module_paths if _short_name(m) == _APSCHEDULER_MODULE]
     rest = [m for m in module_paths if m not in sched]
     return sched + rest
@@ -189,18 +306,21 @@ def _load_plugin_module(
     if slot in loaded_short:
         return False
     if importlib.util.find_spec(module_path) is None:
+        record_startup_plugin_load_failure(module_path)
         logger.error(
-            "启动：{} 跳过 {}（未发现模块）",
-            role_label,
+            "跳过 {}：未发现模块",
             module_path,
         )
         return False
     try:
+        started_at = time.perf_counter()
         nonebot.load_plugin(module_path)
         load_bundled_plugin_entry_submodules(module_path)
+        record_startup_plugin_load_success(module_path, elapsed_sec=time.perf_counter() - started_at)
         loaded_short.add(slot)
         return True
     except Exception as e:
+        record_startup_plugin_load_failure(module_path)
         log = logger.error if _short_name(module_path) == _APSCHEDULER_MODULE else logger.warning
         log("启动：{} 加载 {} 失败: {}", role_label, module_path, e)
         return False
@@ -233,7 +353,16 @@ def _load_discovered_plugin_modules(
     for mod in module_paths:
         short = _short_name(mod)
         slot = _load_slot_key(mod)
-        if mod in skip_module_paths or short in skip_short or slot in loaded_short:
+        if mod in skip_module_paths:
+            _record_startup_plugin_skip(mod)
+            logger.info("跳过 {}：配置排除", mod)
+            continue
+        if short in skip_short:
+            _record_startup_plugin_skip(mod)
+            logger.info("跳过 {}：配置禁用", mod)
+            continue
+        if slot in loaded_short:
+            logger.info("跳过 {}：同名插件已加载", mod)
             continue
         if _load_plugin_module(mod, role_label=role_label, loaded_short=loaded_short):
             count += 1
@@ -245,6 +374,7 @@ def _load_toml_extra_plugin_dirs(
     *,
     role_label: str,
     loaded_short: set[str],
+    loaded_plugin_dirs: list[Path] | None = None,
 ) -> int:
     count = 0
     for rel_dir in plugin_dirs:
@@ -261,18 +391,19 @@ def _load_toml_extra_plugin_dirs(
                 continue
             if _load_slot_key(entry.name) in loaded_short:
                 sub_rel = f"{rel_dir.rstrip('/')}/{entry.name}"
-                logger.debug(
-                    "启动：{} 跳过 {}（同名插件已加载）",
-                    role_label,
+                logger.info(
+                    "跳过 {}：同名插件已加载",
                     sub_rel,
                 )
                 continue
             sub_rel = f"{rel_dir.rstrip('/')}/{entry.name}"
             pkg_path = PROJECT_ROOT / sub_rel
             try:
+                started_at = time.perf_counter()
                 plugin = nonebot.load_plugin(pkg_path)
                 found = [plugin] if plugin is not None else []
             except Exception as e:
+                record_startup_plugin_load_failure(sub_rel)
                 logger.warning(
                     "启动：{} 加载 {} 失败: {}",
                     role_label,
@@ -280,6 +411,10 @@ def _load_toml_extra_plugin_dirs(
                     e,
                 )
                 continue
+            if not found:
+                record_startup_plugin_load_failure(sub_rel)
+                continue
+            record_startup_plugin_load_success(sub_rel, elapsed_sec=time.perf_counter() - started_at)
             for plugin in found:
                 mod = getattr(plugin, "module", None)
                 if mod is None:
@@ -289,6 +424,8 @@ def _load_toml_extra_plugin_dirs(
                     loaded_short.add(_load_slot_key(name))
             dir_loaded += len(found)
             count += len(found)
+            if loaded_plugin_dirs is not None:
+                loaded_plugin_dirs.extend(entry for _ in found)
         logger.debug(
             "启动：{} 目录 {} 加载 {} 个",
             role_label,
@@ -296,6 +433,25 @@ def _load_toml_extra_plugin_dirs(
             dir_loaded,
         )
     return count
+
+
+def load_extra_plugin_dirs_by_source(
+    plugin_dirs: list[str],
+    *,
+    role_label: str,
+    loaded_short: set[str],
+) -> tuple[int, int, int]:
+    site_local_dirs, custom_dirs = split_site_local_plugin_dirs(plugin_dirs)
+    site_local_plugin_dirs: list[Path] = []
+    _load_toml_extra_plugin_dirs(
+        site_local_dirs,
+        role_label=role_label,
+        loaded_short=loaded_short,
+        loaded_plugin_dirs=site_local_plugin_dirs,
+    )
+    local, community = classify_site_local_plugins(site_local_plugin_dirs)
+    extra = _load_toml_extra_plugin_dirs(custom_dirs, role_label=role_label, loaded_short=loaded_short)
+    return local, community, extra
 
 
 def _append_bootstrap_plugin_dirs(plugin_dirs: list[str]) -> list[str]:
@@ -316,42 +472,52 @@ def load_pyproject_extra_plugins(
     loaded_short: set[str],
     include_extra_dirs: bool,
     include_bootstrap_dirs: bool = True,
-) -> int:
+) -> tuple[int, int, int, int]:
     """加载 pyproject [tool.nonebot.plugins] 与额外 plugin_dirs。"""
     module_paths, plugin_dirs = parse_nonebot_plugin_config(_PYPROJECT)
     module_paths = _prioritize_scheduler_modules(module_paths)
-    total = 0
+    local_total = 0
+    community_total = 0
+    extra_total = 0
     if include_extra_dirs:
         extra_dirs = extra_plugin_dirs_for_role(plugin_dirs)
         if include_bootstrap_dirs:
             extra_dirs = _append_bootstrap_plugin_dirs(extra_dirs)
-        total += _load_toml_extra_plugin_dirs(extra_dirs, role_label=role_label, loaded_short=loaded_short)
-    total += _load_toml_module_plugins(
+        local_total, community_total, extra_total = load_extra_plugin_dirs_by_source(
+            extra_dirs,
+            role_label=role_label,
+            loaded_short=loaded_short,
+        )
+    pypi_total = _load_toml_module_plugins(
         module_paths,
         role_label=role_label,
         skip_short=skip_short,
         loaded_short=loaded_short,
     )
-    return total
+    return pypi_total, local_total, community_total, extra_total
 
 
 def load_plugins_for_role() -> None:
     from pallas.core.platform.bot_runtime.kernel_runtime import register_kernel_runtime
 
+    reset_startup_plugin_load_diagnostics()
+    logger.info("[初始化] 插件载入中...")
+
     if is_unified_role():
         loaded_short: set[str] = set()
-        load_apscheduler_plugin_first(role_label="unified", loaded_short=loaded_short)
+        nonebot_loaded = int(load_apscheduler_plugin_first(role_label="unified", loaded_short=loaded_short))
         register_kernel_runtime()
 
         bootstrap_dirs = resolve_extra_plugin_dirs()
-        bootstrap_loaded = 0
+        local_loaded = 0
+        community_loaded = 0
+        extra_dir_loaded = 0
         if bootstrap_dirs:
-            bootstrap_loaded = _load_toml_extra_plugin_dirs(
+            local_loaded, community_loaded, extra_dir_loaded = load_extra_plugin_dirs_by_source(
                 bootstrap_dirs,
                 role_label="unified",
                 loaded_short=loaded_short,
             )
-
         unified_skip = merge_startup_skip_plugins(UNIFIED_SKIP_PLUGIN_NAMES)
         loaded = _load_discovered_plugin_modules(
             role_label="unified",
@@ -360,7 +526,7 @@ def load_plugins_for_role() -> None:
             loaded_short=loaded_short,
         )
 
-        extra = load_pyproject_extra_plugins(
+        nonebot_extra, local_extra, community_extra, extra_extra = load_pyproject_extra_plugins(
             role_label="unified",
             skip_short=unified_skip,
             loaded_short=loaded_short,
@@ -373,16 +539,23 @@ def load_plugins_for_role() -> None:
             skip_short=unified_skip,
             loaded_short=loaded_short,
         )
+        skip_sources = startup_plugin_skip_source_fact()
         register_startup_fact(
             "plugins",
-            f"local={bootstrap_loaded} src={loaded} pip={pip_extra} extra={extra} skip={len(unified_skip)}",
+            f"local={local_loaded + local_extra} src={loaded} official={pip_extra} "
+            f"nonebot={nonebot_loaded + nonebot_extra} community={community_loaded + community_extra} "
+            f"extra={extra_dir_loaded + extra_extra} skip={len(unified_skip)}"
+            f"{f' skip_sources={skip_sources}' if skip_sources else ''}",
         )
+        register_startup_plugin_load_diagnostics()
         logger.debug(
-            "启动：unified local={} src={} pip={} extra={} skip={}",
-            bootstrap_loaded,
+            "启动：unified local={} community={} src={} official={} nonebot={} extra_dirs={} skip={}",
+            local_loaded + local_extra,
+            community_loaded,
             loaded,
             pip_extra,
-            extra,
+            nonebot_extra,
+            extra_dir_loaded + extra_extra,
             sorted(unified_skip),
         )
         return
@@ -396,14 +569,16 @@ def load_plugins_for_role() -> None:
 
     loaded_short: set[str] = set()
     role_label = "hub" if is_hub_role() else "worker"
-    load_apscheduler_plugin_first(role_label=role_label, loaded_short=loaded_short)
+    nonebot_loaded = int(load_apscheduler_plugin_first(role_label=role_label, loaded_short=loaded_short))
     register_kernel_runtime()
 
     if is_hub_role():
         bootstrap_dirs = resolve_extra_plugin_dirs()
-        bootstrap_loaded = 0
+        local_loaded = 0
+        community_loaded = 0
+        extra_dir_loaded = 0
         if bootstrap_dirs:
-            bootstrap_loaded = _load_toml_extra_plugin_dirs(
+            local_loaded, community_loaded, extra_dir_loaded = load_extra_plugin_dirs_by_source(
                 bootstrap_dirs,
                 role_label="hub",
                 loaded_short=loaded_short,
@@ -420,36 +595,44 @@ def load_plugins_for_role() -> None:
             skip_short=frozenset(),
             loaded_short=loaded_short,
         )
-        extra = load_pyproject_extra_plugins(
+        nonebot_extra, local_extra, community_extra, extra_extra = load_pyproject_extra_plugins(
             role_label="hub",
             skip_short=merge_startup_skip_plugins(WORKER_SKIP_PLUGIN_NAMES),
             loaded_short=loaded_short,
             include_extra_dirs=False,
         )
         bundled_total = len(resolve_hub_bundled_module_paths())
+        skip_sources = startup_plugin_skip_source_fact()
         register_startup_fact(
             "plugins",
-            f"local={bootstrap_loaded} modules={loaded}/{bundled_total} pip={pip_extra} extra={extra}",
+            f"local={local_loaded + local_extra} modules={loaded}/{bundled_total} official={pip_extra} "
+            f"nonebot={nonebot_loaded + nonebot_extra} community={community_loaded + community_extra} "
+            f"extra={extra_dir_loaded + extra_extra}"
+            f"{f' skip_sources={skip_sources}' if skip_sources else ''}",
         )
+        register_startup_plugin_load_diagnostics()
         logger.debug(
-            "启动：hub local={} modules={}/{} pip={} extra={}",
-            bootstrap_loaded,
+            "启动：hub local={} community={} modules={}/{} official={} nonebot={} extra_dirs={}",
+            local_loaded + local_extra,
+            community_loaded,
             loaded,
             bundled_total,
             pip_extra,
-            extra,
+            nonebot_extra,
+            extra_dir_loaded + extra_extra,
         )
         return
 
     bootstrap_dirs = resolve_extra_plugin_dirs()
-    bootstrap_loaded = 0
+    local_loaded = 0
+    community_loaded = 0
+    extra_dir_loaded = 0
     if bootstrap_dirs:
-        bootstrap_loaded = _load_toml_extra_plugin_dirs(
+        local_loaded, community_loaded, extra_dir_loaded = load_extra_plugin_dirs_by_source(
             bootstrap_dirs,
             role_label="worker",
             loaded_short=loaded_short,
         )
-
     worker_skip = merge_startup_skip_plugins(WORKER_SKIP_PLUGIN_NAMES)
 
     loaded = _load_discovered_plugin_modules(
@@ -459,7 +642,7 @@ def load_plugins_for_role() -> None:
         loaded_short=loaded_short,
     )
 
-    extra = load_pyproject_extra_plugins(
+    nonebot_extra, local_extra, community_extra, extra_extra = load_pyproject_extra_plugins(
         role_label="worker",
         skip_short=worker_skip,
         loaded_short=loaded_short,
@@ -477,17 +660,24 @@ def load_plugins_for_role() -> None:
     from pallas.core.platform.shard.registry.config import get_shard_registry_settings
 
     s = get_shard_registry_settings()
+    skip_sources = startup_plugin_skip_source_fact()
     register_startup_fact(
         "plugins",
-        f"local={bootstrap_loaded} src={loaded} pip={pip_extra} extra={extra} skip={len(worker_skip)}",
+        f"local={local_loaded + local_extra} src={loaded} official={pip_extra} "
+        f"nonebot={nonebot_loaded + nonebot_extra} community={community_loaded + community_extra} "
+        f"extra={extra_dir_loaded + extra_extra} skip={len(worker_skip)}"
+        f"{f' skip_sources={skip_sources}' if skip_sources else ''}",
     )
+    register_startup_plugin_load_diagnostics()
     logger.debug(
-        "启动：worker shard={} local={} src={} pip={} extra={} skip={}",
+        "启动：worker shard={} local={} community={} src={} official={} nonebot={} extra_dirs={} skip={}",
         s.shard_id,
-        bootstrap_loaded,
+        local_loaded + local_extra,
+        community_loaded,
         loaded,
         pip_extra,
-        extra,
+        nonebot_extra,
+        extra_dir_loaded + extra_extra,
         sorted(worker_skip),
     )
     from pallas.core.platform.shard.worker_console_metrics import register_worker_console_metrics_startup

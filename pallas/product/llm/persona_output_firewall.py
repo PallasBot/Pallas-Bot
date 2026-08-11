@@ -6,6 +6,8 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
+from pallas.product.llm.reply_necessity import is_short_vent
+
 FirewallAction = Literal["allow", "retry", "fallback", "silent"]
 FirewallSeverity = Literal["soft", "strict"]
 FirewallStrategy = Literal["fallback", "retry_then_fallback"]
@@ -37,12 +39,14 @@ _GENDER_IDENTITY_CONFLICT_RE = re.compile(r"(?:哥们|兄弟们|爷们|老子)(?
 _GENERIC_TEMPLATE_CLOSURE_RE = re.compile(
     r"(?:行吧|好吧)[，,。!！\s]*那?[旧就]当我没说[，,。!！\s]*(?:你|你们).{0,6}(?:乐呵|高兴|开心).{0,3}就行"
 )
-_SHORT_VENT_RE = re.compile(r"(?:烦|唉|累|难受|没绷住|服了|崩溃)[，,。.!！?？~～\s]*$")
 _SHORT_VENT_GENERIC_QUESTION_RE = re.compile(
     r"^(?:咋了|怎么了|咋回事|什么情况|啥情况|然后呢|咋整)[，,。.!！?？~～\s]*$"
 )
 _SHORT_VENT_ADVICE_RE = re.compile(r"(?:^|[，,])\s*(?:先|要不|不如|可以|最好|建议|试试|别).{0,12}(?:吧|。|！|!|$)")
 _PRESENCE_CHECK_RE = re.compile(r"(?:你|您)?(?:还)?(?:在|在线)吗[，,。.!！?？~～\s]*$")
+_ALIAS_WAKE_GENERIC_REPLY_RE = re.compile(
+    r"^(?:(?:说吧(?:[，,、\s]*(?:什么事|啥事))?)|(?:什么事|啥事|怎么了|怎么啦))[。.!！?？~～\s]*$"
+)
 _GENERIC_PRAISE_TERMS = ("有实力", "太强", "厉害啊", "厉害了")
 _FACT_REPLY_COMPLIANCE_RE = re.compile(
     r"^(?:(?:改|行|好)(?:吧|呗)|(?:行|好)[，,\s]*(?:那)?(?:就)?这样吧)[，,。.!！?？~～\s]*$"
@@ -72,6 +76,14 @@ _SHORT_SOCIAL_ROLEPLAY_EXPANSION_RE = re.compile(
 _PARTICIPATION_INVITATION_TERMS = ("一起", "来不来", "去不去", "带上", "拉上", "喊上", "叫上", "陪我", "跟我")
 _RECIPROCAL_SOCIAL_QUESTION_RE = re.compile(
     r"(?:^|[。！？!?]\s*)(?:你呢|你(?:那边)?(?:怎么样|咋样)|你吃没|你吃了吗)[？?]\s*$"
+)
+_SHORT_SOCIAL_ACTIONS = frozenset({"ACK", "AFFECTION", "JOKE"})
+_RECIPROCAL_QUESTION_ACTIONS = _SHORT_SOCIAL_ACTIONS | {"STANCE", "ANSWER"}
+_HARD_PRESSURE_CHAT_RE = re.compile(r"(?:少废话|闭嘴|滚|自己想|别来烦我|别烦我|爱咋咋地)[，,。!！\s]*$")
+_PRICKLY_CHAT_RE = re.compile(r"(?:关我什么事|与我无关|不关我的事|懒得理你|别找我)[，,。!！\s]*$")
+_SUPPORTIVE_CONTEXT_DEFLECTION_RE = re.compile(r"(?:哎呀)?这个我不会嘛[，,。!！\s]*$")
+_SUPPORTIVE_HELP_REQUEST_RE = re.compile(
+    r"(?:我|自己)不知道(?:该)?怎么办|(?:我|自己)不知所措[，,。！？!?\s]{0,4}(?:我)?该怎么办|(?:我|自己)撑不住"
 )
 
 
@@ -151,10 +163,12 @@ def inspect_persona_output(
     rule_ids: list[str] = []
     quality_rule_ids: list[str] = []
     current = str(current_user_text or "").strip().rsplit("\n", 1)[-1].strip()
-    short_vent = len(current) <= 24 and bool(_SHORT_VENT_RE.search(current))
+    short_vent = is_short_vent(current)
     is_presence_check = bool(_PRESENCE_CHECK_RE.search(current))
+    is_bare_self_alias_wake = _is_bare_self_alias_wake(current, self_aliases)
     action = str(social_action or "").strip().upper()
     target = str(reply_target or "").strip().lower()
+    user_is_hostile = any(term in current for term in ("滚", "闭嘴", "别烦我", "去死"))
     current_has_persona_topic = any(anchor in current for anchor in _PERSONA_TOPIC_ANCHORS)
     persona_topic_terms = ()
     if not current_has_persona_topic:
@@ -190,6 +204,16 @@ def inspect_persona_output(
     if is_presence_check and len(plain) > 4:
         quality_rule_ids.append("presence_check_overexplained")
         rule_ids.append("presence_check_overexplained")
+    if is_bare_self_alias_wake and _ALIAS_WAKE_GENERIC_REPLY_RE.fullmatch(plain):
+        quality_rule_ids.append("alias_wake_generic_reply")
+        rule_ids.append("alias_wake_generic_reply")
+    if (
+        (target in {"emotion", "help"} or (target == "answer" and _SUPPORTIVE_HELP_REQUEST_RE.search(current)))
+        and action in {"ACK", "ANSWER", "STANCE"}
+        and _SUPPORTIVE_CONTEXT_DEFLECTION_RE.fullmatch(plain)
+    ):
+        quality_rule_ids.append("supportive_context_deflection")
+        rule_ids.append("supportive_context_deflection")
     if (
         target == "fact"
         and any(term in plain for term in _GENERIC_PRAISE_TERMS)
@@ -203,25 +227,33 @@ def inspect_persona_output(
     if target == "fact" and _FACT_REPLY_COMPLIANCE_RE.fullmatch(plain):
         quality_rule_ids.append("fact_reply_compliance_template")
         rule_ids.append("fact_reply_compliance_template")
-    if action in {"ACK", "JOKE"} and any(pattern.fullmatch(plain) for pattern in _SHORT_SOCIAL_DEFERENTIAL_PATTERNS):
+    if action in _SHORT_SOCIAL_ACTIONS and any(
+        pattern.fullmatch(plain) for pattern in _SHORT_SOCIAL_DEFERENTIAL_PATTERNS
+    ):
         quality_rule_ids.append("short_social_deferential_template")
         rule_ids.append("short_social_deferential_template")
-    if action in {"ACK", "JOKE"} and persona_topic_terms:
+    if action in _SHORT_SOCIAL_ACTIONS and persona_topic_terms:
         quality_rule_ids.append("persona_topic_hijack")
         rule_ids.append("persona_topic_hijack")
-    if action in {"ACK", "JOKE"} and unprompted_self_aliases:
+    if action in _SHORT_SOCIAL_ACTIONS and unprompted_self_aliases:
         quality_rule_ids.append("unprompted_self_alias")
         rule_ids.append("unprompted_self_alias")
-    if action in {"ACK", "JOKE", "STANCE", "ANSWER"} and _RECIPROCAL_SOCIAL_QUESTION_RE.search(plain):
+    if action in _RECIPROCAL_QUESTION_ACTIONS and _RECIPROCAL_SOCIAL_QUESTION_RE.search(plain):
         quality_rule_ids.append("reciprocal_social_question")
         rule_ids.append("reciprocal_social_question")
     if (
-        action in {"ACK", "JOKE"}
+        action in _SHORT_SOCIAL_ACTIONS
         and not any(term in current for term in _PARTICIPATION_INVITATION_TERMS)
         and _SHORT_SOCIAL_ROLEPLAY_EXPANSION_RE.search(plain)
     ):
         quality_rule_ids.append("short_social_roleplay_expansion")
         rule_ids.append("short_social_roleplay_expansion")
+    if action in {"ACK", "ANSWER", "STANCE"} and _HARD_PRESSURE_CHAT_RE.search(plain):
+        quality_rule_ids.append("chat_hard_pressure_tone")
+        rule_ids.append("chat_hard_pressure_tone")
+    if action in {"ACK", "ANSWER", "STANCE"} and not user_is_hostile and _PRICKLY_CHAT_RE.search(plain):
+        quality_rule_ids.append("chat_prickly_tone")
+        rule_ids.append("chat_prickly_tone")
     return PersonaOutputInspection(
         rule_ids=tuple(rule_ids),
         quality_rule_ids=tuple(quality_rule_ids),
@@ -252,6 +284,13 @@ def _find_unprompted_self_aliases(
         if re.search(rf"(?:拉|带|喊|叫).{{0,3}}{escaped}(?:去|来|看看|一下)?", plain):
             found.append(alias)
     return tuple(found)
+
+
+def _is_bare_self_alias_wake(current_user_text: str, self_aliases: list[str]) -> bool:
+    compact = re.sub(r"[\s，,。.!！?？：:;；~～]+", "", str(current_user_text or "").casefold())
+    if not compact:
+        return False
+    return any(compact == str(alias or "").strip().casefold() for alias in self_aliases if str(alias or "").strip())
 
 
 def resolve_persona_output(
@@ -320,6 +359,11 @@ def persona_output_retry_instruction(rule_ids: tuple[str, ...] | list[str]) -> s
         return "上一句擅自安排了下一步。只接住这句情绪，不提建议、做法或时间安排。"
     if "presence_check_overexplained" in rules:
         return "上一句在确认是否在线时补了状态和反问。只回答是否在，四字以内，不追加任何话。"
+    if "alias_wake_generic_reply" in rules:
+        return "".join((
+            "对方只是在叫你的别名，不要用说吧、什么事、怎么了这类客服式泛问。",
+            "换成像群友被叫到名的短回应，例如？或干嘛。",
+        ))
     if "fact_reply_ungrounded_praise" in rules:
         return "上一句无根据地夸人了。只接当前这句话，不泛夸、不鼓励。"
     if "fact_reply_overextended" in rules:

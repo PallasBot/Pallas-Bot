@@ -6,6 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from pallas.api.logging import format_plugin_event
 from pallas.console.webui import plugin_config_proxy
 from pallas.console.webui.field_help import field_help
 from pallas.console.webui.registry import PluginWebuiConfigHooks, register_plugin_webui_config
@@ -109,7 +110,7 @@ def on_pb_stats_config_reload(cfg: Config) -> None:
         from pallas.product.community_stats.scheduler import schedule_reload_community_stats_reporter
 
         schedule_reload_community_stats_reporter()
-        logger.info("pb_stats: config saved, hot reloaded")
+        logger.info(format_plugin_event("reload_config", "Reloaded community statistics reporting configuration"))
     except Exception as e:
         logger.warning("pb_stats hot reload failed: {}", e)
 

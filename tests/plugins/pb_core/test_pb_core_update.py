@@ -141,6 +141,38 @@ async def test_apply_update_action_all_runs_three_targets():
     assert "Bot：已应用" in text
 
 
+@pytest.mark.asyncio
+async def test_apply_plugins_lists_updated_plugin_versions():
+    with (
+        patch(
+            "pallas.console.webui.update_apply_progress.has_active_update_apply_job",
+            return_value=False,
+        ),
+        patch(
+            "packages.pb_core.update._apply_plugins",
+            new=AsyncMock(
+                return_value={
+                    "result": "applied",
+                    "updated": [
+                        {
+                            "id": "pallas-plugin-afdian",
+                            "source": "official",
+                            "from_ref": "0.1.8",
+                            "to_ref": "0.1.9",
+                        },
+                    ],
+                    "restart_scheduled": True,
+                },
+            ),
+        ),
+    ):
+        text = await apply_update_action("plugins")
+
+    assert "【插件更新】" in text
+    assert "pallas-plugin-afdian：0.1.8 -> 0.1.9" in text
+    assert "已安排重启 Bot" in text
+
+
 def test_apply_update_config_command_patches_pb_webui():
     with patch(
         "pallas.console.webui.plugin_api.apply_plugin_config_patch",

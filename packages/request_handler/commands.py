@@ -1,4 +1,4 @@
-from nonebot import on_command, on_message, on_request
+from nonebot import logger, on_command, on_message, on_request
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11 import (
     Bot,
@@ -69,6 +69,7 @@ from packages.request_handler.texts import (
     build_quick_action_arg_hint,
     build_quick_action_missing_hint,
 )
+from pallas.api.logging import format_plugin_event
 from pallas.api.perm import private_message_permission_for_command, satisfies_command_permission
 from pallas.core.foundation.config import BotConfig, GroupConfig, UserConfig, user_is_bot_admin
 
@@ -267,6 +268,12 @@ async def handle_friend_request(bot: Bot, event: FriendRequestEvent):
         await event.approve(bot)
         pending_friend.get(bot_key, {}).pop(str(event.user_id), None)
         persist_pending_friend(bot_key)
+        logger.info(
+            format_plugin_event(
+                "auto_approve_friend",
+                f"Bot [{bot_id}] automatically approved a friend request from user [{event.user_id}]",
+            )
+        )
         return
 
     if not await request_handler_plugin_disabled(bot_id=bot_id):
@@ -416,10 +423,19 @@ async def handle_group_request(bot: Bot, event: GroupRequestEvent):
         persist_pending_group(bot_key)
 
         bot_config = BotConfig(bot_id)
-        if await bot_config.auto_accept_group() or await user_is_bot_admin(bot_id, event.user_id):
+        inviter_is_bot_admin = await user_is_bot_admin(bot_id, event.user_id)
+        if await bot_config.auto_accept_group() or inviter_is_bot_admin:
             await event.approve(bot)
             pending_group.get(bot_key, {}).pop(group_key, None)
             persist_pending_group(bot_key)
+            reason = "the inviter is a bot admin" if inviter_is_bot_admin else "auto approval is enabled"
+            logger.info(
+                format_plugin_event(
+                    "auto_approve_group",
+                    f"Bot [{bot_id}] automatically approved an invitation to group [{event.group_id}] "
+                    f"from user [{event.user_id}]: {reason}",
+                )
+            )
             return
 
         if not await request_handler_plugin_disabled(bot_id=bot_id):
@@ -479,6 +495,13 @@ async def handle_approve_all_friends(bot: Bot, event: MessageEvent):
     for uid in cleared_friend_ids:
         clear_quick_approve_state(bot_key, "friend", uid)
 
+    if ok:
+        logger.info(
+            format_plugin_event(
+                "approve_all_friends",
+                f"Bot [{bot.self_id}] approved [{ok}] pending friend requests",
+            )
+        )
     await approve_all_friends_cmd.finish(f"已同意 {ok} 条好友申请" + (f"，{fail} 条失败" if fail else ""))
 
 
@@ -526,6 +549,13 @@ async def handle_reject_all_friends(bot: Bot, event: MessageEvent):
     for uid in cleared_friend_ids:
         clear_quick_approve_state(bot_key, "friend", uid)
 
+    if ok:
+        logger.info(
+            format_plugin_event(
+                "reject_all_friends",
+                f"Bot [{bot.self_id}] rejected [{ok}] pending friend requests",
+            )
+        )
     await reject_all_friends_cmd.finish(f"已拒绝 {ok} 条好友申请" + (f"，{fail} 条失败" if fail else ""))
 
 
@@ -554,6 +584,13 @@ async def handle_approve_all_groups(bot: Bot, event: MessageEvent):
     persist_pending_group(bot_key)
     for gkey in cleared_group_keys:
         clear_quick_approve_state(bot_key, "group", gkey)
+    if ok:
+        logger.info(
+            format_plugin_event(
+                "approve_all_groups",
+                f"Bot [{bot.self_id}] approved [{ok}] pending group invitations",
+            )
+        )
     await approve_all_groups_cmd.finish(f"已同意 {ok} 条入群申请" + (f"，{fail} 条失败" if fail else ""))
 
 
@@ -582,6 +619,13 @@ async def handle_reject_all_groups(bot: Bot, event: MessageEvent):
     persist_pending_group(bot_key)
     for gkey in cleared_group_keys:
         clear_quick_approve_state(bot_key, "group", gkey)
+    if ok:
+        logger.info(
+            format_plugin_event(
+                "reject_all_groups",
+                f"Bot [{bot.self_id}] rejected [{ok}] pending group invitations",
+            )
+        )
     await reject_all_groups_cmd.finish(f"已拒绝 {ok} 条入群申请" + (f"，{fail} 条失败" if fail else ""))
 
 
@@ -622,6 +666,7 @@ async def handle_enable_auto_friend(bot: Bot, event: MessageEvent):
     if not await satisfies_command_permission(bot, event, "request.enable_auto_friend"):
         return
     await BotConfig(int(bot.self_id)).set_auto_accept_friend(True)
+    logger.info(format_plugin_event("enable_auto_friend", f"Bot [{bot.self_id}] enabled automatic friend approval"))
     await enable_auto_friend_cmd.finish("已开启好友自动同意")
 
 
@@ -630,6 +675,7 @@ async def handle_disable_auto_friend(bot: Bot, event: MessageEvent):
     if not await satisfies_command_permission(bot, event, "request.disable_auto_friend"):
         return
     await BotConfig(int(bot.self_id)).set_auto_accept_friend(False)
+    logger.info(format_plugin_event("disable_auto_friend", f"Bot [{bot.self_id}] disabled automatic friend approval"))
     await disable_auto_friend_cmd.finish("已关闭好友自动同意")
 
 
@@ -638,6 +684,9 @@ async def handle_enable_auto_group(bot: Bot, event: MessageEvent):
     if not await satisfies_command_permission(bot, event, "request.enable_auto_group"):
         return
     await BotConfig(int(bot.self_id)).set_auto_accept_group(True)
+    logger.info(
+        format_plugin_event("enable_auto_group", f"Bot [{bot.self_id}] enabled automatic group invitation approval")
+    )
     await enable_auto_group_cmd.finish("已开启入群自动同意")
 
 
@@ -646,6 +695,9 @@ async def handle_disable_auto_group(bot: Bot, event: MessageEvent):
     if not await satisfies_command_permission(bot, event, "request.disable_auto_group"):
         return
     await BotConfig(int(bot.self_id)).set_auto_accept_group(False)
+    logger.info(
+        format_plugin_event("disable_auto_group", f"Bot [{bot.self_id}] disabled automatic group invitation approval")
+    )
     await disable_auto_group_cmd.finish("已关闭入群自动同意")
 
 

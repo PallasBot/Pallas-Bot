@@ -29,7 +29,6 @@ def score_fixture(row: dict) -> dict:
     from pallas.product.llm.output_filter import resolve_output_filtered_reply
     from pallas.product.llm.reply_effect import heuristic_reply_effect_scores
     from pallas.product.llm.scene_style import format_scene_style_block, resolve_scene_style_constraints
-    from pallas.product.llm.situational_rules import enrich_system_with_situational_rules
     from pallas.product.llm.structured_reply import normalize_model_reply
 
     user_text = str(row.get("user_text") or row.get("input") or "").strip()
@@ -44,7 +43,7 @@ def score_fixture(row: dict) -> dict:
     filtered = resolve_output_filtered_reply({"task_type": LLM_CHAT_TASK_TYPE}, normalized)
     constraints = resolve_scene_style_constraints(scene, ConversationMode.NORMAL, direct_chat=True)
     style_block = format_scene_style_block(constraints)
-    system = enrich_system_with_situational_rules("你在群里闲聊。", focus_text=user_text)
+    system = "你在群里闲聊。"
     scores = heuristic_reply_effect_scores(filtered or normalized)
     low = scores.get("uncanny_risk", 3) >= 4 or not filtered
     return {

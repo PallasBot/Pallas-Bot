@@ -10,8 +10,10 @@ from dataclasses import replace
 
 from nonebot import logger
 
+from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.core.platform.work_jobs.models import WorkJob
 from pallas.core.platform.work_jobs.runtime import build_work_job_store
+from pallas.product.llm.inference_params import task_token_budget
 
 _DISPATCH_TASK: asyncio.Task[None] | None = None
 _VISION_SELECT_SEMAPHORE = asyncio.Semaphore(1)
@@ -204,7 +206,10 @@ async def choose_sticker_with_vision(
                     {"role": "user", "content": content},
                 ],
                 model=endpoint.model,
-                options={"temperature": 0.1, "num_predict": 32},
+                options={
+                    "temperature": 0.1,
+                    "num_predict": task_token_budget("sticker_vision"),
+                },
                 tools=None,
                 base_url=endpoint.base_url,
                 api_key=endpoint.api_key,
@@ -220,13 +225,16 @@ async def choose_sticker_with_vision(
         details["finished_at"] = time.time()
         details["error"] = f"{type(exc).__name__}: {str(exc)[:200]}"
         logger.warning(
-            "sticker vision failed: job_id={} provider={} model={} candidates={} duration_ms={} err={}",
-            details.get("job_id"),
-            provider,
-            endpoint.model,
-            len(candidates),
-            details["duration_ms"],
-            details["error"],
+            format_business_event(
+                "贴纸视觉选择",
+                "失败",
+                job_id=details.get("job_id"),
+                provider=provider,
+                model=endpoint.model,
+                candidates=len(candidates),
+                duration_ms=details["duration_ms"],
+                error=type(exc).__name__,
+            )
         )
         record_bot_llm_task("sticker_vision", "callback_fail")
         return None
@@ -236,13 +244,16 @@ async def choose_sticker_with_vision(
     details["finished_at"] = time.time()
     details["state"] = "selected" if index is not None else "no_match"
     logger.info(
-        "sticker vision finished: job_id={} provider={} model={} candidates={} state={} duration_ms={}",
-        details.get("job_id"),
-        provider,
-        endpoint.model,
-        len(candidates),
-        details["state"],
-        details["duration_ms"],
+        format_business_event(
+            "贴纸视觉选择",
+            "已完成",
+            job_id=details.get("job_id"),
+            provider=provider,
+            model=endpoint.model,
+            candidates=len(candidates),
+            state=details["state"],
+            duration_ms=details["duration_ms"],
+        )
     )
     return candidates[index][0] if index is not None else None
 
@@ -256,8 +267,21 @@ async def enqueue_sticker_vision_job(
     bot_id: int,
     group_id: int,
     fallback_cq_code: str,
+    cooldown_sec: int = 90,
 ) -> str:
     """将图片选择交由 work 辅进程执行，返回可轮询的 job id。"""
+    from pallas.product.llm.sticker_label_jobs import StickerLabelSource, enqueue_sticker_label_candidate
+
+    source = (
+        StickerLabelSource.TEST_CANDIDATE
+        if idempotency_key.startswith("sticker_vision.test:")
+        else StickerLabelSource.FOLLOWUP_CANDIDATE
+    )
+    for cache_key, content in candidates:
+        try:
+            await enqueue_sticker_label_candidate(cache_key=cache_key, content=content, source=source)
+        except Exception as exc:
+            logger.debug("sticker label enqueue skipped: {}", exc)
     job = WorkJob.create(
         kind="sticker_vision.select",
         payload={},
@@ -273,6 +297,7 @@ async def enqueue_sticker_vision_job(
             "bot_id": int(bot_id),
             "group_id": int(group_id),
             "fallback_cq_code": str(fallback_cq_code),
+            "cooldown_sec": max(0, int(cooldown_sec)),
         },
         "vision_observation": {
             "job_id": job.id,
@@ -281,12 +306,10 @@ async def enqueue_sticker_vision_job(
             "candidate_count": len(candidates),
         },
     }
-    logger.info(
-        "sticker vision queued: job_id={} candidates={} bot_id={} group_id={}",
-        job.id,
-        len(candidates),
-        bot_id,
-        group_id,
+    logger.debug(
+        format_business_event(
+            "贴纸视觉选择", "已入队", job_id=job.id, candidates=len(candidates), bot=bot_id, group=group_id
+        )
     )
     job = replace(job, payload=payload)
     return (await build_work_job_store().enqueue(job)).id
@@ -473,8 +496,11 @@ async def dispatch_sticker_vision_delivery_once() -> bool:
         return True
     from pallas.core.shared.utils.media_cache import get_image
     from pallas.product.llm.delivery import prepare_sticker_image
+    from pallas.product.llm.sticker_followup import note_repeater_image_sent, should_send_repeater_image
+    from pallas.product.llm.sticker_labels import content_hash_for_bytes
 
     message = Message()
+    content_hash = ""
     for segment in Message(raw_image):
         if segment.type != "image":
             message += segment
@@ -483,15 +509,24 @@ async def dispatch_sticker_vision_delivery_once() -> bool:
         if not cached:
             await save_sticker_vision_delivery(job_id, payload, state="failed", error="图片缓存已失效")
             return True
+        content_hash = content_hash_for_bytes(cached)
+        if not should_send_repeater_image(
+            int(delivery.get("group_id") or 0),
+            raw_image,
+            cooldown_sec=int(delivery.get("cooldown_sec") or 0),
+        ):
+            await save_sticker_vision_delivery(job_id, payload, state="failed", error="表情图发送条件已失效")
+            return True
         message += MessageSegment.image(file=prepare_sticker_image(cached))
     try:
         await bot.call_api("send_group_msg", group_id=int(delivery.get("group_id") or 0), message=message)
     except Exception as exc:
         await save_sticker_vision_delivery(job_id, payload, state="failed", error=f"{type(exc).__name__}: {exc}")
-        logger.warning("sticker vision delivery failed: job_id={} err={}", job_id, type(exc).__name__)
+        logger.warning(format_business_event("贴纸视觉投递", "失败", job_id=job_id, error=type(exc).__name__))
         return True
     await save_sticker_vision_delivery(job_id, payload, state="sent")
-    logger.info("sticker vision delivered: job_id={} group_id={}", job_id, delivery.get("group_id"))
+    note_repeater_image_sent(int(delivery.get("group_id") or 0), raw_image, content_hash=content_hash)
+    logger.info(format_business_event("贴纸视觉投递", "已完成", job_id=job_id, group=delivery.get("group_id")))
     return True
 
 

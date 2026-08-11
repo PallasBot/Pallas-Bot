@@ -23,8 +23,8 @@
 
 | 命令 ID | 默认等级 |
 | --- | --- |
-| `repeater.ban` | 群管或号主 |
-| `repeater.ban_latest` | 群管或号主 |
+| `repeater.ban` | 所有人 |
+| `repeater.ban_latest` | 所有人 |
 
 实际生效等级以控制台「命令权限」为准。面向用户的 usage 不要写死角色名。
 
@@ -57,7 +57,7 @@
 - `config.py`：接话 / 复读 / 主动发言配置
 - `handlers/`：学习、接话、禁用与决策
 
-若开启 `LLM_REPEATER_MODE=select`，LLM 仅可从原始候选中辅助选句；默认仍以语料底盘为主。接话决策与 `llm_chat` 共用 conversation kernel。牛格与群风格见 [persona](../persona/README.md)。
+日常接话完全由 Repeater 从原始语料中选择并发送，不调用 LLM 选句或润色。Repeater 学到的牛格与群风格仍可作为明确唤醒 LLM 对话的表达参考，见 [persona](../persona/README.md)。
 
 ## 相关链接
 

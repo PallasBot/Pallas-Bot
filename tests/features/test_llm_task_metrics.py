@@ -10,37 +10,29 @@ from pallas.product.llm.task_metrics import (
 
 def test_record_bot_llm_task_snapshot() -> None:
     clear_llm_task_metrics_for_tests()
-    record_bot_llm_task("repeater_polish", "submit_ok")
-    record_bot_llm_task("repeater_polish", "callback_ok")
-    record_bot_llm_task("repeater_fallback", "submit_skip")
+    record_bot_llm_task("llm_chat", "submit_ok")
     record_bot_llm_task("llm_chat", "callback_fail")
     record_bot_llm_route("llm_chat", "plain_llm_chat")
-    record_bot_llm_route("llm_chat", "corpus_select")
     snap = llm_task_metrics_snapshot()
-    assert snap["by_task"]["repeater_polish"]["submit_ok"] == 1
-    assert snap["by_task"]["repeater_polish"]["callback_ok"] == 1
-    assert snap["by_task"]["repeater_fallback"]["submit_skip"] == 1
+    assert snap["by_task"]["llm_chat"]["submit_ok"] == 1
     assert snap["by_task"]["llm_chat"]["callback_fail"] == 1
-    assert snap["by_task"]["llm_chat"]["route_counts"] == {
-        "plain_llm_chat": 1,
-        "corpus_select": 1,
-    }
+    assert snap["by_task"]["llm_chat"]["route_counts"] == {"plain_llm_chat": 1}
     clear_llm_task_metrics_for_tests()
 
 
-def test_record_repeater_stage_routes() -> None:
+def test_record_bot_llm_task_background_events() -> None:
     clear_llm_task_metrics_for_tests()
-    record_bot_llm_route("repeater_select", "pipeline_select")
-    record_bot_llm_route("repeater_polish", "pipeline_stitch")
-    record_bot_llm_route("repeater_fallback", "pipeline_generate")
+    record_bot_llm_task("llm_chat", "background_enqueued")
+    record_bot_llm_task("llm_chat", "background_coalesced")
     snap = llm_task_metrics_snapshot()
-    assert snap["by_task"]["repeater_select"]["route_counts"] == {"pipeline_select": 1}
-    assert snap["by_task"]["repeater_polish"]["route_counts"] == {"pipeline_stitch": 1}
-    assert snap["by_task"]["repeater_fallback"]["route_counts"] == {"pipeline_generate": 1}
+    assert snap["by_task"]["llm_chat"]["background_enqueued"] == 1
+    assert snap["by_task"]["llm_chat"]["background_coalesced"] == 1
+    assert snap["totals"]["background_enqueued"] == 1
+    assert snap["totals"]["background_coalesced"] == 1
     clear_llm_task_metrics_for_tests()
 
 
-def test_track_llm_callback_uses_task_llm_route() -> None:
+def test_track_llm_callback_ignores_retired_repeater_task() -> None:
     from pallas.product.llm.delivery import track_llm_callback
 
     clear_llm_task_metrics_for_tests()
@@ -50,11 +42,21 @@ def test_track_llm_callback_uses_task_llm_route() -> None:
     )
     track_llm_callback({"task_type": "repeater_fallback"}, "callback_ok")
     snap = llm_task_metrics_snapshot()
-    assert snap["by_task"]["repeater_fallback"]["callback_ok"] == 2
-    assert snap["by_task"]["repeater_fallback"]["route_counts"] == {
-        "pipeline_generate": 1,
-        "corpus_fallback": 1,
-    }
+    assert "repeater_fallback" not in snap["by_task"]
+    clear_llm_task_metrics_for_tests()
+
+
+def test_track_llm_callback_records_explicit_llm_chat_route() -> None:
+    from pallas.product.llm.delivery import track_llm_callback
+
+    clear_llm_task_metrics_for_tests()
+    track_llm_callback(
+        {"task_type": "llm_chat", "llm_route": "plain_llm_chat"},
+        "callback_ok",
+    )
+    snap = llm_task_metrics_snapshot()
+    assert snap["by_task"]["llm_chat"]["callback_ok"] == 1
+    assert snap["by_task"]["llm_chat"]["route_counts"] == {"plain_llm_chat": 1}
     clear_llm_task_metrics_for_tests()
 
 

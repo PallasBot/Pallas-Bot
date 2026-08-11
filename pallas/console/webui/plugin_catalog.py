@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import ast
 import importlib
+import importlib.metadata
 import importlib.util
+import re
+import tomllib
 from pathlib import Path  # noqa: TC003
 from typing import Any
 
@@ -28,7 +31,7 @@ from pallas.core.platform.plugin_runtime.plugin_identity import canonical_plugin
 
 _PLUGINS_ROOT = PROJECT_ROOT / "packages"
 
-PluginSourceKind = str  # "core" | "extra" | "bundled" | "local" | "pip"
+PluginSourceKind = str  # "core" | "bundled" | "official" | "community" | "nonebot" | "local"
 
 _INFRA_NAME_PREFIXES = (
     "nonebot",
@@ -45,6 +48,20 @@ _INFRA_EXACT = frozenset({
     "nonebot_plugin_alconna",
 })
 _BRAND_AVATAR_PATH = "/pallas/assets/brand-avatar.png"
+
+
+def normalize_distribution_name(name: str) -> str:
+    """按 PyPI 规范统一 distribution 名称。"""
+    return re.sub(r"[-_.]+", "-", str(name or "").strip().lower())
+
+
+def classify_distribution_source(name: str) -> PluginSourceKind | None:
+    normalized = normalize_distribution_name(name)
+    if normalized.startswith("pallas-plugin-"):
+        return "official"
+    if normalized.startswith("nonebot-plugin-"):
+        return "nonebot"
+    return None
 
 
 def discover_plugin_packages() -> list[str]:
@@ -422,6 +439,78 @@ def community_plugin_row_for_plugin(plugin_id: str) -> dict[str, Any] | None:
     return None
 
 
+def catalog_plugin_source(
+    plugin_id: str,
+    source: PluginSourceKind,
+    *,
+    module_name: str = "",
+) -> PluginSourceKind:
+    if source == "local" and community_plugin_row_for_plugin(plugin_id) is not None:
+        return "community"
+    if source == "extra" or is_extra_plugin(plugin_id):
+        return "official"
+    if community_plugin_row_for_plugin(plugin_id) is not None:
+        return "community"
+    if source == "pip":
+        return classify_distribution_source(module_name) or classify_distribution_source(plugin_id) or source
+    return source
+
+
+def installed_distribution_version(
+    package: str,
+    module_name: str,
+    *,
+    top_level_distributions: dict[str, list[str]] | None = None,
+) -> str | None:
+    candidates = [extra_package_for_plugin(package)]
+    top_level = (module_name or "").split(".", 1)[0]
+    if top_level:
+        try:
+            distributions = top_level_distributions or importlib.metadata.packages_distributions()
+            candidates.extend(distributions.get(top_level, ()))
+        except Exception:  # noqa: BLE001
+            pass
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            return importlib.metadata.version(candidate)
+        except importlib.metadata.PackageNotFoundError:
+            continue
+    return None
+
+
+def plugin_version(
+    package: str,
+    source: PluginSourceKind,
+    *,
+    package_root: Path | None = None,
+    module_name: str = "",
+    top_level_distributions: dict[str, list[str]] | None = None,
+) -> str | None:
+    if top_level_distributions is None:
+        installed = installed_distribution_version(package, module_name)
+    else:
+        installed = installed_distribution_version(
+            package,
+            module_name,
+            top_level_distributions=top_level_distributions,
+        )
+    if installed:
+        return installed
+    if source not in ("local", "community") or package_root is None:
+        return None
+    try:
+        with (package_root / "pyproject.toml").open("rb") as f:
+            project = tomllib.load(f).get("project")
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+    version = project.get("version") if isinstance(project, dict) else None
+    if version is None:
+        return None
+    return str(version).strip() or None
+
+
 def _resolve_remote_catalog_visuals(plugin_id: str) -> dict[str, str | None]:
     community = community_plugin_row_for_plugin(plugin_id)
     if community is not None:
@@ -519,6 +608,10 @@ def build_plugin_catalog_rows(
     global_disable_protected = global_disable_protected or set()
     _, by_package = _loaded_plugin_index()
     extra_pkgs = discover_extra_plugin_packages()
+    try:
+        top_level_distributions = importlib.metadata.packages_distributions()
+    except Exception:  # noqa: BLE001
+        top_level_distributions = {}
     rows: list[dict[str, Any]] = []
     seen_packages: set[str] = set()
 
@@ -554,6 +647,18 @@ def build_plugin_catalog_rows(
             file_path = getattr(mod, "__file__", "") if mod is not None else ""
             if file_path:
                 root = Path(file_path).resolve().parent
+        plugin_source = catalog_plugin_source(
+            resolved_plugin_id,
+            plugin_source,
+            module_name=module_name,
+        )
+        version = plugin_version(
+            resolved_plugin_id,
+            plugin_source,
+            package_root=root,
+            module_name=module_name,
+            top_level_distributions=top_level_distributions,
+        )
         visuals = resolve_catalog_visuals(
             plugin_id=resolved_plugin_id,
             plugin_source=plugin_source,
@@ -577,6 +682,7 @@ def build_plugin_catalog_rows(
             "global_disable_protected": g_protected,
             "plugin_source": plugin_source,
             "plugin_source_dir": plugin_source_dir,
+            "plugin_version": version,
             "extra_package": extra_package_for_plugin(resolved_plugin_id),
             "avatar": visuals["avatar"],
             "icon": visuals["icon"],
@@ -645,7 +751,7 @@ def build_plugin_catalog_rows(
             meta=meta,
             loaded=loaded,
             role="infra",
-            plugin_source="pip",
+            plugin_source="nonebot",
             plugin_source_dir=None,
             has_config=module_has_config_module(module_name),
             loaded_plugin=p,
@@ -679,7 +785,7 @@ def build_plugin_catalog_rows(
                 meta=meta,
                 loaded=loaded,
                 role=package_load_role(resolved_plugin_id),
-                plugin_source="extra" if len(module_paths) == 1 else "pip",
+                plugin_source="official",
                 plugin_source_dir=None,
                 has_config=module_has_config_module(module_name),
                 loaded_plugin=p,
@@ -693,10 +799,19 @@ def build_plugin_catalog_rows(
             continue
         mod = getattr(p, "module", None)
         module_name = getattr(mod, "__name__", "") if mod is not None else ""
+        if "." in module_name:
+            continue
         short = module_name.rsplit(".", 1)[-1] if module_name else ""
         if short in seen_packages:
             continue
         if not is_infrastructure_plugin_name(nb_name, module_name):
+            continue
+        plugin_metadata = getattr(p, "metadata", None)
+        if (
+            classify_distribution_source(nb_name) is None
+            and classify_distribution_source(module_name) is None
+            and plugin_metadata is None
+        ):
             continue
         pkg_key = short or nb_name
         seen_packages.add(pkg_key)
@@ -707,7 +822,9 @@ def build_plugin_catalog_rows(
             meta=metadata_to_dict(getattr(p, "metadata", None)),
             loaded=True,
             role="infra",
-            plugin_source="pip",
+            plugin_source=(
+                classify_distribution_source(nb_name) or classify_distribution_source(module_name) or "nonebot"
+            ),
             plugin_source_dir=None,
             has_config=module_has_config_module(module_name),
             loaded_plugin=p,

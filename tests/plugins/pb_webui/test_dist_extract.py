@@ -5,7 +5,10 @@ from __future__ import annotations
 import zipfile
 from typing import TYPE_CHECKING
 
-from packages.pb_webui.manager import _resolved_extract_root
+from packages.pb_webui.manager import (
+    _resolved_extract_root,
+    extract_bundled_webui_dist,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -57,3 +60,21 @@ def test_sync_extract_public_zip_layout(tmp_path: Path) -> None:
     _sync_extract_dist_zip_file(zip_path, dest)
 
     assert (dest / "index.html").read_text(encoding="utf-8") == "<html>ok</html>"
+
+
+async def test_extract_bundled_webui_dist_installs_archive(tmp_path: Path) -> None:
+    zip_path = tmp_path / "dist.zip"
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.writestr("public-react/index.html", "<html>bundled</html>")
+
+    dest = tmp_path / "data" / "pb_webui" / "public-react"
+
+    assert await extract_bundled_webui_dist(dest, zip_path) is True
+    assert (dest / "index.html").read_text(encoding="utf-8") == "<html>bundled</html>"
+
+
+async def test_extract_bundled_webui_dist_rejects_invalid_archive(tmp_path: Path) -> None:
+    zip_path = tmp_path / "dist.zip"
+    zip_path.write_text("not a zip", encoding="utf-8")
+
+    assert await extract_bundled_webui_dist(tmp_path / "public-react", zip_path) is False

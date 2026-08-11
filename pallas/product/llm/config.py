@@ -109,10 +109,6 @@ def _env_float(key: str, default: float) -> float:
         return default
 
 
-def _env_float_clamped(key: str, default: float, minimum: float, maximum: float) -> float:
-    return min(maximum, max(minimum, _env_float(key, default)))
-
-
 def _parse_group_id_set(raw: str | None) -> list[int]:
     if not raw or not raw.strip():
         return []
@@ -146,24 +142,6 @@ def _env_group_id_list(key: str) -> list[int]:
     if raw is None:
         return []
     return _parse_group_id_set(raw)
-
-
-def resolve_llm_repeater_mode() -> str:
-    raw = _env_str("LLM_REPEATER_MODE").strip().lower()
-    if raw == "off":
-        return raw
-    return "select"
-
-
-def resolve_llm_repeater_flags() -> tuple[bool, bool, bool]:
-    mode = resolve_llm_repeater_mode()
-    if mode == "off":
-        return False, False, False
-    return False, False, True
-
-
-def resolve_llm_polish_lite_enabled() -> bool:
-    return False
 
 
 def resolve_conversation_feature_level_raw() -> str:
@@ -242,13 +220,6 @@ class LlmConfig(BaseModel):
     chat_tts_enable: bool = Field(default=False)
     drunk_tts_min_drunkenness: int = Field(default=1, ge=0, le=100)
     drunk_tts_min_chars: int = Field(default=6, ge=0, le=2000)
-    llm_repeater_mode: str = Field(default="select")
-    llm_fallback_enabled: bool = Field(default=False)
-    llm_polish_enabled: bool = Field(default=False)
-    llm_select_enabled: bool = Field(default=True)
-    llm_select_max_candidates: int = Field(default=12, ge=2, le=32)
-    llm_polish_lite_enabled: bool = Field(default=False)
-    llm_polish_lite_sample_rate: float = Field(default=0.12, ge=0.0, le=1.0)
     use_unified_chat_api: bool = Field(default=True)
     legacy_chat_allowed: bool = Field(default=False)
     legacy_chat_endpoint: str = Field(default="/api/llm/chat")
@@ -276,31 +247,22 @@ class LlmConfig(BaseModel):
     llm_shared_max_concurrency: int = Field(default=4, ge=1, le=64)
     llm_chat_char_budget: int = Field(default=12000, ge=0, le=200000)
     llm_chat_disabled_group_ids: list[int] = Field(default_factory=list)
-    llm_repeater_group_cooldown_sec: int = Field(default=60, ge=0, le=3600)
-    llm_repeater_strong_cooldown_sec: int = Field(default=25, ge=0, le=3600)
-    llm_repeater_strong_attempt_rate: float = Field(default=0.55, ge=0.0, le=1.0)
-    llm_repeater_max_inflight: int = Field(default=2, ge=1, le=32)
-    llm_repeater_global_rpm: int = Field(default=18, ge=1, le=600)
     llm_repeater_feedback_enabled: bool = Field(default=True)
     llm_repeater_bias_enabled: bool = Field(default=True)
     llm_repeater_writeback_enabled: bool = Field(default=True)
     conversation_feature_level: str = Field(default="")
     llm_reply_gate_enabled: bool = Field(default=True)
-    llm_current_turn_decision_enabled: bool = Field(default=True)
+    llm_current_turn_decision_enabled: bool = Field(default=False)
     llm_current_turn_decision_model: str = Field(default="")
     llm_reply_gate_min_chars: int = Field(default=1, ge=0, le=32)
     llm_chat_queue_merge: bool = Field(default=True)
     llm_output_filter_enabled: bool = Field(default=True)
     llm_output_filter_chat_hard_phrases: list[str] = Field(default_factory=list)
     llm_output_filter_chat_soft_phrases: list[str] = Field(default_factory=list)
-    llm_output_filter_polish_lite_hard_phrases: list[str] = Field(default_factory=list)
-    llm_output_filter_polish_lite_soft_phrases: list[str] = Field(default_factory=list)
     llm_persona_output_firewall: dict[str, object] = Field(default_factory=dict)
     llm_reply_postprocess_enabled: bool = Field(default=False)
     llm_reply_typo_enabled: bool = Field(default=False)
     llm_reply_typo_rate: float = Field(default=0.01, ge=0.0, le=1.0)
-    llm_reply_split_enabled: bool = Field(default=False)
-    llm_reply_split_max_chars: int = Field(default=36, ge=8, le=120)
     llm_reply_trim_terminal_period_enabled: bool = Field(default=True)
     llm_reply_trim_terminal_period_rate: float = Field(default=0.9, ge=0.0, le=1.0)
     llm_reply_mention_cooldown_sec: int = Field(default=900, ge=0, le=86400)
@@ -450,13 +412,9 @@ def get_llm_config() -> LlmConfig:
             return _cached_llm_config
         host = _env_str("LLM_AI_SERVER_HOST") or _env_str("AI_SERVER_HOST") or "127.0.0.1"
         port = _env_int("LLM_AI_SERVER_PORT", _env_int("AI_SERVER_PORT", 9099))
-        repeater_mode = resolve_llm_repeater_mode()
-        fallback_enabled, polish_enabled, select_enabled = resolve_llm_repeater_flags()
         from pallas.product.llm.corpus_contamination import (
             CHAT_HARD_BLOCK_PHRASES,
             CHAT_SOFT_RETRY_PHRASES,
-            POLISH_LITE_HARD_BLOCK_PHRASES,
-            POLISH_LITE_SOFT_RETRY_PHRASES,
         )
 
         _cached_llm_config = LlmConfig(
@@ -471,13 +429,6 @@ def get_llm_config() -> LlmConfig:
             chat_tts_enable=resolve_chat_tts_enabled(),
             drunk_tts_min_drunkenness=_env_int("DRUNK_TTS_MIN_DRUNKENNESS", 1),
             drunk_tts_min_chars=_env_int("DRUNK_TTS_MIN_CHARS", 6),
-            llm_repeater_mode=repeater_mode,
-            llm_fallback_enabled=fallback_enabled,
-            llm_polish_enabled=polish_enabled,
-            llm_select_enabled=select_enabled,
-            llm_select_max_candidates=_env_int("LLM_SELECT_MAX_CANDIDATES", 12),
-            llm_polish_lite_enabled=resolve_llm_polish_lite_enabled(),
-            llm_polish_lite_sample_rate=_env_float("LLM_POLISH_LITE_SAMPLE_RATE", 0.12),
             use_unified_chat_api=_env_bool("LLM_USE_UNIFIED_CHAT_API", True),
             legacy_chat_allowed=_env_bool("LLM_LEGACY_CHAT_ALLOWED", False),
             legacy_chat_endpoint=_env_str("LLM_LEGACY_CHAT_ENDPOINT", "/api/llm/chat"),
@@ -508,22 +459,12 @@ def get_llm_config() -> LlmConfig:
             llm_shared_max_concurrency=_env_int("LLM_SHARED_MAX_CONCURRENCY", 4),
             llm_chat_char_budget=_env_int("LLM_CHAT_CHAR_BUDGET", 12000),
             llm_chat_disabled_group_ids=_env_group_id_list("LLM_CHAT_DISABLED_GROUP_IDS"),
-            llm_repeater_group_cooldown_sec=_env_int("LLM_REPEATER_GROUP_COOLDOWN_SEC", 60),
-            llm_repeater_strong_cooldown_sec=_env_int("LLM_REPEATER_STRONG_COOLDOWN_SEC", 25),
-            llm_repeater_strong_attempt_rate=_env_float_clamped(
-                "LLM_REPEATER_STRONG_ATTEMPT_RATE",
-                0.55,
-                0.0,
-                1.0,
-            ),
-            llm_repeater_max_inflight=_env_int("LLM_REPEATER_MAX_INFLIGHT", 2),
-            llm_repeater_global_rpm=_env_int("LLM_REPEATER_GLOBAL_RPM", 18),
             llm_repeater_feedback_enabled=_env_bool("LLM_REPEATER_FEEDBACK_ENABLED", True),
             llm_repeater_bias_enabled=_env_bool("LLM_REPEATER_BIAS_ENABLED", True),
             llm_repeater_writeback_enabled=_env_bool("LLM_REPEATER_WRITEBACK_ENABLED", True),
             conversation_feature_level=resolve_conversation_feature_level_raw(),
             llm_reply_gate_enabled=_env_bool("LLM_REPLY_GATE_ENABLED", True),
-            llm_current_turn_decision_enabled=_env_bool("LLM_CURRENT_TURN_DECISION_ENABLED", True),
+            llm_current_turn_decision_enabled=_env_bool("LLM_CURRENT_TURN_DECISION_ENABLED", False),
             llm_current_turn_decision_model=_env_str("LLM_CURRENT_TURN_DECISION_MODEL"),
             llm_reply_gate_min_chars=_env_int("LLM_REPLY_GATE_MIN_CHARS", 1),
             llm_chat_queue_merge=_env_bool("LLM_CHAT_QUEUE_MERGE", True),
@@ -536,20 +477,10 @@ def get_llm_config() -> LlmConfig:
                 "LLM_OUTPUT_FILTER_CHAT_SOFT_PHRASES",
                 CHAT_SOFT_RETRY_PHRASES,
             ),
-            llm_output_filter_polish_lite_hard_phrases=_env_str_list_or_default(
-                "LLM_OUTPUT_FILTER_POLISH_LITE_HARD_PHRASES",
-                POLISH_LITE_HARD_BLOCK_PHRASES,
-            ),
-            llm_output_filter_polish_lite_soft_phrases=_env_str_list_or_default(
-                "LLM_OUTPUT_FILTER_POLISH_LITE_SOFT_PHRASES",
-                POLISH_LITE_SOFT_RETRY_PHRASES,
-            ),
             llm_persona_output_firewall=_env_json_object("LLM_PERSONA_OUTPUT_FIREWALL"),
             llm_reply_postprocess_enabled=_env_bool("LLM_REPLY_POSTPROCESS_ENABLED", False),
             llm_reply_typo_enabled=_env_bool("LLM_REPLY_TYPO_ENABLED", False),
             llm_reply_typo_rate=_env_float("LLM_REPLY_TYPO_RATE", 0.01),
-            llm_reply_split_enabled=_env_bool("LLM_REPLY_SPLIT_ENABLED", False),
-            llm_reply_split_max_chars=_env_int("LLM_REPLY_SPLIT_MAX_CHARS", 36),
             llm_reply_trim_terminal_period_enabled=_env_bool("LLM_REPLY_TRIM_TERMINAL_PERIOD_ENABLED", True),
             llm_reply_trim_terminal_period_rate=_env_float("LLM_REPLY_TRIM_TERMINAL_PERIOD_RATE", 0.9),
             llm_reply_mention_cooldown_sec=_env_int("LLM_REPLY_MENTION_COOLDOWN_SEC", 900),
@@ -652,12 +583,6 @@ def clear_llm_config_cache() -> None:
         from .governance import clear_llm_chat_governance_state
 
         clear_llm_chat_governance_state()
-    except Exception:
-        pass
-    try:
-        from .repeater_limit import clear_repeater_llm_limit_state
-
-        clear_repeater_llm_limit_state()
     except Exception:
         pass
 

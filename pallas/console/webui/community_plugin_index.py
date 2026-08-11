@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -128,16 +129,59 @@ async def fetch_index_from_url(url: str) -> tuple[str, dict[str, Any], list[dict
     return f"url:{url}", meta, plugins
 
 
-async def load_community_plugin_index() -> dict[str, Any]:
-    """返回 { source, meta, plugins }。远程索引失败时回退本地文件。"""
+def cache_community_plugin_index(meta: dict[str, Any], plugins: list[dict[str, Any]]) -> None:
+    path = PROJECT_ROOT / LOCAL_INDEX_REL
+    payload_plugins: list[dict[str, Any]] = []
+    for plugin in plugins:
+        cached = dict(plugin)
+        cached["id"] = cached.pop("plugin_id", "")
+        cached["repository"] = cached.pop("repository_url", "")
+        payload_plugins.append(cached)
+    payload = {**meta, "plugins": payload_plugins}
+    temp_path = path.with_name(f".{path.name}.tmp")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temp_path.replace(path)
+    except OSError as e:
+        logger.warning("社区插件索引缓存写入失败：{}", e)
+        try:
+            temp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+async def refresh_community_plugin_index() -> dict[str, Any]:
+    """同步拉取远程社区插件索引并更新本地快照。"""
     url = community_plugin_index_url()
     if url:
-        try:
-            source, meta, plugins = await fetch_index_from_url(url)
-            return {"source": source, "meta": meta, "plugins": plugins}
-        except CommunityIndexError as e:
-            logger.warning("社区插件索引远程拉取失败，回退本地：{}", e.detail)
+        source, meta, plugins = await fetch_index_from_url(url)
+        cache_community_plugin_index(meta, plugins)
+        return {"source": source, "meta": meta, "plugins": plugins}
+
+    msg = "社区插件索引未配置远程地址"
+    raise CommunityIndexError(msg)
+
+
+async def refresh_community_plugin_index_in_background() -> None:
+    try:
+        await refresh_community_plugin_index()
+    except CommunityIndexError as e:
+        logger.warning("社区插件索引后台刷新失败：{}", e.detail)
+
+
+async def load_community_plugin_index(*, force_refresh: bool = False) -> dict[str, Any]:
+    """返回 { source, meta, plugins }。本地快照优先，后台刷新远程索引。"""
     local_path = PROJECT_ROOT / LOCAL_INDEX_REL
+    if local_path.is_file() and not force_refresh:
+        source, meta, plugins = load_index_from_path(local_path)
+        asyncio.create_task(refresh_community_plugin_index_in_background())
+        return {"source": source, "meta": meta, "plugins": plugins}
+
+    try:
+        return await refresh_community_plugin_index()
+    except CommunityIndexError as e:
+        logger.warning("社区插件索引远程拉取失败，回退本地：{}", e.detail)
     if local_path.is_file():
         source, meta, plugins = load_index_from_path(local_path)
         return {"source": source, "meta": meta, "plugins": plugins}
@@ -145,9 +189,9 @@ async def load_community_plugin_index() -> dict[str, Any]:
     return {"source": source, "meta": meta, "plugins": plugins}
 
 
-async def load_community_plugin_index_safe() -> dict[str, Any]:
+async def load_community_plugin_index_safe(*, force_refresh: bool = False) -> dict[str, Any]:
     try:
-        return await load_community_plugin_index()
+        return await load_community_plugin_index(force_refresh=force_refresh)
     except CommunityIndexError as e:
         logger.warning("社区插件索引：{}", e.detail)
         return {"source": "error", "meta": {}, "plugins": [], "error": e.detail}

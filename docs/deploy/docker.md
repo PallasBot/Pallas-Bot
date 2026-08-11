@@ -1,6 +1,6 @@
 # 使用 Docker 部署
 
-完成本页后，Bot、PostgreSQL 和网页控制台会由 Docker Compose 启动。适合希望用官方镜像部署、无需修改源码的使用者。
+完成本页后，Bot、PostgreSQL 和网页控制台会由 Docker Compose 启动。没有源码开发需求时，优先使用本方式。
 
 ::: tip
 **不要** `git clone` 整仓。镜像内已有代码；本机只需 compose 文件与配置。
@@ -83,7 +83,7 @@ docker compose --env-file ./pallas-bot/config/compose.env logs pallasbot | head 
 
 ## 接下来：登录控制台并连接 QQ
 
-先在 [网页控制台](/guide/web-console) 登录并完成首次设置。然后打开 `http://<主机>:8088/pallas/protocol`，用同一密码登录 → 新建 NapCat → 扫码。群里发 **牛牛帮助**，应能出图。
+先在 [网页控制台](/guide/web-console) 登录并完成首次设置。随后可在协议端管理中托管 NapCat / SnowLuma，或让已有 OneBot V11 协议端反向连接。群里发 **牛牛帮助**，应能出图。
 
 完整说明见 [连接 QQ](/guide/connect-qq)。
 
@@ -96,6 +96,71 @@ docker compose --env-file ./pallas-bot/config/compose.env pull
 docker compose --env-file ./pallas-bot/config/compose.env up -d
 docker compose --env-file ./pallas-bot/config/compose.env down
 ```
+
+## 下载慢与镜像源
+
+先按失败对象选择配置；下面三类来源互不替代。
+
+### 拉取 Docker 镜像
+
+`docker pull` 或 `docker compose pull` 访问 Docker Hub 失败时，可为宿主机 Docker daemon 配置 Registry mirror。Linux 通常编辑 `/etc/docker/daemon.json`，将 `https://<你的 Docker Registry mirror>` 合并到已有 JSON，不要覆盖其他 daemon 配置：
+
+```json
+{
+  "registry-mirrors": ["https://<你的 Docker Registry mirror>"]
+}
+```
+
+保存后重启并验证；Docker Desktop 用户在设置页的 Docker Engine 中修改同一字段：
+
+```bash
+sudo systemctl restart docker
+docker info --format '{{json .RegistryConfig.Mirrors}}'
+```
+
+如果镜像服务要求使用完整代理地址，而不是 daemon mirror，可在 `pallas-bot/config/compose.env` 覆盖 Compose 镜像：
+
+```dotenv
+PALLAS_BOT_IMAGE=<Registry>/pallasbot/pallas-bot:latest
+POSTGRES_IMAGE=<Registry>/library/postgres:16-alpine
+MONGO_IMAGE=<Registry>/library/mongo:8.0.10-noble
+REDIS_IMAGE=<Registry>/library/redis:7-alpine
+OLLAMA_IMAGE=<Registry>/ollama/ollama:latest
+PALLAS_AI_IMAGE=<Registry>/pallasbot/pallas-bot-ai:slim
+```
+
+不同服务的路径规则由 Registry 提供方决定。启动前检查 Compose 最终采用的地址：
+
+```bash
+docker compose --env-file ./pallas-bot/config/compose.env config --images
+```
+
+### 自建 Bot 镜像与 Python 依赖
+
+本地构建时，`BASE_IMAGE` 替换 Dockerfile 的 Python 基础镜像，`UV_DEFAULT_INDEX` 指定安装 uv 和项目依赖所用的 Python 包索引：
+
+```bash
+docker build \
+  --build-arg BASE_IMAGE=<Registry>/library/python:3.12-slim \
+  --build-arg UV_DEFAULT_INDEX=https://<你的 Python 包索引>/simple \
+  -t pallasbot:local .
+```
+
+运行中的 Bot / work 容器安装插件时也会读取 `compose.env` 的 `UV_DEFAULT_INDEX`；不设置则使用 `https://pypi.org/simple`。直接使用 pip 时另配 `PIP_INDEX_URL`。
+
+### WebUI Git 镜像源
+
+Bot 启动后可在控制台的 **更新管理 → 镜像源** 或 **插件商店 → 镜像源** 设置首选 Git 镜像、分目标覆盖并测试连通性。它用于 Bot/WebUI 更新、GitHub Release、Git clone 和插件资源下载。
+
+该配置**不影响** `docker pull`、Dockerfile 基础镜像或 uv/PyPI 依赖下载；这些仍使用上面对应的 Docker 与 Python 配置。
+
+## 容器内更新与 Docker 权限
+
+控制台可以更新 Bot 正式 Release、WebUI 和插件。Bot Release 会覆盖当前容器，普通 `docker compose restart` 不会丢失；容器重建后会恢复为镜像版本。持久更新仍使用上面的 `pull` + `up -d`。
+
+官方镜像默认包含 Docker CLI。只有让协议端管理 NapCat / SnowLuma 容器时，才按 `docker-compose.yml` 注释挂载 `/var/run/docker.sock`；该 socket 接近宿主机 root 权限，不用于管理 Bot 自身、AI、数据库、Redis 或 Ollama。自建镜像可用 `--build-arg INSTALL_DOCKER_CLI=0` 移除 CLI。
+
+AI Runtime、Redis、Ollama 和数据库始终由 Compose 或外部运维负责。控制台不会因为拥有 Docker socket 而创建、更新或重建这些服务。
 
 ::: details 全栈（Bot + PG + Redis + Ollama + AI）
 仓库根目录只提供默认 `docker-compose.yml`（Bot + PostgreSQL）。需要 AI Runtime / Ollama 时，将下面 YAML 另存为部署目录中的 `docker-compose.full.yml`，再启动。
@@ -113,7 +178,7 @@ name: pallas-full
 services:
   pallasbot:
     container_name: pallasbot
-    image: pallasbot/pallas-bot:latest
+    image: ${PALLAS_BOT_IMAGE:-pallasbot/pallas-bot:latest}
     restart: always
     ports:
       - "${BOT_PORT:-8088}:${BOT_LISTEN_PORT:-8088}"
@@ -122,6 +187,7 @@ services:
       ENVIRONMENT: prod
       APP_MODULE: bot:app
       MAX_WORKERS: 1
+      UV_DEFAULT_INDEX: ${UV_DEFAULT_INDEX:-https://pypi.org/simple}
       PORT: ${BOT_LISTEN_PORT:-8088}
       DB_BACKEND: postgresql
       PG_HOST: postgres
@@ -150,7 +216,7 @@ services:
 
   postgres:
     container_name: pallasbot_postgres
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
     restart: always
     command:
       - postgres
@@ -177,7 +243,7 @@ services:
       start_period: 15s
 
   redis:
-    image: redis:7-alpine
+    image: ${REDIS_IMAGE:-redis:7-alpine}
     container_name: pallas-full-redis
     command: redis-server --appendonly yes
     networks:
@@ -193,7 +259,7 @@ services:
       start_period: 5s
 
   ollama:
-    image: ollama/ollama:latest
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
     container_name: pallas-full-ollama
     networks:
       - pallas-full
@@ -209,7 +275,7 @@ services:
 
   ollama-init:
     profiles: ["pull-models"]
-    image: ollama/ollama:latest
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
     container_name: pallas-full-ollama-init
     networks:
       - pallas-full
@@ -325,22 +391,23 @@ docker compose --env-file ./pallas-bot/config/compose.env --profile mongo up -d
 :::
 
 ::: details 自建镜像与 extras
-官方镜像偏单进程用途。自行 `docker build` 时可用 `--build-arg PALLAS_UV_EXTRAS=perf`（PG 驱动已在主依赖）。国内拉基础镜像失败可用 `BASE_IMAGE` 换镜像站前缀。
+官方镜像偏单进程用途。自行 `docker build` 时可用 `--build-arg PALLAS_UV_EXTRAS=perf`（PG 驱动已在主依赖）。基础镜像与 Python 包索引参数见上方 [下载慢与镜像源](#下载慢与镜像源)。
 :::
 
 ::: details 多进程分片
-官方根目录 Compose 面向单进程。源码部署优先 `./scripts/run_sharded_bot.sh`（见 [分片部署](/maintainer/deploy/sharded)）。若坚持用 Docker，可将下面示例另存为 `docker-compose.shard.yml`（hub + 2 worker；按需复制 worker 段并改端口 / `PALLAS_SHARD_ID`）。协议端反向 WS 须连 **worker** 端口（8090+），不是 hub 8088。`pallas.toml` 的 `[env]` 可设 `REDIS_URL=redis://redis:6379/0`，或依赖下方环境变量。
+官方根目录 Compose 面向单进程。分片可使用源码脚本（见 [分片部署](/maintainer/deploy/sharded)），也可将下面示例另存为 `docker-compose.shard.yml`（hub + 2 worker；按需复制 worker 段并改端口 / `PALLAS_SHARD_ID`）。协议端反向 WS 须连 **worker** 端口（8090+），不是 hub 8088。`pallas.toml` 的 `[env]` 可设 `REDIS_URL=redis://redis:6379/0`，或依赖下方环境变量。
 
 ```yaml
 name: pallas-bot-shard
 
 x-pallas-common: &pallas-common
-  image: pallasbot/pallas-bot:latest
+  image: ${PALLAS_BOT_IMAGE:-pallasbot/pallas-bot:latest}
   restart: always
   environment: &pallas-env
     TZ: Asia/Shanghai
     ENVIRONMENT: prod
     MAX_WORKERS: 1
+    UV_DEFAULT_INDEX: ${UV_DEFAULT_INDEX:-https://pypi.org/simple}
     PALLAS_SHARD_ENABLED: "true"
     PG_HOST: postgres
     PG_PORT: "5432"
@@ -398,7 +465,7 @@ services:
 
   postgres:
     container_name: pallasbot_postgres
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
     restart: always
     environment:
       TZ: Asia/Shanghai
@@ -418,7 +485,7 @@ services:
 
   redis:
     container_name: pallasbot_redis
-    image: redis:7-alpine
+    image: ${REDIS_IMAGE:-redis:7-alpine}
     restart: always
     command: ["redis-server", "--appendonly", "yes"]
     networks:

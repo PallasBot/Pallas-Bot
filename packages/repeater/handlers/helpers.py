@@ -49,8 +49,6 @@ async def post_proc(message: Message, self_id: int, group_id: int) -> Message:
             base64_data = await get_image(cq_code)
             if base64_data:
                 new_msg += MessageSegment.image(file=base64_data)
-            else:
-                new_msg += seg
         else:
             new_msg += seg
 

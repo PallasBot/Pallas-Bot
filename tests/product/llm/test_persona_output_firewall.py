@@ -131,6 +131,29 @@ def test_allows_brief_presence_check_reply() -> None:
     assert result.rule_ids == ()
 
 
+@pytest.mark.parametrize("reply", ["说吧", "什么事？", "说吧，什么事？"])
+def test_rejects_generic_reply_to_bare_self_alias_wake(reply: str) -> None:
+    result = inspect_persona_output(
+        reply,
+        self_aliases=["牛牛", "帕拉斯"],
+        current_user_text="牛牛",
+        social_action="ACK",
+    )
+
+    assert result.rule_ids == ("alias_wake_generic_reply",)
+
+
+def test_allows_natural_reply_to_bare_self_alias_wake() -> None:
+    result = inspect_persona_output(
+        "干嘛",
+        self_aliases=["牛牛"],
+        current_user_text="牛牛",
+        social_action="ACK",
+    )
+
+    assert result.rule_ids == ()
+
+
 def test_detects_reciprocal_social_question_after_an_answer() -> None:
     result = inspect_persona_output(
         "挺好，老样子，训练出任务都没落下。你呢？",
@@ -253,6 +276,32 @@ def test_detects_deferential_short_social_template() -> None:
     assert result.trace["rule_ids"] == ["short_social_deferential_template"]
 
 
+@pytest.mark.parametrize(
+    ("text", "self_aliases", "rule_id"),
+    [
+        ("行啊，那你骂吧，我听着呢。", [], "short_social_deferential_template"),
+        ("谢谢你，改天请你喝米诺斯的酒。", [], "persona_topic_hijack"),
+        ("牛牛都精神了。", ["牛牛"], "unprompted_self_alias"),
+        ("嘿嘿，谢谢。你呢？", [], "reciprocal_social_question"),
+        ("谢谢夸奖，给你竖个大拇指。", [], "short_social_roleplay_expansion"),
+    ],
+)
+def test_affection_uses_short_social_expansion_protection(
+    text: str,
+    self_aliases: list[str],
+    rule_id: str,
+) -> None:
+    result = inspect_persona_output(
+        text,
+        self_aliases=self_aliases,
+        current_user_text="你真可爱",
+        social_action="AFFECTION",
+        reply_target="emotion",
+    )
+
+    assert rule_id in result.rule_ids
+
+
 def test_detects_unrelated_persona_topic_in_short_social_reply() -> None:
     result = inspect_persona_output(
         "行啊，骂完记得请我喝一杯，米诺斯的酒可不便宜。",
@@ -357,6 +406,199 @@ def test_detects_pallas_identity_and_template_drift(text: str, rule_id: str) -> 
     result = inspect_persona_output(text, self_aliases=["帕拉斯", "牛牛"])
 
     assert rule_id in result.rule_ids
+
+
+@pytest.mark.parametrize(
+    ("text", "current_user_text", "rule_id"),
+    [
+        ("少废话，自己想。", "这个怎么配", "chat_hard_pressure_tone"),
+        ("关我什么事。", "我今天有点难受", "chat_prickly_tone"),
+    ],
+)
+def test_detects_unhelpful_hard_or_prickly_chat_tone(
+    text: str,
+    current_user_text: str,
+    rule_id: str,
+) -> None:
+    result = inspect_persona_output(
+        text,
+        self_aliases=[],
+        current_user_text=current_user_text,
+        social_action="ANSWER",
+        reply_target="answer",
+    )
+
+    assert rule_id in result.rule_ids
+
+
+def test_detects_supportive_context_deflection() -> None:
+    result = inspect_persona_output(
+        "哎呀这个我不会嘛。",
+        self_aliases=[],
+        current_user_text="我今天很难受，想聊聊",
+        social_action="ANSWER",
+        reply_target="emotion",
+    )
+
+    assert result.rule_ids == ("supportive_context_deflection",)
+    assert result.quality_rule_ids == ("supportive_context_deflection",)
+
+
+def test_detects_supportive_context_deflection_for_answer_targeted_help_request() -> None:
+    result = inspect_persona_output(
+        "哎呀这个我不会嘛。",
+        self_aliases=[],
+        current_user_text="我不知道该怎么办，能帮我想想吗？",
+        social_action="ANSWER",
+        reply_target="answer",
+    )
+
+    assert result.rule_ids == ("supportive_context_deflection",)
+    assert result.quality_rule_ids == ("supportive_context_deflection",)
+
+
+def test_detects_supportive_context_deflection_for_first_person_disorientation() -> None:
+    result = inspect_persona_output(
+        "哎呀这个我不会嘛。",
+        self_aliases=[],
+        current_user_text="自己不知所措，该怎么办",
+        social_action="ANSWER",
+        reply_target="answer",
+    )
+
+    assert result.rule_ids == ("supportive_context_deflection",)
+
+
+def test_allows_supportive_context_template_for_technical_help_request() -> None:
+    result = inspect_persona_output(
+        "哎呀这个我不会嘛。",
+        self_aliases=[],
+        current_user_text="能帮我查一下这条日志吗？",
+        social_action="ANSWER",
+        reply_target="answer",
+    )
+
+    assert "supportive_context_deflection" not in result.rule_ids
+
+
+@pytest.mark.parametrize(
+    "current_user_text",
+    [
+        "我不知道这个参数该怎么办",
+        "服务器快撑不住了，怎么扩容？",
+        "我该怎么做才能扩容服务器？",
+    ],
+)
+def test_allows_supportive_context_template_for_technical_distress_wording(current_user_text: str) -> None:
+    result = inspect_persona_output(
+        "哎呀这个我不会嘛。",
+        self_aliases=[],
+        current_user_text=current_user_text,
+        social_action="ANSWER",
+        reply_target="answer",
+    )
+
+    assert "supportive_context_deflection" not in result.rule_ids
+
+
+def test_allows_supportive_context_template_for_ordinary_answer() -> None:
+    result = inspect_persona_output(
+        "哎呀这个我不会嘛。",
+        self_aliases=[],
+        current_user_text="这个怎么配？",
+        social_action="ANSWER",
+        reply_target="answer",
+    )
+
+    assert result.rule_ids == ()
+
+
+def test_allows_supportive_context_template_in_short_tease() -> None:
+    result = inspect_persona_output(
+        "哎呀这个我不会嘛。",
+        self_aliases=[],
+        current_user_text="你会不会这个？",
+        social_action="JOKE",
+        reply_target="short_tease",
+    )
+
+    assert result.rule_ids == ()
+
+
+def test_supportive_context_deflection_retries_before_visible_delivery() -> None:
+    decision = resolve_persona_output(
+        "哎呀这个我不会嘛。",
+        policy=enabled_policy(),
+        self_aliases=[],
+        fallback_text="我在，慢慢说。",
+        current_user_text="我今天很难受，想聊聊",
+        social_action="ANSWER",
+        reply_target="emotion",
+    )
+
+    assert decision.action == "retry"
+    assert decision.text == ""
+    assert decision.trace["rule_ids"] == ["supportive_context_deflection"]
+
+
+def test_detects_prickly_tone_when_user_describes_self_as_stupid() -> None:
+    result = inspect_persona_output(
+        "关我什么事。",
+        self_aliases=[],
+        current_user_text="我觉得自己很蠢，能帮我看看吗",
+        social_action="ANSWER",
+        reply_target="answer",
+    )
+
+    assert result.rule_ids == ("chat_prickly_tone",)
+
+
+def test_allows_prickly_tone_when_current_user_message_is_hostile() -> None:
+    result = inspect_persona_output(
+        "关我什么事。",
+        self_aliases=[],
+        current_user_text="滚，别烦我。",
+        social_action="ANSWER",
+        reply_target="answer",
+    )
+
+    assert result.rule_ids == ()
+
+
+def test_allows_brief_playful_tease_and_clear_boundary() -> None:
+    tease = inspect_persona_output(
+        "这也算我赢吗。",
+        self_aliases=[],
+        current_user_text="你又偷懒？",
+        social_action="JOKE",
+        reply_target="short_tease",
+    )
+    boundary = inspect_persona_output(
+        "这个我不能帮你做。",
+        self_aliases=[],
+        current_user_text="帮我绕过这个限制",
+        social_action="ANSWER",
+        reply_target="answer",
+    )
+
+    assert tease.rule_ids == ()
+    assert boundary.rule_ids == ()
+
+
+def test_hard_pressure_chat_tone_retries_before_visible_delivery() -> None:
+    decision = resolve_persona_output(
+        "少废话，自己想。",
+        policy=enabled_policy(),
+        self_aliases=[],
+        fallback_text="这个我先不乱说。",
+        current_user_text="这个怎么配",
+        social_action="ANSWER",
+        reply_target="answer",
+    )
+
+    assert decision.action == "retry"
+    assert decision.text == ""
+    assert decision.trace["rule_ids"] == ["chat_hard_pressure_tone"]
 
 
 def test_disabled_policy_preserves_output() -> None:

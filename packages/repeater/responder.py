@@ -19,6 +19,7 @@ from pallas.core.platform.shard import context as shard_ctx
 from pallas.core.platform.shard.repeater_ingress_metrics import record_repeater_reply_selection
 from pallas.product.llm.kernel.memory_governance import can_apply_feedback_bias
 from pallas.product.llm.repeater_feedback import group_feedback_bias_snapshot
+from pallas.product.persona.group_expression_profile import GroupReplyShapeHint
 from pallas.product.persona.model import ResolvedPersona
 from pallas.product.persona.scorer import freshness_multiplier, message_weight_multiplier
 
@@ -32,6 +33,28 @@ if TYPE_CHECKING:
 
 
 plugin_config = get_repeater_config()
+
+
+async def load_feedback_snapshot(
+    *,
+    group_id: int,
+    user_text: str,
+    behavior_scene: str,
+) -> dict | None:
+    if not can_apply_feedback_bias():
+        return None
+    try:
+        return await asyncio.to_thread(
+            group_feedback_bias_snapshot,
+            group_id=group_id,
+            limit=Responder.FEEDBACK_BIAS_LIMIT,
+            user_text=user_text,
+            behavior_scene=behavior_scene,
+            hotpath=True,
+        )
+    except Exception as exc:
+        logger.warning("repeater.llm_feedback_bias_snapshot_failed group_id={}: {}", group_id, exc)
+        return None
 
 
 @dataclass(frozen=True)
@@ -212,6 +235,7 @@ class Responder:
         recent_message: list[str],
         affect_triggers,
         mode: str,
+        reply_shape=None,
         feedback_snapshot: dict | None = None,
     ) -> float:
         from pallas.product.persona.scorer import (
@@ -229,7 +253,12 @@ class Responder:
         for sample in answer.messages:
             text = sample.removeprefix("牛牛")
             sample_weight = (
-                message_weight_multiplier(text, persona, affect_triggers=affect_triggers)
+                message_weight_multiplier(
+                    text,
+                    persona,
+                    affect_triggers=affect_triggers,
+                    reply_shape=reply_shape,
+                )
                 * freshness_multiplier(text, recent_sent, persona=persona)
                 * Responder._sample_mode_multiplier(
                     text,
@@ -322,7 +351,9 @@ class Responder:
             return False, 0.0
         score = max(0.0, float(base_score))
         if persona is not None:
-            score *= message_weight_multiplier(plain, persona, affect_triggers=affect_triggers)
+            expression_profile = getattr(persona, "group_expression_profile", None)
+            reply_shape = getattr(expression_profile, "reply_shape", GroupReplyShapeHint())
+            score *= message_weight_multiplier(plain, persona, affect_triggers=affect_triggers, reply_shape=reply_shape)
             score *= freshness_multiplier(plain, recent_sent or [], persona=persona)
         mode = str(reply_mode or "normal").strip().lower()
         try:
@@ -605,7 +636,6 @@ class Responder:
             return None
 
         from pallas.product.persona import resolve_persona_for_message
-        from pallas.product.persona.loader import load_affect_triggers
         from pallas.product.persona.scorer import scaled_answer_threshold
 
         from .activity_gate import group_has_hosted_activity
@@ -616,10 +646,11 @@ class Responder:
             group_id,
             str(getattr(chat_data, "plain_text", "") or chat_data.raw_message or ""),
         )
+        expression_profile = getattr(persona, "group_expression_profile", None)
+        reply_shape = getattr(expression_profile, "reply_shape", GroupReplyShapeHint())
         persona_ms = (time.perf_counter() - t_persona) * 1000.0
-        t_affect = time.perf_counter()
-        affect_triggers = await load_affect_triggers(group_id)
-        affect_ms = (time.perf_counter() - t_affect) * 1000.0
+        affect_triggers = list(getattr(persona, "affect_triggers", []) or [])
+        affect_ms = 0.0
         in_hosted_activity = group_has_hosted_activity(group_id) and not chat_data.to_me
         group_activity = Responder._group_activity_score(group_msgs)
         reply_mode = Responder._roll_active_mode(
@@ -668,7 +699,6 @@ class Responder:
             for r in reply_dict[group_id][bot_id][-Responder.DUPLICATE_REPLY :]
             if r.get("reply") and r["reply"] != Responder.REPLY_FLAG
         ]
-        feedback_snapshot = None
         trigger_text = str(getattr(chat_data, "plain_text", "") or chat_data.raw_message or "").strip()
         behavior_scene = ""
         try:
@@ -686,18 +716,11 @@ class Responder:
         except Exception as exc:
             logger.warning("repeater.behavior_scene_failed group_id={}: {}", group_id, exc)
         t_feedback = time.perf_counter()
-        if can_apply_feedback_bias():
-            try:
-                feedback_snapshot = await asyncio.to_thread(
-                    group_feedback_bias_snapshot,
-                    group_id=group_id,
-                    limit=Responder.FEEDBACK_BIAS_LIMIT,
-                    user_text=trigger_text,
-                    behavior_scene=behavior_scene,
-                    hotpath=True,
-                )
-            except Exception as exc:
-                logger.warning("repeater.llm_feedback_bias_snapshot_failed group_id={}: {}", group_id, exc)
+        feedback_snapshot = await load_feedback_snapshot(
+            group_id=group_id,
+            user_text=trigger_text,
+            behavior_scene=behavior_scene,
+        )
         feedback_ms = (time.perf_counter() - t_feedback) * 1000.0
 
         t_select = time.perf_counter()
@@ -792,6 +815,7 @@ class Responder:
                 recent_message=recent_message,
                 affect_triggers=affect_triggers,
                 mode=reply_mode,
+                reply_shape=reply_shape,
                 feedback_snapshot=feedback_snapshot,
             )
             for answer in candidate_answers.values()

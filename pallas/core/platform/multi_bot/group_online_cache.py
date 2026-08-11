@@ -72,6 +72,22 @@ def remember_local_group_bot(group_id: int, bot_id: int) -> None:
     observed[bid] = now + GROUP_ONLINE_TTL_SEC
 
 
+def forget_group_bot(group_id: int, bot_id: int) -> None:
+    gid = int(group_id)
+    bid = int(bot_id)
+    observed = _observed_local_group_bots.get(gid)
+    if observed is not None:
+        observed.pop(bid, None)
+        if not observed:
+            _observed_local_group_bots.pop(gid, None)
+    for bucket in _caches.values():
+        cached = bucket.get(gid)
+        if cached is None:
+            continue
+        expires_at, ids = cached
+        bucket[gid] = (expires_at, tuple(value for value in ids if value != bid))
+
+
 def recent_local_group_bot_ids(group_id: int) -> list[int]:
     gid = int(group_id)
     observed = _observed_local_group_bots.get(gid)

@@ -193,7 +193,9 @@ def test_community_stats_canonical_alias():
 
 def test_official_extension_description_prefers_readme_summary():
     assert official_extension_description("pallas-plugin-draw") == "按文字描述生图，或带参考图改图。"
-    assert official_extension_description("pallas-plugin-protocol") == ("管理 NapCat / SnowLuma 协议端实例与连接配置。")
+    assert official_extension_description("pallas-plugin-protocol") == (
+        "管理 NapCat / SnowLuma 协议端实例与连接配置，也展示反向连接进来的外置 OneBot V11 账号。"
+    )
 
 
 def test_official_extension_description_falls_back_for_multi_plugin_package():

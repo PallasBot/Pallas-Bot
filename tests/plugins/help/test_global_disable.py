@@ -2,7 +2,22 @@ from __future__ import annotations
 
 import pytest
 
+import packages.help
 from packages.help import global_disable, plugin_manager
+from pallas.core.storage.schema import clear_plugin_storage_registry_cache
+
+
+@pytest.fixture(autouse=True)
+def register_help_plugin_storage(monkeypatch, tmp_path):
+    class FakePlugin:
+        name = "help"
+        metadata = packages.help.__plugin_meta__
+
+    monkeypatch.setattr("nonebot.get_loaded_plugins", lambda: [FakePlugin()])
+    monkeypatch.setattr("pallas.core.storage.deploy_store.plugin_data_dir", lambda _name: tmp_path)
+    clear_plugin_storage_registry_cache()
+    yield
+    clear_plugin_storage_registry_cache()
 
 
 def test_save_and_load_global_disabled_plugins(tmp_path, monkeypatch):

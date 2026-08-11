@@ -10,7 +10,7 @@
 | `src/plugins/ollama/` 或 pip `pallas-plugin-llm-chat` | **core 内置** `llm_chat`（仓库里已无 `ollama` 插件目录） |
 | 主仓直连 Ollama `/api/chat` | Bot 内核经已配置的 Provider 调用模型 |
 | `CHAT_ENABLE` / `OLLAMA_ENABLE` 等分散开关 | **`LLM_CHAT_ENABLED`**（LLM）与遗留 **`CHAT_ENABLE`**（RWKV）可并存 |
-| 无 Repeater 辅助选句 | `LLM_REPEATER_MODE`：`off` / `select` |
+| 无 Repeater 辅助选句 | 不变；日常接话仍由 Repeater 独立完成 |
 | 无方舟 tool | `pallas/product/llm/tools` + `ARKNIGHTS_KB_ENABLED` |
 
 酒后 `chat`、随时 @、接话 LLM 共用 **`LLM_CHAT_ENABLED`**（Bot 内核 Provider）。  
@@ -25,7 +25,7 @@
 | `OLLAMA_HOST` / `OLLAMA_PORT` | Provider 接入配置 | 在 Bot WebUI「AI 配置 → 接入」填写 Base URL |
 | `OLLAMA_MODEL` | Provider 接入配置 | 在 Bot WebUI 为 Provider 选择模型 |
 | `OLLAMA_SYSTEM_PROMPT` 等 | `llm_chat` 插件页 | 可选自定义人设文件；默认走 `compile_persona_prompt` |
-| — | `LLM_REPEATER_MODE` | 接话策略：`off` 或 `select` |
+| `LLM_REPEATER_MODE` | （已删除） | 遗留值会被忽略，可从配置中移除 |
 | — | `LLM_TOOLS_ENABLED` | 方舟等 tool，默认 `true`（总闸开时生效） |
 | — | `LLM_SESSION_ENABLED` | 多轮会话，默认 `true` |
 | — | `LLM_GOVERNANCE_ENABLED` | 冷却/并发/字数，默认 `true` |
@@ -43,13 +43,12 @@ Pallas-Bot-AI 是可选的媒体 sidecar，提供唱歌、TTS 等媒体任务，
 3. 在 Bot WebUI **AI 配置 → 接入** 配置 Provider、模型与密钥，并完成连通性测试。
 4. 在 **AI 配置 → 接话** 打开 **`LLM_CHAT_ENABLED`**。需要遗留 RWKV 酒后时，再部署 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI)、配置 `AI_SERVER_HOST` / `AI_SERVER_PORT`，并打开 **`CHAT_ENABLE`**。
 5. 删除或注释遗留 `OLLAMA_*`；**`CHAT_ENABLE` 可保留**（只要还要用 AI 仓 RWKV 酒后路径）。
-6. 验收：Provider 测试成功，群内 `@牛牛` 与（可选）接话正常；媒体或 RWKV 任务另验收 AI Runtime 与 callback。
+6. 验收：Provider 测试成功，群内 `@牛牛` 能生成回复，日常接话仍能直接使用 Repeater 语料；媒体或 RWKV 任务另验收 AI Runtime 与 callback。
 
 一键探测：
 
 ```bash
 uv run python tools/integration_llm_chat.py
-uv run python tools/integration_repeater_llm.py --scenario both
 ```
 
 ## 命令与帮助

@@ -31,8 +31,8 @@ __plugin_meta__ = PluginMetadata(
         "menu_template": PLUGIN_MENU_TEMPLATE,
         "ingress_route": {"lane": "storage", "passive": True},
         "command_permissions": command_perm_list(
-            command_perm_row("repeater.ban", "复读「不可以」", "staff"),
-            command_perm_row("repeater.ban_latest", "复读「不可以发这个」", "staff"),
+            command_perm_row("repeater.ban", "复读「不可以」", "everyone"),
+            command_perm_row("repeater.ban_latest", "复读「不可以发这个」", "everyone"),
         ),
         "command_limits": command_limit_list(
             command_limit_row("repeater.ban", 3),

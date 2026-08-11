@@ -12,7 +12,7 @@ name: pallas-bot
 services:
   pallasbot:
     container_name: pallasbot
-    image: pallasbot/pallas-bot:latest
+    image: ${PALLAS_BOT_IMAGE:-pallasbot/pallas-bot:latest}
     restart: always
     ports:
       - 8088:8088
@@ -21,6 +21,7 @@ services:
       ENVIRONMENT: prod
       APP_MODULE: bot:app
       MAX_WORKERS: 1
+      UV_DEFAULT_INDEX: ${UV_DEFAULT_INDEX:-https://pypi.org/simple}
       # 连本编排内 postgres；外置 PG 请删改这两项
       PG_HOST: postgres
       PG_PORT: "5432"
@@ -37,7 +38,9 @@ services:
       - ./pallas-bot/data:/app/data
       # 站点自有插件（见 local/README.md、docs/maintainer/deploy/upgrade.md）
       - ./pallas-bot/local/plugins:/app/local/plugins
-      # Linux 且协议端使用「Docker 模式」拉起 NapCat 时再取消注释（挂载 Docker socket 有安全风险，生产请加固）
+      # 仅在协议端托管 NapCat / SnowLuma Docker Runtime 时取消下一行注释。
+      # docker.sock 近似宿主机 root 权限，只应在可信环境启用；不用于管理 AI、数据库或 Bot 自身容器。
+      # 官方镜像默认包含 Docker CLI，但未挂载 socket 时无法控制宿主机 Docker。
       # - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       postgres:
@@ -48,12 +51,13 @@ services:
 
   pallas-work:
     container_name: pallasbot_work
-    image: pallasbot/pallas-bot:latest
+    image: ${PALLAS_BOT_IMAGE:-pallasbot/pallas-bot:latest}
     restart: always
     command: ["python", "bot_work.py"]
     environment:
       TZ: Asia/Shanghai
       ENVIRONMENT: prod
+      UV_DEFAULT_INDEX: ${UV_DEFAULT_INDEX:-https://pypi.org/simple}
       PG_HOST: postgres
       PG_PORT: "5432"
       MONGO_HOST: mongodb
@@ -73,7 +77,7 @@ services:
 
   postgres:
     container_name: pallasbot_postgres
-    image: postgres:16-alpine
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
     restart: always
     command:
       - postgres
@@ -104,7 +108,7 @@ services:
   mongodb:
     profiles: ["mongo"]
     container_name: mongodb
-    image: mongo:8.0.10-noble
+    image: ${MONGO_IMAGE:-mongo:8.0.10-noble}
     restart: always
     ports:
       - 27017:27017

@@ -146,7 +146,7 @@ async def install_community_plugin(
         )
     dest.parent.mkdir(parents=True, exist_ok=True)
     logger.info(
-        "Pallas-Bot 控制台: 安装社区插件 id={} repo={} ref={}",
+        "[控制台] 安装社区插件 id={} repo={} ref={}",
         pid,
         repo,
         branch,
@@ -214,7 +214,7 @@ async def update_community_plugin(
     _report(on_progress, 5, "准备更新…")
     if not local_plugin_installed(pid):
         raise CommunityPluginInstallError(f"local/plugins/{pid} 未安装，无法更新")
-    logger.info("Pallas-Bot 控制台: 更新社区插件 id={} ref={}", pid, branch)
+    logger.info("[控制台] 更新社区插件 id={} ref={}", pid, branch)
     last_detail = ""
     last_stage = "fetch"
     update_ok = False
@@ -308,7 +308,7 @@ async def uninstall_community_plugin(
             "already_removed": True,
             "message": f"local/plugins/{pid} 不存在，无需卸载。",
         }
-    logger.info("Pallas-Bot 控制台: 卸载社区插件 id={}", pid)
+    logger.info("[控制台] 卸载社区插件 id={}", pid)
     _report(on_progress, 40, f"删除 local/plugins/{pid}/…")
     try:
         shutil.rmtree(dest)

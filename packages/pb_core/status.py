@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import time
 
-from nonebot import get_bots
-
 from pallas.console.cli.bot_process import bot_lifecycle_available
 from pallas.console.cli.runtime_mode import detect_running_bot_mode
 from pallas.core.foundation.bot_version import get_bot_current_version, get_pallas_bot_version_for_reporting
@@ -43,7 +41,7 @@ def _coord_redis_line() -> str | None:
 
 
 def format_runtime_status_text(*, self_id: str | int | None = None) -> str:
-    lines: list[str] = []
+    lines: list[str] = ["【牛牛状态】"]
     version = get_pallas_bot_version_for_reporting()
     lines.append(f"版本：{version or 'unknown'}")
 
@@ -73,12 +71,5 @@ def format_runtime_status_text(*, self_id: str | int | None = None) -> str:
         lines.append(f"编排脚本检测：{detected} 运行中")
     elif bot_lifecycle_available():
         lines.append("编排脚本检测：未运行（当前应为 nb 前台或自定义守护）")
-
-    bots = get_bots()
-    if bots:
-        ids = ", ".join(sorted(bots.keys()))
-        lines.append(f"本进程已连接牛牛：{len(bots)}（{ids}）")
-    else:
-        lines.append("本进程已连接牛牛：0")
 
     return "\n".join(lines)

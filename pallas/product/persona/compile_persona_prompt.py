@@ -14,19 +14,13 @@ from .affect_axes import (
     bluntness_behavior_hint,
     warmth_behavior_hint,
 )
-from .compile_group_style import compile_group_style_prompt, compile_group_style_snapshot
-from .config import persona_preset_layers_enabled
-from .disposition import compile_disposition_prompt, resolve_persona_disposition
-from .group_expression import compile_group_expression_prompt
+from .group_expression_profile import resolve_group_expression_profile
 from .loader import resolve_persona, resolve_persona_for_message
 from .peer_bots_prompt import (
     compile_peer_bots_prompt,
     compile_peer_bots_prompt_for_message,
-    compile_repeater_peer_bots_prompt,
 )
-from .preset_layers import compile_preset_layers_prompt, extract_preset_layers
 from .prompt_guard import (
-    ALLOWED_LENGTH_PREFS,
     ALLOWED_TONES,
     guard_system_prompt,
     normalize_enum,
@@ -35,7 +29,6 @@ from .prompt_guard import (
 )
 from .seed import normalize_seed_prefs, resolve_effective_seed_prefs
 from .self_identity import (
-    compile_repeater_self_identity_prompt,
     compile_self_identity_prompt,
     resolve_login_nickname,
 )
@@ -46,15 +39,7 @@ if TYPE_CHECKING:
 _PROMPT_VERSION = 1
 _DEFAULT_BASE_PROMPT_PATH = Path(__file__).resolve().parent / "base_system_prompt.txt"
 _AT_CHAT_BASE_PROMPT_PATH = Path(__file__).resolve().parent / "at_chat_system_prompt.txt"
-_REPEATER_BASE_PROMPT_PATH = Path(__file__).resolve().parent / "repeater_system_prompt.txt"
-_SELECT_BASE_PROMPT_PATH = Path(__file__).resolve().parent / "select_system_prompt.txt"
-_POLISH_LITE_PROMPT_PATH = Path(__file__).resolve().parent / "polish_lite_system_prompt.txt"
-_FALLBACK_LITE_PROMPT_PATH = Path(__file__).resolve().parent / "fallback_lite_system_prompt.txt"
-REPEATER_PROMPT_PURPOSES = frozenset({"fallback", "polish"})
-LITE_REPEATER_PROMPT_PURPOSES = frozenset({"fallback_lite", "polish_lite"})
-SELECT_PROMPT_PURPOSES = frozenset({"select"})
 PROMPT_PROFILE_DEFAULT = "default"
-PROMPT_PROFILE_REPEATER = "repeater"
 PROMPT_PROFILE_CHAT = "chat"
 
 _base_lock = Lock()
@@ -70,21 +55,6 @@ _TONE_HINTS: dict[str, str] = {
     "terse": "回复精简，避免冗长铺陈",
 }
 
-_REPEATER_TONE_HINTS: dict[str, str] = {
-    "neutral": "语气平和，像群友接一句",
-    "calm": "语气沉稳克制，别展开解释",
-    "enthusiastic": "语气可稍热情，但仍像群友短接",
-    "dramatic": "可稍张扬接梗，但勿主动扯庆典或游戏设定",
-    "terse": "回复精简，1 句为主",
-}
-
-_LENGTH_HINTS: dict[str, str] = {
-    "any": "按对话情境灵活把握长度",
-    "short": "优先简短回复（1-2 句）",
-    "medium": "适中长度（2-3 句）",
-    "long": "可稍详细展开，但仍保持口语",
-}
-
 _ARCHETYPE_FINGERPRINTS: dict[str, str] = {
     "terse": "- 少展开，能一句接完就一句接完，别起哄加戏。",
     "chaotic": "- 可短促接梗，少总结陈词，别把梗抻成长段。",
@@ -92,8 +62,6 @@ _ARCHETYPE_FINGERPRINTS: dict[str, str] = {
 }
 
 _SEED_FINGERPRINTS: dict[str, str] = {
-    "short": "- 优先短句收口，能不铺垫就别铺垫。",
-    "long": "- 需要展开时也只多补半句，别写成小作文。",
     "warm": "- 先把对方的话接住，再顺势回一句。",
     "chaotic": "- 可顺手接梗反抛半句，但别连着抖包袱。",
     "restrained": "- 收着点火候，别追着一个梗反复拱。",
@@ -104,23 +72,10 @@ _DRUNK_CHAT_OVERLAY = (
 )
 
 
-def resolve_prompt_profile_for_purpose(purpose: str) -> str:
-    normalized = str(purpose or "").strip().lower()
-    if normalized in REPEATER_PROMPT_PURPOSES:
-        return PROMPT_PROFILE_REPEATER
-    if normalized == "chat":
-        return PROMPT_PROFILE_CHAT
-    return PROMPT_PROFILE_DEFAULT
-
-
 class PersonaPromptSections(BaseModel):
     base: str
     self_identity: str = ""
-    preset_layers: str = ""
-    disposition: str = ""
     bot_behavior: str
-    group_style: str
-    group_expression: str = ""
 
 
 class PersonaPromptMetadata(BaseModel):
@@ -128,8 +83,7 @@ class PersonaPromptMetadata(BaseModel):
     bot_id: int
     group_id: int | None = None
     persona: dict[str, Any]
-    disposition: dict[str, Any] = Field(default_factory=dict)
-    group_style: dict[str, Any]
+    group_expression_profile: dict[str, Any] = Field(default_factory=dict)
 
 
 class PersonaPromptBundle(BaseModel):
@@ -140,38 +94,8 @@ class PersonaPromptBundle(BaseModel):
     sections: PersonaPromptSections
 
 
-def resolve_repeater_system_prompt_path() -> Path:
-    return _REPEATER_BASE_PROMPT_PATH
-
-
 def resolve_at_chat_system_prompt_path() -> Path:
     return _AT_CHAT_BASE_PROMPT_PATH
-
-
-def resolve_select_system_prompt_path() -> Path:
-    return _SELECT_BASE_PROMPT_PATH
-
-
-def resolve_polish_lite_system_prompt_path() -> Path:
-    return _POLISH_LITE_PROMPT_PATH
-
-
-def resolve_fallback_lite_system_prompt_path() -> Path:
-    return _FALLBACK_LITE_PROMPT_PATH
-
-
-def load_lite_system_prompt(path: Path) -> str:
-    if path.is_file():
-        return path.read_text(encoding="utf-8").strip()
-    return ""
-
-
-def load_polish_lite_system_prompt() -> str:
-    return load_lite_system_prompt(resolve_polish_lite_system_prompt_path())
-
-
-def load_fallback_lite_system_prompt() -> str:
-    return load_lite_system_prompt(resolve_fallback_lite_system_prompt_path())
 
 
 def resolve_base_system_prompt_path(custom_path: str | None = None) -> Path:
@@ -213,22 +137,15 @@ def clear_base_system_prompt_cache() -> None:
 def build_bot_behavior_prompt(
     persona: ResolvedPersona,
     *,
-    profile: str = PROMPT_PROFILE_DEFAULT,
     seed_prefs: list[str] | None = None,
 ) -> str:
     tone = normalize_enum(str(persona.tone or ""), ALLOWED_TONES, "neutral")
-    length_pref = normalize_enum(str(persona.length_pref or ""), ALLOWED_LENGTH_PREFS, "any")
-    tone_map = _REPEATER_TONE_HINTS if profile == PROMPT_PROFILE_REPEATER else _TONE_HINTS
-    tone_hint = tone_map[tone]
-    length_hint = _LENGTH_HINTS[length_pref]
+    tone_hint = _TONE_HINTS[tone]
 
     lines = [
         "【接话风格】",
         f"- 基调：{tone_hint}",
-        f"- 长度：{length_hint}",
     ]
-    if profile == PROMPT_PROFILE_REPEATER:
-        lines.append("- 像本群群友接话，以假乱真；用户未聊设定时不要表演角色或扯庆典。")
     if persona.chaos_bias >= 0.12:
         lines.extend([
             "- 本群/本牛接话偏复读链与短句，回复宜更口语、更短促。",
@@ -277,8 +194,6 @@ def assemble_persona_system(sections: PersonaPromptSections, *, mode: str = "nor
     section_values = (
         sections.base,
         sections.self_identity,
-        sections.preset_layers,
-        sections.disposition,
         sections.bot_behavior,
     )
     parts = [section.strip() for section in section_values if section.strip()]
@@ -314,67 +229,34 @@ def compile_persona_prompt(
         if profile == PROMPT_PROFILE_CHAT
         else build_bot_behavior_prompt(
             persona,
-            profile=profile,
             seed_prefs=seed_prefs,
         )
     )
-    group_style = compile_group_style_prompt(style_profile)
-    group_expression = compile_group_expression_prompt(style_profile)
-    try:
-        from pallas.product.persona.catchphrase_bank import compile_catchphrase_prompt_lines
-
-        # 编译阶段不注入口癖；本轮按场合选入在 llm_chat 完成
-        catchphrase_lines = compile_catchphrase_prompt_lines(int(bot_id), limit=0)
-    except Exception:
-        catchphrase_lines = []
-    if catchphrase_lines:
-        catchphrase_block = "\n".join(catchphrase_lines[:6])
-        group_expression = (
-            f"{group_expression}\n\n{catchphrase_block}".strip() if group_expression.strip() else catchphrase_block
+    self_identity = compile_self_identity_prompt(
+        bot_persona,
+        login_nickname=login_nickname,
+    )
+    peer = (
+        compile_peer_bots_prompt_for_message(
+            self_bot_id=int(bot_id),
+            plain_text=plain_text,
+            bot_persona=bot_persona,
         )
-    if profile == PROMPT_PROFILE_REPEATER:
-        self_identity = compile_repeater_self_identity_prompt(
-            bot_persona,
-            login_nickname=login_nickname,
-        )
-        peer = compile_repeater_peer_bots_prompt(self_bot_id=int(bot_id), bot_persona=bot_persona)
-    else:
-        self_identity = compile_self_identity_prompt(
-            bot_persona,
-            login_nickname=login_nickname,
-        )
-        peer = (
-            compile_peer_bots_prompt_for_message(
-                self_bot_id=int(bot_id),
-                plain_text=plain_text,
-                bot_persona=bot_persona,
-            )
-            if profile == PROMPT_PROFILE_CHAT
-            else compile_peer_bots_prompt(self_bot_id=int(bot_id), bot_persona=bot_persona)
-        )
+        if profile == PROMPT_PROFILE_CHAT
+        else compile_peer_bots_prompt(self_bot_id=int(bot_id), bot_persona=bot_persona)
+    )
     if peer:
         self_identity = f"{self_identity}\n\n{peer}" if self_identity.strip() else peer
-    preset_layers = ""
-    if profile != PROMPT_PROFILE_REPEATER and persona_preset_layers_enabled():
-        sample = style_profile.get("sample") if isinstance(style_profile, dict) else None
-        layers = extract_preset_layers(bot_persona, sample if isinstance(sample, dict) else None)
-        preset_layers = compile_preset_layers_prompt(layers)
-    disposition = compile_disposition_prompt(bot_persona) if profile == PROMPT_PROFILE_CHAT else ""
     sections = PersonaPromptSections(
         base=base,
         self_identity=self_identity,
-        preset_layers=preset_layers,
-        disposition=disposition,
         bot_behavior=bot_behavior,
-        group_style=group_style,
-        group_expression=group_expression,
     )
     metadata = PersonaPromptMetadata(
         bot_id=int(bot_id),
         group_id=int(group_id) if group_id is not None else None,
         persona=persona.model_dump(),
-        disposition=resolve_persona_disposition(bot_persona).model_dump(),
-        group_style=compile_group_style_snapshot(style_profile),
+        group_expression_profile=resolve_group_expression_profile(style_profile).model_dump(mode="json"),
     )
     return PersonaPromptBundle(
         system=assemble_persona_system(sections, mode=mode),

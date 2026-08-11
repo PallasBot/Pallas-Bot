@@ -5,10 +5,13 @@ from __future__ import annotations
 import asyncio
 import random
 
-from nonebot import get_bot, logger
+from nonebot import get_bot, get_driver, logger
 from nonebot.exception import ActionFailed
 from nonebot_plugin_apscheduler import scheduler
 
+from pallas.api.logging import format_plugin_event
+from pallas.core.foundation.db.lifecycle_service import run_lifecycle_dataset_maintenance
+from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.core.platform.ingress.message_load import should_pause_tasks
 from pallas.core.platform.shard import context as shard_ctx
 
@@ -16,6 +19,27 @@ from ..message_store import MessageStore
 from ..model import Chat
 from ..runtime_stats import prune_repeater_runtime_caches
 from ..shard_opt import repeater_maintenance_runs_on_worker, repeater_scheduler_runs_on_worker
+
+driver = get_driver()
+
+
+async def run_image_cache_prune() -> None:
+    if not repeater_maintenance_runs_on_worker():
+        return
+    try:
+        await run_lifecycle_dataset_maintenance("image_cache")
+    except Exception:
+        logger.exception("image cache prune failed")
+
+
+@driver.on_startup
+async def schedule_image_cache_prune_after_startup() -> None:
+    asyncio.create_task(run_image_cache_prune(), name="image_cache_prune_startup")
+
+
+@scheduler.scheduled_job("cron", hour=4, minute=30)
+async def prune_image_cache_daily() -> None:
+    await run_image_cache_prune()
 
 
 @scheduler.scheduled_job("interval", seconds=60)
@@ -37,15 +61,22 @@ async def speak_up():
         return
 
     for msg in messages:
-        logger.info(f"bot [{bot_id}] ready to speak [{msg}] to group [{group_id}]")
+        logger.debug(format_business_event("主动发言", "已准备", bot=bot_id, group=group_id, content_len=len(str(msg))))
         try:
-            await bot.call_api(
-                "send_group_msg",
-                **{
-                    "message": msg,
-                    "group_id": group_id,
-                },
-            )
+            from pallas.product.llm.sticker_followup import suppress_outgoing_sticker_followup
+
+            with suppress_outgoing_sticker_followup():
+                await bot.call_api(
+                    "send_group_msg",
+                    **{
+                        "message": msg,
+                        "group_id": group_id,
+                    },
+                )
+
+            from ..sticker_followup import maybe_send_repeater_sticker_followup
+
+            await maybe_send_repeater_sticker_followup(bot, group_id, str(msg))
             if target_id:
                 await bot.call_api(
                     "group_poke",
@@ -54,12 +85,16 @@ async def speak_up():
                         "group_id": group_id,
                     },
                 )
+            suffix = f" and poked user [{target_id}]" if target_id else ""
+            logger.info(
+                format_plugin_event(
+                    "speak_up",
+                    f"Bot [{bot_id}] spoke up in group [{group_id}]: {msg}{suffix}",
+                )
+            )
         except ActionFailed as e:
             logger.warning(
-                "bot [{}] speak_up send failed group [{}]: {}",
-                bot_id,
-                group_id,
-                e,
+                format_business_event("主动发言", "发送失败", bot=bot_id, group=group_id, error=type(e).__name__)
             )
             return
         await asyncio.sleep(random.randint(2, 5))

@@ -12,11 +12,8 @@ _local_routing_cache_at = 0.0
 _providers_cache: dict[str, Any] = {}
 _providers_cache_at = 0.0
 
-HIGH_TIER_TASKS = frozenset({"llm_chat", "drunk", "repeater_polish"})
+HIGH_TIER_TASKS = frozenset({"llm_chat", "drunk"})
 LOW_TIER_TASKS = frozenset({
-    "repeater_select",
-    "repeater_polish_lite",
-    "repeater_fallback",
     "affect_refine",
     "turn_decision",
 })
@@ -281,9 +278,6 @@ async def resolve_task_route_chain(task: str, *, explicit_model: str | None = No
 
 _TASK_ROUTING_PREVIEW_TASKS: tuple[str, ...] = (
     "llm_chat",
-    "repeater_fallback",
-    "repeater_select",
-    "repeater_polish",
     "turn_decision",
 )
 

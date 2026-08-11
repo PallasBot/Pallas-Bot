@@ -16,11 +16,14 @@ from pallas.core.foundation.db.modules import (
     Message,
     PallasACL,
     SchemaMigration,
+    StickerLabel,
 )
 from pallas.core.shared.utils.invalidate_cache import clear_model_cache
 
 if TYPE_CHECKING:
     from beanie import Document
+
+    from pallas.core.foundation.db.repository import ImageCachePrunePolicy, ImageCachePruneResult
 
 
 class MongoContextRepository:
@@ -299,6 +302,14 @@ class MongoImageCacheRepository:
     async def find_by_cq_code(self, cq_code: str) -> ImageCache | None:
         return await ImageCache.find_one(ImageCache.cq_code == cq_code)
 
+    async def find_by_content_hash(self, content_hash: str) -> ImageCache | None:
+        return await ImageCache.find_one(ImageCache.content_hash == content_hash)
+
+    async def bind_content_hash(self, cq_code: str, content_hash: str) -> None:
+        await ImageCache.get_pymongo_collection().update_one(
+            {"cq_code": cq_code}, {"$set": {"content_hash": content_hash}}
+        )
+
     async def find_latest_with_blob(self) -> ImageCache | None:
         cache = await ImageCache.find({"blob_data": {"$nin": [None, b""]}}).sort("-date", "-id").first_or_none()
         if cache and cache.blob_data:
@@ -319,11 +330,164 @@ class MongoImageCacheRepository:
     async def save(self, cache: ImageCache) -> None:
         await cache.save()
 
+    async def touch(self, cq_code: str, *, date: int) -> None:
+        await ImageCache.get_pymongo_collection().update_one(
+            {"cq_code": cq_code},
+            {"$inc": {"ref_times": 1}, "$set": {"date": int(date)}},
+        )
+
     async def delete_old(self, before_date: int) -> None:
         await ImageCache.find(ImageCache.date < before_date).delete()
 
     async def delete_low_ref(self, ref_threshold: int) -> None:
         await ImageCache.find(ImageCache.ref_times < ref_threshold).delete()
+
+    async def prune(self, policy: ImageCachePrunePolicy) -> ImageCachePruneResult:
+        from pallas.core.foundation.db.repository import ImageCachePruneResult
+
+        collection = ImageCache.get_pymongo_collection()
+        batch_size = max(1, int(policy.batch_size))
+        max_blob_bytes = max(0, int(policy.max_blob_bytes))
+        deleted_rows = 0
+        deleted_blob_bytes = 0
+
+        async def total_blob_bytes() -> int:
+            pipeline = [
+                {"$project": {"size": {"$binarySize": {"$ifNull": ["$blob_data", b""]}}}},
+                {"$group": {"_id": None, "total": {"$sum": "$size"}}},
+            ]
+            try:
+                rows = await collection.aggregate(pipeline).to_list(length=1)
+                return int(rows[0]["total"]) if rows else 0
+            except Exception:
+                total = 0
+                async for row in collection.find({}, {"blob_data": 1}):
+                    total += len(row.get("blob_data") or b"")
+                return total
+
+        async def delete_batch(query: dict[str, Any], *, size_limit: int | None = None) -> tuple[int, int]:
+            cursor = collection.find(query, {"_id": 1, "blob_data": 1}).sort([("date", 1), ("_id", 1)])
+            rows = await cursor.to_list(length=batch_size)
+            if size_limit is not None:
+                selected = []
+                selected_bytes = 0
+                for row in rows:
+                    selected.append(row)
+                    selected_bytes += len(row.get("blob_data") or b"")
+                    if selected_bytes >= size_limit:
+                        break
+                rows = selected
+            if not rows:
+                return 0, 0
+            result = await collection.delete_many({"_id": {"$in": [row["_id"] for row in rows]}})
+            return int(result.deleted_count), sum(len(row.get("blob_data") or b"") for row in rows)
+
+        expired = {
+            "$or": [
+                {"date": {"$lt": int(policy.absolute_before)}},
+                {"date": {"$lt": int(policy.single_use_before)}, "ref_times": {"$lte": 1}},
+            ]
+        }
+        while True:
+            rows, blob_bytes = await delete_batch(expired)
+            deleted_rows += rows
+            deleted_blob_bytes += blob_bytes
+            if rows < batch_size:
+                break
+
+        remaining_blob_bytes = await total_blob_bytes()
+        while remaining_blob_bytes > max_blob_bytes:
+            rows, blob_bytes = await delete_batch(
+                {"ref_times": {"$lte": 1}},
+                size_limit=remaining_blob_bytes - max_blob_bytes,
+            )
+            if not rows:
+                rows, blob_bytes = await delete_batch({}, size_limit=remaining_blob_bytes - max_blob_bytes)
+            if not rows:
+                break
+            deleted_rows += rows
+            deleted_blob_bytes += blob_bytes
+            remaining_blob_bytes = max(0, remaining_blob_bytes - blob_bytes)
+
+        return ImageCachePruneResult(deleted_rows, deleted_blob_bytes, remaining_blob_bytes)
+
+
+class MongoStickerLabelRepository:
+    """MongoDB 版表情语义标签仓储。"""
+
+    async def get(self, content_hash: str):
+        from pallas.product.llm.sticker_labels import StickerSemanticLabel
+
+        row = await StickerLabel.get_pymongo_collection().find_one({"content_hash": content_hash})
+        return StickerSemanticLabel.model_validate(row["label_json"]) if row else None
+
+    async def upsert(self, label) -> None:
+        values = {
+            "content_hash": label.content_hash,
+            "is_sticker": label.is_sticker,
+            "confidence": label.confidence,
+            "prompt_version": label.prompt_version,
+            "labeled_at": label.labeled_at,
+            "label_json": label.model_dump(mode="json"),
+        }
+        await StickerLabel.get_pymongo_collection().update_one(
+            {"content_hash": label.content_hash}, {"$set": values}, upsert=True
+        )
+
+    async def list_labels(self, *, limit: int = 100, offset: int = 0):
+        from pallas.product.llm.sticker_labels import StickerSemanticLabel
+
+        rows = await (
+            StickerLabel
+            .get_pymongo_collection()
+            .find({}, {"label_json": 1})
+            .sort([("labeled_at", -1), ("content_hash", 1)])
+            .skip(max(0, offset))
+            .limit(max(1, limit))
+            .to_list(length=max(1, limit))
+        )
+        return [StickerSemanticLabel.model_validate(row["label_json"]) for row in rows]
+
+    async def stats(self, *, min_confidence: float = 0.6, current_prompt_version: int | None = None) -> dict[str, int]:
+        rows = (
+            await StickerLabel
+            .get_pymongo_collection()
+            .find({}, {"is_sticker": 1, "confidence": 1, "prompt_version": 1})
+            .to_list(None)
+        )
+        total = len(rows)
+        sticker = sum(bool(row.get("is_sticker")) for row in rows)
+        result = {
+            "total": total,
+            "sticker": sticker,
+            "not_sticker": total - sticker,
+            "low_confidence": sum(float(row.get("confidence") or 0) < min_confidence for row in rows),
+        }
+        if current_prompt_version is not None:
+            result["current_version"] = sum(
+                int(row.get("prompt_version") or 0) == current_prompt_version for row in rows
+            )
+        return result
+
+    async def list_relabel_candidates(self, *, min_confidence: float, current_prompt_version: int, limit: int = 200):
+        from pallas.product.llm.sticker_labels import StickerSemanticLabel
+
+        rows = await (
+            StickerLabel
+            .get_pymongo_collection()
+            .find(
+                {"$or": [{"confidence": {"$lt": min_confidence}}, {"prompt_version": {"$lt": current_prompt_version}}]},
+                {"label_json": 1},
+            )
+            .sort([("labeled_at", 1), ("content_hash", 1)])
+            .limit(max(1, int(limit)))
+            .to_list(length=max(1, int(limit)))
+        )
+        return [StickerSemanticLabel.model_validate(row["label_json"]) for row in rows]
+
+    async def delete(self, content_hash: str) -> bool:
+        result = await StickerLabel.get_pymongo_collection().delete_one({"content_hash": content_hash})
+        return bool(result.deleted_count)
 
 
 class MongoAdminRepository:

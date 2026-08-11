@@ -6,6 +6,7 @@ import json
 import re
 from typing import Any
 
+from pallas.product.llm.inference_params import task_token_budget
 from pallas.product.persona.occasion import OccasionTag
 
 # 口癖：短、可复用；整句接话 / 多意图枚举不应入库
@@ -177,7 +178,7 @@ async def extract_catchphrase_candidates_llm(text: str, *, limit: int = 3) -> li
             {"role": "user", "content": f"回复：\n{plain[:500]}"},
         ],
         model=model,
-        options={"temperature": 0.1, "num_predict": 200},
+        options={"temperature": 0.1, "num_predict": task_token_budget("catchphrase_extract")},
         task=task,
     )
     items = parse_llm_catchphrase_payload(str(message.get("content") or ""))

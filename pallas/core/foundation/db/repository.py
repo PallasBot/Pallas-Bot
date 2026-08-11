@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
@@ -20,6 +21,21 @@ class AclDecisionLike(Protocol):
     allow: bool
     priority: int
     source: str
+
+
+@dataclass(frozen=True, slots=True)
+class ImageCachePrunePolicy:
+    single_use_before: int
+    absolute_before: int
+    max_blob_bytes: int
+    batch_size: int = 1000
+
+
+@dataclass(frozen=True, slots=True)
+class ImageCachePruneResult:
+    deleted_rows: int
+    deleted_blob_bytes: int
+    remaining_blob_bytes: int
 
 
 @runtime_checkable
@@ -186,6 +202,10 @@ class ImageCacheRepository(Protocol):
         """根据 CQ code 查找图片缓存"""
         ...
 
+    async def find_by_content_hash(self, content_hash: str) -> ImageCache | None: ...
+
+    async def bind_content_hash(self, cq_code: str, content_hash: str) -> None: ...
+
     async def find_latest_with_blob(self) -> ImageCache | None:
         """查找最近一条带图片二进制内容的缓存。"""
         ...
@@ -202,12 +222,20 @@ class ImageCacheRepository(Protocol):
         """保存/更新图片缓存"""
         ...
 
+    async def touch(self, cq_code: str, *, date: int) -> None:
+        """原子累加引用并刷新日期，不重写图片二进制。"""
+        ...
+
     async def delete_old(self, before_date: int) -> None:
         """按 date 删除早于指定日期的记录"""
         ...
 
     async def delete_low_ref(self, ref_threshold: int) -> None:
         """删除 ref_times 低于阈值的记录"""
+        ...
+
+    async def prune(self, policy: ImageCachePrunePolicy) -> ImageCachePruneResult:
+        """按保留期与逻辑字节上限分批清理缓存。"""
         ...
 
 

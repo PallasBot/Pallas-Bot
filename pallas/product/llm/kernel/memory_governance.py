@@ -44,8 +44,6 @@ def resolve_conversation_feature_level(cfg: LlmConfig | None = None) -> Conversa
         return ConversationFeatureLevel.LEGACY_REPEATER
     if c.llm_repeater_feedback_enabled or c.llm_repeater_bias_enabled or c.llm_repeater_writeback_enabled:
         return ConversationFeatureLevel.FULL_CONVERSATION_KERNEL
-    if c.llm_select_enabled or c.llm_polish_enabled or c.llm_fallback_enabled:
-        return ConversationFeatureLevel.REPEATER_PLUS_DECISION
     return ConversationFeatureLevel.LEGACY_REPEATER
 
 

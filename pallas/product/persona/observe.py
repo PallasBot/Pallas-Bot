@@ -23,7 +23,6 @@ def persona_axis_snapshot(persona: ResolvedPersona) -> dict[str, Any]:
         "tone": str(persona.tone or ""),
         "reply_bias": float(persona.reply_bias),
         "speak_bias": float(persona.speak_bias),
-        "length_pref": str(persona.length_pref or ""),
         "chaos_bias": float(persona.chaos_bias),
         "warmth": float(persona.warmth),
         "assertiveness": float(persona.assertiveness),
@@ -135,18 +134,14 @@ async def build_persona_observe_payload(
         group_style_enabled = bool(row.get("group_style_enabled", True))
         base_persona = await resolve_persona(account, None)
         resolved_persona = await resolve_persona(account, gid) if gid is not None and group_style_enabled else None
-        from pallas.product.persona.seed import resolve_effective_seed_prefs
+        from pallas.product.persona.account_profile import resolve_account_persona_profile
 
         raw_persona = row.get("persona") if isinstance(row.get("persona"), dict) else None
-        seed_prefs, seed_source = resolve_effective_seed_prefs(
-            raw_persona if isinstance(raw_persona, dict) else None,
-            account,
-        )
+        account_profile = resolve_account_persona_profile(raw_persona, account)
         entry: dict[str, Any] = {
             "account": account,
             "group_style_enabled": group_style_enabled,
-            "seed_prefs": seed_prefs,
-            "seed_source": seed_source,
+            "account_profile": account_profile.model_dump(mode="json"),
             "base": persona_axis_snapshot(base_persona),
             "base_hints": behavior_hint_lines(base_persona),
         }

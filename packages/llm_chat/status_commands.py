@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from nonebot import on_command
+from nonebot import logger, on_command
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, MessageEvent, PrivateMessageEvent
 
+from pallas.api.logging import format_plugin_event
 from pallas.api.perm import group_message_permission_for_command, private_message_permission_for_command
 from pallas.product.llm.config import get_llm_config
 from pallas.product.llm.delivery import send_cached_sticker_image
@@ -42,6 +43,7 @@ async def handle_llm_status(event: MessageEvent) -> None:
     except Exception as exc:
         await status_cmd.finish(f"读取 LLM 状态失败：{exc}")
         return
+    logger.info(format_plugin_event("show_status", f"Bot [{event.self_id}] showed its LLM runtime status"))
     await status_cmd.finish(text)
 
 
@@ -80,6 +82,13 @@ async def handle_sticker_test(bot, event: MessageEvent) -> None:
     response = await run_sticker_test(bot, event)
     if response:
         await sticker_test_cmd.finish(response)
+        return
+    logger.info(
+        format_plugin_event(
+            "test_cached_sticker",
+            f"Bot [{event.self_id}] sent a cached sticker test in group [{event.group_id}]",
+        )
+    )
 
 
 @llm_sticker_test_cmd.handle()
@@ -89,3 +98,10 @@ async def handle_llm_sticker_test(bot, event: MessageEvent) -> None:
     response = await run_llm_sticker_test(bot, event)
     if response:
         await llm_sticker_test_cmd.finish(response)
+        return
+    logger.info(
+        format_plugin_event(
+            "test_llm_sticker",
+            f"Bot [{event.self_id}] queued an LLM sticker test in group [{event.group_id}]",
+        )
+    )

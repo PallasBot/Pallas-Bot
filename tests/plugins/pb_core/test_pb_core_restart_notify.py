@@ -42,7 +42,7 @@ def test_load_restart_notify_expired(notify_dir):
 
 def test_format_restart_online_message():
     assert mod.format_restart_online_message(bot_id=3888888888, mode="shard") == (
-        "牛牛 3888888888 已重新上线（shard），重启完成。"
+        "【牛牛重启完成】\n账号：3888888888\n模式：shard"
     )
 
 
@@ -54,7 +54,7 @@ async def test_maybe_notify_restart_online_sends_and_clears(notify_dir, monkeypa
     await mod.maybe_notify_restart_online(bot)
     bot.send_private_msg.assert_awaited_once_with(
         user_id=111,
-        message="牛牛 222 已重新上线（unified），重启完成。",
+        message="【牛牛重启完成】\n账号：222\n模式：unified",
     )
     assert mod.load_restart_notify_pending() is None
 

@@ -70,7 +70,7 @@ async def refresh_bot_cross_group_persona(
         if isinstance(style_profile, dict):
             group_profiles.append((int(gid), style_profile))
 
-    persona = build_bot_cross_group_persona(
+    cross_group_expression = build_bot_cross_group_persona(
         bot_id=bid,
         group_profiles=group_profiles,
         now_ts=now_ts,
@@ -79,20 +79,11 @@ async def refresh_bot_cross_group_persona(
     bot_repo = make_bot_config_repository()
     existing = await bot_repo.get(bid)
     existing_persona = getattr(existing, "persona", None) if existing is not None else None
-    merged = dict(persona)
-    if isinstance(existing_persona, dict):
-        for key in (
-            "seed",
-            "seed_override",
-            "self_aliases",
-            "peer_aliases",
-            "alias_names",
-            "knowledges",
-            "relationships",
-            "layers",
-        ):
-            if key in existing_persona and key not in merged:
-                merged[key] = existing_persona[key]
+    merged = dict(existing_persona) if isinstance(existing_persona, dict) else {}
+    if str(merged.get("source") or "") == "cross_group":
+        for key in ("source", "version", "updated_at", "sample", "derived"):
+            merged.pop(key, None)
+    merged["cross_group_expression"] = cross_group_expression
     from pallas.product.persona.seed import ensure_persona_auto_seed
 
     merged = ensure_persona_auto_seed(merged, bid)

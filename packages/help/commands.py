@@ -1,10 +1,11 @@
-from nonebot import on_message
+from nonebot import logger, on_message
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, PrivateMessageEvent
 from nonebot.rule import Rule
 from nonebot.typing import T_State
 
 from pallas.api.limits import is_command_cooldown_ready, refresh_command_cooldown
+from pallas.api.logging import format_plugin_event
 from pallas.api.perm import permission_for_command
 from pallas.core.foundation.command_prefix import matches_command_prefix
 
@@ -147,6 +148,12 @@ async def toggle_all_plugins(bot: Bot, event: GroupMessageEvent | PrivateMessage
             count += 1
 
     action_name = "启用" if action == "enable" else "停止"
+    logger.info(
+        format_plugin_event(
+            "enable_all_plugins" if action == "enable" else "disable_all_plugins",
+            f"Bot [{bot_id}] {action}d [{count}] plugins in group [{group_id or '-'}]",
+        )
+    )
     await matcher.finish(f"在米诺斯女神的允许下，我将{action_name} {count} 个能力")
 
 

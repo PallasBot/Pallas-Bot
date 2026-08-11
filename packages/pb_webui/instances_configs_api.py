@@ -9,6 +9,8 @@ from fastapi.responses import JSONResponse
 from nonebot import logger
 from pydantic import BaseModel, ConfigDict, Field
 
+from pallas.product.persona.account_profile import AccountPersonaProfile  # noqa: TC001
+
 from .console_read_cache import cached_read, drop_read_cache
 from .extended_common import (
     check_pallas_write_token,
@@ -48,7 +50,10 @@ async def _apply_bot_config_patch(account: int, body: _BotConfigPatch) -> dict[s
     repo = make_bot_config_repository()
     await repo.get_or_create(account, disabled_plugins=[])
     fields: dict[str, Any] = {}
-    for field_name, raw in body.model_dump(exclude_none=True).items():
+    patch_data = body.model_dump(exclude_none=True)
+    if "persona" in body.model_fields_set and body.persona is not None:
+        patch_data["persona"] = body.persona.model_dump(exclude_unset=True)
+    for field_name, raw in patch_data.items():
         if field_name in ("admins", "disabled_plugins") and raw is not None:
             if field_name == "disabled_plugins":
                 fields[field_name] = [str(s).strip() for s in raw if str(s).strip()]
@@ -56,6 +61,22 @@ async def _apply_bot_config_patch(account: int, body: _BotConfigPatch) -> dict[s
                 fields[field_name] = [int(x) for x in raw]
         else:
             fields[field_name] = raw
+    if "persona" in fields:
+        from pallas.product.persona.seed import merge_persona_with_seed_patch
+
+        incoming = fields.get("persona")
+        if (
+            isinstance(incoming, dict)
+            and any(key in incoming for key in ("account_profile", "seed_override", "seed"))
+            and not any(key in incoming for key in ("source", "derived", "version"))
+        ):
+            current = await repo.get(account)
+            existing = getattr(current, "persona", None) if current is not None else None
+            fields["persona"] = merge_persona_with_seed_patch(
+                existing if isinstance(existing, dict) else None,
+                incoming,
+                bot_id=account,
+            )
     await repo.upsert_fields(account, fields)
     if "disabled_plugins" in fields:
         from packages.help.plugin_manager import apply_disabled_plugin_config_change
@@ -67,21 +88,7 @@ async def _apply_bot_config_patch(account: int, body: _BotConfigPatch) -> dict[s
         await invalidate_bot_admins_cache(account)
     if "persona" in fields:
         from pallas.product.persona import invalidate_persona_cache
-        from pallas.product.persona.seed import merge_persona_with_seed_patch
 
-        incoming = fields.get("persona")
-        if (
-            isinstance(incoming, dict)
-            and ("seed_override" in incoming or "seed" in incoming)
-            and not any(k in incoming for k in ("source", "derived", "version"))
-        ):
-            current = await repo.get(account)
-            existing = getattr(current, "persona", None) if current is not None else None
-            fields["persona"] = merge_persona_with_seed_patch(
-                existing if isinstance(existing, dict) else None,
-                incoming,
-                bot_id=account,
-            )
         invalidate_persona_cache(account)
     doc = await repo.get(account, ignore_cache=True)
     if doc is None:
@@ -143,6 +150,12 @@ async def _apply_user_config_patch(user_id: int, body: _UserConfigPatch) -> dict
     return user_config_to_public(doc)
 
 
+class _BotPersonaPatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    account_profile: AccountPersonaProfile | None = None
+
+
 class _BotConfigPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -152,7 +165,7 @@ class _BotConfigPatch(BaseModel):
     auto_accept_group: bool | None = None
     security: bool | None = None
     community_roster_show_qq: bool | None = None
-    persona: dict | None = None
+    persona: _BotPersonaPatch | None = None
     group_style_enabled: bool | None = None
 
 
@@ -190,7 +203,7 @@ def register_instances_configs_router(
                 stale_sec=20.0,
             )
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 加载实例视图失败")
+            logger.exception("[控制台] 加载实例视图失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": payload})
 
@@ -237,7 +250,7 @@ def register_instances_configs_router(
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 更新 Bot 配置失败")
+            logger.exception("[控制台] 更新 Bot 配置失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         drop_read_cache(("instances", "bot_configs_list", "db_overview", "home-overview"))
         return JSONResponse({"ok": True, "data": data})
@@ -312,7 +325,7 @@ def register_instances_configs_router(
             except HTTPException:
                 raise
             except Exception as e:  # noqa: BLE001
-                logger.exception("Pallas-Bot 控制台: 群配置（按 Bot）加载失败")
+                logger.exception("[控制台] 群配置（按 Bot）加载失败")
                 raise HTTPException(status_code=500, detail=str(e)) from e
 
             return JSONResponse({
@@ -359,7 +372,7 @@ def register_instances_configs_router(
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 更新群配置失败")
+            logger.exception("[控制台] 更新群配置失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         drop_read_cache(("group_configs_list", "db_overview", "group_configs_bot:"))
         return JSONResponse({"ok": True, "data": data})
@@ -407,7 +420,7 @@ def register_instances_configs_router(
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 更新 User 配置失败")
+            logger.exception("[控制台] 更新 User 配置失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         drop_read_cache(("db_overview", "user_configs_list"))
         return JSONResponse({"ok": True, "data": data})

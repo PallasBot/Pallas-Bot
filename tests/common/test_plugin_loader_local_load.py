@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 from pallas.core.platform.bot_runtime import plugin_loader
@@ -7,6 +8,7 @@ from pallas.core.platform.bot_runtime import plugin_loader
 
 def test_load_discovered_plugin_modules_applies_skip_rules(monkeypatch):
     calls: list[tuple[str, str, set[str]]] = []
+    records: list[tuple[str, tuple[object, ...]]] = []
 
     def fake_load(module_path: str, *, role_label: str, loaded_short: set[str]) -> bool:
         calls.append((module_path, role_label, set(loaded_short)))
@@ -14,6 +16,11 @@ def test_load_discovered_plugin_modules_applies_skip_rules(monkeypatch):
         return True
 
     monkeypatch.setattr(plugin_loader, "_load_plugin_module", fake_load)
+    monkeypatch.setattr(
+        plugin_loader,
+        "logger",
+        SimpleNamespace(info=lambda message, *args: records.append((message, args))),
+    )
 
     loaded_short = {"already"}
     count = plugin_loader._load_discovered_plugin_modules(
@@ -32,6 +39,11 @@ def test_load_discovered_plugin_modules_applies_skip_rules(monkeypatch):
     assert count == 1
     assert calls == [("packages.keep", "worker", {"already"})]
     assert loaded_short == {"already", "keep"}
+    assert records == [
+        ("跳过 {}：配置排除", ("packages.skip_by_path",)),
+        ("跳过 {}：配置禁用", ("packages.skip_me",)),
+        ("跳过 {}：同名插件已加载", ("packages.already",)),
+    ]
 
 
 def test_load_discovered_plugin_modules_skips_canonical_alias(monkeypatch):
@@ -102,8 +114,53 @@ def test_load_plugin_module_logs_neutral_message_when_module_missing(monkeypatch
     assert loaded is False
     assert records == [
         (
-            "启动：{} 跳过 {}（未发现模块）",
-            ("hub", "packages.relogin_bot"),
+            "跳过 {}：未发现模块",
+            ("packages.relogin_bot",),
         )
     ]
     assert "uv sync" not in records[0][0]
+
+
+def test_plugin_load_diagnostics_keeps_failures_and_slow_plugins() -> None:
+    plugin_loader.reset_startup_plugin_load_diagnostics()
+    plugin_loader.record_startup_plugin_load_failure("packages.weather")
+    plugin_loader.record_startup_plugin_load_success("packages.ai_media", elapsed_sec=1.42)
+    plugin_loader.record_startup_plugin_load_success("packages.pb_core", elapsed_sec=0.02)
+
+    assert plugin_loader.startup_plugin_load_diagnostic_facts() == {
+        "plugin_failures": "weather",
+        "plugin_slow": "ai_media=1.42",
+    }
+
+
+def test_split_site_local_plugin_dirs_keeps_custom_dirs_separate() -> None:
+    site_local, custom = plugin_loader.split_site_local_plugin_dirs(["local/plugins", "plugins/custom"])
+
+    assert site_local == ["local/plugins"]
+    assert custom == ["plugins/custom"]
+
+
+def test_classify_site_local_plugins_separates_community_plugin_directories(tmp_path, monkeypatch) -> None:
+    community = tmp_path / "interact"
+    community.mkdir()
+    (community / "community-index.entry.json").write_text(json.dumps({"id": "interact"}), encoding="utf-8")
+    local = tmp_path / "private_plugin"
+    local.mkdir()
+    monkeypatch.setattr(plugin_loader, "plugin_directory_git_origin", lambda _path: "")
+
+    local_count, community_count = plugin_loader.classify_site_local_plugins([community, local])
+
+    assert local_count == 1
+    assert community_count == 1
+
+
+def test_community_plugin_directory_accepts_external_git_origin(tmp_path, monkeypatch) -> None:
+    plugin_dir = tmp_path / "bilibili_dynamic"
+    plugin_dir.mkdir()
+    monkeypatch.setattr(
+        plugin_loader,
+        "plugin_directory_git_origin",
+        lambda _path: "https://github.com/Blackish-Red/pallas-plugin-bilibili.git",
+    )
+
+    assert plugin_loader.is_community_plugin_directory(plugin_dir) is True

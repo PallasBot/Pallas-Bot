@@ -185,8 +185,8 @@ def test_plugin_store_assets_refresh_returns_counts(monkeypatch) -> None:
 def test_community_store_refresh_also_refreshes_store_assets(monkeypatch) -> None:
     calls: list[str] = []
 
-    async def fake_build_store() -> dict:
-        calls.append("build-community-store")
+    async def fake_build_store(*, force_refresh: bool = False) -> dict:
+        calls.append(f"build-community-store:{force_refresh}")
         return {"plugins": [], "meta": {}}
 
     async def fake_refresh_assets() -> dict:
@@ -204,14 +204,14 @@ def test_community_store_refresh_also_refreshes_store_assets(monkeypatch) -> Non
     response = client.get("/pallas/api/plugins/community-store", params={"refresh": "true"})
 
     assert response.status_code == 200, response.text
-    assert calls == ["refresh-store-assets", "build-community-store"]
+    assert calls == ["refresh-store-assets", "build-community-store:True"]
 
 
 def test_community_store_skip_assets_skips_snapshot_refresh(monkeypatch) -> None:
     calls: list[str] = []
 
-    async def fake_build_store() -> dict:
-        calls.append("build-community-store")
+    async def fake_build_store(*, force_refresh: bool = False) -> dict:
+        calls.append(f"build-community-store:{force_refresh}")
         return {"plugins": [], "meta": {}}
 
     async def fake_refresh_assets() -> dict:
@@ -236,7 +236,7 @@ def test_community_store_skip_assets_skips_snapshot_refresh(monkeypatch) -> None
     )
 
     assert response.status_code == 200, response.text
-    assert calls == ["build-community-store"]
+    assert calls == ["build-community-store:True"]
 
 
 def test_store_refresh_endpoint_refreshes_assets_and_updates(monkeypatch) -> None:

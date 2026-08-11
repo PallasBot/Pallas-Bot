@@ -1,4 +1,4 @@
-"""分片：AI 异步任务登记，供 hub 将 /callback 转发到对应 worker。"""
+"""AI 异步任务持久化登记；分片模式额外记录 callback 所属 worker 路由。"""
 
 from __future__ import annotations
 
@@ -134,6 +134,16 @@ def build_ai_task_record(task_id: str, task_status: dict[str, Any]) -> dict[str,
     bot_id = str(bot_raw).strip()
     if not bot_id.isdigit():
         return None
+    try:
+        record = json.loads(json.dumps(task_status, ensure_ascii=False))
+        start_time = float(task_status.get("start_time") or time.time())
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(record, dict):
+        return None
+    record.update(task_id=task_id, bot_id=bot_id, start_time=start_time)
+    if not shard_ctx.sharding_active():
+        return record
     reg = get_shard_registry()
     sid = reg.shard_for_bot(bot_id)
     if sid is not None:
@@ -148,22 +158,11 @@ def build_ai_task_record(task_id: str, task_status: dict[str, Any]) -> dict[str,
             if sid is None:
                 return None
             port = worker_port_for_shard(int(sid), registry=reg)
-    return {
-        "task_id": task_id,
-        "bot_id": bot_id,
-        "group_id": task_status.get("group_id"),
-        "user_id": task_status.get("user_id"),
-        "task_type": task_status.get("task_type"),
-        "count_usage": task_status.get("count_usage"),
-        "shard_id": int(sid),
-        "worker_port": int(port),
-        "start_time": float(task_status.get("start_time") or time.time()),
-    }
+    record.update(shard_id=int(sid), worker_port=int(port))
+    return record
 
 
 def register_ai_task(task_id: str, task_status: dict[str, Any]) -> None:
-    if not shard_ctx.sharding_active():
-        return
     rec = build_ai_task_record(task_id, task_status)
     if rec is None:
         return
@@ -172,14 +171,10 @@ def register_ai_task(task_id: str, task_status: dict[str, Any]) -> None:
 
 
 def remove_ai_task(task_id: str) -> None:
-    if not shard_ctx.sharding_active():
-        return
     remove_ai_task_redis_sync(task_id)
 
 
 def get_ai_task_record(task_id: str) -> dict[str, Any] | None:
-    if not shard_ctx.sharding_active():
-        return None
     rec = read_ai_task_redis_sync(task_id)
     if not rec or _is_stale(rec):
         remove_ai_task(task_id)
@@ -188,9 +183,7 @@ def get_ai_task_record(task_id: str) -> dict[str, Any] | None:
 
 
 def claim_ai_task_record(task_id: str) -> dict[str, Any] | None:
-    """原子领取分片任务登记；已被领取或过期则返回 None。"""
-    if not shard_ctx.sharding_active():
-        return None
+    """原子领取持久化任务登记；已被领取或过期则返回 None。"""
     rec = claim_ai_task_redis_sync(task_id)
     if not rec:
         return None

@@ -5,16 +5,6 @@ from __future__ import annotations
 LLM_CHAT_TASK_TYPE = "llm_chat"
 LEGACY_LLM_CHAT_TASK_TYPES = frozenset({LLM_CHAT_TASK_TYPE, "ollama"})
 CHAT_DRUNK_TASK_TYPE = "chat"
-REPEATER_POLISH_TASK_TYPE = "repeater_polish"
-REPEATER_POLISH_LITE_TASK_TYPE = "repeater_polish_lite"
-REPEATER_SELECT_TASK_TYPE = "repeater_select"
-REPEATER_FALLBACK_TASK_TYPE = "repeater_fallback"
-REPEATER_LLM_TASK_TYPES = frozenset({
-    REPEATER_FALLBACK_TASK_TYPE,
-    REPEATER_POLISH_TASK_TYPE,
-    REPEATER_POLISH_LITE_TASK_TYPE,
-    REPEATER_SELECT_TASK_TYPE,
-})
 DRAW_IMAGE_TASK_TYPE = "draw"
 SING_TASK_TYPES = frozenset({"sing", "play", "request"})
 TTS_TASK_TYPE = "tts"

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from pallas.product.llm.startup_probe import probe_ai_service_health
+from pallas.product.llm.startup_probe import build_llm_startup_fact, probe_ai_service_health
 
 
 @pytest.mark.asyncio
@@ -51,3 +51,10 @@ async def test_probe_ai_service_health_unreachable(monkeypatch: pytest.MonkeyPat
     result = await probe_ai_service_health()
     assert result["ok"] is False
     assert "refused" in str(result.get("error", ""))
+
+
+def test_build_llm_startup_fact_uses_task_endpoint_over_legacy_model() -> None:
+    cfg = type("Cfg", (), {"llm_model": "", "llm_chat_enabled": True})()
+    endpoint = type("Endpoint", (), {"provider_id": "aliyun", "model": "deepseek-v4-flash"})()
+
+    assert build_llm_startup_fact(cfg, endpoint) == ("ok provider=aliyun model=deepseek-v4-flash chat=enabled")

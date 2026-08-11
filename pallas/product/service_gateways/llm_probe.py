@@ -66,13 +66,7 @@ async def probe_llm_service(*, timeout_sec: float = 15.0, draft_values=None) -> 
     from pallas.product.llm.startup_probe import probe_llm_provider
 
     cfg = get_llm_config()
-    if not (
-        cfg.llm_chat_enabled
-        or cfg.llm_fallback_enabled
-        or cfg.llm_polish_enabled
-        or cfg.llm_select_enabled
-        or cfg.llm_polish_lite_enabled
-    ):
+    if not cfg.llm_chat_enabled:
         return [
             llm_runtime_result(
                 ok=False,

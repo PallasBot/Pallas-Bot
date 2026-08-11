@@ -23,6 +23,7 @@ def repeater_work_handlers():
         handle_repeater_semantic_style_backfill_scan,
         handle_repeater_semantic_style_visual,
     )
+    from pallas.product.llm.sticker_label_jobs import handle_sticker_label_visual
     from pallas.product.llm.sticker_vision import handle_sticker_vision_select
 
     return {
@@ -33,4 +34,5 @@ def repeater_work_handlers():
         "repeater.semantic_style.visual": handle_repeater_semantic_style_visual,
         "image_cache.capture": handle_image_cache_capture,
         "sticker_vision.select": handle_sticker_vision_select,
+        "sticker.label.visual": handle_sticker_label_visual,
     }

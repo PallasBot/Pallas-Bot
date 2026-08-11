@@ -163,7 +163,6 @@ async def test_direct_chat_short_social_skips_relationship_and_person_facts(
     monkeypatch.setattr("pallas.product.llm.knowledge.vector_backend.vector_retrieve_mode", lambda _cfg: "hybrid")
 
     result = await assemble_direct_chat_context(
-        "base",
         bot_id=1,
         group_id=2,
         user_id=3,
@@ -174,9 +173,12 @@ async def test_direct_chat_short_social_skips_relationship_and_person_facts(
 
     relationship_mock.assert_not_awaited()
     person_facts_mock.assert_not_awaited()
-    assert result.system_prompt == "knowledge"
+    assert result.memory == "memory"
+    assert result.knowledge == "knowledge"
+    assert result.relationship == ""
+    assert result.person_facts == ""
     assert result.relationship_trace == {"hit_count": 0, "sources": [], "skipped_short_social_turn": True}
-    assert set(result.stage_durations_ms) == {"memory", "knowledge", "relationship", "person_facts", "expression"}
+    assert set(result.stage_durations_ms) == {"memory", "knowledge", "relationship", "person_facts"}
 
 
 @pytest.mark.asyncio

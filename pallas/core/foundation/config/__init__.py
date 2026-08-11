@@ -439,6 +439,7 @@ class UserConfig(Config):
 class TaskManager:
     _tasks: dict[str, dict] = {}
     _lock: asyncio.Lock = asyncio.Lock()
+    _claim_events: dict[str, asyncio.Event] = {}
 
     @classmethod
     async def refresh(cls):
@@ -473,12 +474,28 @@ class TaskManager:
         """原子取出并移除任务，避免并发回调重复投递。"""
         await cls.refresh()
         async with cls._lock:
-            task = cls._tasks.pop(task_id, None)
-        if task is None:
+            pending_claim = cls._claim_events.get(task_id)
+            if pending_claim is None:
+                task = cls._tasks.pop(task_id, None)
+                if task is None:
+                    return None
+                pending_claim = asyncio.Event()
+                cls._claim_events[task_id] = pending_claim
+                owns_claim = True
+            else:
+                task = None
+                owns_claim = False
+        if not owns_claim:
+            await pending_claim.wait()
             return None
         from pallas.core.platform.shard.coord.ai_task_registry import remove_ai_task
 
-        await asyncio.to_thread(remove_ai_task, task_id)
+        try:
+            await asyncio.to_thread(remove_ai_task, task_id)
+        finally:
+            async with cls._lock:
+                cls._claim_events.pop(task_id, None)
+                pending_claim.set()
         return task
 
     @classmethod

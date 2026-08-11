@@ -42,7 +42,13 @@ from pallas.core.platform.ingress.message_load import (
     reset_chat_degraded,
     signal_overload,
 )
+from pallas.core.platform.ingress.route_candidate_metrics import record_route_candidate
 from pallas.core.platform.ingress.route_index import RouteResolution, matcher_module_key
+from pallas.core.platform.message_runtime.lifecycle import (
+    direct_runtime_for_group,
+)
+from pallas.core.platform.message_runtime.matcher_adapter import MatcherAdapter
+from pallas.core.platform.message_runtime.models import HandlingOutcome, MessageContext
 from pallas.core.platform.multi_bot.dedup import needs_group_host_bot_gate
 
 if TYPE_CHECKING:
@@ -106,6 +112,12 @@ def matcher_dispatch_batches(selected_matchers: list[type]) -> list[list[type]]:
     return [selected_matchers[i : i + batch_size] for i in range(0, len(selected_matchers), batch_size)]
 
 
+_matcher_adapter = MatcherAdapter(
+    batch_size=matcher_dispatch_batches,
+    threshold=overload_selected_threshold,
+)
+
+
 def synthetic_llm_command_context(event: Event) -> dict[str, Any] | None:
     raw = getattr(event, "_pallas_llm_command_context", None)
     if not isinstance(raw, dict):
@@ -123,6 +135,31 @@ def matcher_log_name(matcher: type) -> str:
     return str(getattr(matcher, "plugin_name", "") or "<unknown>")
 
 
+def message_runtime_context(
+    bot: Bot,
+    event: GroupMessageEvent,
+    *,
+    command_traffic: bool,
+    resolution: RouteResolution | None,
+) -> MessageContext:
+    bot_id = int(bot.self_id)
+    group_id = int(event.group_id)
+    message_id = int(getattr(event, "message_id", 0) or 0)
+    plain_text = str(event.get_plaintext() or "")
+    raw_text = str(getattr(event, "raw_message", "") or "")
+    return MessageContext(
+        ingress_id=f"{bot_id}:{group_id}:{message_id}",
+        bot_id=bot_id,
+        group_id=group_id,
+        message_id=message_id,
+        plain_text=plain_text,
+        raw_text=raw_text,
+        is_to_me=bool(getattr(event, "to_me", False) or getattr(event, "_pallas_llm_alias_hard_trigger", False)),
+        command_traffic=command_traffic,
+        route_modules=resolution.matched_modules if resolution is not None else frozenset(),
+    )
+
+
 def select_synthetic_llm_command_matchers(selected_matchers: list[type], resolution: RouteResolution) -> list[type]:
     """合成命令仅派发到其路由目标，避免无关 blocker 占满执行通道。"""
     return [matcher for matcher in selected_matchers if matcher_module_key(matcher) in resolution.matched_modules]
@@ -131,6 +168,60 @@ def select_synthetic_llm_command_matchers(selected_matchers: list[type], resolut
 def select_overload_chatter_matchers(selected_matchers: list[type]) -> list[type]:
     """过载时仍保留核心闲聊的接话判断，暂缓其他被动能力。"""
     return [matcher for matcher in selected_matchers if matcher_module_key(matcher) in _CORE_CHATTER_MODULES]
+
+
+def exclude_direct_matchers(selected_matchers: list[type], modules: frozenset[str]) -> list[type]:
+    if not modules:
+        return selected_matchers
+    return [matcher for matcher in selected_matchers if matcher_module_key(matcher) not in modules]
+
+
+def record_route_candidate_safe(
+    *,
+    command_traffic: bool,
+    resolution: RouteResolution | None,
+    duration_ms: float,
+    matchers_considered: int,
+    matchers_selected: int,
+    matchers_run: int,
+    direct_outcome: HandlingOutcome | None,
+    matcher_handled: bool,
+) -> None:
+    if not command_traffic:
+        return
+    direct_status = None
+    visible_actions = None
+    effect_actions = None
+    if direct_outcome is not None:
+        if direct_outcome.error_class:
+            direct_status = "direct_error"
+        elif direct_outcome.fallback_to_matcher:
+            direct_status = "direct_fallback"
+        elif direct_outcome.handled:
+            direct_status = "direct_handled"
+        visible_actions = len(direct_outcome.actions)
+        effect_actions = (
+            visible_actions
+            + len(direct_outcome.work_jobs)
+            + len(direct_outcome.deferred_actions)
+            + len(direct_outcome.cross_worker_actions)
+        )
+    try:
+        record_route_candidate(
+            route_modules=resolution.matched_modules if resolution is not None else frozenset(),
+            index_hit=bool(resolution and resolution.index_hit),
+            route_fallback=not bool(resolution and resolution.index_hit),
+            matchers_considered=matchers_considered,
+            matchers_selected=matchers_selected,
+            matchers_run=matchers_run,
+            direct_outcome=direct_status,
+            matcher_handled=matcher_handled,
+            direct_visible_actions=visible_actions,
+            direct_effect_actions=effect_actions,
+            duration_ms=duration_ms,
+        )
+    except Exception:
+        logger.exception("Route candidate metrics record failed")
 
 
 async def pre_schedule_ingress_group_message_gate(bot: Bot, event: Event):
@@ -160,15 +251,18 @@ async def patched_handle_event(bot: Bot, event: Event) -> None:
 
 
 async def patched_handle_event_now(bot: Bot, event: Event) -> None:
-    from pallas.core.foundation.logging import compact_inbound_event_log, inbound_event_log_as_debug
+    from pallas.core.foundation.logging import (
+        compact_group_message_log,
+        compact_inbound_event_log,
+        inbound_event_log_as_debug,
+    )
 
     ingress_started = time.perf_counter()
     mark_activity()
     show_log = True
-    log_msg = f" {nb_message.escape_tag(bot.type)} {nb_message.escape_tag(bot.self_id)} | "
+    event_log = ""
     try:
-        # 群消息正文可能含 `<le>` 等伪标签；colors=True 时必须 escape，否则整条事件处理失败
-        log_msg += nb_message.escape_tag(compact_inbound_event_log(event.get_log_string()))
+        event_log = compact_inbound_event_log(event.get_log_string())
     except nb_message.NoLogException:
         show_log = False
     if show_log:
@@ -176,10 +270,27 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
         event_type = ""
         with contextlib.suppress(Exception):
             event_type = str(event.get_type() or "")
-        if inbound_event_log_as_debug(event_type):
-            log.debug(log_msg)
+        if isinstance(event, GroupMessageEvent):
+            log.debug(
+                " {} {} | {}",
+                nb_message.escape_tag(bot.type),
+                nb_message.escape_tag(bot.self_id),
+                nb_message.escape_tag(event_log),
+            )
+            if all(hasattr(event, field) for field in ("group_id", "user_id", "get_message")):
+                compact_log = compact_group_message_log(
+                    bot_id=str(bot.self_id),
+                    group_id=event.group_id,
+                    user_id=event.user_id,
+                    message=str(event.get_message()),
+                )
+                log.success(nb_message.escape_tag(compact_log))
+            else:
+                log.success(nb_message.escape_tag(f" Bot {bot.self_id} | {event_log}"))
+        elif inbound_event_log_as_debug(event_type):
+            log.debug(nb_message.escape_tag(f" {bot.type} {bot.self_id} | {event_log}"))
         else:
-            log.success(log_msg)
+            log.success(nb_message.escape_tag(f" {bot.type} {bot.self_id} | {event_log}"))
 
     state: dict[Any, Any] = {}
     dependency_cache: dict[Any, Any] = {}
@@ -206,6 +317,46 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
             apply_dispatch = isinstance(event, GroupMessageEvent)
             resolution = resolve_route_for_event(event) if apply_dispatch else None
             command_traffic = event_command_traffic(event, state, resolution=resolution) if apply_dispatch else True
+            if apply_dispatch:
+                direct_matcher_exclude_modules = frozenset()
+                direct_outcome = None
+                direct_runtime = direct_runtime_for_group(int(getattr(event, "group_id", 0) or 0))
+                if direct_runtime is not None:
+                    try:
+                        direct_context = message_runtime_context(
+                            bot,
+                            event,
+                            command_traffic=command_traffic,
+                            resolution=resolution,
+                        )
+                        direct_outcome = await direct_runtime.execute_and_commit(direct_context, bot=bot, event=event)
+                    except Exception:
+                        logger.exception("MessageRuntime direct execution failed")
+                    else:
+                        if direct_outcome.handled and not direct_outcome.fallback_to_matcher:
+                            if not direct_outcome.continue_matcher:
+                                record_group_message_ingress(
+                                    duration_ms=(time.perf_counter() - ingress_started) * 1000.0,
+                                    command_traffic=command_traffic,
+                                    matchers_considered=0,
+                                    matchers_selected=0,
+                                    matchers_run=0,
+                                )
+                                record_route_candidate_safe(
+                                    command_traffic=command_traffic,
+                                    resolution=resolution,
+                                    duration_ms=(time.perf_counter() - ingress_started) * 1000.0,
+                                    matchers_considered=0,
+                                    matchers_selected=0,
+                                    matchers_run=0,
+                                    direct_outcome=direct_outcome,
+                                    matcher_handled=False,
+                                )
+                                await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
+                                return
+                            direct_matcher_exclude_modules = direct_outcome.matcher_exclude_modules
+            else:
+                direct_matcher_exclude_modules = frozenset()
             if apply_dispatch and resolution is not None:
                 record_route_index_decision(
                     index_hit=resolution.index_hit,
@@ -229,56 +380,17 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                 chat_degraded_token = mark_chat_degraded(True)
 
             try:
-                threshold = overload_selected_threshold()
                 total_selected = 0
                 total_considered = 0
                 matchers_run = 0
                 any_matcher_executed = False
+                matcher_modules: list[str] = []
 
-                break_flag = False
+                if show_log:
+                    nb_message.logger.debug("Checking for matchers completed")
 
-                async def run_selected_matcher(matcher) -> None:
-                    nonlocal any_matcher_executed, matchers_run
-                    result = await check_and_run_matcher_with_lane(
-                        matcher,
-                        bot,
-                        event,
-                        state.copy(),
-                        stack,
-                        dependency_cache,
-                        command_traffic=command_traffic,
-                        synthetic_llm_command=llm_command is not None,
-                        hard_speak_trigger=bool(
-                            matcher_module_key(matcher) == "llm_chat"
-                            and (
-                                getattr(event, "to_me", False)
-                                or getattr(event, "_pallas_llm_alias_hard_trigger", False)
-                            )
-                        ),
-                    )
-                    if result.acquired:
-                        matchers_run += 1
-                        any_matcher_executed = True
-                        if llm_command is not None:
-                            acquired_matcher_modules.append(matcher_log_name(matcher))
-                    return
-
-                def handle_stop_propagation(_exc_group) -> None:
-                    nonlocal break_flag
-                    break_flag = True
-                    nb_message.logger.debug("Stop event propagation")
-
-                for priority in sorted(matchers.keys()):
-                    if break_flag:
-                        break
-
-                    if show_log:
-                        nb_message.logger.debug("Checking for matchers in priority {}...", priority)
-
-                    if not (priority_matchers := matchers[priority]):
-                        continue
-
-                    selected_matchers = (
+                def select_matchers(priority_matchers: list[type]) -> list[type]:
+                    selected = (
                         select_priority_matchers(
                             priority_matchers,
                             command_traffic=command_traffic,
@@ -289,43 +401,56 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         else priority_matchers
                     )
                     if llm_command is not None and resolution is not None:
-                        selected_matchers = select_synthetic_llm_command_matchers(selected_matchers, resolution)
+                        selected = select_synthetic_llm_command_matchers(selected, resolution)
                     elif chat_degraded_token is not None:
-                        selected_matchers = select_overload_chatter_matchers(selected_matchers)
-                    if not selected_matchers:
-                        continue
+                        selected = select_overload_chatter_matchers(selected)
+                    return exclude_direct_matchers(selected, direct_matcher_exclude_modules)
 
-                    if llm_command is not None:
-                        selected_matcher_modules.extend(matcher_log_name(matcher) for matcher in selected_matchers)
-
-                    total_considered += len(priority_matchers)
-                    total_selected += len(selected_matchers)
-                    if total_selected > threshold:
-                        signal_overload(3.0)
-
-                    with nb_message.catch({
-                        nb_message.StopPropagation: handle_stop_propagation,
-                        Exception: nb_message._handle_exception(
-                            "<r><bg #f8bbd0>Error when checking Matcher.</bg #f8bbd0></r>"
-                        ),
-                    }):
-                        for batch in matcher_dispatch_batches(selected_matchers):
-                            if break_flag:
-                                break
-                            async with nb_message.anyio.create_task_group() as tg:
-                                for matcher in batch:
-                                    tg.start_soon(nb_message.run_coro_with_shield, run_selected_matcher(matcher))
-
-                if show_log:
-                    nb_message.logger.debug("Checking for matchers completed")
+                matcher_result = await _matcher_adapter.execute(
+                    bot=bot,
+                    event=event,
+                    state=state,
+                    stack=stack,
+                    dependency_cache=dependency_cache,
+                    command_traffic=command_traffic,
+                    llm_command=(
+                        dict(llm_command, route_modules=resolution.matched_modules)
+                        if llm_command is not None and resolution is not None
+                        else None
+                    ),
+                    chat_degraded=chat_degraded_token is not None,
+                    direct_matcher_exclude_modules=direct_matcher_exclude_modules,
+                    matcher_pools=matchers,
+                    matcher_checker=check_and_run_matcher_with_lane,
+                    select_matchers=select_matchers,
+                    signal_overload=signal_overload,
+                )
+                total_selected = matcher_result.total_selected
+                total_considered = matcher_result.total_considered
+                matchers_run = matcher_result.matchers_run
+                any_matcher_executed = matcher_result.any_matcher_executed
+                matcher_modules.extend(matcher_result.selected_matcher_modules)
+                selected_matcher_modules.extend(matcher_result.selected_matcher_modules)
+                acquired_matcher_modules.extend(matcher_result.acquired_matcher_modules)
 
                 if apply_dispatch:
+                    ingress_duration_ms = (time.perf_counter() - ingress_started) * 1000.0
                     record_group_message_ingress(
-                        duration_ms=(time.perf_counter() - ingress_started) * 1000.0,
+                        duration_ms=ingress_duration_ms,
                         command_traffic=command_traffic,
                         matchers_considered=total_considered,
                         matchers_selected=total_selected,
                         matchers_run=matchers_run,
+                    )
+                    record_route_candidate_safe(
+                        command_traffic=command_traffic,
+                        resolution=resolution,
+                        duration_ms=ingress_duration_ms,
+                        matchers_considered=total_considered,
+                        matchers_selected=total_selected,
+                        matchers_run=matchers_run,
+                        direct_outcome=direct_outcome,
+                        matcher_handled=any_matcher_executed,
                     )
                 if llm_command is not None:
                     logger.info(
@@ -335,7 +460,6 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         selected_matcher_modules,
                         acquired_matcher_modules,
                     )
-
                 await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
             finally:
                 if chat_degraded_token is not None:

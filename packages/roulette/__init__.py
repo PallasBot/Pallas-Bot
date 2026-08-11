@@ -13,6 +13,7 @@ from pallas.product.llm.knowledge.declare import knowledge_source_row
 from pallas.product.llm.tools.declare import llm_command_tool_row
 
 from . import commands as _commands  # noqa: F401
+from . import direct as _direct  # noqa: F401
 from .game import parse_roulette_start_command
 
 __plugin_meta__ = PluginMetadata(
@@ -52,7 +53,6 @@ __plugin_meta__ = PluginMetadata(
                 "牛牛禁言轮盘",
                 "牛牛开枪",
             ],
-            "prefixes": ["牛牛救一下", "牛牛补一枪"],
         },
         "command_permissions": command_perm_list(
             command_perm_row("roulette.start", "牛牛轮盘"),

@@ -12,6 +12,8 @@ from pallas.core.foundation.db import init_db
 from pallas.core.foundation.logging import (
     apply_stdlib_logging_channel_prefix,
     configure_quiet_library_loggers,
+    format_repo_file_log,
+    install_repo_console_log_format,
     install_startup_log_noise_patcher,
     resolve_repo_log_level,
 )
@@ -34,17 +36,20 @@ def boot() -> nonebot.Driver:
     configure_quiet_library_loggers()
     file_log_level = resolve_repo_log_level()
     nonebot.init()
+    install_repo_console_log_format()
     install_startup_log_noise_patcher()
+    logger.info("[初始化] 运行环境载入中...")
     bot_log_dir = plugin_data_dir("bot", create=True)
     logger.add(
         bot_log_dir / "nonebot_{time:YYYY-MM-DD_HH-mm-ss_SSSSSS}.log",
         level=file_log_level,
+        format=format_repo_file_log,
         rotation="50 MB",
         retention="14 days",
         encoding="utf-8",
         enqueue=True,
     )
-    logger.info("bot file log dir: {} level={}", bot_log_dir, file_log_level)
+    logger.info("[初始化] 运行环境已就绪：日志目录 {}，级别 {}", bot_log_dir, file_log_level)
     start_message_scrub_if_enabled()
     install_llm_startup_probe()
     install_nonebot_log_sink()
@@ -54,6 +59,7 @@ def boot() -> nonebot.Driver:
 
     @driver.on_startup
     async def startup() -> None:
+        logger.info("[初始化] 运行服务初始化中...")
         await init_db()
         await start_ban_gate_snapshot()
         schedule_ensure_voices()
@@ -62,6 +68,7 @@ def boot() -> nonebot.Driver:
     async def shutdown() -> None:
         await stop_ban_gate_snapshot()
 
+    logger.info("[初始化] 模块载入中...")
     load_plugins_for_role()
 
     @driver.on_startup

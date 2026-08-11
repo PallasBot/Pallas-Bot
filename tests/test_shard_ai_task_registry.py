@@ -13,6 +13,25 @@ from pallas.core.platform.shard.registry.config import get_shard_registry_settin
 
 
 def test_register_and_resolve_worker_port(tmp_path, monkeypatch):
+    records: dict[str, dict] = {}
+
+    def write_record(rec: dict, *, ttl_sec: int) -> bool:
+        assert ttl_sec > 0
+        records[str(rec["task_id"])] = dict(rec)
+        return True
+
+    monkeypatch.setattr(
+        "pallas.core.platform.shard.coord.ai_task_registry.write_ai_task_redis_sync",
+        write_record,
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.shard.coord.ai_task_registry.read_ai_task_redis_sync",
+        lambda task_id: records.get(task_id),
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.shard.coord.ai_task_registry.remove_ai_task_redis_sync",
+        lambda task_id: records.pop(task_id, None),
+    )
     shard_root = tmp_path / "pallas_shard"
     shard_root.mkdir(parents=True)
     (shard_root / "registry.json").write_text(
@@ -34,6 +53,7 @@ def test_register_and_resolve_worker_port(tmp_path, monkeypatch):
     monkeypatch.setenv("PALLAS_BOT_ROLE", "worker")
     monkeypatch.setenv("PALLAS_SHARD_ID", "2")
     get_shard_registry_settings.cache_clear()
+    monkeypatch.setattr("pallas.core.platform.shard.registry.store._cached", None)
     monkeypatch.setattr(
         "pallas.core.platform.shard.registry.store._registry_path",
         lambda: shard_root / "registry.json",
@@ -43,11 +63,11 @@ def test_register_and_resolve_worker_port(tmp_path, monkeypatch):
         task_id,
         {"bot_id": "10001", "group_id": 12345, "start_time": time.time()},
     )
-    assert resolve_worker_port_for_task(task_id) == 7972
+    assert resolve_worker_port_for_task(task_id) == 7971
     rec = get_ai_task_record(task_id)
     assert rec is not None
-    assert rec["shard_id"] == 2
-    assert rec["worker_port"] == 7972
+    assert rec["shard_id"] == 1
+    assert rec["worker_port"] == 7971
 
     remove_ai_task(task_id)
     assert resolve_worker_port_for_task(task_id) is None

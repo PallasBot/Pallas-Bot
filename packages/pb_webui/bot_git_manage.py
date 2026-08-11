@@ -8,6 +8,7 @@ import subprocess
 from collections.abc import Callable
 from typing import Any
 
+import httpx
 from nonebot import logger
 
 from packages.pb_webui.manager import (
@@ -28,6 +29,7 @@ from pallas.core.shared.utils.git_mirror import (
     git_instead_of_args,
     iter_mirrors_for_failover,
 )
+from pallas.core.shared.utils.github_release import fetch_github_releases
 
 ProgressReporter = Callable[[int, str], None]
 
@@ -313,10 +315,10 @@ async def build_bot_git_status_payload(
             try:
                 await fetch_bot_origin_refs()
             except BotGitUpdateError as e:
-                logger.warning("Pallas-Bot 控制台: Bot git status fetch 失败 err={}", e.detail)
+                logger.warning("[控制台] Bot git status fetch 失败 err={}", e.detail)
             except Exception as e:  # noqa: BLE001
                 logger.warning(
-                    "Pallas-Bot 控制台: Bot git status fetch 异常 err={}",
+                    "[控制台] Bot git status fetch 异常 err={}",
                     format_exception_for_log(e),
                 )
         probe = bot_branch_update_probe(preferred_branch=preferred_branch)
@@ -344,6 +346,8 @@ async def load_bot_git_history_payload(
     branch: str = "",
     limit: int = 30,
     fetch: bool = True,
+    github_token: str = "",
+    repo: str = "PallasBot/Pallas-Bot",
 ) -> dict[str, Any]:
     history_mode = normalize_git_history_mode(mode)
     preferred_branch = normalize_bot_git_track_branch(branch) if history_mode == "commit" else ""
@@ -357,12 +361,39 @@ async def load_bot_git_history_payload(
         try:
             await fetch_bot_origin_refs()
         except BotGitUpdateError as e:
-            logger.warning("Pallas-Bot 控制台: Bot git history fetch 失败 err={}", e.detail)
+            logger.warning("[控制台] Bot git history fetch 失败 err={}", e.detail)
         except Exception as e:  # noqa: BLE001
             logger.warning(
-                "Pallas-Bot 控制台: Bot git history fetch 异常 err={}",
+                "[控制台] Bot git history fetch 异常 err={}",
                 format_exception_for_log(e),
             )
+
+    if not git_available and history_mode == "release" and deploy.get("deployment_mode") == "docker":
+        async with httpx.AsyncClient(follow_redirects=True, timeout=20.0) as client:
+            releases = await fetch_github_releases(
+                repo,
+                client=client,
+                limit=max(1, min(limit, 100)),
+                token=github_token,
+            )
+        runtime_tag = str(deploy.get("runtime_version") or deploy.get("image_version") or "")
+        raw_items = [
+            {
+                "kind": "release",
+                "ref": str(release.get("tag") or ""),
+                "short_ref": str(release.get("tag") or ""),
+                "date": str(release.get("published_at") or ""),
+                "message": str(release.get("name") or release.get("tag") or ""),
+            }
+            for release in releases
+            if is_bot_release_style_tag(str(release.get("tag") or ""))
+        ]
+        return {
+            "mode": history_mode,
+            "branch": "",
+            "items": mark_history_items(raw_items, head_tag=runtime_tag),
+            "head": {"tag": runtime_tag, "sha": "", "short_sha": ""} if runtime_tag else None,
+        }
 
     if not git_available:
         return {
@@ -447,7 +478,7 @@ async def apply_bot_git_target(
         mirrors = list(iter_mirrors_for_failover("bot"))
         for i, mirror in enumerate(mirrors, start=1):
             logger.info(
-                "Pallas-Bot 控制台: Bot git {} 尝试 {}/{} mirror={}",
+                "[控制台] Bot git {} 尝试 {}/{} mirror={}",
                 " ".join(args[:3]),
                 i,
                 len(mirrors),
@@ -458,7 +489,7 @@ async def apply_bot_git_target(
                 return code, out, err
             last_code, last_out, last_err = code, out, err
             logger.warning(
-                "Pallas-Bot 控制台: Bot git mirror={} 失败：{}",
+                "[控制台] Bot git mirror={} 失败：{}",
                 mirror.id,
                 (err or out or f"exit={code}")[:300],
             )
@@ -537,7 +568,7 @@ async def apply_bot_git_target(
                 f"git reset --hard 失败：{err_reset or '(无 stderr)'}",
                 status_code=400,
             )
-        logger.info("Pallas-Bot 控制台: Bot 已 force reset 至 {}", hard_ref[:12])
+        logger.info("[控制台] Bot 已 force reset 至 {}", hard_ref[:12])
         report(92, "整理版本信息…")
         after = get_bot_current_version()
         display = str(after.get("tag") or after.get("commit") or hard_ref[:12]).strip()
@@ -635,7 +666,7 @@ async def apply_bot_git_target(
             rc_sp, _, err_sp = await git("stash", "pop")
             if rc_sp != 0:
                 stash_note = " 本地改动已暂存但未自动恢复，请手动 git stash pop。"
-                logger.warning("Pallas-Bot 控制台: commit 更新后 stash pop 失败 err={}", err_sp)
+                logger.warning("[控制台] commit 更新后 stash pop 失败 err={}", err_sp)
             else:
                 stash_note = " 已自动恢复先前暂存的本地改动。"
 
@@ -704,7 +735,7 @@ async def apply_bot_git_target(
             rc_sp, _, err_sp = await git("stash", "pop")
             if rc_sp != 0:
                 stash_restore_note = " 本地改动已暂存但未自动恢复，请手动 git stash pop。"
-                logger.warning("Pallas-Bot 控制台: release 更新后 stash pop 失败 err={}", err_sp)
+                logger.warning("[控制台] release 更新后 stash pop 失败 err={}", err_sp)
             else:
                 stash_restore_note = " 已自动恢复先前暂存的本地改动。"
     else:

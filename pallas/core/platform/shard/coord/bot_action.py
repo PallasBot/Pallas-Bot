@@ -179,8 +179,12 @@ async def _execute_local(action: str, bot_qq: int, payload: dict[str, Any]) -> t
         if action == "repeater_fanout_reply":
             from packages.repeater.fanout_reply import run_repeater_reply_for_bot
 
+            delay_sec = float(payload.pop("delay_sec", 0.0) or 0.0)
+
             async def repeater_job() -> None:
                 try:
+                    if delay_sec > 0:
+                        await asyncio.sleep(delay_sec)
                     await run_repeater_reply_for_bot(int(bot_qq), payload)
                 except Exception as err:
                     logger.warning("repeater_fanout remote bot={} failed: {}", int(bot_qq), err)

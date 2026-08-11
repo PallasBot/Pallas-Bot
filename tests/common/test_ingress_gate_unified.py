@@ -115,6 +115,52 @@ async def test_unified_ingress_fanout_skips_federate_and_once_claim(monkeypatch:
 
 
 @pytest.mark.asyncio
+async def test_unified_ingress_pallas_status_uses_local_claim_without_federate(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.federate_peer_bot_ids_contains", lambda _uid: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_fanout_bypasses_claim", lambda _plain: False)
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.gate.ingress_once_claim_safe_before_host_gates",
+        lambda *_args, **_kwargs: True,
+    )
+    owner = MagicMock(return_value=True)
+    federate = AsyncMock(return_value=True)
+    local_claim = AsyncMock(return_value=[])
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.should_process_federate_group_on_current_deployment", owner)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.claim_federate_group_message_ingress", federate)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.run_ingress_message_claim", local_claim)
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.gate.hosted_activity_ingress_passes", lambda *_args, **_kwargs: True
+    )
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.dream_session_ingress_passes", AsyncMock(return_value=True))
+    from pallas.core.platform.ingress.gate import ingress_group_message_gate
+
+    class FakeBot:
+        self_id = "111"
+
+    event = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=12345,
+        message_id=1,
+        message=Message("#pallas"),
+        raw_message="#pallas",
+    )
+
+    await ingress_group_message_gate(FakeBot(), event)
+
+    local_claim.assert_awaited_once()
+    owner.assert_not_called()
+    federate.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_unified_ingress_bypass_skips_federate_claim(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
@@ -217,7 +263,7 @@ async def test_unified_ingress_non_owner_deployment_skips_command_once_and_feder
         lambda _group_id, **_kw: False,
     )
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_fanout_bypasses_claim", lambda _plain: False)
-    monkeypatch.setattr("pallas.core.platform.ingress.gate.legacy_command_traffic", lambda _plain: True)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.legacy_command_traffic", lambda _plain, **_kw: True)
     federate = AsyncMock(return_value=True)
     once = AsyncMock(return_value=True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.claim_federate_group_message_ingress", federate)
@@ -261,7 +307,7 @@ async def test_unified_ingress_yields_peer_covered_command_even_if_not_local_com
         lambda _group_id, **_kw: True,
     )
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_fanout_bypasses_claim", lambda _plain: False)
-    monkeypatch.setattr("pallas.core.platform.ingress.gate.legacy_command_traffic", lambda _plain: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.legacy_command_traffic", lambda _plain, **_kw: False)
     federate = AsyncMock(return_value=True)
     once = AsyncMock(return_value=True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.claim_federate_group_message_ingress", federate)
@@ -304,7 +350,7 @@ async def test_unified_ingress_non_owner_still_claims_chat_traffic(
         lambda _group_id, **_kw: False,
     )
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_fanout_bypasses_claim", lambda _plain: False)
-    monkeypatch.setattr("pallas.core.platform.ingress.gate.legacy_command_traffic", lambda _plain: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.legacy_command_traffic", lambda _plain, **_kw: False)
     federate = AsyncMock(return_value=True)
     once = AsyncMock(return_value=True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.claim_federate_group_message_ingress", federate)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import sys
 from typing import TYPE_CHECKING
 
 from nonebot.log import LoguruHandler
@@ -11,6 +12,11 @@ from nonebot.log import LoguruHandler
 if TYPE_CHECKING:
     from logging import LogRecord
     from typing import Any
+
+REPO_CONSOLE_LOG_FORMAT = (
+    "<g>{time:MM-DD HH:mm:ss}</g> [<lvl>{level:<8}</lvl>] <c><u>{{{extra[display_name]:<8}}}</u></c> {message}\n"
+)
+REPO_FILE_LOG_FORMAT = "{time:MM-DD HH:mm:ss} [{level:<8}] {{{extra[display_name]:<8}}} {message}\n"
 
 _TRANSIENT_UVICORN_MESSAGES = (
     "keepalive ping failed",
@@ -45,6 +51,80 @@ _CHANNEL_ALIASES = (
     ("httpcore", "HTTP"),
 )
 
+_BUSINESS_LOG_LABELS = (
+    ("packages.repeater.learn_queue", "Learn"),
+    ("packages.repeater.learner", "Learn"),
+    ("packages.repeater.fanout", "Reply"),
+    ("packages.repeater.emoji", "Reaction"),
+    ("packages.repeater", "Repeater"),
+    ("packages.llm_chat.drunk_chat", "Drink"),
+    ("packages.llm_chat", "Chat"),
+    ("packages.pb_webui", "控制台"),
+    ("packages.pb_core", "Core"),
+    ("packages.pb_stats", "Stats"),
+    ("packages.help", "Help"),
+    ("packages.blacklist", "Blacklist"),
+    ("packages.request_handler", "Request"),
+    ("packages.take_name", "TakeName"),
+    ("packages.drink", "Drink"),
+    ("pallas.product.llm", "LLM"),
+    ("pallas.product.persona", "Persona"),
+    ("pallas.product.corpus", "Corpus"),
+    ("pallas.product.message_scrub", "消息过滤"),
+    ("pallas.product", "Product"),
+    ("pallas.core.platform.ai_callback", "AICallback"),
+    ("pallas.core.foundation.db", "数据库"),
+    ("pallas.core.platform", "Platform"),
+    ("pallas.core", "Core"),
+    ("pallas.console.cli", "CLI"),
+    ("pallas.console", "控制台"),
+    ("pallas.extensions", "Extension"),
+    ("pallas", "Pallas"),
+)
+
+_DISPLAY_LOG_NAME_PREFIXES = (
+    "packages.",
+    "pallas_plugin_",
+    "nonebot_plugin_",
+    "pallas.core",
+    "pallas.product",
+    "pallas.console",
+    "pallas.extensions",
+    "pallas",
+)
+
+_BUSINESS_EVENT_ACTIONS = {
+    "复读回复": "Reply",
+    "复读禁言": "Repeater ban",
+    "禁言目标读取": "Ban target lookup",
+    "禁言目标撤回": "Ban target recall",
+    "主动发言": "Scheduled message",
+    "语料回填批次": "Corpus backfill batch",
+    "视觉表情跟随": "Vision sticker follow-up",
+    "表情跟随投递": "Sticker follow-up delivery",
+    "缓存贴纸投递": "Cached sticker delivery",
+    "贴纸视觉选择": "Sticker vision selection",
+    "贴纸视觉投递": "Sticker vision delivery",
+    "视觉图片拉取": "Vision image fetch",
+    "视觉图片理解": "Vision image analysis",
+    "视觉多模态请求": "Vision multimodal request",
+    "视觉文本回退": "Vision text fallback",
+    "智能对话提交": "Chat submission",
+}
+
+_BUSINESS_EVENT_RESULTS = {
+    "已准备": "prepared",
+    "已发送": "sent",
+    "已完成": "completed",
+    "已跳过": "skipped",
+    "已降级": "degraded",
+    "已拒绝": "rejected",
+    "未命中": "not matched",
+    "失败": "failed",
+    "发送失败": "failed to send",
+    "已入队": "queued",
+}
+
 _QUIET_LIBRARY_LOGGER_NAMES = (
     "uvicorn",
     "uvicorn.access",
@@ -78,6 +158,58 @@ _QUIET_LIBRARY_LOGGER_NAMES = (
 )
 
 
+def display_log_name(logger_name: str) -> str:
+    """返回日志中展示的短名称，不改动原始 logger name。"""
+    name = (logger_name or "").strip()
+    if name in {"pallas", "pallas.core"} or name.startswith("pallas.core."):
+        return "Core"
+    if name == "packages.llm_chat.drunk_chat" or name.startswith("packages.llm_chat.drunk_chat."):
+        return "Drink"
+    if name == "packages.llm_chat" or name.startswith("packages.llm_chat."):
+        return "LLMChat"
+    if name.startswith("packages."):
+        return _pascal_case(name.split(".", 2)[1])
+    for prefix in ("pallas_plugin_", "nonebot_plugin_"):
+        if name.startswith(prefix):
+            return _pascal_case(name.removeprefix(prefix).split(".", 1)[0])
+    if name.startswith("pallas.product."):
+        return _pascal_case(name.split(".", 3)[2])
+    if name.startswith("pallas.console."):
+        return "Console"
+    if name.startswith("pallas.extensions."):
+        return "Extension"
+    return _pascal_case(name.split(".", 1)[0]) if name else ""
+
+
+_PASCAL_CASE_ACRONYMS = {"llm": "LLM", "tts": "TTS"}
+
+
+def _pascal_case(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    parts: list[str] = []
+    for part in re.split(r"[_-]+", text):
+        if not part:
+            continue
+        lowered = part.casefold()
+        parts.append(_PASCAL_CASE_ACRONYMS.get(lowered, part[:1].upper() + part[1:]))
+    return "".join(parts)
+
+
+def _format_repo_log(record: dict[str, Any], template: str) -> str:
+    record["extra"]["display_name"] = display_log_name(str(record.get("name", "")))
+    return template
+
+
+def format_repo_console_log(record: dict[str, Any]) -> str:
+    return _format_repo_log(record, REPO_CONSOLE_LOG_FORMAT)
+
+
+def format_repo_file_log(record: dict[str, Any]) -> str:
+    return _format_repo_log(record, REPO_FILE_LOG_FORMAT)
+
+
 def _stdlib_logger_channel_label(logger_name: str) -> str:
     """把 stdlib logger 名收成简短标签；``.error`` 易被误认为级别，故单独映射。"""
     name = (logger_name or "").strip()
@@ -89,11 +221,101 @@ def _stdlib_logger_channel_label(logger_name: str) -> str:
     return name
 
 
+def prefix_business_log_message(logger_name: str, message: str) -> str:
+    """为主仓业务日志补充稳定类别标签，保留调用方已有标签。"""
+    text = str(message or "")
+    stripped = text.lstrip()
+    if not stripped or stripped.startswith("["):
+        return text
+    name = (logger_name or "").strip()
+    for prefix, label in _BUSINESS_LOG_LABELS:
+        if name == prefix or name.startswith(f"{prefix}.") or (prefix.endswith("_") and name.startswith(prefix)):
+            return f"[{label}] {stripped}"
+    if name.startswith(_DISPLAY_LOG_NAME_PREFIXES):
+        return f"[{display_log_name(name)}] {stripped}"
+    return text
+
+
+def format_business_event(action: str, result: str, /, **fields: object) -> str:
+    """生成单行英文结果叙事，省略空字段。"""
+    if action == "复读回复" and result == "已发送":
+        bot = fields.get("bot")
+        group = fields.get("group")
+        content = _format_business_field(fields.get("content"))
+        tag = "Fanout" if fields.get("mode") == "fanout" else "Reply"
+        return f"[{tag}] Bot [{bot}] replied in group [{group}]: {content}"
+    if action == "饮酒" and result == "已完成":
+        bot = fields.get("bot")
+        group = fields.get("group")
+        duration = fields.get("duration")
+        return f"[Drink] Bot [{bot}] started drinking in group [{group}], sober up after {duration}s."
+    if action == "清醒" and result == "已完成":
+        return f"[SoberUp] Bot [{fields.get('bot')}] sobered up in group [{fields.get('group')}]."
+    if action == "酒后会话" and result == "已完成":
+        return (
+            f"[Session] Bot [{fields.get('bot')}] cleared drunk-chat session [{fields.get('session_id')}] "
+            f"in group [{fields.get('group')}]."
+        )
+    if action == "表情回应" and result == "已发送":
+        return (
+            f"[Reaction] Bot [{fields.get('bot')}] reacted to message [{fields.get('message_id')}] "
+            f"in group [{fields.get('group')}] with emoji [{fields.get('emoji')}]."
+        )
+    if action == "表情回应" and result == "已跳过":
+        return (
+            f"[Reaction] Bot [{fields.get('bot')}] skipped message [{fields.get('message_id')}] "
+            f"in group [{fields.get('group')}]: already reacted."
+        )
+    if action == "表情回应" and result == "已超时":
+        return (
+            f"[Reaction] Bot [{fields.get('bot')}] timed out reacting to message [{fields.get('message_id')}] "
+            f"in group [{fields.get('group')}] after [{fields.get('timeout')}s]."
+        )
+    if action == "表情回应" and result == "发送失败":
+        return (
+            f"[Reaction] Bot [{fields.get('bot')}] failed to react to message [{fields.get('message_id')}] "
+            f"in group [{fields.get('group')}] with emoji [{fields.get('emoji')}]: {fields.get('error')}."
+        )
+    if action == "自动表情回应" and result == "已跳过":
+        return (
+            f"[Reaction] Bot [{fields.get('bot')}] skipped auto reaction for message [{fields.get('message_id')}] "
+            f"in group [{fields.get('group')}]: pending [{fields.get('pending')}] "
+            f"reached limit [{fields.get('limit')}]."
+        )
+
+    subject = _BUSINESS_EVENT_ACTIONS.get(action, action)
+    outcome = _BUSINESS_EVENT_RESULTS.get(result, result)
+    text = f"{subject} {outcome}".strip()
+    values = [f"{key}={_format_business_field(value)}" for key, value in fields.items() if value not in (None, "")]
+    return f"{text}: {' '.join(values)}" if values else text
+
+
+def format_plugin_event(
+    operation: str,
+    narrative: str,
+    /,
+) -> str:
+    """生成带 PascalCase 操作标签的单行领域叙事。"""
+    tag = _pascal_case(operation.strip())
+    text = _format_business_field(narrative).strip()
+    return f"[{tag}] {text}" if text else f"[{tag}]"
+
+
+def _format_business_field(value: object) -> str:
+    return str(value).replace("\r", "\\r").replace("\n", "\\n")
+
+
 def _is_quiet_access_line(text: str) -> bool:
     """2xx 访问日志中的高频健康/推流路径。"""
     if '" 5' in text or '" 4' in text:  # 4xx/5xx 仍可见
         return False
     return any(marker in text for marker in _QUIET_ACCESS_PATH_MARKERS)
+
+
+def is_websocket_connection_noise(text: str) -> bool:
+    """WebSocket 正常握手由 Bot 接入状态覆盖，生产 INFO 下不逐条输出。"""
+    plain = (text or "").strip()
+    return plain == "connection open" or ('"WebSocket ' in plain and plain.endswith('" [accepted]'))
 
 
 def _is_transient_asgi_failure(record: LogRecord) -> bool:
@@ -125,6 +347,9 @@ class ChannelLoguruHandler(LoguruHandler):
         if label == "HTTP 服务" and any(part in text for part in _TRANSIENT_UVICORN_MESSAGES):
             record.levelno = logging.WARNING
             record.levelname = "WARNING"
+        elif label == "HTTP 服务" and is_websocket_connection_noise(text):
+            record.levelno = logging.DEBUG
+            record.levelname = "DEBUG"
         elif record.name == "uvicorn.access" and _is_quiet_access_line(text):
             record.levelno = logging.DEBUG
             record.levelname = "DEBUG"
@@ -143,6 +368,19 @@ def apply_stdlib_logging_channel_prefix() -> None:
     import nonebot.log as nb_log
 
     nb_log.LoguruHandler = ChannelLoguruHandler  # type: ignore[misc, assignment]
+
+
+def install_repo_console_log_format() -> None:
+    import nonebot.log as nb_log
+
+    nb_log.logger.remove(nb_log.logger_id)
+    nb_log.logger_id = nb_log.logger.add(
+        sys.stdout,
+        level=0,
+        diagnose=False,
+        filter=nb_log.default_filter,
+        format=format_repo_console_log,
+    )
 
 
 def configure_quiet_library_loggers() -> None:
@@ -195,10 +433,12 @@ def install_startup_log_noise_patcher() -> None:
 
     def patcher(record: dict[str, Any]) -> None:
         _log_patcher(record)
-        plain = _COLOR_TAG_RE.sub("", str(record.get("message", "")))
+        message = str(record.get("message", ""))
+        plain = _COLOR_TAG_RE.sub("", message)
         if _PLUGIN_LOAD_SUCCESS_RE.search(plain) or is_matcher_lifecycle_noise(plain):
             record["level"].name = "DEBUG"
             record["level"].no = debug_no
+        record["message"] = prefix_business_log_message(str(record.get("name", "")), message)
 
     logger.configure(patcher=patcher)
 

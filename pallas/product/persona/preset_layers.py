@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-from .prompt_guard import sanitize_prompt_literal, wrap_stats_block
+from .prompt_guard import sanitize_prompt_literal
 
 
 class PresetLayers(BaseModel):
@@ -54,14 +54,3 @@ def extract_preset_layers(
         knowledges=normalize_layer_lines(knowledges),
         relationships=normalize_layer_lines(relationships),
     )
-
-
-def compile_preset_layers_prompt(layers: PresetLayers) -> str:
-    if not layers.knowledges and not layers.relationships:
-        return ""
-    parts: list[str] = ["【预设分层】"]
-    if layers.knowledges:
-        parts.append("知识：" + "；".join(layers.knowledges[:8]))
-    if layers.relationships:
-        parts.append("关系：" + "；".join(layers.relationships[:8]))
-    return wrap_stats_block("preset_layers", "\n".join(parts))

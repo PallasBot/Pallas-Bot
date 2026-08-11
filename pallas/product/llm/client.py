@@ -11,7 +11,6 @@ from .kernel.memory_governance import can_write_runtime_state_summary, runtime_s
 from .legacy_guard import assess_legacy_chat_submit
 from .message_guard import format_user_turn
 from .models import ChatCompletionMessage, ChatSubmitRequest, ChatSubmitResult
-from .repeater_limit import is_repeater_llm_task
 from .session_store import build_llm_chat_messages, is_llm_session_store_available
 from .submit_gate import assess_llm_submit_gate
 from .task_routing import resolve_submit_task_name, resolve_task_route_chain, serialize_task_route
@@ -23,10 +22,7 @@ async def resolve_chat_messages(
     cfg: LlmConfig | None = None,
 ) -> list[ChatCompletionMessage]:
     c = cfg or get_llm_config()
-    task = str(request.task or "").strip().lower()
-    if is_repeater_llm_task(task):
-        messages = build_chat_messages(request.user_text, max_len=c.user_message_max_len)
-    elif is_llm_session_store_available() and request.bot_id is not None and request.user_id is not None:
+    if is_llm_session_store_available() and request.bot_id is not None and request.user_id is not None:
         messages = await build_llm_chat_messages(
             int(request.bot_id),
             request.group_id,
@@ -34,6 +30,8 @@ async def resolve_chat_messages(
             request.user_text,
             cfg=c,
             include_history=request.include_session_history,
+            history_limit=request.session_history_limit,
+            include_group_ambient=request.include_group_ambient_history,
         )
     else:
         user_turn = format_user_turn(request.user_text, max_len=c.user_message_max_len)
@@ -101,7 +99,7 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
     if task_route.provider_hint:
         metadata["provider_hint"] = task_route.provider_hint
     from pallas.product.llm.assembler import assemble_tool_bundle
-    from pallas.product.llm.inference_params import chat_token_count_with_tools
+    from pallas.product.llm.inference_params import resolve_task_token_budget
 
     user_text = str(request.user_text or "").strip()
     if not user_text and messages:
@@ -115,9 +113,10 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
         user_id=request.user_id,
     )
     metadata.update(tool_meta)
-    metadata["token_count"] = chat_token_count_with_tools(
-        request.token_count,
+    metadata["token_count"] = resolve_task_token_budget(
+        task_name,
         tools_enabled=bool(tool_meta.get("tools_enabled")),
+        requested=request.token_count,
     )
     if request.temperature is not None:
         metadata["temperature"] = float(request.temperature)
@@ -174,21 +173,8 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
     metadata["runtime_debug"]["request_snapshot_id"] = snapshot_id
     metadata["runtime_debug"]["replay_enabled"] = True
     metadata["runtime_debug"]["trace_level"] = "standard"
-    from pallas.product.llm.kernel_runner import (
-        submit_kernel_llm_chat_task,
-        submit_kernel_repeater_chat_task,
-    )
+    from pallas.product.llm.kernel_runner import submit_kernel_llm_chat_task
 
-    if is_repeater_llm_task(task_name):
-        return await submit_kernel_repeater_chat_task(
-            request,
-            system_prompt=request.system_prompt,
-            messages=message_dicts,
-            metadata=metadata,
-            timer=timer,
-            message_count=len(messages),
-            cfg=c,
-        )
     return await submit_kernel_llm_chat_task(
         request,
         system_prompt=request.system_prompt,

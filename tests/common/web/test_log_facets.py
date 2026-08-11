@@ -39,6 +39,11 @@ from pallas.console.web.bot_web import (
             "message",
         ),
         (
+            "pallas",
+            "[Bot 1] [群 2] [用户 3] hi",
+            "message",
+        ),
+        (
             "nonebot",
             "Event will be handled by Matcher(type='message', module=packages.repeater.handlers.message, lineno=41)",
             "message",
@@ -112,3 +117,10 @@ def test_line_matches_scope_missing_is_other() -> None:
     msg = "07-28 10:59:20 | INFO     | repeater:1 - bot [1] ready to send [hi] to group [2] (reply)"
     assert _line_matches_scope(msg, "message") is True
     assert _line_matches_scope(msg, "other") is False
+    assert _line_matches_scope(plain, "protocol") is True
+
+
+def test_protocol_log_facet_compatibility_is_removed() -> None:
+    import pallas.console.web as web
+
+    assert not hasattr(web, "nonebot_log_record_matches_http_facet")

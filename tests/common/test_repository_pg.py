@@ -882,6 +882,36 @@ async def test_message_find_recent_in_group(pg_engine):
         ),
     ])
     rows = await repo.find_recent_in_group(gid, before_time=250, limit=8)
+
+    assert [row.plain_text for row in rows] == ["a", "b"]
+
+
+@pytest.mark.asyncio
+async def test_message_find_recent_in_group_keeps_timeline_metadata(pg_engine):
+    from pallas.core.foundation.db.modules import Message
+    from pallas.core.foundation.db.repository_pg import PgMessageRepository
+
+    repo = PgMessageRepository()
+    await repo.bulk_insert([
+        Message.model_construct(
+            group_id=88002,
+            user_id=10,
+            bot_id=1,
+            raw_message="[CQ:reply,id=90]还是笨蛋欸",
+            is_plain_text=True,
+            plain_text="还是笨蛋欸",
+            keywords="笨蛋",
+            sender_name="兔兔",
+            message_id=101,
+            reply_to_message_id=90,
+            time=100,
+        )
+    ])
+
+    row = (await repo.find_recent_in_group(88002))[0]
+    assert row.sender_name == "兔兔"
+    assert row.message_id == 101
+    assert row.reply_to_message_id == 90
     assert [m.plain_text for m in rows] == ["a", "b"]
     one = await repo.find_recent_in_group(gid, before_time=250, user_id=20, limit=1)
     assert len(one) == 1
@@ -991,19 +1021,177 @@ async def test_image_cache_insert_is_no_op_on_duplicate(pg_engine):
 
 
 @pytest.mark.asyncio
+async def test_image_cache_touch_increments_ref_and_refreshes_date_without_replacing_blob(pg_engine):
+    from pallas.core.foundation.db.modules import ImageCache
+    from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
+
+    repo = PgImageCacheRepository()
+    await repo.insert(ImageCache.model_construct(cq_code="touch", blob_data=b"original", ref_times=1, date=20260101))
+
+    await repo.touch("touch", date=20260810)
+
+    found = await repo.find_by_cq_code("touch")
+    assert found is not None
+    assert found.ref_times == 2
+    assert found.date == 20260810
+    assert found.blob_data == b"original"
+
+
+@pytest.mark.asyncio
+async def test_image_cache_content_hash_lookup_selects_one_row_when_cache_keys_share_bytes(monkeypatch):
+    from types import SimpleNamespace
+
+    from sqlalchemy.exc import MultipleResultsFound
+
+    from pallas.core.foundation.db import repository_pg
+
+    row = SimpleNamespace(
+        cq_code="[CQ:image,file=latest-private.image,user_id=10087]",
+        content_hash="a" * 64,
+        blob_data=b"same-sticker-bytes",
+        ref_times=1,
+        date=20260811,
+    )
+
+    class DuplicateHashResult:
+        def scalar_one_or_none(self):
+            raise MultipleResultsFound("Multiple rows were found when one or none was required")
+
+        def scalars(self):
+            return SimpleNamespace(first=lambda: row)
+
+    class Session:
+        statement = None
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return None
+
+        async def execute(self, statement):
+            self.statement = statement
+            return DuplicateHashResult()
+
+    session = Session()
+    monkeypatch.setattr(repository_pg, "get_session", lambda **_kwargs: session)
+
+    found = await repository_pg.PgImageCacheRepository().find_by_content_hash("a" * 64)
+
+    assert found is not None
+    assert found.blob_data == b"same-sticker-bytes"
+    assert "CQ:" not in repr(found.model_dump(exclude={"cq_code"}))
+    sql = str(session.statement.compile(dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}))
+    assert "ORDER BY image_cache.date DESC, image_cache.id DESC" in sql
+    assert "LIMIT 1" in sql
+
+
+@pytest.mark.asyncio
 async def test_image_cache_find_latest_with_blob_skips_empty_entries(pg_engine):
     from pallas.core.foundation.db.modules import ImageCache
     from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
 
     repo = PgImageCacheRepository()
-    await repo.insert(ImageCache.model_construct(cq_code="[CQ:image,file=empty.image]", blob_data=None, ref_times=9, date=20260806))
-    await repo.insert(ImageCache.model_construct(cq_code="[CQ:image,file=ready.image]", blob_data=b"image", ref_times=1, date=20260805))
+    await repo.insert(
+        ImageCache.model_construct(cq_code="[CQ:image,file=empty.image]", blob_data=None, ref_times=9, date=20260806)
+    )
+    await repo.insert(
+        ImageCache.model_construct(
+            cq_code="[CQ:image,file=ready.image]", blob_data=b"image", ref_times=1, date=20260805
+        )
+    )
 
     found = await repo.find_latest_with_blob()
 
     assert found is not None
     assert found.cq_code == "[CQ:image,file=ready.image]"
     assert found.blob_data == b"image"
+
+
+@pytest.mark.asyncio
+async def test_sticker_label_worker_resolves_duplicate_content_hash_without_cq_leak(pg_engine, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from pallas.core.foundation.db.modules import ImageCache
+    from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
+    from pallas.product.llm import sticker_label_jobs
+    from pallas.product.llm.sticker_labels import StickerSemanticLabel, content_hash_for_bytes
+
+    content = b"same-sticker-bytes"
+    content_hash = content_hash_for_bytes(content)
+    older_cq = "[CQ:image,file=older-private.image,user_id=10086]"
+    newer_cq = "[CQ:image,file=newer-private.image,user_id=10087]"
+    repo = PgImageCacheRepository()
+    await repo.insert(
+        ImageCache.model_construct(
+            cq_code=older_cq, content_hash=content_hash, blob_data=content, ref_times=1, date=20260810
+        )
+    )
+    await repo.insert(
+        ImageCache.model_construct(
+            cq_code=newer_cq, content_hash=content_hash, blob_data=content, ref_times=1, date=20260811
+        )
+    )
+
+    monkeypatch.setattr("pallas.core.shared.utils.media_cache.image_cache_repo", repo)
+    label = StickerSemanticLabel(content_hash=content_hash, is_sticker=True, confidence=0.9, prompt_version=1)
+    vision = AsyncMock(return_value=(label, "provider", "model"))
+    save_observation = AsyncMock()
+    labels = SimpleNamespace(upsert=AsyncMock())
+    monkeypatch.setattr(sticker_label_jobs, "label_sticker_with_vision", vision)
+    monkeypatch.setattr(sticker_label_jobs, "save_sticker_label_observation", save_observation)
+    monkeypatch.setattr(sticker_label_jobs, "sticker_label_repository", lambda: labels)
+
+    await sticker_label_jobs.handle_sticker_label_visual({
+        "job_id": "duplicate-hash",
+        "content_hash": content_hash,
+        "source": "manual_sticker",
+        "observation": {"state": "queued"},
+    })
+
+    vision.assert_awaited_once_with(content)
+    labels.upsert.assert_awaited_once_with(label)
+    serialized = repr(save_observation.await_args.args)
+    assert "CQ:" not in serialized
+    assert older_cq not in serialized
+    assert newer_cq not in serialized
+
+
+@pytest.mark.asyncio
+async def test_image_cache_prune_applies_retention_tiers_and_byte_limit(pg_engine):
+    from pallas.core.foundation.db.modules import ImageCache
+    from pallas.core.foundation.db.repository import ImageCachePrunePolicy
+    from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
+
+    repo = PgImageCacheRepository()
+    rows = [
+        ImageCache.model_construct(cq_code="absolute-old", blob_data=b"a" * 4, ref_times=9, date=20260101),
+        ImageCache.model_construct(cq_code="single-old", blob_data=b"b" * 4, ref_times=1, date=20260701),
+        ImageCache.model_construct(cq_code="single-new", blob_data=b"c" * 4, ref_times=1, date=20260801),
+        ImageCache.model_construct(cq_code="popular-oldest", blob_data=b"d" * 4, ref_times=5, date=20260720),
+        ImageCache.model_construct(cq_code="popular-newest", blob_data=b"e" * 4, ref_times=5, date=20260802),
+    ]
+    for row in rows:
+        await repo.insert(row)
+
+    result = await repo.prune(
+        ImageCachePrunePolicy(
+            single_use_before=20260711,
+            absolute_before=20260512,
+            max_blob_bytes=10,
+            batch_size=2,
+        )
+    )
+
+    assert result.deleted_rows == 3
+    assert result.deleted_blob_bytes == 15
+    assert result.remaining_blob_bytes == 10
+    assert await repo.find_by_cq_code("absolute-old") is None
+    assert await repo.find_by_cq_code("single-old") is None
+    assert await repo.find_by_cq_code("single-new") is None
+    assert await repo.find_by_cq_code("popular-oldest") is not None
+    assert await repo.find_by_cq_code("popular-newest") is not None
 
 
 @pytest.mark.asyncio

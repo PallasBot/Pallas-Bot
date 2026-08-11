@@ -27,4 +27,4 @@ def test_llm_chat_clear_tool_registers(monkeypatch: pytest.MonkeyPatch) -> None:
     count = register_plugin_command_tools()
     assert count >= 1
     names = {item["function"]["name"] for item in tool_openai_schemas()}
-    assert "llm_chat.clear" in names
+    assert "llm_chat__clear" in names

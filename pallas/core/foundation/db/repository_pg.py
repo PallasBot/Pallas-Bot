@@ -25,6 +25,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     and_,
+    case,
     delete,
     func,
     insert,
@@ -46,6 +47,7 @@ from pallas.product.llm.corpus_contamination import reject_corpus_learn_message
 
 if TYPE_CHECKING:
     from pallas.core.foundation.db.modules import Answer, Ban, Context, ImageCache, Message
+    from pallas.core.foundation.db.repository import ImageCachePrunePolicy, ImageCachePruneResult
 
 _JsonB = JSONB().with_variant(JSON(), "sqlite")
 
@@ -157,6 +159,9 @@ class MessageRow(Base):
     is_plain_text: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     plain_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
     keywords: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    sender_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    reply_to_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     time: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
 
@@ -288,10 +293,24 @@ class ImageCacheRow(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     cq_code: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    content_hash: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
     # 原生二进制 BYTEA。旧库 base64_data 由 init_pg → _ensure_pg_image_cache_blob_data 幂等迁移。
     blob_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     ref_times: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     date: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+
+
+class StickerLabelRow(Base):
+    """按原始二进制内容哈希缓存的表情语义标签。"""
+
+    __tablename__ = "sticker_label"
+
+    content_hash: Mapped[str] = mapped_column(Text, primary_key=True)
+    is_sticker: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    prompt_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    labeled_at: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    label_json: Mapped[Any] = mapped_column(_JsonB, nullable=False)
 
 
 class LlmChatMessageRow(Base):
@@ -491,6 +510,16 @@ def _ensure_pg_image_cache_blob_data(connection) -> None:
         logger.info("image_cache: base64_data → blob_data 迁移完成")
 
 
+def _ensure_pg_image_cache_content_hash(connection) -> None:
+    insp = inspect(connection)
+    if not insp.has_table("image_cache"):
+        return
+    names = {c["name"] for c in insp.get_columns("image_cache")}
+    if "content_hash" not in names:
+        connection.execute(text("ALTER TABLE image_cache ADD COLUMN content_hash TEXT"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_image_cache_content_hash ON image_cache (content_hash)"))
+
+
 def _ensure_pg_group_config_blocked_user_ids(connection) -> None:
     """旧库 group_config 缺列时补列。"""
     insp = inspect(connection)
@@ -668,6 +697,20 @@ def _ensure_pg_message_group_user_time_index(connection) -> None:
     )
 
 
+def _ensure_pg_message_timeline_metadata(connection) -> None:
+    """旧 message 表补群时间线所需的身份与引用元数据。"""
+    insp = inspect(connection)
+    if not insp.has_table("message"):
+        return
+    names = {column["name"] for column in insp.get_columns("message")}
+    if "sender_name" not in names:
+        connection.execute(text("ALTER TABLE message ADD COLUMN sender_name TEXT NOT NULL DEFAULT ''"))
+    if "message_id" not in names:
+        connection.execute(text("ALTER TABLE message ADD COLUMN message_id BIGINT"))
+    if "reply_to_message_id" not in names:
+        connection.execute(text("ALTER TABLE message ADD COLUMN reply_to_message_id BIGINT"))
+
+
 def _ensure_pg_context_answer_reply_index(connection) -> None:
     """context_answer 表补 context_id+count+time 索引。"""
     insp = inspect(connection)
@@ -777,6 +820,7 @@ async def get_session(*, read_only: bool = False):
 # 启动期 DDL ensure 注册表（step_id 稳定，供控制台与可观测使用）
 PG_SCHEMA_ENSURE_STEPS: list[tuple[str, Any]] = [
     ("ddl.image_cache_blob_data", _ensure_pg_image_cache_blob_data),
+    ("ddl.image_cache_content_hash", _ensure_pg_image_cache_content_hash),
     ("ddl.group_config_blocked_user_ids", _ensure_pg_group_config_blocked_user_ids),
     ("ddl.background_job_lease_id", _ensure_pg_background_job_lease_id),
     ("ddl.group_config_style_profile", _ensure_pg_group_config_style_profile),
@@ -792,6 +836,7 @@ PG_SCHEMA_ENSURE_STEPS: list[tuple[str, Any]] = [
     ("ddl.llm_relationship_delta_columns", _ensure_pg_llm_relationship_delta_columns),
     ("ddl.message_group_time_index", _ensure_pg_message_group_time_index),
     ("ddl.message_group_user_time_index", _ensure_pg_message_group_user_time_index),
+    ("ddl.message_timeline_metadata", _ensure_pg_message_timeline_metadata),
     ("ddl.context_answer_reply_index", _ensure_pg_context_answer_reply_index),
     ("ddl.context_answer_message_reply_index", _ensure_pg_context_answer_message_reply_index),
 ]
@@ -1122,6 +1167,7 @@ def row_to_image_cache(row: ImageCacheRow) -> ImageCache:
 
     return ImageCache.model_construct(
         cq_code=row.cq_code,
+        content_hash=row.content_hash,
         blob_data=row.blob_data,
         ref_times=row.ref_times,
         date=row.date,
@@ -1648,6 +1694,9 @@ def row_to_message(row: MessageRow) -> Message:
         is_plain_text=bool(row.is_plain_text),
         plain_text=str(row.plain_text),
         keywords=str(row.keywords),
+        sender_name=str(row.sender_name or ""),
+        message_id=int(row.message_id) if row.message_id is not None else None,
+        reply_to_message_id=int(row.reply_to_message_id) if row.reply_to_message_id is not None else None,
         time=int(row.time),
     )
 
@@ -1732,6 +1781,9 @@ class PgMessageRepository:
                         "is_plain_text": m.is_plain_text,
                         "plain_text": _s(m.plain_text) or "",
                         "keywords": _s(m.keywords) or "",
+                        "sender_name": _s(m.sender_name) or "",
+                        "message_id": m.message_id,
+                        "reply_to_message_id": m.reply_to_message_id,
                         "time": m.time,
                     }
                     for m in batch
@@ -2261,6 +2313,24 @@ class PgImageCacheRepository:
             row = result.scalar_one_or_none()
             return row_to_image_cache(row) if row else None
 
+    async def find_by_content_hash(self, content_hash: str) -> ImageCache | None:
+        async with get_session(read_only=True) as session:
+            stmt = (
+                select(ImageCacheRow)
+                .where(ImageCacheRow.content_hash == content_hash)
+                .order_by(ImageCacheRow.date.desc(), ImageCacheRow.id.desc())
+                .limit(1)
+            )
+            row = (await session.execute(stmt)).scalars().first()
+            return row_to_image_cache(row) if row else None
+
+    async def bind_content_hash(self, cq_code: str, content_hash: str) -> None:
+        async with get_session() as session:
+            await session.execute(
+                update(ImageCacheRow).where(ImageCacheRow.cq_code == cq_code).values(content_hash=content_hash)
+            )
+            await session.commit()
+
     async def find_latest_with_blob(self) -> ImageCache | None:
         async with get_session(read_only=True) as session:
             stmt = (
@@ -2290,6 +2360,7 @@ class PgImageCacheRepository:
         async with get_session() as session:
             stmt = pg_insert(ImageCacheRow).values(
                 cq_code=_s(cache.cq_code) or "",
+                content_hash=_s(cache.content_hash),
                 blob_data=cache.blob_data,
                 ref_times=cache.ref_times,
                 date=cache.date,
@@ -2302,6 +2373,7 @@ class PgImageCacheRepository:
         async with get_session() as session:
             stmt = pg_insert(ImageCacheRow).values(
                 cq_code=_s(cache.cq_code) or "",
+                content_hash=_s(cache.content_hash),
                 blob_data=cache.blob_data,
                 ref_times=cache.ref_times,
                 date=cache.date,
@@ -2312,9 +2384,19 @@ class PgImageCacheRepository:
                     "ref_times": stmt.excluded.ref_times,
                     "date": stmt.excluded.date,
                     "blob_data": stmt.excluded.blob_data,
+                    "content_hash": stmt.excluded.content_hash,
                 },
             )
             await session.execute(stmt)
+            await session.commit()
+
+    async def touch(self, cq_code: str, *, date: int) -> None:
+        async with get_session() as session:
+            await session.execute(
+                update(ImageCacheRow)
+                .where(ImageCacheRow.cq_code == cq_code)
+                .values(ref_times=ImageCacheRow.ref_times + 1, date=int(date))
+            )
             await session.commit()
 
     async def delete_old(self, before_date: int) -> None:
@@ -2326,3 +2408,73 @@ class PgImageCacheRepository:
         async with get_session() as session:
             await session.execute(delete(ImageCacheRow).where(ImageCacheRow.ref_times < ref_threshold))
             await session.commit()
+
+    async def prune(self, policy: ImageCachePrunePolicy) -> ImageCachePruneResult:
+        from pallas.core.foundation.db.repository import ImageCachePruneResult
+
+        batch_size = max(1, int(policy.batch_size))
+        max_blob_bytes = max(0, int(policy.max_blob_bytes))
+        deleted_rows = 0
+        deleted_blob_bytes = 0
+
+        async def total_blob_bytes() -> int:
+            async with get_session(read_only=True) as session:
+                stmt = select(func.coalesce(func.sum(func.pg_column_size(ImageCacheRow.blob_data)), 0))
+                return int((await session.execute(stmt)).scalar_one())
+
+        async def delete_batch(where_clause, *, size_limit: int | None = None) -> tuple[int, int]:
+            async with get_session() as session:
+                stmt = (
+                    select(ImageCacheRow.id, func.coalesce(func.pg_column_size(ImageCacheRow.blob_data), 0))
+                    .where(where_clause)
+                    .order_by(
+                        case((ImageCacheRow.ref_times <= 1, 0), else_=1),
+                        ImageCacheRow.date,
+                        ImageCacheRow.id,
+                    )
+                    .limit(batch_size)
+                )
+                rows = list((await session.execute(stmt)).all())
+                if size_limit is not None:
+                    selected = []
+                    selected_bytes = 0
+                    for row in rows:
+                        selected.append(row)
+                        selected_bytes += int(row[1])
+                        if selected_bytes >= size_limit:
+                            break
+                    rows = selected
+                if not rows:
+                    return 0, 0
+                await session.execute(delete(ImageCacheRow).where(ImageCacheRow.id.in_([int(row[0]) for row in rows])))
+                await session.commit()
+                return len(rows), sum(int(row[1]) for row in rows)
+
+        expired = or_(
+            ImageCacheRow.date < int(policy.absolute_before),
+            and_(ImageCacheRow.date < int(policy.single_use_before), ImageCacheRow.ref_times <= 1),
+        )
+        while True:
+            rows, blob_bytes = await delete_batch(expired)
+            deleted_rows += rows
+            deleted_blob_bytes += blob_bytes
+            if rows < batch_size:
+                break
+
+        remaining_blob_bytes = await total_blob_bytes()
+        while remaining_blob_bytes > max_blob_bytes:
+            rows, blob_bytes = await delete_batch(
+                literal_column("true"),
+                size_limit=remaining_blob_bytes - max_blob_bytes,
+            )
+            if not rows:
+                break
+            deleted_rows += rows
+            deleted_blob_bytes += blob_bytes
+            remaining_blob_bytes = max(0, remaining_blob_bytes - blob_bytes)
+
+        return ImageCachePruneResult(
+            deleted_rows=deleted_rows,
+            deleted_blob_bytes=deleted_blob_bytes,
+            remaining_blob_bytes=remaining_blob_bytes,
+        )

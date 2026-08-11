@@ -61,3 +61,9 @@ def test_chat_lane_adaptive_max_reads_explicit_value(monkeypatch: pytest.MonkeyP
     )
 
     assert config.IngressDispatchRuntimeConfig.from_env().lane_chat_adaptive_max == 14
+
+
+def test_dispatch_env_float_applies_minimum(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(config, "dispatch_env_raw", lambda key: {"PALLAS_X": "0.25"}.get(key))
+
+    assert config.dispatch_env_float("PALLAS_X", default=1.0, minimum=0.5) == 0.5

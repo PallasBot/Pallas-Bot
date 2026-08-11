@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from nonebot import logger
 
+from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.core.platform.bot_runtime.roles import is_sharded_worker
 from pallas.product.corpus.backfill_store import load_backfill_state, save_backfill_state
 from pallas.product.corpus.config import community_contribute_enabled, get_corpus_config
@@ -178,7 +179,7 @@ async def run_corpus_backfill_round() -> None:
     if not contexts:
         if cursor:
             save_backfill_state({"cursor_keywords": "", "wrapped_unix": int(time.time())})
-            logger.info("corpus backfill round done pushed=0 skipped=0 cursor=wrapped")
+            logger.info(format_business_event("语料回填批次", "已完成", pushed=0, skipped=0, cursor="wrapped"))
         return
 
     pushed = 0
@@ -201,8 +202,5 @@ async def run_corpus_backfill_round() -> None:
 
     save_backfill_state({"cursor_keywords": last_keywords, "updated_unix": int(time.time())})
     logger.info(
-        "corpus backfill round done pushed={} skipped={} cursor={}",
-        pushed,
-        skipped,
-        last_keywords[:40],
+        format_business_event("语料回填批次", "已完成", pushed=pushed, skipped=skipped, cursor=last_keywords[:40])
     )

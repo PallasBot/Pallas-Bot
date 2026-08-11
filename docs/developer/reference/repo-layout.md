@@ -45,4 +45,5 @@ Pallas-Bot 多仓分工与主仓目录。
 
 - [架构总览](/developer/architecture/overview)
 - [Core 与扩展](/developer/architecture/core-vs-extensions)
+- [Pallas API 总览](pallas-api.md)
 - [Platform API](platform-api.md)

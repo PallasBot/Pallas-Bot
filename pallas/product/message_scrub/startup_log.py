@@ -4,6 +4,8 @@ from pathlib import Path
 
 from nonebot import get_driver, logger
 
+from pallas.core.foundation.startup_report import register_startup_ready, register_startup_skipped
+
 _hook_installed = False
 
 LOCAL_SOURCE_LABELS = {
@@ -59,6 +61,18 @@ def format_api_fail_behavior(fail_open: bool) -> str:
     return "放行" if fail_open else "拦截"
 
 
+def format_message_filter_startup_detail(
+    *,
+    local_sources: str,
+    remote_chain: str,
+    timeout_sec: float,
+    fail_behavior: str,
+) -> str:
+    local = f"已启用本地过滤：{local_sources}" if local_sources != "无" else "未启用本地过滤"
+    remote = "远程审查未启用" if remote_chain.startswith("无（已显式关闭") else f"远程审查：{remote_chain}"
+    return f"{local}；{remote}；超时 {timeout_sec:g} 秒，异常时{fail_behavior}"
+
+
 def install_message_scrub_startup_log() -> None:
     global _hook_installed
     if _hook_installed:
@@ -107,17 +121,27 @@ def install_message_scrub_startup_log() -> None:
         )
 
         intercept_on = bool(local_bits) or bool(chain_ids)
-        filter_status = "已启用" if intercept_on else "未启用（无本地规则且无远程审查）"
         local_desc = format_local_sources(local_bits)
         fail_behavior = format_api_fail_behavior(cfg.inbound_filter_api_fail_open)
 
-        log = logger.info if intercept_on else logger.debug
-        log(
+        logger.debug(
             "[消息过滤] {} | 本地={} | 远程={}/{} | 超时={}s | 失败{}",
-            filter_status,
+            "已启用" if intercept_on else "未启用（无本地规则且无远程审查）",
             local_desc,
             remote_mode,
             remote_chain,
             cfg.inbound_filter_api_timeout_sec,
             fail_behavior,
         )
+        if intercept_on:
+            register_startup_ready(
+                "消息过滤",
+                format_message_filter_startup_detail(
+                    local_sources=local_desc,
+                    remote_chain=remote_chain,
+                    timeout_sec=cfg.inbound_filter_api_timeout_sec,
+                    fail_behavior=fail_behavior,
+                ),
+            )
+        else:
+            register_startup_skipped("消息过滤", "reason=no_rules")

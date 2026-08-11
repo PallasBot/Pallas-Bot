@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal
 
 from nonebot import get_loaded_plugins
 from nonebot.rule import TrieRule
@@ -16,6 +16,8 @@ _TRIGGER_SPLIT_RE = re.compile(r"\s+/\s+|[、，,]")
 _TOKEN_SPLIT_RE = re.compile(r"[\s<＜〈\[(（(:：]")
 _PLUGIN_PREFIX_CACHE_VALUE: tuple[str, ...] | None = None
 _PLUGIN_PREFIX_TRIE = None
+_GROUP_PLUGIN_PREFIX_CACHE_VALUE: tuple[str, ...] | None = None
+_GROUP_PLUGIN_PREFIX_TRIE = None
 
 
 def _iter_trigger_parts(trigger_condition: str) -> list[str]:
@@ -45,9 +47,21 @@ def _extract_literal_prefix(part: str) -> str | None:
     return head if len(head) >= 2 else None
 
 
-def extract_command_prefixes_from_menu_data(menu_data: list[dict[str, Any]] | None) -> tuple[str, ...]:
+def menu_item_matches_scene(item: dict[str, Any], *, scene: Literal["all", "group"] = "all") -> bool:
+    if scene == "all":
+        return True
+    return str(item.get("trigger_scene") or "").strip() != "私聊"
+
+
+def extract_command_prefixes_from_menu_data(
+    menu_data: list[dict[str, Any]] | None,
+    *,
+    scene: Literal["all", "group"] = "all",
+) -> tuple[str, ...]:
     prefixes: list[str] = []
     for item in menu_data or []:
+        if not menu_item_matches_scene(item, scene=scene):
+            continue
         trigger = str(item.get("trigger_condition") or "").strip()
         if not trigger:
             continue
@@ -84,12 +98,43 @@ def _loaded_plugin_command_prefixes() -> tuple[str, ...]:
     return _PLUGIN_PREFIX_CACHE_VALUE
 
 
+def _loaded_group_plugin_command_prefixes() -> tuple[str, ...]:
+    global _GROUP_PLUGIN_PREFIX_CACHE_VALUE
+    if _GROUP_PLUGIN_PREFIX_CACHE_VALUE is not None:
+        return _GROUP_PLUGIN_PREFIX_CACHE_VALUE
+
+    prefixes: list[str] = []
+    for plugin in get_loaded_plugins():
+        meta = getattr(plugin, "metadata", None)
+        extra = getattr(meta, "extra", None) if meta is not None else None
+        if not isinstance(extra, dict):
+            continue
+        explicit = extra.get("command_prefixes")
+        if isinstance(explicit, (list, tuple)):
+            for prefix in explicit:
+                item = str(prefix or "").strip()
+                if item and item not in prefixes:
+                    prefixes.append(item)
+        menu_data = extra.get("menu_data")
+        for prefix in extract_command_prefixes_from_menu_data(
+            menu_data if isinstance(menu_data, list) else None,
+            scene="group",
+        ):
+            if prefix not in prefixes:
+                prefixes.append(prefix)
+    _GROUP_PLUGIN_PREFIX_CACHE_VALUE = tuple(prefixes)
+    return _GROUP_PLUGIN_PREFIX_CACHE_VALUE
+
+
 def clear_plugin_command_plaintext_cache() -> None:
-    global _PLUGIN_PREFIX_CACHE_VALUE, _PLUGIN_PREFIX_TRIE
+    global _GROUP_PLUGIN_PREFIX_CACHE_VALUE, _GROUP_PLUGIN_PREFIX_TRIE, _PLUGIN_PREFIX_CACHE_VALUE, _PLUGIN_PREFIX_TRIE
 
     _PLUGIN_PREFIX_CACHE_VALUE = None
     _PLUGIN_PREFIX_TRIE = None
+    _GROUP_PLUGIN_PREFIX_CACHE_VALUE = None
+    _GROUP_PLUGIN_PREFIX_TRIE = None
     is_plugin_command_plaintext.cache_clear()
+    is_group_plugin_command_plaintext.cache_clear()
     from pallas.core.foundation.command_prefix import clear_command_start_cache
     from pallas.core.platform.ingress.hosted_activity_gate import clear_hosted_activity_ingress_cache
     from pallas.core.platform.ingress.policy_registry import clear_ingress_policy_cache
@@ -114,6 +159,15 @@ def _plugin_prefix_trie():
     return _PLUGIN_PREFIX_TRIE
 
 
+def _group_plugin_prefix_trie():
+    global _GROUP_PLUGIN_PREFIX_TRIE
+    if _GROUP_PLUGIN_PREFIX_TRIE is None:
+        from pallas.core.platform.ingress.prefix_trie import PrefixModuleTrie
+
+        _GROUP_PLUGIN_PREFIX_TRIE = PrefixModuleTrie.from_prefixes(_loaded_group_plugin_command_prefixes())
+    return _GROUP_PLUGIN_PREFIX_TRIE
+
+
 @lru_cache(maxsize=2048)
 def is_plugin_command_plaintext(text: str) -> bool:
     plain = strip_leading_command_marks(text)
@@ -122,3 +176,11 @@ def is_plugin_command_plaintext(text: str) -> bool:
     if TrieRule.prefix.longest_prefix(plain):
         return True
     return _plugin_prefix_trie().has_any_prefix(plain)
+
+
+@lru_cache(maxsize=2048)
+def is_group_plugin_command_plaintext(text: str) -> bool:
+    plain = strip_leading_command_marks(text)
+    if not plain:
+        return False
+    return _group_plugin_prefix_trie().has_any_prefix(plain)

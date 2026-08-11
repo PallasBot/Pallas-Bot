@@ -44,10 +44,6 @@ def plan_direct_chat_stages(*, tools_enabled: bool) -> list[str]:
 def decide_repeater_action(
     ctx: ConversationContext,
     *,
-    llm_enabled: bool,
-    select_enabled: bool,
-    polish_enabled: bool,
-    polish_lite_enabled: bool,
     has_grounded_candidate: bool,
     opportunity_accepted: bool,
     opportunity_trace_extra: dict[str, Any] | None = None,
@@ -63,17 +59,6 @@ def decide_repeater_action(
         action = ConversationAction.SKIP
         trace_reason = "opportunity_rejected"
         stages = []
-    elif llm_enabled and feature_level != ConversationFeatureLevel.LEGACY_REPEATER:
-        stages = plan_generation_stages(
-            has_candidate_pool=ctx.has_candidate_pool,
-            candidate_pool_size=ctx.candidate_pool_size,
-            has_grounded_candidate=has_grounded_candidate,
-            select_enabled=select_enabled,
-            polish_enabled=polish_enabled,
-            polish_lite_enabled=polish_lite_enabled,
-        )
-        action = stages_to_primary_action(stages)
-        trace_reason = "llm_pipeline_planned"
     elif has_grounded_candidate:
         action = ConversationAction.REPLY_CORPUS
         trace_reason = "corpus_reply"
@@ -135,33 +120,6 @@ def decide_direct_chat_action(
         generation_stages=[GenerationStage.GENERATE],
         agent_stages=agent_stages,
     )
-
-
-def plan_generation_stages(
-    *,
-    has_candidate_pool: bool,
-    candidate_pool_size: int,
-    has_grounded_candidate: bool,
-    select_enabled: bool,
-    polish_enabled: bool,
-    polish_lite_enabled: bool,
-) -> list[GenerationStage]:
-    if candidate_pool_size >= 2 and select_enabled:
-        return [GenerationStage.SELECT]
-    return []
-
-
-def stages_to_primary_action(stages: list[GenerationStage]) -> ConversationAction:
-    if not stages:
-        return ConversationAction.SKIP
-    first = stages[0]
-    if first == GenerationStage.SELECT:
-        return ConversationAction.REPLY_CORPUS
-    if first == GenerationStage.REWRITE:
-        return ConversationAction.REPLY_REWRITE
-    if first == GenerationStage.STITCH:
-        return ConversationAction.REPLY_STITCH
-    return ConversationAction.REPLY_GENERATE
 
 
 def build_mode_constraints(

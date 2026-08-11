@@ -1,31 +1,26 @@
 from __future__ import annotations
 
 from pallas.product.llm.config import LlmConfig
-from pallas.product.llm.webui_config import LlmWebuiConfig, get_llm_webui_config, normalize_repeater_mode_for_webui
+from pallas.product.llm.webui_config import LlmWebuiConfig, get_llm_webui_config
 
 
-def test_normalize_repeater_mode_for_webui_maps_legacy_modes() -> None:
-    assert normalize_repeater_mode_for_webui("polish") == "select"
-    assert normalize_repeater_mode_for_webui("both") == "select"
+def test_llm_webui_config_hides_retired_repeater_assist() -> None:
+    retired = {
+        "llm_repeater_mode",
+        "llm_repeater_group_cooldown_sec",
+        "llm_repeater_strong_cooldown_sec",
+        "llm_repeater_strong_attempt_rate",
+        "llm_repeater_max_inflight",
+        "llm_repeater_global_rpm",
+        "llm_output_filter_polish_lite_hard_phrases",
+        "llm_output_filter_polish_lite_soft_phrases",
+    }
+    assert retired.isdisjoint(LlmWebuiConfig.model_fields)
 
 
-def test_normalize_repeater_mode_for_webui_keeps_supported_modes() -> None:
-    assert normalize_repeater_mode_for_webui("select") == "select"
-    assert normalize_repeater_mode_for_webui("select_polish_lite") == "select"
-    assert normalize_repeater_mode_for_webui("off") == "off"
-
-
-def test_normalize_repeater_mode_for_webui_unknown_defaults_select() -> None:
-    assert normalize_repeater_mode_for_webui("unknown") == "select"
-
-
-def test_llm_webui_config_defaults_to_select() -> None:
-    assert LlmWebuiConfig().llm_repeater_mode == "select"
-
-
-def test_llm_webui_config_defaults_current_turn_model_decision_on() -> None:
+def test_llm_webui_config_defaults_current_turn_model_decision_off() -> None:
     config = LlmWebuiConfig()
-    assert config.llm_current_turn_decision_enabled is True
+    assert config.llm_current_turn_decision_enabled is False
     assert config.llm_current_turn_decision_model == ""
 
 

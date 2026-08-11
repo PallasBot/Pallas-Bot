@@ -1,9 +1,10 @@
-"""发送前轻量后处理：可选错别字与拆条（默认关）。"""
+"""发送前轻量后处理：可选错别字与末尾句号处理。"""
 
 from __future__ import annotations
 
 import random
-import re
+
+_SHORT_REPLY_SPLIT_PUNCTUATION = frozenset("。！？!?")
 
 # 常见近音/形近替换，刻意保守，避免引入额外依赖
 _TYPO_MAP: dict[str, tuple[str, ...]] = {
@@ -21,8 +22,6 @@ _TYPO_MAP: dict[str, tuple[str, ...]] = {
     "吗": ("嘛",),
     "呢": ("呐",),
 }
-
-_SPLIT_RE = re.compile(r"(?<=[。！？!?；;])")
 
 
 def trim_terminal_period(text: str, *, trim_rate: float = 0.9, rng_seed: int | None = None) -> str:
@@ -54,34 +53,25 @@ def apply_chinese_typo(text: str, *, error_rate: float = 0.01, rng_seed: int | N
     return "".join(chars)
 
 
-def split_reply_segments(text: str, *, max_chars: int = 36) -> list[str]:
+def split_short_reply_segments(text: str) -> list[str]:
     plain = str(text or "").strip()
     if not plain:
         return []
-    limit = max(4, int(max_chars))
-    rough = [part.strip() for part in _SPLIT_RE.split(plain) if part and part.strip()]
-    if not rough:
-        rough = [plain]
-    out: list[str] = []
-    buf = ""
-    for part in rough:
-        candidate = f"{buf}{part}" if buf else part
-        if len(candidate) <= limit:
-            buf = candidate
+    segments: list[str] = []
+    start = 0
+    for index, char in enumerate(plain):
+        if char not in _SHORT_REPLY_SPLIT_PUNCTUATION:
             continue
-        if buf:
-            out.append(buf)
-        if len(part) <= limit:
-            buf = part
-            continue
-        for start in range(0, len(part), limit):
-            chunk = part[start : start + limit].strip()
-            if chunk:
-                out.append(chunk)
-        buf = ""
-    if buf:
-        out.append(buf)
-    return out or [plain]
+        segment = plain[start : index + 1].strip()
+        if segment:
+            segments.append(segment)
+        start = index + 1
+        if len(segments) == 2:
+            break
+    tail = plain[start:].strip()
+    if tail:
+        segments.append(tail)
+    return segments if len(segments) > 1 else [plain]
 
 
 def apply_reply_postprocess(
@@ -90,15 +80,13 @@ def apply_reply_postprocess(
     enabled: bool = False,
     typo_enabled: bool = False,
     typo_rate: float = 0.01,
-    split_enabled: bool = False,
-    split_max_chars: int = 36,
     trim_terminal_period_enabled: bool = True,
     trim_terminal_period_rate: float = 0.9,
     rng_seed: int | None = None,
-) -> list[str]:
+) -> str:
     plain = str(text or "").strip()
     if not plain:
-        return []
+        return ""
     processed = plain
     if trim_terminal_period_enabled:
         processed = trim_terminal_period(
@@ -107,9 +95,7 @@ def apply_reply_postprocess(
             rng_seed=rng_seed,
         )
     if not enabled:
-        return [processed]
+        return processed
     if typo_enabled:
         processed = apply_chinese_typo(processed, error_rate=typo_rate, rng_seed=rng_seed)
-    if split_enabled:
-        return split_reply_segments(processed, max_chars=split_max_chars)
-    return [processed]
+    return processed

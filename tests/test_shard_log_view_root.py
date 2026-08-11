@@ -107,6 +107,16 @@ def test_parse_nonebot_bracket_line():
     assert e["level"] == "success"
 
 
+def test_parse_aligned_brace_source_line():
+    e = parse_nonebot_log_line(
+        "05-22 00:38:12 [SUCCESS ] {pallas      } [Bot 1] [群 2] [用户 3] hello",
+    )
+    assert e["time"]
+    assert e["scope"] == "pallas"
+    assert e["level"] == "success"
+    assert e["message"] == "[Bot 1] [群 2] [用户 3] hello"
+
+
 def test_parse_double_shard_prefix_bracket_line():
     e = parse_nonebot_log_line(
         "[worker-6.bootstrap] [worker-6.bootstrap] 05-22 01:03:47 [INFO] nonebot | hello",

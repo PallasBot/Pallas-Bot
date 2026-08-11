@@ -14,6 +14,7 @@ from pallas.core.platform.ingress import dispatch_lanes, message_load
 from pallas.core.platform.ingress import matcher_activation as activation
 from pallas.core.platform.ingress import matcher_dispatch as dispatch
 from pallas.core.platform.ingress.route_index import RouteResolution
+from pallas.core.platform.message_runtime.models import HandlingOutcome, SendAction
 
 
 def test_synthetic_llm_command_context_reads_structured_marker() -> None:
@@ -57,6 +58,116 @@ def test_overload_chat_selection_keeps_only_core_reply_deciders() -> None:
         RepeaterMatcher,
         LlmMatcher,
     ]
+
+
+def test_native_repeater_exclusion_keeps_other_passive_matchers() -> None:
+    class RepeaterMatcher:
+        plugin_name = "packages.repeater"
+
+    class LlmMatcher:
+        plugin_name = "packages.llm_chat"
+
+    assert dispatch.exclude_direct_matchers([RepeaterMatcher, LlmMatcher], frozenset({"repeater"})) == [LlmMatcher]
+
+
+def test_native_drink_exclusion_keeps_roulette_drink_matcher() -> None:
+    class DrinkMatcher:
+        plugin_name = "packages.drink"
+
+    class RouletteMatcher:
+        plugin_name = "packages.roulette"
+
+    assert dispatch.exclude_direct_matchers([DrinkMatcher, RouletteMatcher], frozenset({"drink"})) == [RouletteMatcher]
+
+
+def test_route_candidate_helper_records_native_action_counts(monkeypatch: pytest.MonkeyPatch) -> None:
+    recorded: list[dict] = []
+    monkeypatch.setattr(dispatch, "record_route_candidate", lambda **values: recorded.append(values))
+    outcome = HandlingOutcome(handled=True, actions=(SendAction("reply"),), deferred_actions=(MagicMock(),))
+
+    dispatch.record_route_candidate_safe(
+        command_traffic=True,
+        resolution=RouteResolution(frozenset({"help"}), True),
+        duration_ms=12.0,
+        matchers_considered=0,
+        matchers_selected=0,
+        matchers_run=0,
+        direct_outcome=outcome,
+        matcher_handled=False,
+    )
+
+    assert recorded == [
+        {
+            "route_modules": frozenset({"help"}),
+            "index_hit": True,
+            "route_fallback": False,
+            "matchers_considered": 0,
+            "matchers_selected": 0,
+            "matchers_run": 0,
+            "direct_outcome": "direct_handled",
+            "matcher_handled": False,
+            "direct_visible_actions": 1,
+            "direct_effect_actions": 2,
+            "duration_ms": 12.0,
+        }
+    ]
+
+
+def test_route_candidate_helper_ignores_non_command_traffic(monkeypatch: pytest.MonkeyPatch) -> None:
+    recorded: list[dict] = []
+    monkeypatch.setattr(dispatch, "record_route_candidate", lambda **values: recorded.append(values))
+
+    dispatch.record_route_candidate_safe(
+        command_traffic=False,
+        resolution=RouteResolution(frozenset({"repeater"}), True),
+        duration_ms=1.0,
+        matchers_considered=2,
+        matchers_selected=1,
+        matchers_run=1,
+        direct_outcome=None,
+        matcher_handled=True,
+    )
+
+    assert recorded == []
+
+
+def test_route_candidate_helper_classifies_native_error_without_error_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    recorded: list[dict] = []
+    monkeypatch.setattr(dispatch, "record_route_candidate", lambda **values: recorded.append(values))
+
+    dispatch.record_route_candidate_safe(
+        command_traffic=True,
+        resolution=RouteResolution(frozenset({"help"}), True),
+        duration_ms=1.0,
+        matchers_considered=1,
+        matchers_selected=1,
+        matchers_run=1,
+        direct_outcome=HandlingOutcome(
+            handled=False,
+            fallback_to_matcher=True,
+            error_class="RuntimeError",
+        ),
+        matcher_handled=True,
+    )
+
+    assert recorded[0]["direct_outcome"] == "direct_error"
+    assert "error_class" not in recorded[0]
+
+
+def test_message_runtime_context_treats_alias_hard_trigger_as_direct_address() -> None:
+    bot = MagicMock(self_id="10001")
+    event = MagicMock(group_id=42, message_id=3, to_me=False, _pallas_llm_alias_hard_trigger=True)
+    event.get_plaintext.return_value = "牛牛出来"
+    event.raw_message = "牛牛出来"
+
+    context = dispatch.message_runtime_context(
+        bot,
+        event,
+        command_traffic=False,
+        resolution=RouteResolution(frozenset(), False),
+    )
+
+    assert context.is_to_me is True
 
 
 class _CommandMatcher:
@@ -195,7 +306,10 @@ async def test_patched_handle_event_discards_pre_scheduler_federate_loser(monkey
 @pytest.mark.asyncio
 async def test_patched_handle_event_drops_chat_when_overloaded(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeGroupMessageEvent:
+        group_id = 100
+        message_id = 200
         raw_message = "今天天气不错"
+        to_me = False
 
         def get_log_string(self) -> str:
             return "fake group message"
@@ -310,6 +424,124 @@ async def test_patched_handle_event_degrades_chat_when_overloaded_by_default(
     assert message_load.is_chat_degraded() is False
 
 
+@pytest.mark.asyncio
+async def test_direct_runtime_sends_once_and_skips_legacy_matchers(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeGroupMessageEvent:
+        group_id = 100
+        message_id = 200
+        raw_message = "#pallas"
+        to_me = False
+
+        def get_log_string(self) -> str:
+            return "fake group message"
+
+        def get_plaintext(self) -> str:
+            return "#pallas"
+
+    class StatusMatcher:
+        plugin_name = "pb_core"
+        rule = Rule()
+
+    bot = MagicMock(type="OneBot V11", self_id="10001")
+    bot.send = AsyncMock()
+    event = FakeGroupMessageEvent()
+    pre_mock = AsyncMock(return_value=True)
+    post_mock = AsyncMock()
+    native_runtime = MagicMock()
+    native_runtime.execute_and_commit = AsyncMock(
+        return_value=HandlingOutcome(handled=True, actions=(SendAction("status"),))
+    )
+    run_matcher = AsyncMock(return_value=MagicMock(acquired=True))
+    record_candidate = MagicMock()
+
+    monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", pre_mock)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_postprocessors", post_mock)
+    monkeypatch.setattr(dispatch.nb_message.TrieRule, "get_value", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dispatch, "mark_activity", lambda: None)
+    monkeypatch.setattr(
+        dispatch,
+        "resolve_route_for_event",
+        lambda _event: RouteResolution(frozenset({"pb_core"}), True),
+    )
+    monkeypatch.setattr(dispatch, "event_command_traffic", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        dispatch, "direct_runtime_for_group", lambda group_id: native_runtime if group_id == 100 else None
+    )
+    monkeypatch.setattr(dispatch, "record_route_index_decision", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatch, "record_route_candidate_safe", record_candidate)
+    monkeypatch.setattr(dispatch, "check_and_run_matcher_with_lane", run_matcher)
+    monkeypatch.setattr(dispatch, "matchers", {1: [StatusMatcher]})
+
+    await dispatch.patched_handle_event(bot, event)
+
+    native_runtime.execute_and_commit.assert_awaited_once()
+    bot.send.assert_not_awaited()
+    run_matcher.assert_not_awaited()
+    record_candidate.assert_called_once()
+    assert record_candidate.call_args.kwargs["matcher_handled"] is False
+    post_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_direct_runtime_fallback_keeps_legacy_matchers(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeGroupMessageEvent:
+        group_id = 100
+        message_id = 200
+        raw_message = "#pallas details"
+        to_me = False
+
+        def get_log_string(self) -> str:
+            return "fake group message"
+
+        def get_plaintext(self) -> str:
+            return "#pallas details"
+
+    class StatusMatcher:
+        plugin_name = "pb_core"
+        rule = Rule()
+
+    bot = MagicMock(type="OneBot V11", self_id="10001")
+    event = FakeGroupMessageEvent()
+    native_runtime = MagicMock()
+    native_runtime.execute_and_commit = AsyncMock(return_value=HandlingOutcome(handled=False, fallback_to_matcher=True))
+    run_matcher = AsyncMock(return_value=MagicMock(acquired=True))
+    record_candidate = MagicMock()
+
+    monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", AsyncMock(return_value=True))
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_postprocessors", AsyncMock())
+    monkeypatch.setattr(dispatch.nb_message.TrieRule, "get_value", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dispatch, "mark_activity", lambda: None)
+    monkeypatch.setattr(
+        dispatch,
+        "resolve_route_for_event",
+        lambda _event: RouteResolution(frozenset({"pb_core"}), True),
+    )
+    monkeypatch.setattr(dispatch, "event_command_traffic", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(dispatch, "direct_runtime_for_group", lambda _group_id: native_runtime)
+    monkeypatch.setattr(dispatch, "record_route_index_decision", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatch, "record_route_candidate_safe", record_candidate)
+    monkeypatch.setattr(dispatch, "select_priority_matchers", lambda pool, **_kwargs: list(pool))
+    monkeypatch.setattr(dispatch, "matcher_dispatch_batches", lambda selected: [selected])
+    monkeypatch.setattr(dispatch, "overload_selected_threshold", lambda: 99)
+    monkeypatch.setattr(dispatch, "signal_overload", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dispatch, "check_and_run_matcher_with_lane", run_matcher)
+    monkeypatch.setattr(dispatch, "matchers", {1: [StatusMatcher]})
+
+    await dispatch.patched_handle_event(bot, event)
+
+    native_runtime.execute_and_commit.assert_awaited_once()
+    run_matcher.assert_awaited_once()
+    record_candidate.assert_called_once()
+    assert record_candidate.call_args.kwargs["direct_outcome"].fallback_to_matcher is True
+    assert record_candidate.call_args.kwargs["matcher_handled"] is True
+    post = dispatch.nb_message._apply_event_postprocessors
+    post.assert_awaited_once()
+
+
 def test_chat_drop_on_overload_default_off(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(dispatch, "repo_env_raw_value", lambda _key: None)
     assert dispatch.chat_drop_on_overload_enabled() is False
@@ -389,16 +621,17 @@ def test_install_and_uninstall_patch(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_event_command_traffic_uses_plaintext(monkeypatch: pytest.MonkeyPatch) -> None:
-    event = MagicMock()
-    event.get_plaintext.return_value = "牛牛帮助"
+    command_event = MagicMock(raw_message="牛牛帮助", group_id=None)
+    command_event.get_plaintext.return_value = "牛牛帮助"
     monkeypatch.setattr(activation, "route_index_enabled", lambda: False)
     monkeypatch.setattr(activation, "is_plugin_command_plaintext", lambda text: text == "牛牛帮助")
     monkeypatch.setattr(activation.TrieRule.prefix, "longest_prefix", lambda _text: None)
-    assert activation.event_command_traffic(event, {}) is True
+    assert activation.event_command_traffic(command_event, {}) is True
 
-    event.get_plaintext.return_value = "今天天气不错"
+    chat_event = MagicMock(raw_message="今天天气不错", group_id=None)
+    chat_event.get_plaintext.return_value = "今天天气不错"
     monkeypatch.setattr(activation, "is_plugin_command_plaintext", lambda _text: False)
-    assert activation.event_command_traffic(event, {}) is False
+    assert activation.event_command_traffic(chat_event, {}) is False
 
 
 @pytest.mark.asyncio

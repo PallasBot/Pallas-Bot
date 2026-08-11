@@ -79,7 +79,8 @@ def test_format_add_bot_admin_result_created_and_added():
         merged=[2777777777],
         added=[2777777777],
     )
-    assert "初始化库配置" in text
+    assert text.startswith("【号主已更新】")
+    assert "已初始化配置" in text
     assert "2777777777" in text
 
 

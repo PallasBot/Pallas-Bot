@@ -97,22 +97,22 @@ async def test_resolve_persona_for_message_applies_triggers(monkeypatch: pytest.
     invalidate_persona_cache()
 
     async def fake_resolve_persona(bot_id: int, group_id: int | None = None):
-        return ResolvedPersona(warmth=0.0, assertiveness=0.0)
-
-    async def fake_load_triggers(group_id: int):
         now = int(time.time())
-        return [
-            {
-                "phrase": "离谱",
-                "warmth_delta": 0.0,
-                "assertiveness_delta": 0.2,
-                "expires_at": now + 3600,
-                "weight": 1.0,
-            }
-        ]
+        return ResolvedPersona(
+            warmth=0.0,
+            assertiveness=0.0,
+            affect_triggers=[
+                {
+                    "phrase": "离谱",
+                    "warmth_delta": 0.0,
+                    "assertiveness_delta": 0.2,
+                    "expires_at": now + 3600,
+                    "weight": 1.0,
+                }
+            ],
+        )
 
     monkeypatch.setattr("pallas.product.persona.loader.resolve_persona", fake_resolve_persona)
-    monkeypatch.setattr("pallas.product.persona.loader.load_affect_triggers", fake_load_triggers)
 
     persona = await resolve_persona_for_message(1, 2, "这也太离谱了")
     assert persona.assertiveness > 0.0

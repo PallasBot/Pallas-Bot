@@ -75,22 +75,6 @@ def test_field_meta_keeps_field_help_description():
     assert row["description"] == field_help("是否启用", "选 true 或 false")
 
 
-def test_field_meta_includes_choice_labels_for_registered_enum():
-    class _Mode(BaseModel):
-        llm_repeater_mode: Literal["off", "select"] = Field(default="select")
-
-    f = _Mode.model_fields["llm_repeater_mode"]
-    row = field_meta_for_model_field(
-        key="llm_repeater_mode",
-        field=f,
-        env_key="LLM_REPEATER_MODE",
-        cur="select",
-        default_value="select",
-    )
-    assert row["choice_labels"]["select"] == "命中语料时 AI 选句（推荐）"
-    assert row["choice_labels"]["off"] == "关闭 AI 接话"
-
-
 def test_field_meta_includes_choice_labels_for_llm_vector_retrieve():
     class _Retrieve(BaseModel):
         llm_vector_retrieve: Literal["keyword", "hybrid", "embedding"] = Field(default="keyword")

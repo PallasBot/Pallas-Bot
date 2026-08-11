@@ -1,7 +1,7 @@
-from .model import ArchetypeName, LengthPref, ResolvedPersona, Tone
+from .account_profile import derive_account_persona_profile
+from .model import ArchetypeName, ResolvedPersona, Tone
 
 _TONES: tuple[Tone, ...] = ("neutral", "calm", "enthusiastic", "dramatic", "terse")
-_LENGTH_PREFS: tuple[LengthPref, ...] = ("any", "short", "medium", "long")
 _ARCHETYPE_NAMES: tuple[ArchetypeName, ...] = ("terse", "chaotic", "polite")
 
 _ARCHETYPE_LABELS: dict[str, str] = {
@@ -13,21 +13,18 @@ _ARCHETYPE_LABELS: dict[str, str] = {
 _ARCHETYPE_OVERLAYS: dict[str, dict[str, float | str]] = {
     "terse": {
         "tone": "terse",
-        "length_pref": "short",
         "chaos_bias": 0.08,
         "warmth": -0.12,
         "assertiveness": 0.05,
     },
     "chaotic": {
         "tone": "dramatic",
-        "length_pref": "short",
         "chaos_bias": 0.55,
         "warmth": 0.05,
         "assertiveness": 0.18,
     },
     "polite": {
         "tone": "calm",
-        "length_pref": "medium",
         "chaos_bias": 0.05,
         "warmth": 0.22,
         "assertiveness": -0.12,
@@ -43,11 +40,11 @@ def derive_persona_from_bot_id(bot_id: int, *, archetype_enabled: bool = True) -
     bid = int(bot_id)
     persona = ResolvedPersona(
         source="auto",
+        account_profile=derive_account_persona_profile(bid),
         preset_label="自动",
         tone=_TONES[bid % len(_TONES)],
         reply_bias=round(0.85 + (bid % 7) * 0.05, 2),
         speak_bias=round(0.90 + (bid % 5) * 0.04, 2),
-        length_pref=_LENGTH_PREFS[bid % len(_LENGTH_PREFS)],
         warmth=round(((bid % 7) - 3) * 0.08, 2),
         assertiveness=round(((bid % 11) - 5) * 0.06, 2),
     )
@@ -63,7 +60,7 @@ def derive_persona_from_bot_id(bot_id: int, *, archetype_enabled: bool = True) -
     payload["archetype"] = archetype
     payload["preset_label"] = _ARCHETYPE_LABELS.get(archetype, archetype)
     for key, value in overlay.items():
-        if key in ("tone", "length_pref"):
+        if key == "tone":
             payload[key] = value
         elif isinstance(value, int | float):
             if key == "chaos_bias":

@@ -20,12 +20,15 @@ from pallas.core.foundation.config import GroupConfig, UserConfig
 @pytest.fixture(autouse=True)
 async def reset_blacklist_gate_cache():
     from packages.blacklist import reset_group_ban_gate_cache, reset_user_ban_gate_cache
+    from pallas.product.ban_gate.snapshot import reset_ban_gate_snapshot_for_tests
 
     await reset_user_ban_gate_cache()
     await reset_group_ban_gate_cache()
+    await reset_ban_gate_snapshot_for_tests()
     yield
     await reset_user_ban_gate_cache()
     await reset_group_ban_gate_cache()
+    await reset_ban_gate_snapshot_for_tests()
 
 
 def test_collect_target_qqs_at_plain_and_dedup():
@@ -144,7 +147,7 @@ async def test_query_user_ban_status_for_gate_timeout_fail_open(beanie_fixture):
 
     uid = 880_002
     with (
-        patch("packages.blacklist._IS_BANNED_DB_TIMEOUT_SEC", 0.05),
+        patch("packages.blacklist.ban_gate._IS_BANNED_DB_TIMEOUT_SEC", 0.05),
         patch.object(UserConfig, "is_banned", side_effect=slow_is_banned),
     ):
         out = await query_user_ban_status_for_gate(uid)

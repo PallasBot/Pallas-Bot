@@ -21,6 +21,22 @@ class _Config:
         return self._value
 
 
+@pytest.mark.asyncio
+async def test_load_feedback_snapshot_swallows_thread_failure(monkeypatch) -> None:
+    from packages.repeater import responder
+
+    monkeypatch.setattr(responder, "can_apply_feedback_bias", lambda: True)
+    monkeypatch.setattr(responder.asyncio, "to_thread", AsyncMock(side_effect=RuntimeError("broken snapshot")))
+
+    snapshot = await responder.load_feedback_snapshot(
+        group_id=1,
+        user_text="message",
+        behavior_scene="smalltalk",
+    )
+
+    assert snapshot is None
+
+
 def _pick_weighted_max(seq, weights):
     return [seq[weights.index(max(weights))]]
 
@@ -469,6 +485,11 @@ async def test_context_find_threshold_filtering():
                 new_callable=AsyncMock,
                 return_value=[],
             ),
+            patch(
+                "packages.repeater.responder.load_feedback_snapshot",
+                new_callable=AsyncMock,
+                return_value=None,
+            ) as mock_feedback_snapshot,
             patch("packages.repeater.activity_gate.group_has_hosted_activity", return_value=False),
             patch("packages.repeater.responder.random.choices", side_effect=[[3], [high_answer]]),
             patch("packages.repeater.responder.random.choice", return_value="high_msg"),
@@ -482,6 +503,11 @@ async def test_context_find_threshold_filtering():
                 recent_topics,
             )
             assert result == (["high_msg"], "ans_high")
+            mock_feedback_snapshot.assert_awaited_once_with(
+                group_id=group_id,
+                user_text="ctx_input",
+                behavior_scene="smalltalk",
+            )
     finally:
         reply_dict.clear()
         message_dict.clear()
@@ -851,12 +877,9 @@ async def test_context_find_applies_llm_feedback_bias_only_when_enabled():
             ),
             patch("packages.repeater.activity_gate.group_has_hosted_activity", return_value=False),
             patch(
-                "packages.repeater.responder.can_apply_feedback_bias",
-                return_value=bias_enabled,
-            ),
-            patch(
-                "packages.repeater.responder.group_feedback_bias_snapshot",
-                return_value={"count": 5, "top_replies": ["少来。"], "scenes": ["banter"]},
+                "packages.repeater.responder.load_feedback_snapshot",
+                new_callable=AsyncMock,
+                return_value={"count": 5, "top_replies": ["少来。"], "scenes": ["banter"]} if bias_enabled else None,
             ) as mock_feedback,
             patch("packages.repeater.responder.random.choices", side_effect=_pick_weighted_max),
             patch("packages.repeater.responder.random.choice", side_effect=itemgetter(0)),
@@ -869,7 +892,7 @@ async def test_context_find_applies_llm_feedback_bias_only_when_enabled():
                 message_dict,
                 recent_topics,
             )
-            return result, mock_feedback.call_count
+            return result, mock_feedback.await_count
 
     try:
         disabled_result, disabled_calls = await run_once(bias_enabled=False)
@@ -877,7 +900,7 @@ async def test_context_find_applies_llm_feedback_bias_only_when_enabled():
 
         assert disabled_result == (["行吧"], "ans_low")
         assert enabled_result == (["少来。"], "ans_bias")
-        assert disabled_calls == 0
+        assert disabled_calls == 1
         assert enabled_calls == 1
     finally:
         reply_dict.clear()
@@ -957,12 +980,9 @@ async def test_context_find_feedback_snapshot_failure_preserves_baseline_behavio
             ),
             patch("packages.repeater.activity_gate.group_has_hosted_activity", return_value=False),
             patch(
-                "packages.repeater.responder.can_apply_feedback_bias",
-                return_value=True,
-            ),
-            patch(
-                "packages.repeater.responder.group_feedback_bias_snapshot",
-                side_effect=RuntimeError("broken snapshot"),
+                "packages.repeater.responder.load_feedback_snapshot",
+                new_callable=AsyncMock,
+                return_value=None,
             ),
             patch("packages.repeater.responder.random.choices", side_effect=_pick_weighted_max),
             patch("packages.repeater.responder.random.choice", side_effect=itemgetter(0)),
@@ -1055,11 +1075,8 @@ async def test_context_find_sparse_feedback_does_not_bias_selection():
             ),
             patch("packages.repeater.activity_gate.group_has_hosted_activity", return_value=False),
             patch(
-                "packages.repeater.responder.can_apply_feedback_bias",
-                return_value=True,
-            ),
-            patch(
-                "packages.repeater.responder.group_feedback_bias_snapshot",
+                "packages.repeater.responder.load_feedback_snapshot",
+                new_callable=AsyncMock,
                 return_value={"count": 1, "top_replies": ["少来。"], "scenes": ["banter"]},
             ),
             patch("packages.repeater.responder.random.choices", side_effect=_pick_weighted_max),
@@ -1163,6 +1180,11 @@ async def test_context_find_records_reply_mode_metrics():
             patch(
                 "packages.repeater.responder.append_repeater_opportunity_trace",
                 side_effect=lambda row: trace_rows.append(dict(row)) or True,
+            ),
+            patch(
+                "packages.repeater.responder.load_feedback_snapshot",
+                new_callable=AsyncMock,
+                return_value=None,
             ),
         ):
             bundle = await Responder.find_reply_bundle(

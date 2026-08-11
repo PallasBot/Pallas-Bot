@@ -12,7 +12,10 @@ from pallas.core.foundation.command_prefix import strip_leading_command_marks
 from pallas.core.perm.registry import resolved_level
 from pallas.core.perm.runtime_meta import get_command_permission_meta
 from pallas.core.platform.ingress.matcher_rule_prefilter import apply_matcher_rule_prefilter
-from pallas.core.platform.ingress.plugin_command_plaintext import is_plugin_command_plaintext
+from pallas.core.platform.ingress.plugin_command_plaintext import (
+    is_group_plugin_command_plaintext,
+    is_plugin_command_plaintext,
+)
 from pallas.core.platform.ingress.route_index import (
     RouteIndexSnapshot,
     RouteResolution,
@@ -101,7 +104,9 @@ def event_dispatch_texts(event: Event) -> tuple[str, str]:
     return result
 
 
-def legacy_command_traffic(plain: str) -> bool:
+def legacy_command_traffic(plain: str, *, group_only: bool = False) -> bool:
+    if group_only:
+        return is_group_plugin_command_plaintext(plain)
     if TrieRule.prefix.longest_prefix(plain):
         return True
     return is_plugin_command_plaintext(plain)
@@ -129,9 +134,9 @@ def event_command_traffic(
         if resolution.index_hit:
             return True
         if not route_index_strict():
-            return legacy_command_traffic(plain)
+            return legacy_command_traffic(plain, group_only=getattr(event, "group_id", None) is not None)
         return False
-    return legacy_command_traffic(plain)
+    return legacy_command_traffic(plain, group_only=getattr(event, "group_id", None) is not None)
 
 
 def matcher_command_permission_meta(matcher: type[Matcher]) -> tuple[str, str] | None:

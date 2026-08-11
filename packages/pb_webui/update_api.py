@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .console_read_cache import cached_read, drop_read_cache
 from .extended_common import check_pallas_write_token
+from .manager import DEFAULT_WEBUI_DIST_ZIP_REPO
 
 if TYPE_CHECKING:
     from .config import Config
@@ -41,7 +42,7 @@ async def _load_webui_update_check_payload(plugin_config: Config) -> dict[str, A
 
     from .manager import fetch_latest_webui_release, get_installed_webui_version
 
-    repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot")
+    repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO)
     asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
     github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
     installed = get_installed_webui_version()
@@ -53,7 +54,7 @@ async def _load_webui_update_check_payload(plugin_config: Config) -> dict[str, A
         asset_url = str(latest.get("asset_url", "") or "").strip()
     except Exception as e:  # noqa: BLE001
         err_msg = format_exception_for_log(e)
-        logger.warning("Pallas-Bot 控制台: WebUI 更新检查失败（GitHub），repo={} err={}", repo, err_msg)
+        logger.warning("[控制台] WebUI 更新检查失败（GitHub），repo={} err={}", repo, err_msg)
         return {
             "current_tag": current_tag,
             "latest_tag": None,
@@ -122,10 +123,12 @@ async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any
     update_track = normalize_bot_update_track(getattr(plugin_config, "pallas_bot_update_track", "release"))
     preferred_branch = normalize_bot_git_track_branch(getattr(plugin_config, "pallas_bot_update_branch", "") or "")
     current = get_bot_current_version()
-    current_tag = current.get("tag", "")
-    current_commit = current.get("commit", "")
     bot_repo = "PallasBot/Pallas-Bot"
     deploy = inspect_bot_deployment()
+    current_tag = current.get("tag", "")
+    current_commit = current.get("commit", "")
+    if deploy.get("deployment_mode") == "docker":
+        current_tag = str(deploy.get("runtime_version") or deploy.get("image_version") or current_tag)
     base = {
         "current_tag": current_tag,
         "current_commit": current_commit,
@@ -165,7 +168,7 @@ async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any
             )
     except Exception as e:  # noqa: BLE001
         github_err = format_exception_for_log(e)
-        logger.warning("Pallas-Bot 控制台: Bot 版本更新检查失败（GitHub） err={}", github_err)
+        logger.warning("[控制台] Bot 版本更新检查失败（GitHub） err={}", github_err)
 
     if update_track == "branch":
         if not deploy.get("git_available"):
@@ -183,10 +186,10 @@ async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any
             await fetch_bot_origin_refs()
         except BotGitUpdateError as e:
             fetch_err = e.detail
-            logger.warning("Pallas-Bot 控制台: Bot 分支轨道 fetch 失败 err={}", fetch_err)
+            logger.warning("[控制台] Bot 分支轨道 fetch 失败 err={}", fetch_err)
         except Exception as e:  # noqa: BLE001
             fetch_err = format_exception_for_log(e)
-            logger.warning("Pallas-Bot 控制台: Bot 分支轨道 fetch 异常 err={}", fetch_err)
+            logger.warning("[控制台] Bot 分支轨道 fetch 异常 err={}", fetch_err)
         probe = bot_branch_update_probe(preferred_branch=preferred_branch)
         err = probe.get("error") or fetch_err or github_err
         # fetch 失败但本地仍有远端 refs 时，仍可给出 has_update；否则透传错误
@@ -253,7 +256,7 @@ def register_update_router(
 
     @router.get(f"{x}/update/check", include_in_schema=True)
     async def _update_check() -> JSONResponse:
-        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot")
+        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO)
         asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         cache_key = f"update_check_webui:{repo}:{asset}:{bool(github_token)}"
@@ -278,7 +281,7 @@ def register_update_router(
     @router.get(f"{x}/update/check-all", include_in_schema=True)
     async def _update_check_all() -> JSONResponse:
         """一次返回 WebUI 与 Bot 更新检查结果（GS 控制台同款聚合接口）。"""
-        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot")
+        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO)
         asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         webui_key = f"update_check_webui:{repo}:{asset}:{bool(github_token)}"
@@ -364,7 +367,7 @@ def register_update_router(
         except EnvToPallasMigrationError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: .env 配置迁移失败")
+            logger.exception("[控制台] .env 配置迁移失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.get(f"{x}/update/git/bot/status", include_in_schema=True)
@@ -390,7 +393,14 @@ def register_update_router(
     ) -> JSONResponse:
         from .bot_git_manage import load_bot_git_history_payload
 
-        data = await load_bot_git_history_payload(mode=mode, branch=branch, limit=limit, fetch=True)
+        github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
+        data = await load_bot_git_history_payload(
+            mode=mode,
+            branch=branch,
+            limit=limit,
+            fetch=True,
+            github_token=github_token,
+        )
         return JSONResponse({"ok": True, "data": data})
 
     @router.post(f"{x}/update/git/bot/apply", include_in_schema=True)
@@ -402,6 +412,7 @@ def register_update_router(
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         from packages.pb_webui.manager import BotGitUpdateError
         from pallas.console.cli.bot_process import bot_lifecycle_available, schedule_bot_restart
+        from pallas.console.cli.update_ops import apply_docker_bot_release, validate_docker_bot_update
         from pallas.console.webui.update_apply_progress import (
             create_update_apply_job,
             run_update_apply_job,
@@ -409,6 +420,7 @@ def register_update_router(
         from pallas.core.shared.utils.format_exception import format_exception_for_log
 
         from .bot_git_manage import apply_bot_git_target, normalize_git_apply_mode, normalize_git_apply_strategy
+        from .manager import inspect_bot_deployment
 
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         apply_mode = normalize_git_apply_mode(body.mode)
@@ -419,7 +431,7 @@ def register_update_router(
 
         job = await create_update_apply_job("bot", restart=restart)
         logger.info(
-            "Pallas-Bot 控制台: Bot git 定向更新任务已排队 job_id={} mode={} strategy={} ref={} restart={}",
+            "[控制台] Bot git 定向更新任务已排队 job_id={} mode={} strategy={} ref={} restart={}",
             job.job_id,
             apply_mode,
             apply_strategy,
@@ -432,15 +444,24 @@ def register_update_router(
                 j.push("running", message, progress_percent=pct)
 
             try:
-                result = await apply_bot_git_target(
-                    github_token=github_token,
-                    repo="PallasBot/Pallas-Bot",
-                    mode=apply_mode,
-                    preferred_branch=branch,
-                    target_ref=target_ref,
-                    strategy=apply_strategy,
-                    on_progress=on_progress,
-                )
+                deployment = inspect_bot_deployment()
+                if validate_docker_bot_update(deployment, mode=apply_mode, strategy=apply_strategy):
+                    result = await apply_docker_bot_release(
+                        github_token=github_token,
+                        repo="PallasBot/Pallas-Bot",
+                        target_tag=target_ref,
+                        on_progress=on_progress,
+                    )
+                else:
+                    result = await apply_bot_git_target(
+                        github_token=github_token,
+                        repo="PallasBot/Pallas-Bot",
+                        mode=apply_mode,
+                        preferred_branch=branch,
+                        target_ref=target_ref,
+                        strategy=apply_strategy,
+                        on_progress=on_progress,
+                    )
                 scheduled = False
                 if restart and bot_lifecycle_available():
                     on_progress(96, "安排进程重启…")
@@ -458,7 +479,7 @@ def register_update_router(
             except BotGitUpdateError as e:
                 j.push("failed", error=e.detail, progress_percent=j.progress_percent)
             except Exception as e:  # noqa: BLE001
-                logger.exception("Pallas-Bot 控制台: Bot git 定向更新失败")
+                logger.exception("[控制台] Bot git 定向更新失败")
                 j.push("failed", error=format_exception_for_log(e), progress_percent=j.progress_percent)
 
         asyncio.create_task(run_update_apply_job(job, _runner))
@@ -491,7 +512,7 @@ def register_update_router(
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         job = await create_update_apply_job("bot", restart=restart)
         logger.info(
-            "Pallas-Bot 控制台: Bot 仓库在线更新（git）任务已排队 job_id={} restart={}",
+            "[控制台] Bot 仓库在线更新（git）任务已排队 job_id={} restart={}",
             job.job_id,
             restart,
         )
@@ -513,7 +534,7 @@ def register_update_router(
             except BotGitUpdateError as e:
                 j.push("failed", error=e.detail, progress_percent=j.progress_percent)
             except Exception as e:  # noqa: BLE001
-                logger.exception("Pallas-Bot 控制台: Bot 仓库更新失败")
+                logger.exception("[控制台] Bot 仓库更新失败")
                 j.push("failed", error=format_exception_for_log(e), progress_percent=j.progress_percent)
 
         asyncio.create_task(run_update_apply_job(job, _runner))
@@ -532,7 +553,7 @@ def register_update_router(
         )
         from pallas.core.shared.utils.format_exception import format_exception_for_log
 
-        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot")
+        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO)
         asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
         tag = str(getattr(plugin_config, "pallas_webui_dist_zip_tag", "") or "")
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
@@ -557,7 +578,7 @@ def register_update_router(
             except WebuiUpdateError as e:
                 j.push("failed", error=e.detail, progress_percent=j.progress_percent)
             except Exception as e:  # noqa: BLE001
-                logger.exception("Pallas-Bot 控制台: WebUI 更新失败")
+                logger.exception("[控制台] WebUI 更新失败")
                 j.push("failed", error=format_exception_for_log(e), progress_percent=j.progress_percent)
 
         asyncio.create_task(run_update_apply_job(job, _runner))
@@ -599,7 +620,7 @@ def register_update_router(
             raise HTTPException(status_code=409, detail="update_busy")
 
         job = await create_update_apply_job("auto")
-        logger.info("Pallas-Bot 控制台: 自动更新立即执行已排队 job_id={}", job.job_id)
+        logger.info("[控制台] 自动更新立即执行已排队 job_id={}", job.job_id)
 
         async def _runner(j: Any) -> None:
             def on_progress(pct: int, message: str) -> None:
@@ -628,7 +649,7 @@ def register_update_router(
                 else:
                     j.message = "本轮自动更新结束"
             except Exception as e:  # noqa: BLE001
-                logger.exception("Pallas-Bot 控制台: 自动更新立即执行失败")
+                logger.exception("[控制台] 自动更新立即执行失败")
                 j.push("failed", error=format_exception_for_log(e), progress_percent=j.progress_percent)
 
         asyncio.create_task(run_update_apply_job(job, _runner))
@@ -667,7 +688,7 @@ def register_update_router(
     async def _warm_console_read_caches_impl() -> None:
         from pallas.product.community_stats.public_stats import fetch_community_public_stats
 
-        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot")
+        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO)
         asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         webui_key = f"update_check_webui:{repo}:{asset}:{bool(github_token)}"
@@ -677,7 +698,7 @@ def register_update_router(
             try:
                 await cached_read(key=key, loader=loader, ttl_sec=ttl, stale_sec=stale)
             except Exception as e:  # noqa: BLE001
-                logger.debug("Pallas-Bot 控制台: 预热读缓存失败 key={} err={}", key, e)
+                logger.debug("[控制台] 预热读缓存失败 key={} err={}", key, e)
 
         async def load_webui() -> dict[str, Any]:
             return await _load_webui_update_check_payload(plugin_config)

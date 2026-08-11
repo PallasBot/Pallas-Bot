@@ -19,6 +19,7 @@ from pallas.core.foundation.bot_version import (
     get_bot_current_version,
     pallas_bot_repo_root,
 )
+from pallas.core.foundation.paths import resource_dir
 from pallas.core.shared.utils.format_exception import format_exception_for_log
 from pallas.core.shared.utils.git_mirror import (
     MirrorSpec,
@@ -73,14 +74,14 @@ async def resolve_github_release_asset_urls(
                 except Exception as e:
                     # API 失败仍会追加 releases/download 直链候选，默认不打 WARNING 以免刷屏
                     logger.debug(
-                        "Pallas-Bot 控制台: GitHub Release API 请求异常（将尝试直链）api={} err={}",
+                        "[控制台] GitHub Release API 请求异常（将尝试直链）api={} err={}",
                         api,
                         format_exception_for_log(e),
                     )
                     continue
                 if resp.status_code != 200:
                     logger.debug(
-                        "Pallas-Bot 控制台: GitHub Release API 非 200（将尝试直链）status={} api={}",
+                        "[控制台] GitHub Release API 非 200（将尝试直链）status={} api={}",
                         resp.status_code,
                         api,
                     )
@@ -117,8 +118,16 @@ async def resolve_github_release_asset_urls(
     return dedup
 
 
-DEFAULT_WEBUI_DIST_ZIP_REPO = "PallasBot/Pallas-Bot"
+DEFAULT_WEBUI_DIST_ZIP_REPO = "PallasBot/Pallas-Bot-WebUI"
 DEFAULT_WEBUI_DIST_ZIP_ASSET = "dist.zip"
+BUNDLED_WEBUI_DIST_ZIP = resource_dir("webui", "dist.zip")
+
+
+def normalize_webui_dist_zip_repo(value: object) -> str:
+    repo = str(value or "").strip()
+    if repo == "PallasBot/Pallas-Bot":
+        return DEFAULT_WEBUI_DIST_ZIP_REPO
+    return repo
 
 
 def webui_frontend_stack() -> str:
@@ -195,6 +204,21 @@ def _sync_extract_dist_zip_file(zip_path: Path, public_dir: Path) -> None:
             shutil.rmtree(public_dir)
         public_dir.parent.mkdir(parents=True, exist_ok=True)
         shutil.copytree(source, public_dir, dirs_exist_ok=True)
+
+
+async def extract_bundled_webui_dist(
+    public_dir: Path,
+    archive_path: Path = BUNDLED_WEBUI_DIST_ZIP,
+) -> bool:
+    if not await asyncio.to_thread(archive_path.is_file):
+        return False
+    try:
+        await asyncio.to_thread(_sync_extract_dist_zip_file, archive_path, public_dir)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("[控制台] 内置 WebUI dist 解压失败：{}", format_exception_for_log(e))
+        return False
+    logger.info("[控制台] 已从内置 dist 初始化静态资源")
+    return True
 
 
 def _sync_write_dist_from_zip_bytes(public_dir: Path, content: bytes) -> None:
@@ -470,6 +494,14 @@ def inspect_bot_deployment() -> dict[str, str | bool | int]:
     except Exception:  # noqa: BLE001
         inside = False
     if not inside:
+        from pallas.core.foundation.bot_version import get_bot_image_version, get_runtime_overlay_version
+
+        image_version = get_bot_image_version()
+        overlay_version = get_runtime_overlay_version()
+        runtime_version = overlay_version or image_version
+        info["image_version"] = image_version
+        info["runtime_version"] = runtime_version
+        info["container_overlay_update"] = bool(overlay_version and overlay_version != image_version)
         return info
 
     info["git_available"] = True
@@ -706,7 +738,7 @@ async def fetch_bot_origin_refs(*, on_progress: ProgressReporter | None = None) 
             return
         last_err = err or f"exit={code}"
         logger.warning(
-            "Pallas-Bot 控制台: Bot git fetch mirror={} 失败：{}",
+            "[控制台] Bot git fetch mirror={} 失败：{}",
             mirror.id,
             last_err[:300],
         )
@@ -827,7 +859,7 @@ async def apply_bot_repository_update(
     update_track = normalize_bot_update_track(track)
     mode = "commit" if update_track == "branch" else "release"
     logger.info(
-        "Pallas-Bot 控制台: Bot 仓库更新开始 repo={} track={} preferred_branch={}",
+        "[控制台] Bot 仓库更新开始 repo={} track={} preferred_branch={}",
         repo,
         update_track,
         (preferred_branch or "").strip() or "(auto)",
@@ -862,7 +894,7 @@ async def fetch_latest_bot_release(repo: str = "PallasBot/Pallas-Bot", *, token:
                 mirror_scope="bot",
             )
             logger.debug(
-                "Pallas-Bot 控制台: GitHub Release API 不可用，已用 github.com/releases/latest 兜底（Bot）tag={}",
+                "[控制台] GitHub Release API 不可用，已用 github.com/releases/latest 兜底（Bot）tag={}",
                 fb["tag"],
             )
             return {"tag": fb["tag"], "html_url": fb["html_url"], "body": ""}
@@ -892,7 +924,7 @@ async def fetch_latest_webui_release(repo: str, *, token: str = "", asset_name: 
             tag_fb = fb["tag"]
             asset_url_fb = github_release_asset_url(repo, asset_clean, tag_fb)
             logger.debug(
-                "Pallas-Bot 控制台: GitHub Release API 不可用，已用 github.com/releases/latest 兜底（WebUI）tag={}",
+                "[控制台] GitHub Release API 不可用，已用 github.com/releases/latest 兜底（WebUI）tag={}",
                 tag_fb,
             )
             return {"tag": tag_fb, "html_url": fb["html_url"], "asset_url": asset_url_fb, "body": ""}

@@ -78,6 +78,11 @@ async def test_task_manager_claim_task_is_one_shot(monkeypatch) -> None:
         lambda _task_id: None,
     )
 
+    async def inline_to_thread(function, *args):
+        return function(*args)
+
+    monkeypatch.setattr("pallas.core.foundation.config.asyncio.to_thread", inline_to_thread)
+
     first = await TaskManager.claim_task("task-claim")
     second = await TaskManager.claim_task("task-claim")
 
@@ -107,6 +112,77 @@ def test_ai_task_registry_uses_redis(fake_coord_redis, monkeypatch) -> None:
 
     mod.remove_ai_task("task-redis")
     assert mod.get_ai_task_record("task-redis") is None
+
+
+def test_ai_task_registry_persists_unified_runtime_callback_without_worker_route(fake_coord_redis, monkeypatch) -> None:
+    now = 1250.0
+    monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: False)
+    monkeypatch.setattr(mod.time, "time", lambda: now)
+
+    mod.register_ai_task(
+        "task-unified",
+        {
+            "bot_id": "123456",
+            "group_id": 42,
+            "user_id": 7,
+            "task_type": "sing",
+            "start_time": now,
+        },
+    )
+
+    rec = mod.get_ai_task_record("task-unified")
+    assert rec is not None
+    assert rec["bot_id"] == "123456"
+    assert rec["group_id"] == 42
+    assert rec["task_type"] == "sing"
+    assert "shard_id" not in rec
+    assert "worker_port" not in rec
+
+    claimed = mod.claim_ai_task_record("task-unified")
+    assert claimed == rec
+    assert mod.claim_ai_task_record("task-unified") is None
+
+
+def test_ai_task_registry_preserves_json_callback_context(fake_coord_redis, monkeypatch) -> None:
+    now = 1300.0
+    monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: False)
+    monkeypatch.setattr(mod.time, "time", lambda: now)
+    callback_context = {
+        "user_text": "再来一杯",
+        "fallback_text": "语料原文",
+        "candidate_pool": ["第一条", "第二条"],
+        "llm_route": "repeater_polish",
+        "behavior_scene": "drunk_chat",
+        "last_reply_text": "上一条回复",
+        "recent_reply_texts": ["较早回复", "上一条回复"],
+        "want_tts": True,
+    }
+
+    mod.register_ai_task(
+        "task-context",
+        {
+            "bot_id": "123456",
+            "group_id": 42,
+            "user_id": 7,
+            "task_type": "chat_drunk",
+            "start_time": now,
+            **callback_context,
+        },
+    )
+
+    rec = mod.get_ai_task_record("task-context")
+    assert rec is not None
+    assert {key: rec[key] for key in callback_context} == callback_context
+
+
+def test_ai_task_registry_skips_non_json_task_context_without_raising(monkeypatch) -> None:
+    monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: False)
+    writes: list[dict] = []
+    monkeypatch.setattr(mod, "write_ai_task_redis_sync", lambda rec, **_kwargs: writes.append(rec))
+
+    mod.register_ai_task("task-object", {"bot_id": "123456", "opaque": object()})
+
+    assert writes == []
 
 
 def test_claim_ai_task_record_is_one_shot(fake_coord_redis, monkeypatch) -> None:

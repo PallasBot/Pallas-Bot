@@ -13,7 +13,9 @@ from nonebot.exception import ActionFailed
 from nonebot.rule import Rule
 from nonebot.typing import T_State  # noqa: TC002
 
+from pallas.api.logging import format_plugin_event
 from pallas.api.perm import group_message_permission_for_command
+from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.core.shared.dream_ban_ack_state import DREAM_BAN_ACK_SENT_STATE_KEY
 from pallas.core.shared.reply_command_rule import (
     event_has_reply_target,
@@ -74,7 +76,9 @@ async def resolve_ban_reply_raw(bot: Bot, event: GroupMessageEvent) -> str:
     try:
         msg = await bot.get_msg(message_id=reply_id)
     except ActionFailed:
-        logger.warning(f"bot [{event.self_id}] failed to get replied msg [{reply_id}] in group [{event.group_id}]")
+        logger.warning(
+            format_business_event("禁言目标读取", "失败", bot=event.self_id, group=event.group_id, message_id=reply_id)
+        )
         return ""
 
     return extract_ban_reply_raw_from_message(Message(msg["message"]))
@@ -140,26 +144,42 @@ ban_msg_latest = on_message(
 async def handle_ban_reply(bot: Bot, event: GroupMessageEvent, state: T_State):
     raw_message = await resolve_ban_reply_raw(bot, event)
     if not raw_message.strip():
-        logger.info(f"bot [{event.self_id}] ban skipped (empty reply target) in group [{event.group_id}]")
+        logger.debug(
+            format_business_event("复读禁言", "已跳过", bot=event.self_id, group=event.group_id, reason="empty_target")
+        )
         return
 
-    logger.info(f"bot [{event.self_id}] ready to ban [{raw_message}] in group [{event.group_id}]")
+    logger.debug(
+        format_business_event(
+            "复读禁言", "已准备", bot=event.self_id, group=event.group_id, content_len=len(raw_message)
+        )
+    )
 
     if event.reply:
         try:
             await bot.delete_msg(message_id=event.reply.message_id)  # type: ignore
         except ActionFailed:
-            logger.warning(f"bot [{event.self_id}] failed to delete [{raw_message}] in group [{event.group_id}]")
+            logger.warning(
+                format_business_event(
+                    "禁言目标撤回", "失败", bot=event.self_id, group=event.group_id, content_len=len(raw_message)
+                )
+            )
 
     banned = await Chat.ban(event.group_id, event.self_id, raw_message, str(event.user_id))
     if banned:
+        logger.info(
+            format_plugin_event(
+                "ban",
+                f"Bot [{event.self_id}] banned a repeater reply in group [{event.group_id}] "
+                f"at user [{event.user_id}]'s request",
+            )
+        )
         if not state.get(DREAM_BAN_ACK_SENT_STATE_KEY):
             state[REPEATER_BAN_ACK_SENT_STATE_KEY] = True
             await finish_ban_ack(ban_msg.finish, event)
     else:
-        logger.info(
-            f"bot [{event.self_id}] ban missed (no reply cache match) in group [{event.group_id}] "
-            f"user [{event.user_id}]"
+        logger.debug(
+            format_business_event("复读禁言", "未命中", bot=event.self_id, group=event.group_id, user=event.user_id)
         )
 
 
@@ -168,15 +188,26 @@ async def handle_ban_recalled(bot: Bot, event: GroupRecallNoticeEvent, state: T_
     try:
         msg = await bot.get_msg(message_id=event.message_id)
     except ActionFailed:
-        logger.warning(f"bot [{event.self_id}] failed to get msg [{event.message_id}]")
+        logger.warning(format_business_event("禁言目标读取", "失败", bot=event.self_id, message_id=event.message_id))
         return
 
     raw_message = ban_raw_from_recalled_api_payload(msg["message"])
 
-    logger.info(f"bot [{event.self_id}] ready to ban [{raw_message}] in group [{event.group_id}]")
+    logger.debug(
+        format_business_event(
+            "复读禁言", "已准备", bot=event.self_id, group=event.group_id, content_len=len(raw_message)
+        )
+    )
 
     banned = await Chat.ban(event.group_id, event.self_id, raw_message, str(f"recall by {event.operator_id}"))
     if banned:
+        logger.info(
+            format_plugin_event(
+                "ban",
+                f"Bot [{event.self_id}] banned a recalled repeater reply in group [{event.group_id}] "
+                f"at operator [{event.operator_id}]'s request",
+            )
+        )
         if not state.get(DREAM_BAN_ACK_SENT_STATE_KEY):
             state[REPEATER_BAN_ACK_SENT_STATE_KEY] = True
             await finish_ban_ack(ban_recalled_msg.finish, event)
@@ -186,14 +217,21 @@ async def handle_ban_recalled(bot: Bot, event: GroupRecallNoticeEvent, state: T_
 
 @ban_msg_latest.handle()
 async def handle_ban_latest(bot: Bot, event: GroupMessageEvent, state: T_State):
-    logger.info(f"bot [{event.self_id}] ready to ban latest reply in group [{event.group_id}]")
+    logger.debug(
+        format_business_event("复读禁言", "已准备", bot=event.self_id, group=event.group_id, target="latest_reply")
+    )
 
     try:
         await bot.delete_msg(message_id=event.reply.message_id)  # type: ignore
     except ActionFailed:
-        logger.warning(
-            f"bot [{event.self_id}] failed to delete latest reply [{event.raw_message}] in group [{event.group_id}]"
-        )
+        logger.warning(format_business_event("禁言目标撤回", "失败", bot=event.self_id, group=event.group_id))
 
     if await Chat.ban(event.group_id, event.self_id, "", str(event.user_id)):
+        logger.info(
+            format_plugin_event(
+                "ban",
+                f"Bot [{event.self_id}] banned its latest repeater reply in group [{event.group_id}] "
+                f"at user [{event.user_id}]'s request",
+            )
+        )
         await finish_ban_ack(ban_msg_latest.finish, event)

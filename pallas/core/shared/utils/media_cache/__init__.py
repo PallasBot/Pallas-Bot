@@ -1,7 +1,7 @@
 import asyncio
 import hashlib
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from urllib.parse import urlparse
 
 import httpx
@@ -9,6 +9,7 @@ from nonebot import get_driver, logger
 from nonebot.adapters.onebot.v11 import MessageSegment
 
 from pallas.core.foundation.db import ImageCache, make_image_cache_repository
+from pallas.core.foundation.db.repository import ImageCachePrunePolicy, ImageCachePruneResult
 from pallas.core.foundation.db.runtime import is_postgresql_backend
 from pallas.core.platform.work_jobs.models import WorkJob
 from pallas.core.platform.work_jobs.runtime import build_work_job_store
@@ -69,6 +70,7 @@ async def handle_image_cache_capture(payload: dict[str, object]) -> None:
             raise RuntimeError(f"image cache download failed status={getattr(rsp, 'status_code', None)}")
         values = {
             "cq_code": cq_code,
+            "content_hash": hashlib.sha256(rsp.content).hexdigest(),
             "blob_data": rsp.content,
             "ref_times": 1,
             "date": int(str(datetime.now().date()).replace("-", "")),
@@ -76,10 +78,10 @@ async def handle_image_cache_capture(payload: dict[str, object]) -> None:
         cache = ImageCache.model_construct(**values) if is_postgresql_backend() else ImageCache(**values)
         await image_cache_repo.insert(cache)
         return
-    # 已有缓存：只累加 ref_times + 刷鲜日期，不再补下载
+    # 已有缓存：只累加 ref_times + 刷鲜日期，不重写大字段，也不再补下载
     # （补下载的"第三次后才下载"逻辑在历史里制造了 99.5% NULL 行，issue #224）
-    cache.ref_times += 1
-    await image_cache_repo.save(cache)
+    today = int(datetime.now().date().strftime("%Y%m%d"))
+    await image_cache_repo.touch(cq_code, date=today)
 
 
 async def run_image_capture_consumer() -> None:
@@ -184,6 +186,17 @@ async def get_image(cq_code) -> bytes | None:
     return cache.blob_data
 
 
+async def bind_image_content_hash(cq_code: str, content: bytes) -> str:
+    content_hash = hashlib.sha256(content).hexdigest()
+    await image_cache_repo.bind_content_hash(cq_code, content_hash)
+    return content_hash
+
+
+async def get_image_by_content_hash(content_hash: str) -> bytes | None:
+    cache = await image_cache_repo.find_by_content_hash(content_hash)
+    return bytes(cache.blob_data) if cache and cache.blob_data else None
+
+
 async def get_latest_image() -> bytes | None:
     """取最近一张可发送的缓存图片。"""
     cache = await image_cache_repo.find_latest_with_blob()
@@ -199,6 +212,27 @@ async def clear_image_cache(days: int = 5, times: int = 3):
     idate = int(str((datetime.now() - timedelta(days=days)).date()).replace("-", ""))
     await image_cache_repo.delete_old(idate)
     await image_cache_repo.delete_low_ref(times)
+
+
+async def prune_image_cache(*, today: date | None = None) -> ImageCachePruneResult:
+    current = today or datetime.now().date()
+    single_use_before = int((current - timedelta(days=30)).strftime("%Y%m%d"))
+    absolute_before = int((current - timedelta(days=90)).strftime("%Y%m%d"))
+    result = await image_cache_repo.prune(
+        ImageCachePrunePolicy(
+            single_use_before=single_use_before,
+            absolute_before=absolute_before,
+            max_blob_bytes=20 * 1024**3,
+            batch_size=1000,
+        )
+    )
+    logger.info(
+        "image cache pruned rows={} bytes={} remaining_bytes={}",
+        result.deleted_rows,
+        result.deleted_blob_bytes,
+        result.remaining_blob_bytes,
+    )
+    return result
 
 
 async def reset_image_cache_runtime_state_for_tests() -> None:

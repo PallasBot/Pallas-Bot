@@ -171,6 +171,27 @@ class Config(BaseModel, extra="ignore"):
         description="跟表情回应时是否优先使用与对方相同的表情。",
         json_schema_extra=_ui("表情回应", 60),
     )
+    sticker_followup_rate: float = Field(
+        default=0.12,
+        ge=0.0,
+        le=1.0,
+        description="复读发送纯文本后，随机追加一张缓存表情图的概率。",
+        json_schema_extra=_ui("表情回应", 70),
+    )
+    sticker_followup_cooldown_sec: int = Field(
+        default=90,
+        ge=0,
+        le=86400,
+        description="同一群两次复读附图之间的最短间隔；0 时只保留同图去重。",
+        json_schema_extra=_ui("表情回应", 80),
+    )
+    sticker_followup_max_per_hour: int = Field(
+        default=12,
+        ge=0,
+        le=1000,
+        description="每个群每小时最多追加多少张复读表情图。",
+        json_schema_extra=_ui("表情回应", 90),
+    )
 
 
 def sync_repeater_runtime_constants(cfg: Config) -> None:

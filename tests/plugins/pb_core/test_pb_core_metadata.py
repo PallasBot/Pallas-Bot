@@ -20,10 +20,10 @@ def test_pb_core_help_name():
     assert __plugin_meta__.name == "牛牛核心"
 
 
-def test_pb_core_status_is_bot_moderator_and_user_help_visible():
+def test_pb_core_status_is_staff_and_user_help_visible():
     perms = {row["id"]: row["default"] for row in (__plugin_meta__.extra.get("command_permissions") or [])}
-    assert perms["pb_core.status"] == "bot_moderator"
-    assert DEFAULT_COMMAND_PERMISSIONS["pb_core.status"] == "bot_moderator"
+    assert perms["pb_core.status"] == "staff"
+    assert DEFAULT_COMMAND_PERMISSIONS["pb_core.status"] == "staff"
 
     menu = __plugin_meta__.extra.get("menu_data") or []
     status_item = next(item for item in menu if item.get("command_permission") == "pb_core.status")

@@ -14,6 +14,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 from pallas.core.foundation.config import BotConfig
 from pallas.core.foundation.db import Message as MessageModel
 from pallas.core.foundation.db.context_repo_access import context_repo
+from pallas.core.shared.reply_command_rule import extract_reply_id_from_raw_message
 
 from .ban_manager import BanManager
 from .config import get_repeater_config
@@ -53,6 +54,11 @@ def extract_keyword_tags(plain_text: str, top_k: int = 2) -> tuple[str, ...]:
     return tuple(cast("list[str]", result))
 
 
+def warmup_keyword_extraction() -> None:
+    """预载 jieba 词典与前缀表，避免首条消息在入口路径触发加载。"""
+    jieba_analyse.extract_tags("预热", topK=1)
+
+
 @dataclass
 class ChatData:
     group_id: int
@@ -61,6 +67,9 @@ class ChatData:
     plain_text: str
     time: int
     bot_id: int
+    sender_name: str = ""
+    message_id: int | None = None
+    reply_to_message_id: int | None = None
 
     _keywords_size: int = 2
 
@@ -157,6 +166,9 @@ class Chat:
                 plain_text=data.get_plaintext(),
                 time=data.time,
                 bot_id=data.self_id,
+                sender_name=str(data.sender.card or data.sender.nickname or ""),
+                message_id=int(data.message_id),
+                reply_to_message_id=extract_reply_id_from_raw_message(data.raw_message),
             )
             self.config = BotConfig(data.self_id, data.group_id)
 

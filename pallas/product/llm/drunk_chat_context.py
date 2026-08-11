@@ -66,7 +66,6 @@ async def build_drunk_chat_system_prompt(
             group_id,
             user_text,
             mode="drunk",
-            purpose="chat",
             base_system_path=resolved_path,
         )
         system_prompt = bundle.system.strip()

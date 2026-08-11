@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from nonebot import get_driver, logger
 
+from pallas.core.foundation.startup_report import register_startup_ready
 from pallas.product.corpus.config import remote_corpus_find_mode
 from pallas.product.corpus.find_cache import invalidate_find_cache
 
@@ -257,6 +258,7 @@ def bind_corpus_prefetch_lifecycle() -> None:
     async def _on_startup() -> None:
         if remote_corpus_find_mode() == "prefetch":
             await start_corpus_prefetch_workers()
+            register_startup_ready("语料预取", f"workers={len(_prefetch_tasks)} queue_max={_QUEUE_MAX}")
 
     @driver.on_shutdown
     async def _on_shutdown() -> None:

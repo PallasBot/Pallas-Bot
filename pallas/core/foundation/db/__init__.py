@@ -24,6 +24,7 @@ from .modules import (
     PallasACL,
     SchemaMigration,
     SingProgress,
+    StickerLabel,
     UserConfigModule,
 )
 from .repository import (
@@ -52,6 +53,7 @@ USER_CONFIG_REPO_REGISTRY: dict[str, Callable[[], ConfigRepository]] = {}
 IMAGE_CACHE_REPO_REGISTRY: dict[str, Callable[[], ImageCacheRepository]] = {}
 ADMIN_REPO_REGISTRY: dict[str, Callable[[], AdminRepository]] = {}
 ACL_REPO_REGISTRY: dict[str, Callable[[], AclRepository]] = {}
+STICKER_LABEL_REPO_REGISTRY: dict[str, Callable] = {}
 
 # 数据库初始化函数注册表：后端名称 → 异步初始化函数
 INIT_DB_REGISTRY: dict[str, Callable] = {}
@@ -74,6 +76,7 @@ def register_backend(
     image_cache_factory: Callable[[], ImageCacheRepository] | None = None,
     admin_factory: Callable[[], AdminRepository] | None = None,
     acl_factory: Callable[[], AclRepository] | None = None,
+    sticker_label_factory: Callable | None = None,
 ) -> None:
     """
     注册一个数据库后端。
@@ -97,6 +100,8 @@ def register_backend(
         ADMIN_REPO_REGISTRY[backend] = admin_factory
     if acl_factory is not None:
         ACL_REPO_REGISTRY[backend] = acl_factory
+    if sticker_label_factory is not None:
+        STICKER_LABEL_REPO_REGISTRY[backend] = sticker_label_factory
     _backends_registered.add(backend)
 
 
@@ -118,6 +123,7 @@ def ensure_backend_registered(backend: str | None = None) -> str:
             image_cache_factory=make_mongo_image_cache,
             admin_factory=make_mongo_admin,
             acl_factory=make_mongo_acl,
+            sticker_label_factory=make_mongo_sticker_label,
         )
     elif name == "postgresql":
         register_backend(
@@ -132,6 +138,7 @@ def ensure_backend_registered(backend: str | None = None) -> str:
             image_cache_factory=make_pg_image_cache,
             admin_factory=make_pg_admin,
             acl_factory=make_pg_acl,
+            sticker_label_factory=make_pg_sticker_label,
         )
     else:
         raise ValueError(f"不支持的数据库后端: {name}，已注册的后端: {sorted(_backends_registered)}")
@@ -190,6 +197,12 @@ def make_mongo_acl() -> AclRepository:
     from .repository_impl import MongoAclRepository
 
     return MongoAclRepository()
+
+
+def make_mongo_sticker_label():
+    from .repository_impl import MongoStickerLabelRepository
+
+    return MongoStickerLabelRepository()
 
 
 def _cfg(key: str, default: str = "") -> str:
@@ -283,6 +296,7 @@ async def init_mongodb_db() -> None:
             LlmMemoryEdge,
             LlmMemoryCategory,
             LlmMemoryHierStatus,
+            StickerLabel,
         ],
     )
     _mongodb_initialized = True
@@ -305,6 +319,12 @@ def make_pg_blacklist() -> BlackListRepository:
     from .repository_pg import PgBlackListRepository
 
     return PgBlackListRepository()
+
+
+def make_pg_sticker_label():
+    from .sticker_label_repository import StickerLabelRepository
+
+    return StickerLabelRepository()
 
 
 def make_pg_bot_config() -> ConfigRepository:
@@ -449,7 +469,8 @@ async def init_postgresql_db() -> None:
         else:
             logger.error("[数据库] 初始化 PostgreSQL 库 {!r} 失败: {}", db_name, exc)
         raise
-    await try_enable_pg_stat_statements(engine)
+    if _cfg_bool("PG_STAT_STATEMENTS_ENABLED"):
+        await try_enable_pg_stat_statements(engine)
     logger.info(
         "[数据库] PostgreSQL {} 已连接 pool={}+{} recycle={}s",
         db_name,
@@ -554,6 +575,12 @@ def make_acl_repository() -> AclRepository:
     if backend not in ACL_REPO_REGISTRY:
         raise ValueError(f"后端 {backend!r} 未注册 AclRepository")
     return ACL_REPO_REGISTRY[backend]()
+
+
+def make_sticker_label_repository():
+    """根据当前配置的后端返回表情语义标签仓储。"""
+    backend = ensure_backend_registered()
+    return STICKER_LABEL_REPO_REGISTRY[backend]()
 
 
 async def init_db(backend: str | None = None) -> None:

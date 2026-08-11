@@ -7,6 +7,7 @@ import pytest
 from pallas.product.llm.behavior import BehaviorAction, BehaviorOutcome, BehaviorPattern, BehaviorRun, BehaviorScene
 from pallas.product.llm.behavior_store import append_behavior_run, list_behavior_patterns, save_behavior_patterns
 from pallas.product.llm.config import LlmConfig, clear_llm_config_cache
+from pallas.product.llm.session_models import LlmChatTurn
 from pallas.product.llm.session_store import (
     append_llm_message,
     build_llm_chat_messages,
@@ -123,6 +124,75 @@ async def test_build_llm_chat_messages_user_thread_and_ambient(pg_engine, monkey
     assert "my-new" in messages[-1].content
     assert any("群环境摘录" in item.content for item in messages)
     assert any("my-old" in item.content for item in messages)
+
+
+@pytest.mark.asyncio
+async def test_build_llm_chat_messages_uses_bounded_recent_pair_without_ambient(pg_engine, monkeypatch) -> None:
+    clear_llm_config_cache()
+    cfg = LlmConfig(
+        llm_session_enabled=True,
+        llm_session_user_window=8,
+        llm_session_group_window=4,
+        llm_session_user_ttl_sec=0,
+    )
+    monkeypatch.setattr("pallas.product.llm.session_store.get_llm_config", lambda: cfg)
+    monkeypatch.setattr("pallas.product.llm.session_store.is_postgresql_backend", lambda: True)
+
+    await append_llm_message(1, 100, 200, "user", "other-user-msg")
+    await append_llm_message(1, 100, 200, "assistant", "reply-to-other")
+    await append_llm_message(1, 100, 300, "user", "old-user")
+    await append_llm_message(1, 100, 300, "assistant", "old-reply")
+    await append_llm_message(1, 100, 300, "user", "story-user")
+    await append_llm_message(1, 100, 300, "assistant", "story-reply")
+
+    messages = await build_llm_chat_messages(
+        1,
+        100,
+        300,
+        "继续讲",
+        cfg=cfg,
+        include_history=True,
+        history_limit=2,
+        include_group_ambient=False,
+    )
+
+    assert [item.role for item in messages] == ["user", "assistant", "user"]
+    assert "story-user" in messages[0].content
+    assert messages[1].content == "story-reply"
+    assert "继续讲" in messages[2].content
+    assert not any("old-user" in item.content for item in messages)
+    assert not any("群环境摘录" in item.content for item in messages)
+
+
+@pytest.mark.asyncio
+async def test_build_llm_chat_messages_forwards_bounded_history_without_ambient(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = LlmConfig(llm_session_enabled=True, llm_session_user_window=8, llm_session_group_window=4)
+    history = [
+        LlmChatTurn(role="user", content="story-user", user_id=300, created_at=1),
+        LlmChatTurn(role="assistant", content="story-reply", user_id=300, created_at=2),
+    ]
+    history_mock = AsyncMock(return_value=history)
+    ambient_mock = AsyncMock(return_value=[])
+    monkeypatch.setattr("pallas.product.llm.session_store.can_read_runtime_state", lambda _cfg: True)
+    monkeypatch.setattr("pallas.product.llm.session_store.list_user_llm_messages", history_mock)
+    monkeypatch.setattr("pallas.product.llm.session_store.list_group_ambient_messages", ambient_mock)
+
+    messages = await build_llm_chat_messages(
+        1,
+        100,
+        300,
+        "继续讲",
+        cfg=cfg,
+        include_history=True,
+        history_limit=2,
+        include_group_ambient=False,
+    )
+
+    assert [item.role for item in messages] == ["user", "assistant", "user"]
+    assert history_mock.await_args.kwargs["limit"] == 2
+    ambient_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio

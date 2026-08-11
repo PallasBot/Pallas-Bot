@@ -34,13 +34,9 @@ GLOBAL_CHOICE_LABELS: dict[str, str] = {
 
 # 键为 Pydantic / WebUI 字段名；值为 {内部枚举值: 展示文案}（可覆盖 GLOBAL）。
 FIELD_CHOICE_LABELS: dict[str, dict[str, str]] = {
-    "llm_repeater_mode": {
-        "off": "关闭 AI 接话",
-        "select": "命中语料时 AI 选句（推荐）",
-    },
     "llm_vector_retrieve": {
         "keyword": "仅关键词",
-        "hybrid": "关键词 + 向量（默认）",
+        "hybrid": "关键词 + 向量（推荐）",
         "embedding": "纯向量",
         "vector": "纯向量（同 embedding）",
     },
@@ -77,4 +73,7 @@ def attach_choice_labels(row: dict[str, Any]) -> None:
     name = str(row.get("name") or "")
     labels = field_choice_labels(name, [str(c) for c in choices])
     if labels:
+        default = str(row.get("default"))
+        if default in labels and "默认" not in labels[default]:
+            labels[default] += "（默认）"
         row["choice_labels"] = labels

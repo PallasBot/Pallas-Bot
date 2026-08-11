@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from pallas.product.llm.kernel_runner import system_prompt_with_reply_target
+from pallas.product.llm.inference_params import task_token_budget
 from pallas.product.llm.persona_output_firewall import (
     PersonaFirewallPolicy,
     inspect_persona_output,
@@ -68,6 +68,7 @@ DEFAULT_OFFLINE_QUALITY_CASES = (
     OfflineQualityCase("short_fact", "这也要再动？", "ACK", "fact"),
     OfflineQualityCase("short_vent", "又临时改了，烦", "ACK", "emotion"),
     OfflineQualityCase("short_tease", "你就会学动物叫？", "JOKE", "short_tease"),
+    OfflineQualityCase("wake_early", "明天六点叫我", "JOKE", "short_tease"),
     OfflineQualityCase("direct_answer", "这个参数怎么配？", "ANSWER", "answer"),
 )
 
@@ -76,6 +77,7 @@ _QUALITY_SCENARIOS = (
     ("short_fact", "这也要再动？", "ACK", "fact", "给出直接结论", ("客服腔",)),
     ("short_vent", "又临时改了，烦", "ACK", "emotion", "接住情绪但不说教", ("说教",)),
     ("short_tease", "你就会学动物叫？", "JOKE", "short_tease", "轻短接梗", ("角色扮演扩写",)),
+    ("wake_early", "明天六点叫我", "JOKE", "short_tease", "先短促惊讶再接话", ("完整独白", "浮夸让步", "客服式收尾")),
     ("direct_answer", "这个参数怎么配？", "ANSWER", "answer", "回答当前问题", ("编造配置",)),
     ("missing_tool_arg", "帮我搜一下", "ANSWER", "answer", "追问搜索内容", ("假称已搜索",)),
     ("tool_command", "查一下公开公告", "ANSWER", "answer", "调用查询工具或说明限制", ("假称执行成功",)),
@@ -231,10 +233,12 @@ async def evaluate_offline_case(
     judge: Completion | None = None,
 ) -> OfflineQualityResult:
     """Generate one anonymous case without delivery, storage, or memory writes."""
-    system_prompt = system_prompt_with_reply_target(
-        base_system_prompt,
-        {"reply_target": case.reply_target},
-    )
+    from pallas.product.llm.current_turn_decision import build_reply_target_instruction
+
+    system_prompt = str(base_system_prompt or "").strip()
+    instruction = build_reply_target_instruction(case.reply_target)
+    if instruction:
+        system_prompt = f"{system_prompt}\n\n【本轮回复目标】\n{instruction}"
     messages = [
         {"role": "system", "content": str(system_prompt or "")},
         {"role": "user", "content": f"{_OFFLINE_USER_PREFIX}{case.user_text}"},
@@ -317,7 +321,7 @@ async def run_configured_offline_quality_eval(
         response = await complete_chat_message(
             messages,
             model="",
-            options={"temperature": 0, "max_tokens": 96},
+            options={"temperature": 0, "max_tokens": task_token_budget("offline_quality_eval")},
             tools=None,
             task="llm_chat",
         )

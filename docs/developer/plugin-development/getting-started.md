@@ -8,7 +8,7 @@
 | --- | --- |
 | 1. 跟做最小插件 | **[写第一个插件](first-plugin.md)** |
 | 2. 定骨架 | [Golden Plugin](golden-plugin.md) |
-| 3. 公开 API | [pallas.api Cookbook](pallas-api-cookbook.md) |
+| 3. 公开 API | [pallas.api Cookbook](pallas-api-cookbook.md)，并判断精确命令是否适合 direct |
 | 4. 配置 / 权限 / 元数据 | [配置与 WebUI](config-and-webui.md) · [cmd_perm](/common/cmd_perm) · [元数据](metadata.md) |
 | 5. 测试与发布 | [测试](testing.md) · [发布](publishing.md) |
 
@@ -28,6 +28,7 @@
 | --- | --- |
 | API | 社区扩展只 import `pallas.api.*` |
 | 入口 | `__init__.py` 薄；逻辑在 `handlers.py` |
+| 消息路径 | 精确单次命令可接 `pallas.api.runtime`；复杂交互保留 matcher |
 | 权限 / 帮助 | `command_permissions` + `menu_data`；文案不写死角色 |
 | 配置 | 有插件页则 `install_hot_reload_config` |
 | 测试 / README | 最小 metadata 测试 + README |

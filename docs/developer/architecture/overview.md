@@ -13,7 +13,7 @@ Pallas-Bot 的可执行边界是：主仓承载运行时与产品语义；WebUI�
 - 修改控制台界面，到 `Pallas-Bot-WebUI` 修改前端源码；`data/pb_webui/public-react/` 是构建后的运行目录。
 - 接入普通 LLM 聊天，使用 Bot Provider；Pallas-Bot-AI 只在媒体 runtime、队列、健康、callback 或遗留 RWKV `/api/chat` 等场景需要。
 
-分片、配置存储、后台 work aux、插件治理、Agent 生命周期与输出路径都属于后续专题：当当前工作涉及这些能力时，从文末「按需深入」进入即可。
+统一消息入口、分片、配置存储、后台 work aux、插件治理、Agent 生命周期与输出路径都属于后续专题：当当前工作涉及这些能力时，从文末「按需深入」进入即可。
 
 ## 拓扑
 
@@ -90,11 +90,13 @@ flowchart LR
 
 | 主题 | 文档 |
 | --- | --- |
+| 统一消息入口与 direct / matcher | [message-runtime.md](message-runtime.md) |
 | Core 与扩展判定 | [core-vs-extensions.md](core-vs-extensions.md) |
 | 分片运行时 | [shard-runtime.md](shard-runtime.md) |
 | 后台任务与 work aux | [单进程部署](../../maintainer/deploy/single-process.md) |
 | 配置存储 | [config-storage.md](config-storage.md) |
 | 插件治理 | [plugin-governance.md](plugin-governance.md) |
+| 插件业务事件日志 | [plugin-event-logging.md](plugin-event-logging.md) |
 | Bot 内置 Agent 生命周期 | [agent-lifecycle.md](agent-lifecycle.md) |
 | LLM 输出路径（@ / 接话 / 表达库） | [llm-output-path.md](llm-output-path.md) |
 | 插件骨架 | [Golden Plugin](/developer/plugin-development/golden-plugin) |

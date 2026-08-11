@@ -2,6 +2,7 @@ import time
 
 from pallas.core.foundation.db import make_bot_config_repository, make_group_config_repository
 
+from .account_profile import resolve_account_persona_profile
 from .activity_ingress import (
     activity_reply_bias_multiplier,
     activity_speak_bias_multiplier,
@@ -12,64 +13,49 @@ from .affect_baseline import apply_affect_derived
 from .affect_triggers import apply_affect_trigger_bias, extract_affect_triggers
 from .auto import derive_persona_from_bot_id
 from .config import persona_activity_ingress_enabled, persona_archetype_enabled
+from .group_expression_profile import resolve_group_expression_profile
 from .model import ResolvedPersona
 
 _CACHE_TTL_SEC = 60.0
 _cache: dict[tuple[int, int | None], tuple[float, ResolvedPersona]] = {}
-_trigger_cache: dict[int, tuple[float, list[dict]]] = {}
 
 
 def invalidate_persona_cache(bot_id: int | None = None) -> None:
     if bot_id is None:
         _cache.clear()
-        _trigger_cache.clear()
         return
     bid = int(bot_id)
     stale_keys = [key for key in _cache if key[0] == bid]
     for key in stale_keys:
         _cache.pop(key, None)
-    _trigger_cache.clear()
 
 
 async def load_affect_triggers(group_id: int) -> list[dict]:
-    gid = int(group_id)
-    now = time.time()
-    cached = _trigger_cache.get(gid)
-    if cached is not None and now - cached[0] < _CACHE_TTL_SEC:
-        return cached[1]
-
-    repo = make_group_config_repository()
-    group_config = await repo.get(gid)
-    style_profile = getattr(group_config, "style_profile", None) if group_config is not None else None
-    triggers = extract_affect_triggers(style_profile if isinstance(style_profile, dict) else None)
-    _trigger_cache[gid] = (now, triggers)
-    return triggers
+    """Deprecated compatibility hook; triggers now travel with ResolvedPersona."""
+    return []
 
 
 async def resolve_persona_for_message(bot_id: int, group_id: int, plain_text: str) -> ResolvedPersona:
     persona = await resolve_persona(bot_id, group_id)
-    triggers = await load_affect_triggers(group_id)
-    return apply_affect_trigger_bias(persona, plain_text, triggers)
+    return apply_affect_trigger_bias(persona, plain_text, persona.affect_triggers)
 
 
 def _apply_group_style_profile(base: ResolvedPersona, style_profile: dict | None) -> ResolvedPersona:
+    payload = base.model_dump()
+    raw_profile = style_profile if isinstance(style_profile, dict) else None
+    payload["group_expression_profile"] = resolve_group_expression_profile(raw_profile).model_dump(mode="python")
+    payload["affect_triggers"] = extract_affect_triggers(raw_profile)
     if not isinstance(style_profile, dict):
-        return base
+        return ResolvedPersona.model_validate(payload)
     derived = style_profile.get("derived")
     if not isinstance(derived, dict):
-        return base
-
-    payload = base.model_dump()
+        return ResolvedPersona.model_validate(payload)
     reply_mul = derived.get("reply_bias_mul")
     speak_mul = derived.get("speak_bias_mul")
     if isinstance(reply_mul, int | float):
         payload["reply_bias"] = max(0.5, min(2.0, float(payload["reply_bias"]) * float(reply_mul)))
     if isinstance(speak_mul, int | float):
         payload["speak_bias"] = max(0.5, min(2.0, float(payload["speak_bias"]) * float(speak_mul)))
-
-    length_pref = str(derived.get("length_pref") or "").strip()
-    if length_pref:
-        payload["length_pref"] = length_pref
 
     chaos_bias = derived.get("chaos_bias")
     if isinstance(chaos_bias, int | float):
@@ -140,8 +126,6 @@ async def resolve_persona(bot_id: int, group_id: int | None = None) -> ResolvedP
     if cached is not None and now - cached[0] < _CACHE_TTL_SEC:
         return cached[1]
 
-    from .seed import apply_seed_prefs, resolve_effective_seed_prefs
-
     resolved = derive_persona_from_bot_id(bid, archetype_enabled=persona_archetype_enabled())
     bot_repo = make_bot_config_repository()
     bot_config = await bot_repo.get(bid)
@@ -158,12 +142,12 @@ async def resolve_persona(bot_id: int, group_id: int | None = None) -> ResolvedP
         style_profile = getattr(group_config, "style_profile", None) if group_config is not None else None
         resolved = _apply_group_style_profile(resolved, style_profile)
 
-    # 账号种子最后叠加，避免群画像把多牛差异抹平
-    seed_prefs, _seed_source = resolve_effective_seed_prefs(
+    payload = resolved.model_dump()
+    payload["account_profile"] = resolve_account_persona_profile(
         persona_dict if isinstance(persona_dict, dict) else None,
         bid,
     )
-    resolved = apply_seed_prefs(resolved, seed_prefs)
+    resolved = ResolvedPersona.model_validate(payload)
 
     _cache[cache_key] = (now, resolved)
     return resolved

@@ -104,6 +104,7 @@ def register_extended_api(
     from .agent_platform_api import register_agent_platform_router
     from .ai_extension_api import register_ai_extension_router
     from .auth_security_api import register_auth_security_router
+    from .bot_favorites_api import register_bot_favorites_router
     from .common_config_api import register_common_config_router
     from .db_api import register_db_router
     from .extended_common import check_pallas_write_token
@@ -112,6 +113,7 @@ def register_extended_api(
     from .llm_product_api import register_llm_product_router
     from .logs_api import register_logs_router
     from .memory_graph_api import register_memory_graph_router
+    from .message_runtime_candidate_api import register_message_runtime_candidate_router
     from .plugins_console_api import register_plugins_console_router
     from .social_api import register_social_router
     from .stats_dashboard_api import register_stats_dashboard_router
@@ -124,6 +126,15 @@ def register_extended_api(
         x=x,
         plugin_config=plugin_config,
         app=app,
+    )
+    register_bot_favorites_router(
+        router,
+        x=x,
+        check_write_token=lambda *, x_pallas_token=None, token=None: check_pallas_write_token(
+            plugin_config,
+            x_pallas_token=x_pallas_token,
+            token=token,
+        ),
     )
     register_acl_router(router, x=x)
     register_llm_ops_router(
@@ -138,6 +149,7 @@ def register_extended_api(
         plugin_config=plugin_config,
         check_write_token=check_pallas_write_token,
     )
+    register_message_runtime_candidate_router(router, x=x)
     register_agent_platform_router(
         router,
         x=x,
@@ -174,7 +186,7 @@ def register_extended_api(
     try:
         from nonebot_plugin_apscheduler import scheduler
     except ImportError:
-        logger.warning("Pallas-Bot 控制台: 未安装 nonebot_plugin_apscheduler，跳过控制台异常记录定时清理")
+        logger.warning("[控制台] 未安装 nonebot_plugin_apscheduler，跳过控制台异常记录定时清理")
     else:
         _matcher_cleanup_job_id = "pallas_webui_matcher_error_log_cleanup"
         if scheduler.get_job(_matcher_cleanup_job_id):
@@ -235,7 +247,7 @@ def register_extended_api(
 
             reschedule_webui_auto_update_job(plugin_config)
         except Exception:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 注册 WebUI 自动更新调度失败")
+            logger.exception("[控制台] 注册 WebUI 自动更新调度失败")
 
 
 # Re-export domain helpers / patch targets for tests and lazy imports in domain modules.

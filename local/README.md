@@ -4,7 +4,7 @@
 
 将自有 NoneBot 插件放在 `local/plugins/<name>/`（需含 `__init__.py`）。
 
-**修改主仓已有插件**时，把**整包**复制到同名目录（例如 `local/plugins/draw/`），不要只拷部分 `.py` 指望与 `src/plugins/` 合并——NoneBot 只能整包 override 或继续 patch 主仓文件。
+**修改主仓已有插件**时，把**整包**复制到同名目录（例如 `local/plugins/draw/`），不要只拷部分 `.py` 指望与 `packages/` 合并——NoneBot 只能整包 override 或继续 patch 主仓文件。
 
 在 `config/pallas.toml` 的 **`[bootstrap]`** 段启用：
 
@@ -13,7 +13,7 @@
 extra_plugin_dirs = ["local/plugins"]
 ```
 
-**hub、worker、unified** 均会加载该目录；与 `src/plugins/` 或 hub 内置模块列表**同名时优先 local**（例如 `help`、`callback`）。
+**hub、worker、unified** 均会加载该目录；与 `packages/` 或 hub 内置模块列表**同名时优先 local**（例如 `help`、`callback`）。
 
 Docker 可选挂载见 [`docker-compose.yml`](../docker-compose.yml) 与 [Docker 部署](../docs/deploy/docker.md)。
 

@@ -4,15 +4,93 @@ import pytest
 
 from pallas.console.webui.plugin_catalog import (
     build_plugin_catalog_rows,
+    catalog_plugin_source,
+    classify_distribution_source,
     discover_extra_plugin_packages,
     discover_plugin_packages,
     discover_pyproject_plugin_modules,
     expected_loaded_in_catalog_process,
     infer_plugin_source,
+    normalize_distribution_name,
     package_load_role,
     plugin_source_from_module_path,
+    plugin_version,
     resolve_catalog_visuals,
 )
+
+
+def test_normalize_distribution_name_accepts_pypi_separators() -> None:
+    assert normalize_distribution_name("Pallas.Plugin.Maa") == "pallas-plugin-maa"
+    assert normalize_distribution_name("pallas_plugin_maa") == "pallas-plugin-maa"
+
+
+def test_classify_distribution_source_uses_plugin_prefixes() -> None:
+    assert classify_distribution_source("pallas_plugin_maa") == "official"
+    assert classify_distribution_source("nonebot_plugin_apscheduler") == "nonebot"
+    assert classify_distribution_source("sqlalchemy") is None
+
+
+def test_catalog_plugin_source_marks_registered_local_plugin_as_community(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "pallas.console.webui.plugin_catalog.community_plugin_row_for_plugin",
+        lambda plugin_id: {"plugin_id": plugin_id} if plugin_id == "demo_local" else None,
+    )
+
+    assert catalog_plugin_source("demo_local", "local") == "community"
+    assert catalog_plugin_source("manual_local", "local") == "local"
+    assert catalog_plugin_source("take_name", "bundled") == "bundled"
+
+
+def test_plugin_version_prefers_distribution_then_local_pyproject(tmp_path, monkeypatch) -> None:
+    root = tmp_path / "demo"
+    root.mkdir()
+    (root / "pyproject.toml").write_text("[project]\nversion = '1.2.3'\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "pallas.console.webui.plugin_catalog.installed_distribution_version",
+        lambda _package, _module_name: None,
+    )
+
+    assert plugin_version("demo", "local", package_root=root) == "1.2.3"
+
+
+def test_catalog_scans_distribution_metadata_once_per_build(monkeypatch) -> None:
+    calls = 0
+
+    def packages_distributions() -> dict[str, list[str]]:
+        nonlocal calls
+        calls += 1
+        return {
+            "acme_first": ["acme-first"],
+            "acme_second": ["acme-second"],
+        }
+
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.discover_plugin_packages", list)
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.discover_extra_plugin_packages", dict)
+    monkeypatch.setattr(
+        "pallas.console.webui.plugin_catalog.discover_pyproject_plugin_modules",
+        lambda: ["acme_first", "acme_second"],
+    )
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.EXTRA_PACKAGE_MODULES", {})
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog._loaded_plugin_index", lambda: ({}, {}))
+    monkeypatch.setattr(
+        "pallas.console.webui.plugin_catalog._pip_plugin_metadata_stub",
+        lambda module_name: {"name": module_name},
+    )
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.module_has_config_module", lambda _module_name: False)
+    monkeypatch.setattr(
+        "pallas.console.webui.plugin_catalog.importlib.metadata.packages_distributions",
+        packages_distributions,
+    )
+    monkeypatch.setattr(
+        "pallas.console.webui.plugin_catalog.importlib.metadata.version",
+        lambda distribution: {"acme-first": "1.0.0", "acme-second": "2.0.0"}[distribution],
+    )
+    monkeypatch.setattr("nonebot.get_loaded_plugins", list)
+
+    rows = build_plugin_catalog_rows()
+
+    assert calls == 1
+    assert {row["plugin_version"] for row in rows} == {"1.0.0", "2.0.0"}
 
 
 def test_discover_bundled_packages():
@@ -102,7 +180,7 @@ def test_catalog_lists_worker_plugin(monkeypatch):
     assert "duel" in by_name
     assert by_name["duel"]["load_role"] == "worker"
     assert by_name["duel"]["metadata"] is not None
-    assert by_name["duel"]["plugin_source"] == "extra"
+    assert by_name["duel"]["plugin_source"] == "official"
     assert by_name["duel"].get("extra_package") == "pallas-plugin-duel"
     assert by_name["duel"]["catalog_process_role"] == "hub"
     assert by_name["duel"]["expected_in_catalog_process"] is False
@@ -162,7 +240,7 @@ def test_catalog_lists_pyproject_apscheduler_on_hub(monkeypatch):
     by_name = {r["name"]: r for r in rows}
     assert "nonebot_plugin_apscheduler" in by_name
     row = by_name["nonebot_plugin_apscheduler"]
-    assert row["plugin_source"] == "pip"
+    assert row["plugin_source"] == "nonebot"
     assert row["load_role"] == "infra"
 
 
@@ -239,8 +317,64 @@ def test_catalog_marks_pyproject_plugin_with_config(monkeypatch) -> None:
     rows = build_plugin_catalog_rows()
     by_name = {r["name"]: r for r in rows}
 
-    assert by_name["acme_demo_plugin"]["plugin_source"] == "pip"
+    assert by_name["acme_demo_plugin"]["plugin_source"] == "nonebot"
     assert by_name["acme_demo_plugin"]["has_config"] is True
+
+
+def test_catalog_hides_nested_nonebot_plugin_modules(monkeypatch) -> None:
+    class FakeLoadedPlugin:
+        name = "uniseg"
+        module = type(
+            "Mod",
+            (),
+            {
+                "__name__": "nonebot_plugin_alconna.uniseg",
+                "__file__": "/tmp/site-packages/nonebot_plugin_alconna/uniseg/__init__.py",
+            },
+        )()
+        metadata = type("Meta", (), {"name": "Universal Segment 插件", "extra": {}})()
+
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.discover_plugin_packages", list)
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.discover_extra_plugin_packages", dict)
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.discover_pyproject_plugin_modules", list)
+    monkeypatch.setattr(
+        "pallas.console.webui.plugin_catalog._loaded_plugin_index",
+        lambda: ({"uniseg": FakeLoadedPlugin()}, {"uniseg": FakeLoadedPlugin()}),
+    )
+    monkeypatch.setattr("nonebot.get_loaded_plugins", lambda: [FakeLoadedPlugin()])
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.module_has_config_module", lambda _module_name: False)
+
+    rows = build_plugin_catalog_rows()
+
+    assert "uniseg" not in {row["name"] for row in rows}
+
+
+def test_catalog_keeps_pyproject_declared_nested_nonebot_plugin_module(monkeypatch) -> None:
+    class FakeLoadedPlugin:
+        name = "uniseg"
+        module = type(
+            "Mod",
+            (),
+            {"__name__": "nonebot_plugin_alconna.uniseg"},
+        )()
+        metadata = type("Meta", (), {"name": "Universal Segment 插件", "extra": {}})()
+
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.discover_plugin_packages", list)
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.discover_extra_plugin_packages", dict)
+    monkeypatch.setattr(
+        "pallas.console.webui.plugin_catalog.discover_pyproject_plugin_modules",
+        lambda: ["nonebot_plugin_alconna.uniseg"],
+    )
+    monkeypatch.setattr(
+        "pallas.console.webui.plugin_catalog._loaded_plugin_index",
+        lambda: ({"uniseg": FakeLoadedPlugin()}, {"uniseg": FakeLoadedPlugin()}),
+    )
+    monkeypatch.setattr("nonebot.get_loaded_plugins", lambda: [FakeLoadedPlugin()])
+    monkeypatch.setattr("pallas.console.webui.plugin_catalog.module_has_config_module", lambda _module_name: False)
+
+    rows = build_plugin_catalog_rows()
+
+    assert "uniseg" in {row["name"] for row in rows}
 
 
 def test_catalog_exposes_resolved_identity_for_official_pip_plugin(monkeypatch) -> None:
@@ -286,6 +420,7 @@ def test_catalog_exposes_resolved_identity_for_official_pip_plugin(monkeypatch) 
     assert row["resolved_module"] == "pallas_plugin_draw"
     assert row["configurable"] is True
     assert row["extra_package"] == "pallas-plugin-draw"
+    assert row["plugin_source"] == "official"
 
 
 def test_catalog_lists_unloaded_official_subplugins_from_package_modules(monkeypatch) -> None:
@@ -323,6 +458,7 @@ def test_catalog_lists_unloaded_official_subplugins_from_package_modules(monkeyp
     assert "sing" in by_name
     assert by_name["sing"]["module"] == "pallas_plugin_sing"
     assert by_name["sing"]["extra_package"] == "pallas-plugin-ai-media"
+    assert by_name["sing"]["plugin_source"] == "official"
 
 
 def test_catalog_row_reuses_official_extension_visuals(monkeypatch) -> None:

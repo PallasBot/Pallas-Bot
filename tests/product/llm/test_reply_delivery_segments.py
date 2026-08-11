@@ -1,0 +1,242 @@
+from __future__ import annotations
+
+from unittest.mock import AsyncMock
+
+import pytest
+
+from pallas.product.llm import delivery as llm_delivery
+from pallas.product.llm.config import LlmConfig
+from pallas.product.llm.webui_config import LlmWebuiConfig
+
+
+def test_bubble_delay_is_short_and_bounded() -> None:
+    assert llm_delivery.bubble_delay_seconds("好") < llm_delivery.bubble_delay_seconds("这是一段稍长一些的回复内容")
+    assert llm_delivery.bubble_delay_seconds("很长" * 100) <= 0.6
+
+
+def test_reply_postprocess_schema_no_longer_advertises_sentence_splitting() -> None:
+    description = str(LlmWebuiConfig.model_fields["llm_reply_postprocess_enabled"].description or "")
+
+    assert "拆" not in description
+
+
+@pytest.mark.asyncio
+async def test_delivery_splits_long_plain_short_reply_at_sentence_boundaries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sender = AsyncMock(
+        side_effect=[
+            type("Receipt", (), {"delivered": True, "message_id": 10})(),
+            type("Receipt", (), {"delivered": True, "message_id": 11})(),
+            type("Receipt", (), {"delivered": True, "message_id": 12})(),
+        ]
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
+        sender,
+    )
+    monkeypatch.setattr(
+        llm_delivery,
+        "get_llm_config",
+        lambda: LlmConfig(llm_reply_trim_terminal_period_enabled=False),
+    )
+
+    reply_text, _text_delivered, _delivered = await llm_delivery.deliver_llm_callback_success(
+        "task-natural-bubbles",
+        {
+            "task_type": "llm_chat",
+            "bot_id": 99,
+            "group_id": 42,
+            "user_id": 7,
+            "reply_total_length_band": "short",
+        },
+        bot=object(),
+        group_id=42,
+        bot_id=99,
+        bot_id_str="99",
+        text="六点？你真狠。我努力一下。",
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+        sleeper=lambda _delay: None,
+    )
+
+    assert [call.args[2] for call in sender.await_args_list] == [
+        "六点？",
+        "你真狠。",
+        "我努力一下。",
+    ]
+    assert reply_text == "六点？\n你真狠。\n我努力一下。"
+
+
+@pytest.mark.asyncio
+async def test_delivery_keeps_complete_reply_as_one_bubble(monkeypatch: pytest.MonkeyPatch) -> None:
+    sender = AsyncMock(return_value=type("Receipt", (), {"delivered": True, "message_id": 10})())
+    monkeypatch.setattr(
+        "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
+        sender,
+    )
+    monkeypatch.setattr(
+        llm_delivery,
+        "get_llm_config",
+        lambda: LlmConfig(llm_reply_trim_terminal_period_enabled=False),
+    )
+
+    await llm_delivery.deliver_llm_callback_success(
+        "task-complete-reply",
+        {
+            "task_type": "llm_chat",
+            "bot_id": 99,
+            "group_id": 42,
+            "user_id": 7,
+            "reply_total_length_band": "complete",
+        },
+        bot=object(),
+        group_id=42,
+        bot_id=99,
+        bot_id_str="99",
+        text="这个参数需要先填写地址，再保存并重启服务。",
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+        sleeper=lambda _delay: None,
+    )
+
+    assert [call.args[2] for call in sender.await_args_list] == ["这个参数需要先填写地址，再保存并重启服务。"]
+
+
+@pytest.mark.asyncio
+async def test_multi_bubble_history_uses_one_logical_assistant_turn(monkeypatch: pytest.MonkeyPatch) -> None:
+    append = AsyncMock(return_value=True)
+    sender = AsyncMock(
+        side_effect=[
+            type("Receipt", (), {"delivered": True, "message_id": 10})(),
+            type("Receipt", (), {"delivered": True, "message_id": 11})(),
+        ]
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
+        sender,
+    )
+    monkeypatch.setattr(llm_delivery, "append_llm_message", append)
+    monkeypatch.setattr(llm_delivery, "should_append_llm_session", lambda _task: True)
+
+    await llm_delivery.deliver_llm_callback_success(
+        "task-session-bubbles",
+        {
+            "task_type": "llm_chat",
+            "bot_id": 99,
+            "group_id": 42,
+            "user_id": 7,
+            "user_text": "在吗",
+        },
+        bot=object(),
+        group_id=42,
+        bot_id=99,
+        bot_id_str="99",
+        text='{"reply_segments":["在","咋了"]}',
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+        sleeper=lambda _delay: None,
+    )
+
+    assert append.await_args_list == [
+        ((99, 42, 7, "user", "在吗"), {}),
+        ((99, 42, 7, "assistant", "在\n咋了"), {}),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_multi_bubble_behavior_records_logical_text_and_shape(monkeypatch: pytest.MonkeyPatch) -> None:
+    sender = AsyncMock(
+        side_effect=[
+            type("Receipt", (), {"delivered": True, "message_id": 10})(),
+            type("Receipt", (), {"delivered": True, "message_id": 11})(),
+        ]
+    )
+    recorded: list[object] = []
+    monkeypatch.setattr(
+        "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
+        sender,
+    )
+    monkeypatch.setattr(llm_delivery, "should_append_llm_session", lambda _task: False)
+    monkeypatch.setattr(llm_delivery, "append_behavior_run", recorded.append)
+
+    await llm_delivery.deliver_llm_callback_success(
+        "task-behavior-bubbles",
+        {
+            "task_type": "llm_chat",
+            "bot_id": 99,
+            "group_id": 42,
+            "user_id": 7,
+            "behavior_scene": "banter",
+        },
+        bot=object(),
+        group_id=42,
+        bot_id=99,
+        bot_id_str="99",
+        text='{"reply_segments":["行","就这样"]}',
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+        sleeper=lambda _delay: None,
+    )
+
+    run = recorded[0]
+    assert run.reply_text == "行\n就这样"
+    assert run.bubble_count == 2
+    assert run.bubble_rhythm == "multi"
+
+
+@pytest.mark.asyncio
+async def test_failed_bubble_does_not_write_incomplete_logical_turn(monkeypatch: pytest.MonkeyPatch) -> None:
+    sender = AsyncMock(
+        side_effect=[
+            type("Receipt", (), {"delivered": True, "message_id": 10})(),
+            type("Receipt", (), {"delivered": False, "message_id": None})(),
+        ]
+    )
+    append = AsyncMock(return_value=True)
+    behavior = AsyncMock()
+    expression = AsyncMock()
+    feedback = AsyncMock()
+    monkeypatch.setattr(
+        "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
+        sender,
+    )
+    monkeypatch.setattr(llm_delivery, "append_llm_message", append)
+    monkeypatch.setattr(llm_delivery, "append_behavior_run", behavior)
+    monkeypatch.setattr(llm_delivery, "should_append_llm_session", lambda _task: True)
+    monkeypatch.setattr(llm_delivery, "get_llm_config", lambda: LlmConfig(llm_repeater_feedback_enabled=True))
+    monkeypatch.setattr("pallas.product.persona.expression_learn.note_expression_from_utterance", expression)
+    monkeypatch.setattr("pallas.product.llm.repeater_feedback.append_feedback_entry", feedback)
+
+    _reply, text_delivered, delivered = await llm_delivery.deliver_llm_callback_success(
+        "task-failed-bubbles",
+        {
+            "task_type": "llm_chat",
+            "bot_id": 99,
+            "group_id": 42,
+            "user_id": 7,
+            "user_text": "在吗",
+            "behavior_scene": "banter",
+            "source_tags": ["recent_chat"],
+        },
+        bot=object(),
+        group_id=42,
+        bot_id=99,
+        bot_id_str="99",
+        text='{"reply_segments":["第一条","第二条","第三条"]}',
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+        sleeper=lambda _delay: None,
+    )
+
+    assert (text_delivered, delivered) == (False, False)
+    assert sender.await_count == 2
+    append.assert_not_awaited()
+    behavior.assert_not_called()
+    expression.assert_not_awaited()
+    feedback.assert_not_called()

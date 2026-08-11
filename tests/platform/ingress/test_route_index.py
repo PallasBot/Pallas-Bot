@@ -120,6 +120,28 @@ def test_group_chatter_defaults_do_not_select_request_handler() -> None:
     assert "request_handler" not in index.passive_modules
 
 
+def test_build_route_index_excludes_private_only_menu_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        route_index,
+        "get_loaded_plugins",
+        lambda: [
+            _fake_plugin(
+                module_name="packages.request_handler",
+                menu_data=[
+                    {"trigger_condition": "同意", "trigger_scene": "私聊"},
+                    {"trigger_condition": "牛牛审批", "trigger_scene": "群内"},
+                ],
+            )
+        ],
+    )
+
+    index = route_index.build_route_index()
+
+    assert "同意" not in index.prefix_to_modules
+    assert "同意" not in index.exact_to_modules
+    assert index.prefix_to_modules["牛牛审批"] == frozenset({"request_handler"})
+
+
 def test_build_route_index_prefers_explicit_command_prefixes_and_exacts(monkeypatch: pytest.MonkeyPatch) -> None:
     plugins = [
         _fake_plugin(
@@ -252,12 +274,26 @@ def test_event_command_traffic_uses_index_before_legacy(monkeypatch: pytest.Monk
     resolution = route_index.RouteResolution(frozenset(), False)
 
     monkeypatch.setattr(activation, "route_index_strict", lambda: False)
-    monkeypatch.setattr(activation, "legacy_command_traffic", lambda _plain: False)
+    monkeypatch.setattr(activation, "legacy_command_traffic", lambda _plain, **_kwargs: False)
 
     assert activation.event_command_traffic(event, {}, resolution=resolution) is False
 
     resolution = route_index.RouteResolution(frozenset({"help"}), True)
     assert activation.event_command_traffic(event, {}, resolution=resolution) is True
+
+
+def test_group_legacy_command_traffic_does_not_use_global_command_trie(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        activation.TrieRule.prefix,
+        "longest_prefix",
+        lambda _plain: SimpleNamespace(key="同意"),
+    )
+    monkeypatch.setattr(activation, "is_group_plugin_command_plaintext", lambda _plain: False)
+
+    assert activation.legacy_command_traffic("同意", group_only=True) is False
+    assert activation.legacy_command_traffic("同意") is True
 
 
 def test_select_priority_matchers_filters_chatter_by_index(monkeypatch: pytest.MonkeyPatch) -> None:

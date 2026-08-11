@@ -17,7 +17,9 @@ if TYPE_CHECKING:
 
 from itertools import starmap
 
+from pallas.api.logging import format_plugin_event
 from pallas.core.foundation.config import BotConfig
+from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.core.platform.bot_runtime.send_unavailable import BOT_SEND_UNAVAILABLE_ERRORS, log_bot_send_unavailable
 from pallas.core.platform.multi_bot.dedup import try_claim_group_message_once
 from pallas.core.platform.shard import context as shard_ctx
@@ -81,14 +83,11 @@ async def repeater_fanout_enabled_for_group(group_id: int) -> bool:
     return await count_fanout_capable_bots(group_id) >= 2
 
 
-def cap_fanout_bot_ids(bot_ids: list[int]) -> list[int]:
-
-    limit = int(get_repeater_config().fanout_max_bots)
-
-    if limit <= 0:
-        return bot_ids
-
-    return bot_ids[:limit]
+def select_fanout_bot_ids(bot_ids: list[int], *, max_bots: int) -> list[int]:
+    upper = min(len(bot_ids), max_bots) if max_bots > 0 else len(bot_ids)
+    if upper <= 0:
+        return []
+    return sorted(random.sample(bot_ids, random.randint(1, upper)))
 
 
 def fanout_payload_from_event(
@@ -191,7 +190,7 @@ async def list_fanout_bot_ids(group_id: int) -> list[int]:
 
     allowed = await asyncio.gather(*(bot_may_repeater_reply(bid, group_id) for bid in ids))
 
-    result = cap_fanout_bot_ids([bid for bid, ok in zip(ids, allowed, strict=True) if ok])
+    result = [bid for bid, ok in zip(ids, allowed, strict=True) if ok]
     _FANOUT_BOT_IDS_CACHE[group_id] = (now + _FANOUT_BOT_IDS_CACHE_TTL, list(result))
     return result
 
@@ -207,6 +206,11 @@ async def resolve_fanout_gate(event: GroupMessageEvent) -> FanoutGate:
 
     if len(bot_ids) < 2:
         return FanoutGate()
+
+    bot_ids = select_fanout_bot_ids(
+        bot_ids,
+        max_bots=int(get_repeater_config().fanout_max_bots),
+    )
 
     if not await try_claim_group_message_once(
         _FANOUT_PLUGIN,
@@ -262,22 +266,52 @@ async def send_repeater_answers(bot_id: int, group_id: int, answers, *, fanout: 
 
     async for item in answers:
         msg = await post_proc(item, bot_id, group_id)
+        if not msg:
+            continue
 
-        logger.info(f"bot [{bot_id}] ready to send [{str(msg)[:30]}] to group [{group_id}] ({log_tag})")
+        logger.debug(
+            format_business_event(
+                "复读回复",
+                "已准备",
+                bot=bot_id,
+                group=group_id,
+                mode=log_tag,
+            )
+        )
 
         await asyncio.sleep(delay)
 
         await config.refresh_cooldown("repeat")
 
         try:
-            await bot.send_group_msg(group_id=group_id, message=msg)
+            from pallas.product.llm.sticker_followup import suppress_outgoing_sticker_followup
+
+            with suppress_outgoing_sticker_followup():
+                await bot.send_group_msg(group_id=group_id, message=msg)
+            logger.info(
+                format_plugin_event(
+                    "fanout" if fanout else "reply",
+                    f"Bot [{bot_id}] replied in group [{group_id}]: {msg}",
+                )
+            )
+
+            from .sticker_followup import maybe_send_repeater_sticker_followup
+
+            await maybe_send_repeater_sticker_followup(bot, group_id, str(msg))
 
         except BOT_SEND_UNAVAILABLE_ERRORS as e:
             log_bot_send_unavailable(e, context=send_context, bot=bot_id, group=group_id)
 
             return
 
-        except ActionFailed:
+        except ActionFailed as e:
+            from pallas.api.platform import classify_send_queue_error, forget_group_bot
+
+            if classify_send_queue_error("send_group_msg", e) == "bot_not_in_group":
+                forget_group_bot(group_id, bot_id)
+                _FANOUT_BOT_IDS_CACHE.pop(group_id, None)
+                return
+
             if not await BotConfig(bot_id).security():
                 continue
 
@@ -286,7 +320,7 @@ async def send_repeater_answers(bot_id: int, group_id: int, answers, *, fanout: 
             shutup = await is_shutup(bot_id, group_id)
 
             if not shutup:
-                logger.info(f"bot [{bot_id}] ready to ban [{str(item)}] in group [{group_id}] ({log_tag})")
+                logger.debug(format_business_event("复读禁言", "已准备", bot=bot_id, group=group_id, mode=log_tag))
 
                 await Chat.ban(group_id, bot_id, str(item), "ActionFailed")
 
@@ -340,9 +374,19 @@ async def dispatch_repeater_fanout(
     bot_ids: list[int] | tuple[int, ...],
     bundle: ReplyBundle,
 ) -> None:
-    group_id = int(event.group_id)
     ids = list(bot_ids)
-    payload = fanout_payload_from_event(event, bundle, fanout_bot_ids=ids)
+    await dispatch_repeater_fanout_payload(
+        ids,
+        fanout_payload_from_event(event, bundle, fanout_bot_ids=ids),
+    )
+
+
+async def dispatch_repeater_fanout_payload(
+    bot_ids: list[int] | tuple[int, ...],
+    payload: dict[str, Any],
+) -> None:
+    group_id = int(payload["group_id"])
+    ids = [int(bot_id) for bot_id in bot_ids]
     stagger = 0.35
 
     from pallas.core.platform.shard.presence import bot_has_cluster_connection, bot_has_local_connection

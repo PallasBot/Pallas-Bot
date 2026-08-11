@@ -29,8 +29,12 @@ from packages.pb_webui.console_openapi_models import (
     ShardObservabilityData as _ShardObservabilityData,
 )
 from packages.pb_webui.console_openapi_models import (
+    SystemRestartAvailabilityData as _SystemRestartAvailabilityData,
+)
+from packages.pb_webui.console_openapi_models import (
     _ApiOkResponse,
 )
+from pallas.core.shared.utils.format_exception import format_exception_for_log
 
 from .console_meta_store import get_console_meta, merge_console_version_from_disk
 from .console_read_cache import cached_read
@@ -219,7 +223,7 @@ def _gpu_metrics() -> dict[str, Any]:
 
 def _home_overview_slice(result: Any, label: str) -> Any:
     if isinstance(result, BaseException):
-        logger.warning("Pallas-Bot 控制台: home/overview {} 失败: {}", label, result)
+        logger.warning("[控制台] home/overview {} 失败: {}", label, format_exception_for_log(result))
         return None
     return result
 
@@ -440,7 +444,7 @@ def _runtime_metrics() -> dict[str, Any]:
 
         boot_time = float(_psutil_boot.boot_time())
     except Exception as e:  # noqa: BLE001
-        logger.debug("Pallas-Bot 控制台: psutil.boot_time 不可用，将尝试其它方式 err={}", e)
+        logger.debug("[控制台] psutil.boot_time 不可用，将尝试其它方式 err={}", e)
 
     if boot_time is None and sys.platform == "win32":
         try:
@@ -449,7 +453,7 @@ def _runtime_metrics() -> dict[str, Any]:
             ms = int(ctypes.windll.kernel32.GetTickCount64())
             boot_time = float(time.time() - ms / 1000.0)
         except Exception as e:  # noqa: BLE001
-            logger.debug("Pallas-Bot 控制台: Windows GetTickCount64 推算启动时间失败 err={}", e)
+            logger.debug("[控制台] Windows GetTickCount64 推算启动时间失败 err={}", e)
 
     return {
         "platform": platform.platform(),
@@ -560,7 +564,7 @@ def register_system_home_router(
 
         mode_label = "workers-restart" if workers_only else "full-restart"
         logger.info(
-            "Pallas-Bot 控制台: 已调度 Bot 重启 mode={} workers_only={}",
+            "[控制台] 已调度 Bot 重启 mode={} workers_only={}",
             mode_label,
             workers_only,
         )
@@ -574,6 +578,26 @@ def register_system_home_router(
                 "message": "已安排重启，数秒后进程将重新拉起。",
             },
         })
+
+    @router.get(
+        f"{x}/system/restart-availability",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_SystemRestartAvailabilityData],
+    )
+    async def _system_restart_availability() -> dict[str, Any]:
+        """壳层判断侧栏重启按钮；轻量、不含 GitHub 等网络请求。"""
+        from pallas.console.cli.bot_process import bot_lifecycle_available
+
+        from .manager import inspect_bot_deployment
+
+        deploy = inspect_bot_deployment()
+        return {
+            "ok": True,
+            "data": {
+                "restart_available": bot_lifecycle_available(),
+                "deployment_mode": deploy.get("deployment_mode", ""),
+            },
+        }
 
     @router.get(f"{x}/shard-registry", include_in_schema=True)
     async def _shard_registry() -> JSONResponse:

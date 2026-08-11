@@ -99,7 +99,39 @@ def test_export_console_openapi_matches_console_prefix(monkeypatch) -> None:
     assert runtime_schema["$ref"].endswith("_ApiOkResponse__LlmRuntimeOverviewData_")
     assert extension_test_schema["$ref"].endswith("_ApiOkResponse__AiExtensionTestData_")
     assert password_schema["$ref"].endswith("_ApiOkResponse__ConsoleLoginChangeData_")
+    sing_defaults_schema = payload["paths"]["/pallas/api/common-config/llm/media-models/sing/defaults"]["put"][
+        "requestBody"
+    ]["content"]["application/json"]["schema"]
+    assert sing_defaults_schema["$ref"].endswith("_LlmSingDefaultsBody")
+    sing_defaults_name = sing_defaults_schema["$ref"].removeprefix("#/components/schemas/")
+    sing_defaults_properties = payload["components"]["schemas"][sing_defaults_name]["properties"]
+    song_cache_days_schema = sing_defaults_properties["song_cache_days"]["anyOf"][0]
+    song_cache_size_schema = sing_defaults_properties["song_cache_size"]["anyOf"][0]
+    assert song_cache_days_schema == {"type": "integer", "maximum": 3650.0, "minimum": 1.0}
+    assert song_cache_size_schema == {"type": "integer", "maximum": 10000.0, "minimum": 0.0}
+    sing_defaults_response_schema = payload["paths"]["/pallas/api/common-config/llm/media-models/sing/defaults"]["put"][
+        "responses"
+    ]["200"]["content"]["application/json"]["schema"]
+    assert sing_defaults_response_schema["$ref"].endswith("_ApiOkResponse__LlmSingDefaultsData_")
+    sing_defaults_response_name = sing_defaults_response_schema["$ref"].removeprefix("#/components/schemas/")
+    sing_defaults_response_properties = payload["components"]["schemas"][sing_defaults_response_name]["properties"]
+    sing_defaults_data_schema = sing_defaults_response_properties["data"]["$ref"]
+    sing_defaults_data_name = sing_defaults_data_schema.removeprefix("#/components/schemas/")
+    sing_defaults_data_properties = payload["components"]["schemas"][sing_defaults_data_name]["properties"]
+    assert sing_defaults_data_properties["default_speaker"]["type"] == "string"
+    assert sing_defaults_data_properties["preferred_backend"]["type"] == "string"
+    assert sing_defaults_data_properties["speaker_backends"]["type"] == "object"
+    assert sing_defaults_data_properties["song_cache_days"]["type"] == "integer"
+    assert sing_defaults_data_properties["song_cache_days"]["minimum"] == 1.0
+    assert sing_defaults_data_properties["song_cache_days"]["maximum"] == 3650.0
+    assert sing_defaults_data_properties["song_cache_size"]["type"] == "integer"
+    assert sing_defaults_data_properties["song_cache_size"]["minimum"] == 0.0
+    assert sing_defaults_data_properties["song_cache_size"]["maximum"] == 10000.0
+    assert sing_defaults_data_properties["writable"]["anyOf"][0]["type"] == "boolean"
     assert "/pallas/api/common-config/llm/wizard/status" not in payload["paths"]
+
+    local_routing_tasks = payload["components"]["schemas"]["_LlmLocalRoutingTaskModelsBody"]["properties"]
+    assert set(local_routing_tasks) == {"llm_chat", "drunk"}
 
     wave2_paths = (
         "/pallas/api/shard-observability",

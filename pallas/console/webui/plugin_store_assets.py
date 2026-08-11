@@ -37,7 +37,7 @@ def load_snapshot() -> dict[str, Any]:
     try:
         data = json.loads(raw)
     except (TypeError, ValueError):
-        logger.warning("Pallas-Bot 控制台: 插件商店资源快照损坏，忽略 path={}", path)
+        logger.warning("[控制台] 插件商店资源快照损坏，忽略 path={}", path)
         return {}
     return data if isinstance(data, dict) else {}
 
@@ -69,7 +69,7 @@ def save_snapshot(data: dict[str, Any]) -> None:
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(path)
     except OSError as exc:
-        logger.warning("Pallas-Bot 控制台: 插件商店资源快照写盘失败 err={}", exc)
+        logger.warning("[控制台] 插件商店资源快照写盘失败 err={}", exc)
 
 
 def _public_root() -> Path:
@@ -188,10 +188,10 @@ def apply_asset_snapshot_to_rows(kind: str, rows: list[dict[str, Any]]) -> list[
         if kind == "official":
             plugin_ids = copied.get("plugin_ids") or []
             plugin_id = str(plugin_ids[0] if plugin_ids else copied.get("package") or "").strip()
-            plugin_source = "extra"
+            plugin_source = "official"
         else:
             plugin_id = str(copied.get("plugin_id") or "").strip()
-            plugin_source = "local" if copied.get("local_installed") else "pip"
+            plugin_source = "local" if copied.get("local_installed") else "community"
         if not plugin_id:
             out.append(copied)
             continue

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from nonebot import on_command
+from nonebot import logger, on_command
 from nonebot.adapters.onebot.v11 import MessageEvent, PrivateMessageEvent
 from nonebot.params import CommandArg
 
+from pallas.api.logging import format_plugin_event
 from pallas.api.perm import private_message_permission_for_command
 from pallas.product.llm.ops_api import get_runtime_model, switch_runtime_model, unload_runtime_model
 
@@ -45,6 +46,12 @@ async def handle_switch_model(event: MessageEvent, args: str = CommandArg()) -> 
         await switch_model_cmd.finish(f"切换模型失败：{exc}")
         return
     resolved = str(result.get("model") or model).strip()
+    logger.info(
+        format_plugin_event(
+            "switch_model",
+            f"Bot [{event.self_id}] switched its local inference model to [{resolved}]",
+        )
+    )
     await switch_model_cmd.finish(f"已切换模型：{resolved}（无需重启 Celery，旧权重已卸载）")
 
 
@@ -57,4 +64,5 @@ async def handle_unload_model(event: MessageEvent) -> None:
     except Exception as exc:
         await unload_model_cmd.finish(f"卸载模型失败：{exc}")
         return
+    logger.info(format_plugin_event("unload_model", f"Bot [{event.self_id}] unloaded its local inference model"))
     await unload_model_cmd.finish("已请求卸载当前本地模型；下次对话将按新配置重新加载。")

@@ -43,7 +43,7 @@ __plugin_meta__ = PluginMetadata(
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
         "command_permissions": command_perm_list(
-            command_perm_row("pb_core.status", "运行状态", "bot_moderator"),
+            command_perm_row("pb_core.status", "运行状态", "staff"),
             command_perm_row("pb_core.console", "牛牛控制台", "superuser"),
             command_perm_row("pb_core.plugins", "牛牛插件", "superuser"),
             command_perm_row("pb_core.update_check", "牛牛更新", "superuser"),

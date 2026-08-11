@@ -39,7 +39,7 @@ def command_override_keys(command_id: str) -> tuple[str, ...]:
 
 
 DEFAULT_COMMAND_PERMISSIONS: dict[str, PermissionLevel] = {
-    "pb_core.status": "bot_moderator",
+    "pb_core.status": "staff",
     "pb_core.console": "superuser",
     "pb_core.plugins": "superuser",
     "pb_core.update_check": "superuser",
@@ -83,8 +83,8 @@ DEFAULT_COMMAND_PERMISSIONS: dict[str, PermissionLevel] = {
     "sing.ncm_logout": "superuser",
     "draw.draw": "everyone",
     "connectivity.probe": "everyone",
-    "repeater.ban": "staff",
-    "repeater.ban_latest": "staff",
+    "repeater.ban": "everyone",
+    "repeater.ban_latest": "everyone",
     "dream.ban_cleanup": "staff",
     "roulette.mode_switch": "staff",
     "duel.duel": "everyone",

@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 
 from nonebot import get_driver, logger
 
+from .logging.bridge import format_plugin_event
+
 _ROLE_LABELS = {
     "unified": "统一进程",
     "hub": "Hub",
@@ -17,6 +19,8 @@ _ROLE_LABELS = {
 
 _FACT_LABELS = {
     "plugins": "插件",
+    "plugin_failures": "插件",
+    "plugin_slow": "插件",
     "llm": "LLM",
     "ingress": "入站",
     "console": "控制台",
@@ -29,10 +33,17 @@ _WARNING_LABELS = {
 }
 
 
+@dataclass(frozen=True)
+class StartupEvent:
+    state: str
+    detail: str
+
+
 @dataclass
 class StartupFactCollector:
     facts: OrderedDict[str, str] = field(default_factory=OrderedDict)
     warnings: OrderedDict[str, str] = field(default_factory=OrderedDict)
+    events: OrderedDict[str, StartupEvent] = field(default_factory=OrderedDict)
     emitted: bool = False
 
     def set_fact(self, key: str, value: str | None) -> None:
@@ -44,6 +55,12 @@ class StartupFactCollector:
         text = str(value or "").strip()
         if text:
             self.warnings[key] = text
+
+    def set_event(self, component: str, state: str, detail: str | None = None) -> None:
+        name = str(component or "").strip()
+        if not name:
+            return
+        self.events[name] = StartupEvent(state=state, detail=str(detail or "").strip())
 
 
 _collector = StartupFactCollector()
@@ -57,9 +74,40 @@ def register_startup_warning(key: str, value: str | None) -> None:
     _collector.set_warning(key, value)
 
 
+def register_startup_ready(component: str, detail: str | None = None) -> None:
+    _collector.set_event(component, "已就绪", detail)
+
+
+def register_plugin_startup_ready(plugin: str, commands: list[str] | tuple[str, ...] | None = None) -> None:
+    """将插件的就绪事件并入启动摘要，避免逐插件启动刷屏。"""
+    plugin_id = str(plugin or "").strip()
+    if plugin_id:
+        command_names = ", ".join(_command_log_name(command) for command in commands or ()) or "-"
+        detail = format_plugin_event("ready", f"Plugin [{plugin_id}] registered commands [{command_names}]")
+        _collector.set_event(plugin_id, "plugin_ready", detail)
+
+
+def _command_log_name(command: str) -> str:
+    name = str(command or "").strip().rsplit(".", maxsplit=1)[-1]
+    return "".join(part[:1].upper() + part[1:] for part in re.split(r"[_-]+", name) if part) or "-"
+
+
+def register_startup_scheduled(component: str, detail: str | None = None) -> None:
+    _collector.set_event(component, "已调度", detail)
+
+
+def register_startup_skipped(component: str, detail: str | None = None) -> None:
+    _collector.set_event(component, "已跳过", detail)
+
+
+def register_startup_degraded(component: str, detail: str | None = None) -> None:
+    _collector.set_event(component, "已降级", detail)
+
+
 def reset_startup_report_for_tests() -> None:
     _collector.facts.clear()
     _collector.warnings.clear()
+    _collector.events.clear()
     _collector.emitted = False
 
 
@@ -67,6 +115,7 @@ def startup_report_snapshot() -> dict[str, dict[str, str] | bool]:
     return {
         "facts": dict(_collector.facts),
         "warnings": dict(_collector.warnings),
+        "events": {component: event.state for component, event in _collector.events.items()},
         "emitted": _collector.emitted,
     }
 
@@ -101,15 +150,49 @@ def _db_label(backend: str) -> str:
 
 def _format_plugins(raw: str) -> str:
     kv = _kv_pairs(raw)
-    parts = [
-        f"本地 {kv.get('local', '0')}",
-        f"内置 {kv.get('src', '0')}",
-        f"pip {kv.get('pip', '0')}",
-        f"扩展 {kv.get('extra', '0')}",
-    ]
+    local = int(kv.get("local", "0") or 0)
+    bundled_raw = kv.get("src", "") or kv.get("modules", "0")
+    bundled_loaded = bundled_raw.split("/", 1)[0]
+    bundled = int(bundled_loaded or 0)
+    official = int(kv.get("official", kv.get("pip", "0")) or 0)
+    nonebot = int(kv.get("nonebot", "0") or 0)
+    community = int(kv.get("community", "0") or 0)
+    extra = int(kv.get("extra", "0") or 0)
+    total = local + bundled + official + nonebot + community + extra
+    parts = []
+    if local:
+        parts.append(f"本地 {local}")
+    if bundled:
+        parts.append(f"内置 {bundled_raw}")
+    if official:
+        parts.append(f"官方 {official}")
+    if nonebot:
+        parts.append(f"NoneBot {nonebot}")
+    if community:
+        parts.append(f"社区 {community}")
+    if extra:
+        parts.append(f"额外目录 {extra}")
+    text = f"已成功载入 {total} 个插件"
+    if parts:
+        text += "：" + "，".join(parts)
     if "skip" in kv:
-        parts.append(f"跳过 {kv['skip']}")
-    return " · ".join(parts)
+        text += f"；配置跳过 {kv['skip']}"
+        source_labels = {
+            "local": "本地",
+            "src": "内置",
+            "official": "官方",
+            "nonebot": "NoneBot",
+            "community": "社区",
+            "extra": "额外目录",
+        }
+        source_parts = []
+        for item in (kv.get("skip_sources", "") or "").split(","):
+            source, separator, count = item.partition(":")
+            if separator and source in source_labels:
+                source_parts.append(f"{source_labels[source]} {count}")
+        if source_parts:
+            text += "：" + "，".join(source_parts)
+    return text
 
 
 def _format_llm(raw: str) -> str:
@@ -119,20 +202,24 @@ def _format_llm(raw: str) -> str:
     if text.startswith("ok"):
         rest = text[2:].strip()
         kv = _kv_pairs(rest)
-        bits: list[str] = ["正常"]
+        bits: list[str] = ["已就绪"]
         if kv.get("v"):
             bits.append(f"版本 {kv['v']}")
         if kv.get("provider"):
-            bits.append(f"通道 {kv['provider']}")
-        if kv.get("switches"):
-            bits.append(f"开关 {kv['switches']}")
+            bits.append(f"Provider {kv['provider']}")
+        if "model" in kv:
+            bits.append("模型未声明" if kv["model"] in {"?", "-"} else f"模型 {kv['model']}")
+        if kv.get("chat"):
+            bits.append("智能对话已启用" if kv["chat"] == "enabled" else "智能对话未启用")
         # 兼容仅有 ok / ok switches=X 以外的尾巴
         leftover = rest
-        for key in ("v", "provider", "switches"):
+        for key in ("v", "provider", "model", "chat", "switches"):
             leftover = re.sub(rf"\b{key}=\S+", "", leftover).strip()
         if leftover and leftover != "ok":
             bits.append(leftover)
-        return "，".join(bits) if len(bits) > 1 else bits[0]
+        if len(bits) > 1:
+            return f"{bits[0]}：" + "，".join(bits[1:])
+        return bits[0]
     return text
 
 
@@ -143,10 +230,10 @@ def _format_ingress(raw: str) -> str:
     strict_raw = (kv.get("strict") or "").lower()
     strict = "开" if strict_raw in {"1", "true", "yes", "on"} else "关"
     return (
-        f"前缀规则 {kv.get('prefix', '-')} · "
-        f"精确规则 {kv.get('exact', '-')} · "
-        f"模块 {kv.get('modules', '-')} · "
-        f"严格模式 {strict}"
+        f"已载入 {kv.get('prefix', '-')} 条前缀规则、"
+        f"{kv.get('exact', '-')} 条精确规则，"
+        f"覆盖 {kv.get('modules', '-')} 个模块；"
+        f"严格路由{'已启用' if strict == '开' else '未启用'}"
     )
 
 
@@ -155,6 +242,34 @@ def _format_scheduler(raw: str) -> str:
     if text in {"ready", "ok", "1", "true"}:
         return "已就绪"
     return raw or "-"
+
+
+def _format_console(raw: str) -> str:
+    return f"已就绪：{raw}" if raw else "-"
+
+
+def _format_plugin_failures(raw: str) -> str:
+    names = [part.strip() for part in raw.split(",") if part.strip()]
+    text = "、".join(part for part in names if not part.startswith("+"))
+    overflow = next((part[1:] for part in names if part.startswith("+")), "")
+    if overflow:
+        text += f"等 {overflow} 个"
+    return f"载入失败：{text}" if text else "载入失败"
+
+
+def _format_slow_plugins(raw: str) -> str:
+    parts: list[str] = []
+    for item in raw.split(","):
+        text = item.strip()
+        if not text:
+            continue
+        if text.startswith("+"):
+            parts.append(f"等 {text[1:]} 个")
+            continue
+        name, sep, elapsed = text.partition("=")
+        if name and sep:
+            parts.append(f"{name} {elapsed} 秒")
+    return f"载入较慢：{'、'.join(parts)}" if parts else "载入较慢"
 
 
 def _format_fact(key: str, value: str) -> str:
@@ -166,6 +281,12 @@ def _format_fact(key: str, value: str) -> str:
         return _format_ingress(value)
     if key == "scheduler":
         return _format_scheduler(value)
+    if key == "console":
+        return _format_console(value)
+    if key == "plugin_failures":
+        return _format_plugin_failures(value)
+    if key == "plugin_slow":
+        return _format_slow_plugins(value)
     return value
 
 
@@ -207,14 +328,32 @@ def build_startup_summary_lines(
     """构造中文摘要行；返回 ``(info_lines, warning_lines)``。"""
     runtime = base_lines if base_lines is not None else _runtime_base_lines()
     fact_map = facts if facts is not None else dict(_collector.facts)
+    fact_lines = []
+    for key, value in fact_map.items():
+        formatted = _format_fact(key, value)
+        if key == "plugins":
+            fact_lines.append(f"[初始化] {formatted}")
+        else:
+            fact_lines.append(f"[{_FACT_LABELS.get(key, key)}] {formatted}")
     info_lines = [
-        "[启动] 就绪",
-        *[f"[启动] {line}" for line in runtime],
-        *[f"[启动] {_FACT_LABELS.get(key, key)}：{_format_fact(key, value)}" for key, value in fact_map.items()],
+        "[初始化] Pallas-Bot 已就绪",
+        *[f"[初始化] {line}" for line in runtime],
+        *fact_lines,
     ]
+    for component, event in _collector.events.items():
+        if event.state == "plugin_ready":
+            info_lines.append(event.detail)
+            continue
+        if event.state != "已降级":
+            detail = f"：{event.detail}" if event.detail else ""
+            info_lines.append(f"[{component}] {event.state}{detail}")
 
     warn_map = warnings if warnings is not None else dict(_collector.warnings)
-    warning_lines = [f"[启动] 降级 · {_WARNING_LABELS.get(key, key)}：{value}" for key, value in warn_map.items()]
+    warning_lines = [f"[{_WARNING_LABELS.get(key, key)}] 已降级：{value}" for key, value in warn_map.items()]
+    for component, event in _collector.events.items():
+        if event.state == "已降级":
+            detail = f"：{event.detail}" if event.detail else ""
+            warning_lines.append(f"[{component}] 已降级{detail}")
     return info_lines, warning_lines
 
 

@@ -45,6 +45,41 @@ class MongoWorkJobStore:
                     raise
         return work_job_from_mongo(row)
 
+    async def requeue_terminal(self, job: WorkJob) -> tuple[WorkJob, bool]:
+        from pallas.core.foundation.db.modules import BackgroundJob
+
+        collection = BackgroundJob.get_pymongo_collection()
+        values = {
+            "job_id": job.id,
+            "kind": job.kind,
+            "payload": job.payload,
+            "attempts": job.attempts,
+            "available_at": job.created_at,
+            "created_at": job.created_at,
+            "status": "pending",
+            "lease_owner": None,
+            "lease_id": None,
+            "leased_until": None,
+            "finished_at": None,
+            "last_error": None,
+        }
+        raw = await collection.find_one_and_update(
+            {"idempotency_key": job.idempotency_key, "status": {"$in": ["done", "dead_letter"]}},
+            {"$set": values},
+            return_document=ReturnDocument.AFTER,
+        )
+        if raw is not None:
+            return work_job_from_mongo(BackgroundJob.model_validate(raw)), True
+        try:
+            row = BackgroundJob(idempotency_key=job.idempotency_key, **values)
+            await row.insert()
+        except Exception:
+            raw = await collection.find_one({"idempotency_key": job.idempotency_key})
+            if raw is None:
+                raise
+            return work_job_from_mongo(BackgroundJob.model_validate(raw)), False
+        return work_job_from_mongo(row), True
+
     async def enqueue_many(self, jobs: list[WorkJob]) -> list[WorkJob]:
         return [await self.enqueue(job) for job in jobs]
 

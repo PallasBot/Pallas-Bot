@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from nonebot import get_driver, logger
 from nonebot_plugin_apscheduler import scheduler
 
+from pallas.core.foundation.startup_report import register_startup_scheduled, register_startup_skipped
 from pallas.product.corpus.backfill import (
     corpus_backfill_interval_sec,
     run_corpus_backfill_round,
@@ -19,6 +20,7 @@ _LIFECYCLE_BOUND = False
 
 async def start_corpus_backfill_job() -> None:
     if not should_run_corpus_backfill():
+        register_startup_skipped("语料回填", "reason=disabled")
         return
     if scheduler.get_job(_JOB_ID):
         scheduler.remove_job(_JOB_ID)
@@ -34,7 +36,8 @@ async def start_corpus_backfill_job() -> None:
         misfire_grace_time=300,
         next_run_time=datetime.now() + timedelta(seconds=120),
     )
-    logger.info("语料回填：周期 {}s", interval_sec)
+    logger.debug("语料回填：周期 {}s", interval_sec)
+    register_startup_scheduled("语料回填", f"interval={interval_sec}s")
 
 
 async def reload_corpus_backfill_job() -> None:

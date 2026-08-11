@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import time
+import tomllib
 from typing import TYPE_CHECKING, Any, Literal
 
 from nonebot import logger
@@ -181,6 +182,15 @@ def _any_auto_enabled(cfg: Any) -> bool:
     )
 
 
+def bot_auto_update_eligibility(deploy: dict[str, Any], update_track: str) -> tuple[bool, str]:
+    mode = str(deploy.get("deployment_mode") or "").strip()
+    if update_track == "branch":
+        eligible = bool(deploy.get("git_available")) and mode != "docker"
+    else:
+        eligible = mode in {"release_tag", "docker"}
+    return eligible, "" if eligible else mode or "unknown"
+
+
 def auto_update_status_payload(config: Any | None = None) -> dict[str, Any]:
     cfg = config if config is not None else get_pallas_webui_config()
     state = load_auto_update_state()
@@ -193,10 +203,7 @@ def auto_update_status_payload(config: Any | None = None) -> dict[str, Any]:
 
     update_track = normalize_bot_update_track(getattr(cfg, "pallas_bot_update_track", "release"))
     update_branch = normalize_bot_git_track_branch(getattr(cfg, "pallas_bot_update_branch", "") or "")
-    if update_track == "branch":
-        auto_apply_eligible = bool(deploy.get("git_available")) and mode != "docker"
-    else:
-        auto_apply_eligible = mode == "release_tag"
+    auto_apply_eligible, _ = bot_auto_update_eligibility(deploy, update_track)
     web = state["targets"]["webui"]
     bot = state["targets"]["bot"]
     plugins = state["targets"]["plugins"]
@@ -269,7 +276,7 @@ async def _run_webui_target(*, config: Any | None = None, force: bool = False) -
         check = await _load_webui_check(cfg)
     except Exception as e:  # noqa: BLE001
         err = format_exception_for_log(e)
-        logger.warning("Pallas-Bot 控制台: WebUI 自动更新检查失败 err={}", err)
+        logger.warning("[控制台] WebUI 自动更新检查失败 err={}", err)
         _patch_target("webui", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
 
@@ -296,11 +303,13 @@ async def _run_webui_target(*, config: Any | None = None, force: bool = False) -
         )
         return out
 
-    repo = str(getattr(cfg, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot")
+    from .manager import DEFAULT_WEBUI_DIST_ZIP_REPO
+
+    repo = str(getattr(cfg, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO)
     asset = str(getattr(cfg, "pallas_webui_dist_zip_asset", "") or "dist.zip")
     tag = str(getattr(cfg, "pallas_webui_dist_zip_tag", "") or "").strip() or latest_tag
     logger.info(
-        "Pallas-Bot 控制台: WebUI 自动更新开始 current={} target={}",
+        "[控制台] WebUI 自动更新开始 current={} target={}",
         current_tag or "(unknown)",
         tag,
     )
@@ -313,12 +322,12 @@ async def _run_webui_target(*, config: Any | None = None, force: bool = False) -
         )
     except WebuiUpdateError as e:
         err = e.detail
-        logger.warning("Pallas-Bot 控制台: WebUI 自动更新失败 err={}", err)
+        logger.warning("[控制台] WebUI 自动更新失败 err={}", err)
         _patch_target("webui", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
     except Exception as e:  # noqa: BLE001
         err = format_exception_for_log(e)
-        logger.exception("Pallas-Bot 控制台: WebUI 自动更新异常")
+        logger.exception("[控制台] WebUI 自动更新异常")
         _patch_target("webui", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
 
@@ -348,7 +357,7 @@ async def _run_webui_target(*, config: Any | None = None, force: bool = False) -
         drop_read_cache(("update_check_webui:",))
     except Exception:  # noqa: BLE001
         pass
-    logger.info("Pallas-Bot 控制台: WebUI 自动更新完成 tag={}", applied_tag)
+    logger.info("[控制台] WebUI 自动更新完成 tag={}", applied_tag)
     return {
         "result": "applied",
         "tag": applied_tag,
@@ -377,13 +386,7 @@ async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> 
         return out
 
     deploy = inspect_bot_deployment()
-    mode = str(deploy.get("deployment_mode") or "").strip()
-    if update_track == "branch":
-        eligible = bool(deploy.get("git_available")) and mode != "docker"
-        skip_reason = (mode or "unknown") if not eligible else ""
-    else:
-        eligible = mode == "release_tag"
-        skip_reason = (mode or "unknown") if not eligible else ""
+    eligible, skip_reason = bot_auto_update_eligibility(deploy, update_track)
     if not eligible:
         out = {"result": "skipped", "reason": f"deploy:{skip_reason or 'unknown'}"}
         _patch_target(
@@ -409,7 +412,7 @@ async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> 
         check = await _load_bot_check(cfg)
     except Exception as e:  # noqa: BLE001
         err = format_exception_for_log(e)
-        logger.warning("Pallas-Bot 控制台: Bot 自动更新检查失败 err={}", err)
+        logger.warning("[控制台] Bot 自动更新检查失败 err={}", err)
         _patch_target("bot", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
 
@@ -439,7 +442,7 @@ async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> 
         return out
 
     logger.info(
-        "Pallas-Bot 控制台: Bot 自动更新开始 track={} current={} target={}",
+        "[控制台] Bot 自动更新开始 track={} current={} target={}",
         update_track,
         current_tag or "(unknown)",
         target_label or "(unknown)",
@@ -448,12 +451,12 @@ async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> 
         data = await apply_bot_update(restart=True)
     except BotGitUpdateError as e:
         err = e.detail
-        logger.warning("Pallas-Bot 控制台: Bot 自动更新失败 err={}", err)
+        logger.warning("[控制台] Bot 自动更新失败 err={}", err)
         _patch_target("bot", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
     except Exception as e:  # noqa: BLE001
         err = format_exception_for_log(e)
-        logger.exception("Pallas-Bot 控制台: Bot 自动更新异常")
+        logger.exception("[控制台] Bot 自动更新异常")
         _patch_target("bot", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
 
@@ -483,7 +486,7 @@ async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> 
         drop_read_cache(("update_check_bot:",))
     except Exception:  # noqa: BLE001
         pass
-    logger.info("Pallas-Bot 控制台: Bot 自动更新完成 tag={}", applied_tag)
+    logger.info("[控制台] Bot 自动更新完成 tag={}", applied_tag)
     return {
         "result": "applied",
         "tag": applied_tag,
@@ -520,7 +523,7 @@ async def _run_plugins_target(*, config: Any | None = None, force: bool = False)
         snap = await refresh_plugin_update_snapshot()
     except Exception as e:  # noqa: BLE001
         err = format_exception_for_log(e)
-        logger.warning("Pallas-Bot 控制台: 插件自动更新快照失败 err={}", err)
+        logger.warning("[控制台] 插件自动更新快照失败 err={}", err)
         _patch_target("plugins", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
 
@@ -554,12 +557,19 @@ async def _run_plugins_target(*, config: Any | None = None, force: bool = False)
         )
         return {"result": "up_to_date", "updated": [], "failed": []}
 
-    updated: list[str] = []
+    updated: list[dict[str, str]] = []
     failed: list[dict[str, str]] = []
     for pkg in official_todo:
         try:
             await update_official_extension_with_options(pkg, restart=False)
-            updated.append(pkg)
+            entry = official.get(pkg) or {}
+            updated.append({
+                "id": pkg,
+                "source": "official",
+                "from_ref": str(entry.get("installed_ref") or "").strip(),
+                "to_ref": str(entry.get("latest_ref") or "").strip(),
+                "ref_kind": "version",
+            })
         except ExtensionInstallError as e:
             failed.append({"id": pkg, "error": e.detail})
         except Exception as e:  # noqa: BLE001
@@ -567,8 +577,23 @@ async def _run_plugins_target(*, config: Any | None = None, force: bool = False)
 
     for pid in community_todo:
         try:
+            before_version = _community_plugin_version(pid)
             await update_community_plugin(pid)
-            updated.append(pid)
+            after_version = _community_plugin_version(pid)
+            entry = community.get(pid) or {}
+            if before_version and after_version and before_version != after_version:
+                from_ref, to_ref, ref_kind = before_version, after_version, "version"
+            else:
+                from_ref = str(entry.get("installed_ref") or "").strip()
+                to_ref = str(entry.get("latest_ref") or "").strip()
+                ref_kind = "commit"
+            updated.append({
+                "id": pid,
+                "source": "community",
+                "from_ref": from_ref,
+                "to_ref": to_ref,
+                "ref_kind": ref_kind,
+            })
         except CommunityPluginInstallError as e:
             failed.append({"id": pid, "error": str(e)})
         except Exception as e:  # noqa: BLE001
@@ -590,20 +615,22 @@ async def _run_plugins_target(*, config: Any | None = None, force: bool = False)
                 "skip_reason": None,
             },
         )
+        restart_scheduled = False
+        try:
+            from pallas.console.cli.bot_process import bot_lifecycle_available, schedule_bot_restart
+
+            if bot_lifecycle_available():
+                restart_scheduled = bool(schedule_bot_restart(delay_s=3.0))
+        except Exception:  # noqa: BLE001
+            logger.warning("[控制台] 插件自动更新后安排重启失败")
         _append_pending_item({
             "kind": "plugins",
             "tag": f"{len(updated)} 个插件",
             "updated": updated,
             "failed": failed,
+            "restart_scheduled": restart_scheduled,
             "applied_at": applied_at,
         })
-        try:
-            from pallas.console.cli.bot_process import bot_lifecycle_available, schedule_bot_restart
-
-            if bot_lifecycle_available():
-                schedule_bot_restart(delay_s=3.0)
-        except Exception:  # noqa: BLE001
-            logger.warning("Pallas-Bot 控制台: 插件自动更新后安排重启失败")
         try:
             from .console_read_cache import drop_read_cache
 
@@ -614,6 +641,7 @@ async def _run_plugins_target(*, config: Any | None = None, force: bool = False)
             "result": result,
             "updated": updated,
             "failed": failed,
+            "restart_scheduled": restart_scheduled,
             "message": f"已更新 {len(updated)} 个插件",
         }
 
@@ -706,21 +734,66 @@ async def run_auto_update_tick(
         try:
             await notify_superusers_auto_update(notice_items, config=cfg)
         except Exception:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 自动更新私聊超管汇报失败")
+            logger.exception("[控制台] 自动更新私聊超管汇报失败")
     return {"result": overall, "targets": results}
 
 
+def _community_plugin_version(plugin_id: str) -> str:
+    from pallas.console.webui.community_plugin_install import plugin_install_path
+
+    root = plugin_install_path(plugin_id)
+    pyproject = root / "pyproject.toml"
+    if pyproject.is_file():
+        try:
+            data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+            project = data.get("project") if isinstance(data, dict) else None
+            version = project.get("version") if isinstance(project, dict) else None
+            if isinstance(version, str) and version.strip():
+                return version.strip()
+        except (OSError, tomllib.TOMLDecodeError):
+            pass
+    return ""
+
+
+def format_plugin_update_item(item: Any) -> str:
+    if isinstance(item, str):
+        return item
+    if not isinstance(item, dict):
+        return str(item)
+    plugin_id = str(item.get("id") or item.get("plugin_id") or "未知插件").strip()
+    from_ref = str(item.get("from_ref") or "").strip()
+    to_ref = str(item.get("to_ref") or "").strip()
+    ref_kind = str(item.get("ref_kind") or "").strip()
+    detail = f"{from_ref} -> {to_ref}" if from_ref and to_ref else (to_ref or from_ref or "版本未知")
+    suffix = "（提交）" if ref_kind == "commit" else ""
+    return f"{plugin_id}：{detail}{suffix}"
+
+
 def format_auto_update_notify_message(items: list[dict[str, Any]]) -> str:
-    lines = ["【自动更新】本轮已应用："]
+    lines = ["【自动更新完成】", "本轮已应用："]
     labels = {"webui": "WebUI", "bot": "Bot", "plugins": "插件"}
     for item in items:
         kind = str(item.get("kind") or "").strip()
         label = labels.get(kind, kind or "项")
         tag = str(item.get("tag") or item.get("last_applied_tag") or item.get("message") or "").strip()
+        from_tag = str(item.get("from_tag") or "").strip()
+        if kind in {"webui", "bot"} and from_tag and tag:
+            tag = f"{from_tag} -> {tag}"
         if kind == "plugins":
             updated = item.get("updated")
             if isinstance(updated, list) and updated:
-                tag = f"{len(updated)} 个" + (f"（{tag}）" if tag else "")
+                lines.append(f"· {label}（{len(updated)} 个）：")
+                lines.extend(f"  - {format_plugin_update_item(row)}" for row in updated)
+                failed = item.get("failed")
+                if isinstance(failed, list) and failed:
+                    lines.extend(
+                        f"  - 失败：{entry.get('id')}（{entry.get('error')}）"
+                        for entry in failed
+                        if isinstance(entry, dict)
+                    )
+                if item.get("restart_scheduled"):
+                    lines.append("· 已安排重启 Bot")
+                continue
             elif not tag:
                 tag = "已更新"
         lines.append(f"· {label}" + (f"：{tag}" if tag else ""))
@@ -744,7 +817,7 @@ async def notify_superusers_auto_update(
 
     bots = get_bots()
     if not bots:
-        logger.warning("Pallas-Bot 控制台: 自动更新汇报时无在线 Bot")
+        logger.warning("[控制台] 自动更新汇报时无在线 Bot")
         return {"sent": False, "reason": "no_bot"}
 
     prefer = int(getattr(cfg, "pallas_auto_update_notify_bot_id", 0) or 0)
@@ -758,7 +831,7 @@ async def notify_superusers_auto_update(
             except (TypeError, ValueError):
                 continue
         if bot is None:
-            logger.warning("Pallas-Bot 控制台: 汇报 Bot {} 不在线，跳过私聊", prefer)
+            logger.warning("[控制台] 汇报 Bot {} 不在线，跳过私聊", prefer)
             return {"sent": False, "reason": "bot_offline", "bot_id": prefer}
     else:
         bot = next(iter(bots.values()))
@@ -780,7 +853,7 @@ async def notify_superusers_auto_update(
             delivered += 1
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "Pallas-Bot 控制台: 自动更新私聊失败 bot={} user={} err={}",
+                "[控制台] 自动更新私聊失败 bot={} user={} err={}",
                 getattr(bot, "self_id", "?"),
                 uid,
                 exc,
@@ -802,7 +875,7 @@ def reschedule_webui_auto_update_job(config: Any | None = None) -> None:
     try:
         from nonebot_plugin_apscheduler import scheduler
     except ImportError:
-        logger.warning("Pallas-Bot 控制台: 未安装 nonebot_plugin_apscheduler，跳过自动更新调度")
+        logger.warning("[控制台] 未安装 nonebot_plugin_apscheduler，跳过自动更新调度")
         return
 
     cfg = config if config is not None else get_pallas_webui_config()
@@ -810,7 +883,7 @@ def reschedule_webui_auto_update_job(config: Any | None = None) -> None:
         scheduler.remove_job(AUTO_UPDATE_JOB_ID)
 
     if not _any_auto_enabled(cfg):
-        logger.info("Pallas-Bot 控制台: 自动更新已全部关闭（未注册调度）")
+        logger.info("[控制台] 自动更新已全部关闭（未注册调度）")
         return
 
     mode = str(getattr(cfg, "pallas_webui_auto_update_schedule_mode", "interval") or "interval").strip().lower()
@@ -821,7 +894,7 @@ def reschedule_webui_auto_update_job(config: Any | None = None) -> None:
         try:
             await run_auto_update_tick()
         except Exception:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 自动更新调度执行失败")
+            logger.exception("[控制台] 自动更新调度执行失败")
 
     if mode == "cron":
         hour = max(0, min(23, int(getattr(cfg, "pallas_webui_auto_update_cron_hour", 4) or 0)))
@@ -837,7 +910,7 @@ def reschedule_webui_auto_update_job(config: Any | None = None) -> None:
             max_instances=1,
             misfire_grace_time=3600,
         )
-        logger.info("Pallas-Bot 控制台: 自动更新已调度 cron={:02d}:{:02d}", hour, minute)
+        logger.info("[控制台] 自动更新已调度 cron={:02d}:{:02d}", hour, minute)
         return
 
     hours = int(getattr(cfg, "pallas_webui_auto_update_interval_hours", 6) or 6)
@@ -852,4 +925,4 @@ def reschedule_webui_auto_update_job(config: Any | None = None) -> None:
         max_instances=1,
         misfire_grace_time=3600,
     )
-    logger.info("Pallas-Bot 控制台: 自动更新已调度 interval={}h", hours)
+    logger.info("[控制台] 自动更新已调度 interval={}h", hours)

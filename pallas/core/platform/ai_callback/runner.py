@@ -24,14 +24,12 @@ from pallas.core.platform.shard.coord.ai_task_registry import claim_ai_task_reco
 from pallas.product.llm.delivery import (
     deliver_llm_callback_success,
     deliver_llm_chat_result,
-    evaluate_repeater_callback_text,
     maybe_append_llm_repeater_feedback,
     track_llm_callback,
 )
 
 __all__ = [
     "deliver_llm_chat_result",
-    "evaluate_repeater_callback_text",
     "maybe_append_llm_repeater_feedback",
     "resolve_callback_task",
     "run_ai_callback",
@@ -46,19 +44,7 @@ async def resolve_callback_task(task_id: str) -> dict | None:
     rec = claim_ai_task_record(task_id)
     if not rec:
         return None
-    return {
-        "bot_id": rec.get("bot_id"),
-        "group_id": rec.get("group_id"),
-        "user_id": rec.get("user_id"),
-        "task_type": rec.get("task_type"),
-        "user_text": rec.get("user_text"),
-        "fallback_text": rec.get("fallback_text"),
-        "candidate_pool": rec.get("candidate_pool"),
-        "llm_route": rec.get("llm_route"),
-        "behavior_scene": rec.get("behavior_scene"),
-        "last_reply_text": rec.get("last_reply_text"),
-        "recent_reply_texts": rec.get("recent_reply_texts"),
-    }
+    return dict(rec)
 
 
 async def run_ai_callback(
@@ -102,16 +88,13 @@ async def run_ai_callback(
     except Exception as e:
         logger.warning("AI callback get_bot failed task={} bot_id={}: {}", task_id, bot_id_str, e)
     logger.info(
-        (
-            "AI callback resolved task={} status={} task_type={} bot_id={} group_id={} "
-            "has_text={} has_file={} song_id={} chunk_index={} key={} history_summary={} "
-            "history_keep_messages={} agent_trace={}"
-        ),
+        f"Bot [{bot_id_str or '<missing>'}] resolved AI task [id={task_id}], "
+        f"a [{str(task.get('task_type') or '').strip()}] request in group [{group_id}], status [{status}]"
+    )
+    logger.debug(
+        "AI callback resolved detail task={} has_text={} has_file={} song_id={} chunk_index={} "
+        "key={} history_summary={} history_keep_messages={} agent_trace={}",
         task_id,
-        status,
-        str(task.get("task_type") or "").strip(),
-        bot_id_str or "<missing>",
-        group_id,
         bool(str(text or "").strip()),
         file is not None,
         song_id,
@@ -119,7 +102,7 @@ async def run_ai_callback(
         key,
         bool(history_summary),
         history_keep_messages,
-        bool(parsed_agent_trace),
+        bool(agent_trace),
     )
 
     if group_id and song_id is not None and chunk_index is not None and key is not None and bot is not None:
@@ -164,11 +147,9 @@ async def run_ai_callback(
         task_type = str(task.get("task_type") or "").strip()
         if file and group_id and bot is not None:
             file_bytes = await file.read()
-            logger.info(
-                (
-                    "AI callback read file task={} bot_id={} group_id={} task_type={} "
-                    "bytes={} song_id={} chunk_index={} key={}"
-                ),
+            logger.debug(
+                "AI callback read file task={} bot_id={} group_id={} task_type={} "
+                "bytes={} song_id={} chunk_index={} key={}",
                 task_id,
                 getattr(bot, "self_id", bot_id_str or "<missing>"),
                 group_id,
@@ -182,12 +163,8 @@ async def run_ai_callback(
                 at_user = task.get("user_id")
                 at_user_id = int(at_user) if at_user is not None else None
                 logger.info(
-                    "AI callback delivering image task={} bot_id={} group_id={} at_user_id={} bytes={}",
-                    task_id,
-                    getattr(bot, "self_id", bot_id_str or "<missing>"),
-                    group_id,
-                    at_user_id,
-                    len(file_bytes),
+                    f"Bot [{getattr(bot, 'self_id', bot_id_str or '<missing>')}] delivering a "
+                    f"[{task_type}] image [id={task_id}] to group [{group_id}], length [{len(file_bytes)}]"
                 )
                 delivered = (
                     await send_group_image(
@@ -202,20 +179,12 @@ async def run_ai_callback(
                     invoke_media_task_success(task, image_bytes=file_bytes, group_id=int(group_id))
             elif task_type in VOICE_TASK_TYPES or (song_id is not None and chunk_index is not None):
                 logger.info(
-                    (
-                        "AI callback delivering voice task={} bot_id={} group_id={} task_type={} "
-                        "bytes={} song_id={} chunk_index={} key={}"
-                    ),
-                    task_id,
-                    getattr(bot, "self_id", bot_id_str or "<missing>"),
-                    group_id,
-                    task_type,
-                    len(file_bytes),
-                    song_id,
-                    chunk_index,
-                    key,
+                    f"Bot [{getattr(bot, 'self_id', bot_id_str or '<missing>')}] delivering a "
+                    f"[{task_type}] voice [id={task_id}] to group [{group_id}], length [{len(file_bytes)}]"
                 )
                 delivered = await send_group_voice(bot, group_id, file_bytes) and delivered
+                if delivered and file_bytes:
+                    invoke_media_task_success(task, image_bytes=file_bytes, group_id=int(group_id))
 
         if (
             task_type == CHAT_DRUNK_TASK_TYPE
@@ -245,12 +214,8 @@ async def run_ai_callback(
                 logger.exception("enqueue drunk tts failed task={}", task_id)
 
         logger.info(
-            "AI callback completed task={} delivered={} bot_id={} group_id={} task_type={}",
-            task_id,
-            delivered,
-            bot_id_str or "<missing>",
-            group_id,
-            str(task.get("task_type") or "").strip(),
+            f"Bot [{bot_id_str or '<missing>'}] completed AI task [id={task_id}], "
+            f"a [{str(task.get('task_type') or '').strip()}] request in group [{group_id}], delivered [{delivered}]"
         )
         return {"message": "ok" if delivered else "failed"}
 

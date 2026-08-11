@@ -25,6 +25,30 @@ def test_merge_protocol_snap_fills_offline_display_name(monkeypatch) -> None:
     assert out["10002"].get("online") is False
 
 
+def test_merge_protocol_snap_prefers_configured_display_name(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "pallas.core.foundation.db.pallas_console_data.pallas_protocol_snapshot",
+        lambda: {"accounts": [{"qq": "2927116873", "display_name": "帕拉斯"}]},
+    )
+    out = {"2927116873": {"nickname": "2927116873", "user_id": 2927116873}}
+
+    _merge_protocol_snap_display_names(out)
+
+    assert out["2927116873"]["nickname"] == "帕拉斯"
+
+
+def test_merge_protocol_snap_keeps_login_nickname_without_display_name(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "pallas.core.foundation.db.pallas_console_data.pallas_protocol_snapshot",
+        lambda: {"accounts": [{"qq": "2927116873", "display_name": ""}]},
+    )
+    out = {"2927116873": {"nickname": "QQ 昵称", "user_id": 2927116873}}
+
+    _merge_protocol_snap_display_names(out)
+
+    assert out["2927116873"]["nickname"] == "QQ 昵称"
+
+
 def test_fill_db_accounts_uses_cached_login_nickname(monkeypatch) -> None:
     monkeypatch.setattr(
         "pallas.product.persona.self_identity.resolve_cached_login_nickname",

@@ -7,6 +7,15 @@ from unittest.mock import AsyncMock
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def reset_message_load_state() -> None:
+    from pallas.core.platform.ingress.message_load import reset_message_load_for_tests
+
+    reset_message_load_for_tests()
+    yield
+    reset_message_load_for_tests()
+
+
 @pytest.mark.asyncio
 async def test_enqueue_repeater_learn_captures_idempotent_work_job(monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.repeater import learn_queue
@@ -292,3 +301,4 @@ def test_repeater_work_handlers_include_image_cache_capture() -> None:
     assert "repeater.semantic_style" in repeater_work_handlers()
     assert "repeater.semantic_style.backfill.scan" in repeater_work_handlers()
     assert "repeater.semantic_style.visual" in repeater_work_handlers()
+    assert "sticker.label.visual" in repeater_work_handlers()

@@ -306,6 +306,10 @@ def register_db_router(
 ) -> None:
     """Register console routes."""
 
+    from .db_lifecycle_api import register_db_lifecycle_router
+
+    register_db_lifecycle_router(router, x=x, plugin_config=plugin_config)
+
     @router.get(f"{x}/db/overview", include_in_schema=True)
     async def _db_overview() -> JSONResponse:
         from pallas.core.foundation.db.pallas_console_data import database_overview
@@ -318,7 +322,7 @@ def register_db_router(
                 stale_sec=120.0,
             )
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 数据库概览失败")
+            logger.exception("[控制台] 数据库概览失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
@@ -329,7 +333,7 @@ def register_db_router(
         try:
             data = await database_health_view()
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 数据库健康探测失败")
+            logger.exception("[控制台] 数据库健康探测失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
@@ -345,7 +349,7 @@ def register_db_router(
                 stale_sec=120.0,
             )
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 数据库表列表失败")
+            logger.exception("[控制台] 数据库表列表失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
@@ -362,7 +366,7 @@ def register_db_router(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 表分页读取失败")
+            logger.exception("[控制台] 表分页读取失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
@@ -373,7 +377,7 @@ def register_db_router(
         try:
             data = migrate_wizard_info()
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 迁移向导信息失败")
+            logger.exception("[控制台] 迁移向导信息失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
@@ -398,7 +402,7 @@ def register_db_router(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 启动 Mongo→PG 迁移失败")
+            logger.exception("[控制台] 启动 Mongo→PG 迁移失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": migrate_job_status_payload(job)})
 
@@ -438,7 +442,7 @@ def register_db_router(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 保存数据库后端配置失败")
+            logger.exception("[控制台] 保存数据库后端配置失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
@@ -454,7 +458,7 @@ def register_db_router(
         try:
             data = await probe_db_backend(body.model_dump())
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 数据库后端探测失败")
+            logger.exception("[控制台] 数据库后端探测失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
@@ -465,7 +469,7 @@ def register_db_router(
         try:
             data = backup_info()
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 读取备份信息失败")
+            logger.exception("[控制台] 读取备份信息失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
@@ -528,7 +532,7 @@ def register_db_router(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 列举备份目录失败")
+            logger.exception("[控制台] 列举备份目录失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": {"runs": rows}})
 
@@ -543,7 +547,7 @@ def register_db_router(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 浏览备份目录失败")
+            logger.exception("[控制台] 浏览备份目录失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
@@ -588,7 +592,7 @@ def register_db_router(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 打包备份下载失败")
+            logger.exception("[控制台] 打包备份下载失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return FileResponse(
             zip_path,
@@ -627,7 +631,7 @@ def register_db_router(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 删除备份目录失败")
+            logger.exception("[控制台] 删除备份目录失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
@@ -653,7 +657,7 @@ def register_db_router(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: Mongo aggregate 失败")
+            logger.exception("[控制台] Mongo aggregate 失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": {"rows": rows, "truncated_to": len(rows)}})
 
@@ -667,7 +671,7 @@ def register_db_router(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 读取表行失败")
+            logger.exception("[控制台] 读取表行失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         if data is None:
             raise HTTPException(status_code=404, detail="未找到该行")
@@ -687,7 +691,7 @@ def register_db_router(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 写入表行失败")
+            logger.exception("[控制台] 写入表行失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         drop_read_cache(
             ("db_overview", "bot_configs_list", "group_configs_list", "user_configs_list", "instances"),
@@ -707,7 +711,7 @@ def register_db_router(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("Pallas-Bot 控制台: 删除表行失败")
+            logger.exception("[控制台] 删除表行失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         drop_read_cache(
             ("db_overview", "bot_configs_list", "group_configs_list", "user_configs_list", "instances"),

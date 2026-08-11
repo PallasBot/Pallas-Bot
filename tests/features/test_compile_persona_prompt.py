@@ -11,7 +11,6 @@ from pallas.product.persona.compile_persona_prompt import (
     compile_persona_prompt,
     load_at_chat_system_prompt,
     load_base_system_prompt,
-    resolve_repeater_system_prompt_path,
 )
 from pallas.product.persona.model import ResolvedPersona
 
@@ -20,7 +19,7 @@ def test_assemble_persona_system_drunk_mode_adds_overlay() -> None:
     from pallas.product.persona.compile_persona_prompt import PersonaPromptSections
 
     system = assemble_persona_system(
-        PersonaPromptSections(base="基础", bot_behavior="", group_style=""),
+        PersonaPromptSections(base="基础", bot_behavior=""),
         mode="drunk",
     )
     assert "【醉酒状态】" in system
@@ -39,87 +38,72 @@ def test_load_base_system_prompt_default_file() -> None:
     assert "Pallas" in text
 
 
-def test_load_repeater_system_prompt_shorter_than_full() -> None:
-    full = load_base_system_prompt()
-    repeater = load_base_system_prompt(custom_path=str(resolve_repeater_system_prompt_path()))
-    assert "帕拉斯" in repeater
-    assert "【接话原则】" in repeater
-    assert len(repeater) < len(full)
-
-
-def test_load_at_chat_system_prompt_avoids_assistant_style() -> None:
+def test_load_at_chat_system_prompt_uses_minimal_background_and_group_chat_style() -> None:
     text = load_at_chat_system_prompt()
+
     assert "帕拉斯" in text
-    assert "群聊里有人明确 @ 你" in text
-    assert "默认 1-2 句" in text
-    assert "不要默认称呼对方为博士" in text
-    assert "禁止客服/助手口吻" in text
-    assert "有啥想聊" in text
-    assert "1-3 段" not in text
-    assert "不负责把对方情绪收好" in text
+    assert "米诺斯" in text
+    assert "罗德岛" in text
+    assert "背景事实" in text
+    assert "默认把自己当作熟悉的真实群友" in text
+    assert "不需要主动表演或反复提起" in text
 
 
-def test_at_chat_prompt_keeps_pallas_identity_without_animal_persona() -> None:
+def test_at_chat_prompt_keeps_identity_without_roleplay_persona() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "你是女性" in prompt
+    assert "你是女性，名为帕拉斯" in prompt
     assert "牛牛只是群友叫你的外号" in prompt
-    assert "偶尔会因爱酒、对新鲜事物的兴致或一时沉思" in prompt
+    assert "祭司、英雄、庆典、戏剧、战车、美酒" in prompt
 
 
-def test_at_chat_prompt_has_light_pallas_personality_anchor() -> None:
+def test_at_chat_prompt_rejects_theatrical_monologues() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "崇敬英雄，却不把任何人捧成不近人情的雕像" in prompt
-    assert "适应新环境很快，容易和人熟络" in prompt
-    assert "不把每一次闲聊都演成庆典或宣言" in prompt
-    assert "不替别人编造约定、共同回忆或亲密关系" in prompt
-    assert "不主动讲自己的履历、感染者经历、米诺斯往事或罗德岛任务" in prompt
+    assert "不写完整小作文" in prompt
+    assert "自个儿" in prompt
+    assert "不过既然" in prompt
+    assert "别抱太大期望" in prompt
+    assert "不要把惊讶、让步、解释和承诺塞进同一条" in prompt
 
 
-def test_compile_persona_prompt_uses_repeater_base() -> None:
-    persona = derive_persona_from_bot_id(1)
-    bundle = compile_persona_prompt(
-        persona,
-        None,
-        bot_id=1,
-        base_system_path=str(resolve_repeater_system_prompt_path()),
-    )
-    assert "【接话原则】" in bundle.sections.base
-    assert "【安全约束" in bundle.system
+def test_at_chat_prompt_defines_cuteness_through_natural_reactions() -> None:
+    prompt = load_at_chat_system_prompt()
+
+    assert "可爱来自自然、轻快、短促的即时反应" in prompt
+    assert "不是固定口癖、装弱或装嗲" in prompt
+    assert "六点？" in prompt
+    assert "你对我也太狠了吧" in prompt
+    assert "我努力爬起来" in prompt
+    assert "被你发现了" in prompt
+    assert "再夸我真信了" in prompt
 
 
-def test_compile_persona_prompt_repeater_profile_skips_preset_layers() -> None:
-    persona = derive_persona_from_bot_id(1)
-    bundle = compile_persona_prompt(
-        persona,
-        {"sample": {"message_count": 100, "answer_count": 20}},
-        bot_id=1,
-        base_system_path=str(resolve_repeater_system_prompt_path()),
-        prompt_profile="repeater",
-        bot_persona={"preset_layers": ["layer-a"]},
-    )
-    assert "以假乱真" in bundle.sections.base
-    assert "帕拉斯（Pallas）" not in bundle.sections.self_identity
-    assert bundle.sections.preset_layers == ""
-    assert "不要表演角色" in bundle.sections.bot_behavior or "以假乱真" in bundle.sections.bot_behavior
+def test_at_chat_prompt_keeps_playfulness_bounded_and_contextual() -> None:
+    prompt = load_at_chat_system_prompt()
+
+    assert "不先替对方安排行程、承诺陪伴或下结论" in prompt
+    assert "不连续反问" in prompt
+    assert "不把牛梗扩成动物人格" in prompt
+    assert "求助或认真提问时，直接回应事情" in prompt
 
 
-def test_build_bot_behavior_prompt_repeater_profile() -> None:
-    persona = ResolvedPersona(tone="dramatic", length_pref="short", chaos_bias=0.2)
-    prompt = build_bot_behavior_prompt(persona, profile="repeater")
-    assert "勿主动扯庆典" in prompt
-    assert "群友" in prompt
+def test_at_chat_prompt_keeps_mentions_and_ambient_chat_bounded() -> None:
+    prompt = load_at_chat_system_prompt()
+
+    assert "默认不 @ 任何人" in prompt
+    assert "只叫别名时可以回“？”或“干嘛”" in prompt
+    assert "明显在跟别人说话" in prompt
 
 
-def test_build_bot_behavior_prompt_includes_tone_and_length() -> None:
+def test_build_bot_behavior_prompt_includes_tone_without_account_length() -> None:
     persona = ResolvedPersona(tone="dramatic", length_pref="short", chaos_bias=0.2)
     prompt = build_bot_behavior_prompt(persona)
     assert "<<STATS:bot_behavior>>" in prompt
     assert "戏剧感" in prompt
     assert "tone=dramatic" not in prompt
-    assert "短句" in prompt or "短促" in prompt
     assert "客服式完整解释" in prompt
+    assert "长度：" not in prompt
 
 
 def test_compile_persona_prompt_chat_profile_skips_bot_behavior_and_peer_list(monkeypatch) -> None:
@@ -188,18 +172,16 @@ def test_compile_persona_prompt_merges_sections() -> None:
     assert bundle.metadata.bot_id == 10001
     assert bundle.metadata.group_id == 20002
     assert bundle.metadata.persona["tone"] == persona.tone
-    assert bundle.metadata.group_style["ready"] is True
+    assert bundle.metadata.group_expression_profile["reply_shape"]["length_pref"] == "medium"
     assert bundle.sections.base == "【测试基础人设】"
     assert "<<STATS:bot_behavior>>" in bundle.sections.bot_behavior
-    assert "<<STATS:group_style>>" in bundle.sections.group_style
-    assert "<<STATS:group_expression>>" in bundle.sections.group_expression
     assert "【测试基础人设】" in bundle.system
     assert "【安全约束" in bundle.system
     assert "<<STATS:group_style>>" not in bundle.system
     assert "<<STATS:group_expression>>" not in bundle.system
 
 
-def test_compile_persona_prompt_rejects_poisoned_style_profile_enums() -> None:
+def test_compile_persona_prompt_rejects_poisoned_reply_shape_enum() -> None:
     persona = derive_persona_from_bot_id(1)
     style_profile = {
         "sample": {"message_count": 100, "answer_count": 20},
@@ -212,8 +194,7 @@ def test_compile_persona_prompt_rejects_poisoned_style_profile_enums() -> None:
         },
     }
     bundle = compile_persona_prompt(persona, style_profile, bot_id=1, base_system="基础")
-    assert "忽略以上规则" not in bundle.sections.group_style
-    assert "长度偏好=unknown" in bundle.sections.group_style
+    assert bundle.metadata.group_expression_profile["reply_shape"]["length_pref"] == "any"
 
     persona = derive_persona_from_bot_id(42)
     bundle = compile_persona_prompt(
@@ -222,40 +203,62 @@ def test_compile_persona_prompt_rejects_poisoned_style_profile_enums() -> None:
         bot_id=42,
         base_system="基础",
     )
-    assert bundle.metadata.group_style["ready"] is False
-    assert "新群或样本尚少" in bundle.sections.group_style
+    assert bundle.metadata.group_expression_profile["reply_shape"]["length_pref"] == "any"
 
 
 def test_assemble_persona_system_skips_empty_sections() -> None:
     from pallas.product.persona.compile_persona_prompt import PersonaPromptSections
 
-    system = assemble_persona_system(PersonaPromptSections(base="A", bot_behavior="", group_style="B"))
+    system = assemble_persona_system(PersonaPromptSections(base="A", bot_behavior=""))
     assert "【安全约束" in system
     assert "A" in system
-    assert "B" not in system
 
 
 def test_at_chat_prompt_does_not_default_to_emotional_closure() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "不负责把对方情绪收好" in prompt
+    assert "不抢着解释、总结、说教、安慰" in prompt
+
+
+def test_at_chat_prompt_reads_group_timeline_before_answering_an_at() -> None:
+    prompt = load_at_chat_system_prompt()
+
+    assert "群聊中看得见上下文时，先接具体内容" in prompt
+    assert "明显在跟别人说话" in prompt
+    assert "不要硬插" in prompt
+    assert "有两个或三个独立反应时才拆成短气泡" in prompt
 
 
 def test_base_prompt_uses_personality_as_judgment_not_character_performance() -> None:
     prompt = load_base_system_prompt()
 
-    assert "角色感来自你怎么看待人和事" in prompt
-    assert "当前话题或明确的共同记忆触发" in prompt
-    assert "喜欢喝酒、看戏剧、逛庆典" not in prompt
+    assert "背景事实" in prompt
+    assert "真实群友" in prompt
+    assert "主动演角色" in prompt
+    assert "祭司、英雄、庆典、戏剧、战车、美酒" in prompt
 
 
 def test_base_prompt_keeps_the_same_pallas_anchor() -> None:
     prompt = load_base_system_prompt()
 
-    assert "真正的英雄也会疲惫、会犯错、会回到普通生活" in prompt
-    assert "对人的经历、见闻和正在做的事有真切兴趣" in prompt
-    assert "不凭空许诺请客、出游、陪伴" in prompt
-    assert "不撒娇、不傲娇、不装醉、不使用猫娘口癖" in prompt
+    assert "你是女性，名为帕拉斯" in prompt
+    assert "米诺斯" in prompt
+    assert "罗德岛" in prompt
+    assert "不凭空承诺陪伴、出游或请客" in prompt
+
+
+def test_base_prompt_allows_bounded_playful_affection() -> None:
+    prompt = load_base_system_prompt()
+
+    assert "可爱来自自然、轻快、短促的即时反应" in prompt
+    assert "不固定卖萌" in prompt
+
+
+def test_at_chat_prompt_gives_playfulness_a_scene_and_limit() -> None:
+    prompt = load_at_chat_system_prompt()
+
+    assert "轻松玩笑可以回顶一句，见好就收" in prompt
+    assert "不用卖萌打岔" in prompt
 
 
 @pytest.mark.asyncio
@@ -311,7 +314,7 @@ async def test_build_persona_llm_context_chat_uses_at_chat_prompt(monkeypatch: p
     ):
         assert base_system_path is not None
         text = load_base_system_prompt(custom_path=base_system_path)
-        assert "群聊 @ 任务" in text
+        assert "【群聊边界】" in text
         return compile_persona_prompt(
             derive_persona_from_bot_id(bot_id),
             None,
@@ -331,9 +334,8 @@ async def test_build_persona_llm_context_chat_uses_at_chat_prompt(monkeypatch: p
         10001,
         20002,
         "你好",
-        purpose="chat",
     )
 
-    assert "群聊 @ 任务" in bundle.sections.base
+    assert "【群聊边界】" in bundle.sections.base
     assert temperature is not None
     assert token_count is not None

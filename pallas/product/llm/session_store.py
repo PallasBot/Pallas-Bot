@@ -291,6 +291,8 @@ async def build_llm_chat_messages(
     *,
     cfg: LlmConfig | None = None,
     include_history: bool = True,
+    history_limit: int | None = None,
+    include_group_ambient: bool = True,
 ) -> list[ChatCompletionMessage]:
     c = cfg or get_llm_config()
     messages: list[ChatCompletionMessage] = []
@@ -302,7 +304,12 @@ async def build_llm_chat_messages(
         messages.append(ChatCompletionMessage(role="user", content=current))
         return messages
 
-    if include_history and not is_private_scope(group_id) and c.llm_session_group_ambient_enabled:
+    if (
+        include_history
+        and include_group_ambient
+        and not is_private_scope(group_id)
+        and c.llm_session_group_ambient_enabled
+    ):
         ambient = await list_group_ambient_messages(bot_id, group_id, cfg=c)
         ambient = [turn for turn in ambient if turn.user_id != int(user_id)]
         ambient_block = format_group_ambient_block(ambient, max_len=c.user_message_max_len)
@@ -312,7 +319,7 @@ async def build_llm_chat_messages(
                 messages.append(ChatCompletionMessage(role="user", content=wrapped))
 
     if include_history:
-        history = await list_user_llm_messages(bot_id, group_id, user_id, cfg=c)
+        history = await list_user_llm_messages(bot_id, group_id, user_id, limit=history_limit, cfg=c)
         for turn in history:
             item = turn_to_completion_message(turn, max_len=c.user_message_max_len)
             if item is not None:

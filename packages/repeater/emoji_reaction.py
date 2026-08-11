@@ -12,6 +12,9 @@ from nonebot.typing import T_State
 from nonebot_plugin_alconna import message_reaction
 from nonebot_plugin_apscheduler import scheduler
 
+from pallas.api.logging import format_plugin_event
+from pallas.core.foundation.logging.bridge import format_business_event
+
 from .config import get_repeater_config
 
 EMOJI_IDS = (
@@ -274,11 +277,13 @@ async def send_msg_emoji_like(bot: Bot, message_id: int, emoji_code: str, *, del
 async def send_reaction(bot: Bot, event: Event, emoji_code: str) -> None:
     bot_id = str(bot.self_id)
     message_id = event.message_id  # type: ignore[attr-defined]
+    group_id = getattr(event, "group_id", "unknown")
 
     if has_sent_reaction(bot_id, message_id):
-        logger.debug(f"[Reaction] Bot {bot_id} already reacted to message {message_id}")
+        logger.debug(format_business_event("表情回应", "已跳过", bot=bot_id, group=group_id, message_id=message_id))
         return
 
+    mark_reaction_sent(bot_id, message_id)
     try:
         # Uniseg 仅识别 NapCat/LLOneBot/Lagrange/ws-plugin；SnowLuma 会 WARNING 且不发送。
         app_name = await onebot_app_name(bot)
@@ -286,18 +291,43 @@ async def send_reaction(bot: Bot, event: Event, emoji_code: str) -> None:
             await send_msg_emoji_like(bot, int(message_id), emoji_code)
         else:
             await message_reaction(emoji_code, str(message_id), event, bot, delete=False)
-        mark_reaction_sent(bot_id, message_id)
         _maybe_feedback_emoji_fit(emoji_code, score=3)
-        logger.debug(f"[Reaction] Bot {bot_id} successfully sent emoji {emoji_code} in group {event.group_id}")  # type: ignore[attr-defined]
+        logger.info(
+            format_plugin_event(
+                "reaction",
+                f"Bot [{bot_id}] reacted to message [{message_id}] in group [{group_id}] with emoji [{emoji_code}]",
+            )
+        )
+    except asyncio.CancelledError:
+        sent_reactions.get(bot_id, {}).pop(message_id, None)
+        raise
     except ActionFailed as e:
+        sent_reactions.get(bot_id, {}).pop(message_id, None)
         logger.debug(
-            f"[Reaction] Bot {bot_id} failed to send emoji {emoji_code} in group {event.group_id}: {str(e)}",  # type: ignore[attr-defined]
+            format_business_event(
+                "表情回应",
+                "发送失败",
+                bot=bot_id,
+                group=group_id,
+                message_id=message_id,
+                emoji=emoji_code,
+                error=type(e).__name__,
+            ),
             exc_info=True,
         )
         raise
     except Exception as e:
+        sent_reactions.get(bot_id, {}).pop(message_id, None)
         logger.debug(
-            f"[Reaction] Unexpected error when sending emoji {emoji_code}: {str(e)}",
+            format_business_event(
+                "表情回应",
+                "发送失败",
+                bot=bot_id,
+                group=group_id,
+                message_id=message_id,
+                emoji=emoji_code,
+                error=type(e).__name__,
+            ),
             exc_info=True,
         )
         raise
@@ -316,37 +346,31 @@ async def run_auto_reaction_send(
         await asyncio.wait_for(send_reaction(bot, event, emoji_code), timeout=timeout_s)
     except TimeoutError:
         logger.debug(
-            "[Reaction] Bot {} auto reaction timed out for message {} in group {}",
-            bot_id,
-            message_id,
-            getattr(event, "group_id", "unknown"),
+            format_business_event(
+                "表情回应",
+                "已超时",
+                bot=bot_id,
+                group=getattr(event, "group_id", "unknown"),
+                message_id=message_id,
+                timeout=timeout_s,
+            )
         )
-    except ActionFailed as e:
-        logger.debug(
-            "[Reaction] Bot {} failed to send emoji {} in group {}: {}",
-            bot_id,
-            emoji_code,
-            getattr(event, "group_id", "unknown"),
-            e,
-            exc_info=True,
-        )
-    except Exception as e:
-        logger.debug(
-            "[Reaction] Bot {} auto reaction failed for message {}: {}",
-            bot_id,
-            message_id,
-            e,
-            exc_info=True,
-        )
+    except Exception:
+        pass
 
 
 def dispatch_auto_reaction_send(bot: Bot, event: Event, emoji_code: str) -> bool:
     if len(_auto_reaction_tasks) >= AUTO_REACTION_MAX_PENDING:
         logger.debug(
-            "[Reaction] Auto reaction skipped due to pending backlog bot={} pending={} limit={}",
-            bot.self_id,
-            len(_auto_reaction_tasks),
-            AUTO_REACTION_MAX_PENDING,
+            format_business_event(
+                "自动表情回应",
+                "已跳过",
+                bot=bot.self_id,
+                group=getattr(event, "group_id", "unknown"),
+                message_id=getattr(event, "message_id", "unknown"),
+                pending=len(_auto_reaction_tasks),
+                limit=AUTO_REACTION_MAX_PENDING,
+            )
         )
         return False
 
@@ -387,16 +411,12 @@ async def handle_reaction(bot: Bot, event: GroupMessageEvent):
         )
         return
 
-    bot_id = str(bot.self_id)
     emoji_code = get_random_emoji()
 
     try:
         await send_reaction(bot, event, emoji_code)
-    except ActionFailed as e:
-        logger.debug(
-            f"[Reaction] Bot {bot_id} failed to send emoji {emoji_code} in group {event.group_id}: {str(e)}",
-            exc_info=True,
-        )
+    except ActionFailed:
+        pass
 
 
 async def has_face(bot: Bot, event: GroupMessageEvent, state: T_State) -> bool:
@@ -416,16 +436,12 @@ async def handle_reaction_with_face(bot: Bot, event: GroupMessageEvent):
         logger.debug("[Reaction] Face reaction is disabled", extra={"bot_id": str(bot.self_id)})
         return
 
-    bot_id = str(bot.self_id)
     emoji_code = get_random_emoji()
 
     try:
         await send_reaction(bot, event, emoji_code)
-    except ActionFailed as e:
-        logger.debug(
-            f"[Reaction] Bot {bot_id} failed to send face reaction emoji {emoji_code}: {str(e)}",
-            exc_info=True,
-        )
+    except ActionFailed:
+        pass
 
 
 def _check_reaction_event(event: NoticeEvent) -> bool:
@@ -465,7 +481,15 @@ async def handle_auto_reaction(bot: Bot, event: NoticeEvent, state: T_State):
     reply_emoji = str(emoji_code) if plugin_config.reply_with_same_emoji else get_random_emoji()
 
     if has_sent_reaction(bot_id, message_id):
-        logger.debug(f"[Reaction] Bot {bot_id} already reacted to message {message_id} in group {event.group_id}")  # type: ignore[attr-defined]
+        logger.debug(
+            format_business_event(
+                "表情回应",
+                "已跳过",
+                bot=bot_id,
+                group=event.group_id,  # type: ignore[attr-defined]
+                message_id=message_id,
+            )
+        )
         return
 
     logger.debug(

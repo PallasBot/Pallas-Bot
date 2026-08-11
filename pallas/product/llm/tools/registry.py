@@ -501,7 +501,7 @@ def execute_tool(name: str, arguments: dict[str, Any] | None) -> dict[str, Any]:
     raise RuntimeError(msg)
 
 
-_NO_TOOL_TASKS = frozenset({"repeater_fallback", "repeater_polish", "repeater_polish_lite", "repeater_select", "drunk"})
+_NO_TOOL_TASKS = frozenset({"drunk"})
 
 
 def tool_metadata_for_chat(

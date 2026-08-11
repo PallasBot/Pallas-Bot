@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from pallas.product.llm.reply_necessity import has_reply_obligation, is_low_value_social_turn
+from pallas.product.llm.inference_params import task_token_budget
+from pallas.product.llm.reply_necessity import has_reply_obligation, is_low_value_social_turn, is_short_vent
 
 
 class CurrentTurnAction(StrEnum):
@@ -20,6 +22,7 @@ class CurrentTurnAction(StrEnum):
 
 class CurrentTurnSocialAction(StrEnum):
     ACK = "ACK"
+    AFFECTION = "AFFECTION"
     JOKE = "JOKE"
     STANCE = "STANCE"
     ANSWER = "ANSWER"
@@ -35,6 +38,52 @@ class CurrentTurnDeliveryStyle(StrEnum):
 ReplyTarget = Literal["fact", "emotion", "short_tease", "answer", "silent"]
 
 
+class ReplyTargetCandidate(BaseModel):
+    """A recent group message the current turn may quote."""
+
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    message_id: int = Field(gt=0)
+    sender_id: int = Field(ge=0)
+    text: str = Field(min_length=1, max_length=160)
+    is_current: bool = False
+
+
+def current_turn_field(decision: object, name: str, default: Any = None) -> Any:
+    """Read a decision field from either the validated model or a mapping."""
+    if isinstance(decision, Mapping):
+        return decision.get(name, default)
+    return getattr(decision, name, default)
+
+
+def normalize_current_turn_action(decision: object) -> CurrentTurnAction:
+    raw = current_turn_field(decision, "action", CurrentTurnAction.REPLY)
+    value = str(getattr(raw, "value", raw) or "").strip().upper()
+    try:
+        return CurrentTurnAction(value)
+    except ValueError:
+        return CurrentTurnAction.REPLY
+
+
+def normalize_current_turn_social_action(decision: object) -> CurrentTurnSocialAction:
+    raw = current_turn_field(decision, "social_action", CurrentTurnSocialAction.ANSWER)
+    value = str(getattr(raw, "value", raw) or "").strip().upper()
+    try:
+        return CurrentTurnSocialAction(value)
+    except ValueError:
+        return CurrentTurnSocialAction.ANSWER
+
+
+def current_turn_decision_is_known(decision: object) -> bool:
+    raw_action = current_turn_field(decision, "action")
+    raw_social_action = current_turn_field(decision, "social_action")
+    action = str(getattr(raw_action, "value", raw_action) or "")
+    social_action = str(getattr(raw_social_action, "value", raw_social_action) or "")
+    return action.strip().upper() in CurrentTurnAction._value2member_map_ and (
+        social_action.strip().upper() in CurrentTurnSocialAction._value2member_map_
+    )
+
+
 class CurrentTurnDecisionInput(BaseModel):
     """Only current-turn, non-identifying fields may enter this decision."""
 
@@ -47,6 +96,7 @@ class CurrentTurnDecisionInput(BaseModel):
     required_tool_intent: bool = False
     recent_bot_reply_count: int = Field(default=0, ge=0, le=6)
     has_multi_party_overlap: bool = False
+    reply_candidates: list[ReplyTargetCandidate] = Field(default_factory=list, max_length=6)
 
 
 class CurrentTurnModelResponse(BaseModel):
@@ -55,6 +105,7 @@ class CurrentTurnModelResponse(BaseModel):
     action: CurrentTurnAction
     social_action: CurrentTurnSocialAction = CurrentTurnSocialAction.ANSWER
     delivery_style: CurrentTurnDeliveryStyle = CurrentTurnDeliveryStyle.PLAIN
+    reply_message_id: int | None = Field(default=None, gt=0)
 
 
 class CurrentTurnDecisionTrace(BaseModel):
@@ -73,6 +124,7 @@ class CurrentTurnDecision(BaseModel):
     action: CurrentTurnAction
     social_action: CurrentTurnSocialAction
     delivery_style: CurrentTurnDeliveryStyle = CurrentTurnDeliveryStyle.PLAIN
+    reply_message_id: int | None = None
     trace: CurrentTurnDecisionTrace
 
 
@@ -90,10 +142,27 @@ def should_read_persistent_memory_for_turn(
 ) -> bool:
     """Keep retrieval out of short social turns without changing reply routing."""
     action = str(getattr(social_action, "value", social_action) or "").strip().upper()
-    if action in {CurrentTurnSocialAction.ACK.value, CurrentTurnSocialAction.JOKE.value}:
+    if action in {
+        CurrentTurnSocialAction.ACK.value,
+        CurrentTurnSocialAction.AFFECTION.value,
+        CurrentTurnSocialAction.JOKE.value,
+    }:
         return False
     current = str(text or "").strip()
     return not (len(current) <= 24 and bool(_SHORT_SOCIAL_MEMORY_TURN_RE.search(current)))
+
+
+def should_include_recent_pair_for_turn(
+    text: str,
+    social_action: CurrentTurnSocialAction | str,
+    *,
+    explicitly_addressed: bool,
+    has_recent_assistant_turn: bool,
+) -> bool:
+    """Keep one direct-chat exchange when a short social turn omits context."""
+    if not explicitly_addressed or not has_recent_assistant_turn:
+        return False
+    return not should_read_persistent_memory_for_turn(text, social_action)
 
 
 def resolve_reply_target(
@@ -112,6 +181,8 @@ def resolve_reply_target(
         if _SHORT_SOCIAL_MEMORY_TURN_RE.search(plain):
             return "emotion"
         return "fact"
+    if social_value == CurrentTurnSocialAction.AFFECTION.value:
+        return "emotion"
     if social_value == CurrentTurnSocialAction.JOKE.value:
         return "short_tease"
     if has_reply_obligation(plain) or social_value in {
@@ -149,22 +220,64 @@ def build_current_turn_decision_prompt(turn: CurrentTurnDecisionInput) -> str:
     return (
         "Classify this current chat turn. Reply with JSON only: "
         '{"action":"REPLY|PASS|TOOL|FOLLOW_UP",'
-        '"social_action":"ACK|JOKE|STANCE|ANSWER|ASK_ONE",'
-        '"delivery_style":"PLAIN|QUOTE|MENTION"}. '
+        '"social_action":"ACK|AFFECTION|JOKE|STANCE|ANSWER|ASK_ONE",'
+        '"delivery_style":"PLAIN|QUOTE|MENTION","reply_message_id":number|null}. '
         "social_action is the visible conversational move, not a writing style. "
         "ACK is for a short vent, acknowledgement, or low-stakes reaction. "
+        "AFFECTION is for warmly receiving praise or responding to affectionate, clingy, or cute behavior. "
         "JOKE is for banter or a playful reaction. "
         "For a short ACK or JOKE without a question or request, use PASS. "
         "STANCE is only for an explicit request for an opinion or choice. "
         "ANSWER is for a direct question, and ASK_ONE is only for a necessary clarification. "
-        "Use PLAIN by default. QUOTE only when directly answering the current message. "
+        "Use PLAIN by default. QUOTE only when directly answering the current message or an offered reply target. "
+        "To quote one offered message, set reply_message_id to its id; never invent an id. "
         "Use MENTION only when multiple people are speaking and a specific person must be singled out; "
         "do not mention someone back just because they mentioned the bot. "
         f"The message is {addressed}; {tool_option}. "
         f"The bot has replied {turn.recent_bot_reply_count} time(s) recently; "
         f"multi-party overlap is {turn.has_multi_party_overlap}. "
+        f"Reply candidates: {_format_reply_candidates(turn.reply_candidates)}. "
         f"Message: {turn.text}"
     )
+
+
+def _format_reply_candidates(candidates: list[ReplyTargetCandidate]) -> str:
+    if not candidates:
+        return "none"
+    return " | ".join(
+        f"id={item.message_id};sender={item.sender_id};current={str(item.is_current).lower()};text={item.text}"
+        for item in candidates
+    )
+
+
+def decide_current_turn_by_rule(turn: CurrentTurnDecisionInput) -> CurrentTurnDecision:
+    """Deterministic decision for the no-model path; mirrors the model rule overrides."""
+    text = str(turn.text or "").strip()
+    if turn.required_tool_intent and turn.tools_permitted:
+        # 保持自包含；decide_current_turn 的调用路径上该分支已被提前短路
+        return _decision(CurrentTurnAction.TOOL, source="rule", reason="required_tool_intent")
+    if is_short_vent(text):
+        return _decision(
+            CurrentTurnAction.REPLY,
+            social_action=CurrentTurnSocialAction.ACK,
+            source="rule",
+            reason="rule_short_vent_ack",
+        )
+    if not (turn.is_to_me or turn.is_explicitly_addressed) and should_pass_low_value_social_turn(text):
+        return _decision(
+            CurrentTurnAction.PASS,
+            social_action=CurrentTurnSocialAction.ACK,
+            source="rule",
+            reason="rule_low_value_social_pass",
+        )
+    if has_reply_obligation(text):
+        return _decision(
+            CurrentTurnAction.REPLY,
+            social_action=CurrentTurnSocialAction.ANSWER,
+            source="rule",
+            reason="rule_reply_obligation",
+        )
+    return _decision(CurrentTurnAction.REPLY, source="rule", reason="rule_default_reply")
 
 
 def decide_current_turn(
@@ -177,7 +290,7 @@ def decide_current_turn(
     if turn.required_tool_intent and turn.tools_permitted:
         return _decision(CurrentTurnAction.TOOL, source="rule", reason="required_tool_intent")
     if not model_enabled:
-        return _decision(CurrentTurnAction.REPLY, source="rule", reason="default_reply")
+        return decide_current_turn_by_rule(turn)
     try:
         parsed = CurrentTurnModelResponse.model_validate_json(str(model_response or ""))
     except (ValidationError, ValueError):
@@ -214,13 +327,26 @@ def decide_current_turn(
             source="fallback",
             reason="mention_without_multi_party_overlap",
         )
+    reply_message_id = _resolve_reply_message_id(parsed.reply_message_id, turn.reply_candidates)
+    delivery_style = CurrentTurnDeliveryStyle.QUOTE if reply_message_id is not None else parsed.delivery_style
     return _decision(
         parsed.action,
         social_action=parsed.social_action,
-        delivery_style=parsed.delivery_style,
+        delivery_style=delivery_style,
+        reply_message_id=reply_message_id,
         source="model",
         reason="model_action",
     )
+
+
+def _resolve_reply_message_id(
+    selected_id: int | None,
+    candidates: list[ReplyTargetCandidate],
+) -> int | None:
+    if selected_id is None:
+        return None
+    candidate_ids = {item.message_id for item in candidates}
+    return selected_id if selected_id in candidate_ids else None
 
 
 async def decide_current_turn_with_model(
@@ -233,8 +359,6 @@ async def decide_current_turn_with_model(
         return decide_current_turn(turn, model_enabled=False)
     if not enabled:
         return decide_current_turn(turn, model_enabled=False)
-    if turn.is_to_me and not turn.tools_permitted and not turn.has_multi_party_overlap:
-        return _decision(CurrentTurnAction.REPLY, source="rule", reason="explicit_plain_reply")
     from pallas.product.llm.provider_client import complete_chat_message
 
     try:
@@ -243,16 +367,16 @@ async def decide_current_turn_with_model(
                 {
                     "role": "system",
                     "content": (
-                        "Return only a JSON object with action, social_action, and delivery_style. "
+                        "Return only a JSON object with action, social_action, delivery_style, and reply_message_id. "
                         "Allowed actions: REPLY, PASS, TOOL, FOLLOW_UP. "
-                        "Allowed social actions: ACK, JOKE, STANCE, ANSWER, ASK_ONE. "
+                        "Allowed social actions: ACK, AFFECTION, JOKE, STANCE, ANSWER, ASK_ONE. "
                         "Allowed delivery styles: PLAIN, QUOTE, MENTION."
                     ),
                 },
                 {"role": "user", "content": build_current_turn_decision_prompt(turn)},
             ],
             model="",
-            options={"temperature": 0, "max_tokens": 48},
+            options={"temperature": 0, "max_tokens": task_token_budget("turn_decision")},
             task="turn_decision",
         )
     except Exception:
@@ -266,6 +390,7 @@ def _decision(
     *,
     social_action: CurrentTurnSocialAction | None = None,
     delivery_style: CurrentTurnDeliveryStyle = CurrentTurnDeliveryStyle.PLAIN,
+    reply_message_id: int | None = None,
     source: str,
     reason: str,
 ) -> CurrentTurnDecision:
@@ -277,6 +402,7 @@ def _decision(
         action=action,
         social_action=social_action,
         delivery_style=delivery_style,
+        reply_message_id=reply_message_id,
         trace=CurrentTurnDecisionTrace(
             action=action,
             social_action=social_action,

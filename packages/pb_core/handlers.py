@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from nonebot import get_loaded_plugins
+from nonebot import get_loaded_plugins, logger
 
+from pallas.api.logging import format_plugin_event
 from pallas.console.cli.bot_process import bot_lifecycle_available, schedule_bot_restart
 from pallas.console.cli.runtime_mode import resolve_bot_mode
 
@@ -51,7 +52,15 @@ async def handle_plugins(ctx: PluginHandlerContext) -> None:
 async def handle_update_check(ctx: PluginHandlerContext) -> None:
     config_cmd = parse_update_config_command(ctx.plain_text)
     if config_cmd is not None:
-        await ctx.finish(apply_update_config_command(config_cmd))
+        result = apply_update_config_command(config_cmd)
+        if not result.startswith("配置失败"):
+            logger.info(
+                format_plugin_event(
+                    "configure_update",
+                    f"Bot [{ctx.event.self_id}] updated automatic update configuration [{config_cmd.kind}]",
+                )
+            )
+        await ctx.finish(result)
         return
     action = parse_update_action(ctx.plain_text)
     if action is None:
@@ -71,7 +80,26 @@ async def handle_update_check(ctx: PluginHandlerContext) -> None:
             default_cd_sec=_UPDATE_APPLY_CD_SEC,
         )
         await ctx.matcher.send(f"开始更新（{action}）…")
-    await ctx.finish(await apply_update_action(action))
+    result = await apply_update_action(action)
+    if action == "check":
+        logger.info(format_plugin_event("check_update", f"Bot [{ctx.event.self_id}] checked available updates"))
+    elif action in _UPDATE_APPLY_ACTIONS:
+        if result.startswith("更新失败"):
+            logger.warning(
+                format_plugin_event(
+                    "apply_update",
+                    f"Bot [{ctx.event.self_id}] failed to apply [{action}] updates",
+                )
+            )
+        else:
+            status = "partially completed" if "失败" in result else "completed"
+            logger.info(
+                format_plugin_event(
+                    "apply_update",
+                    f"Bot [{ctx.event.self_id}] {status} [{action}] updates",
+                )
+            )
+    await ctx.finish(result)
 
 
 async def handle_add_bot_admin(ctx: PluginHandlerContext) -> None:
@@ -88,6 +116,13 @@ async def handle_add_bot_admin(ctx: PluginHandlerContext) -> None:
         return
     bot_id, admin_ids = parsed
     created, merged, added = await add_bot_admins(bot_id, admin_ids)
+    if added:
+        logger.info(
+            format_plugin_event(
+                "add_bot_admin",
+                f"Bot [{ctx.event.self_id}] added [{len(added)}] admins to bot [{bot_id}]",
+            )
+        )
     await ctx.finish(
         format_add_bot_admin_result(
             bot_id=bot_id,
@@ -112,4 +147,10 @@ async def handle_restart(ctx: PluginHandlerContext) -> None:
     if not scheduled:
         await ctx.finish("重启调度失败，请改用 WebUI 或 pallas restart。")
         return
+    logger.info(
+        format_plugin_event(
+            "schedule_restart",
+            f"Bot [{ctx.event.self_id}] scheduled a [{mode}] restart at user [{ctx.user_id}]'s request",
+        )
+    )
     await ctx.finish(f"将在约 3 秒后重启（{mode}）。恢复后会私聊通知你。")

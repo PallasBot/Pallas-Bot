@@ -7,6 +7,7 @@ from pallas.product.llm.reply_necessity import (
     evaluate_reply_necessity_gate,
     is_bystander_plain_text,
     is_noise_fragment,
+    is_short_vent,
     score_reply_necessity,
 )
 
@@ -65,6 +66,17 @@ def test_direct_question_is_not_suppressed_by_recent_bot_presence() -> None:
 
 def test_mentioned_question_crosses_reply_necessity_threshold() -> None:
     result = evaluate_reply_necessity_gate(text="牛牛你还在吗", is_mentioned=True)
+
+    assert result.decision == "proceed"
+    assert result.score >= REPLY_NECESSITY_TRIGGER_SCORE
+
+
+def test_mentioned_short_social_turn_crosses_reply_necessity_threshold() -> None:
+    result = evaluate_reply_necessity_gate(
+        text="牛牛晚饭吃了没",
+        is_mentioned=True,
+        has_recent_back_and_forth=True,
+    )
 
     assert result.decision == "proceed"
     assert result.score >= REPLY_NECESSITY_TRIGGER_SCORE
@@ -144,3 +156,13 @@ def test_spam_promo_and_incomplete() -> None:
         has_candidate_pool=True,
     )
     assert hit.score < REPLY_NECESSITY_TRIGGER_SCORE
+
+
+def test_is_short_vent_accepts_compact_complaints() -> None:
+    assert is_short_vent("又临时改了，烦")
+    assert is_short_vent("今天真累")
+
+
+def test_is_short_vent_rejects_noise_and_long_text() -> None:
+    assert not is_short_vent("哈哈哈")
+    assert not is_short_vent("这件事已经让我非常烦了，而且我还没想好怎么处理")

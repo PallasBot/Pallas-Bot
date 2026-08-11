@@ -50,6 +50,7 @@ FILE_MAP: dict[str, str] = {
     "developer/index.md": "developer/index.md",
     "developer/author/index.md": "developer/author/index.md",
     "developer/architecture/overview.md": "developer/architecture/overview.md",
+    "developer/architecture/message-runtime.md": "developer/architecture/message-runtime.md",
     "developer/architecture/core-vs-extensions.md": "developer/architecture/core-vs-extensions.md",
     "developer/architecture/config-storage.md": "developer/architecture/config-storage.md",
     "developer/architecture/plugin-governance.md": "developer/architecture/plugin-governance.md",
@@ -406,17 +407,17 @@ def transform_for_vitepress(text: str) -> str:
     )
     text = re.sub(
         r"\]\(\.\./config/([^)#]+)\)",
-        rf"](https://github.com/PallasBot/Pallas-Bot/tree/main/config/\1)",
+        r"](https://github.com/PallasBot/Pallas-Bot/tree/main/config/\1)",
         text,
     )
     text = re.sub(
         r"\]\(\.\./tools/([^)#]+)\)",
-        rf"](https://github.com/PallasBot/Pallas-Bot/tree/main/tools/\1)",
+        r"](https://github.com/PallasBot/Pallas-Bot/tree/main/tools/\1)",
         text,
     )
     text = re.sub(
         r"\]\(\.\./scripts/([^)#]+)\)",
-        rf"](https://github.com/PallasBot/Pallas-Bot/tree/main/scripts/\1)",
+        r"](https://github.com/PallasBot/Pallas-Bot/tree/main/scripts/\1)",
         text,
     )
     text = re.sub(
@@ -429,17 +430,17 @@ def transform_for_vitepress(text: str) -> str:
     text = re.sub(r"\]\(Migration-v3\.md([^)]*)\)", r"](/about/migration\1)", text)
     text = re.sub(
         r"\]\(\.\./\.\./\.\./resource/([^)#]+)\)",
-        rf"](https://github.com/PallasBot/Pallas-Bot/tree/main/resource/\1)",
+        r"](https://github.com/PallasBot/Pallas-Bot/tree/main/resource/\1)",
         text,
     )
     text = re.sub(
         r"\]\(\.\./\.\./\.\./tools/([^)#]+)\)",
-        rf"](https://github.com/PallasBot/Pallas-Bot/tree/main/tools/\1)",
+        r"](https://github.com/PallasBot/Pallas-Bot/tree/main/tools/\1)",
         text,
     )
     text = re.sub(
         r"\]\(\.\./\.\./\.\./config/([^)#]+)\)",
-        rf"](https://github.com/PallasBot/Pallas-Bot/tree/main/config/\1)",
+        r"](https://github.com/PallasBot/Pallas-Bot/tree/main/config/\1)",
         text,
     )
     text = re.sub(
@@ -449,7 +450,7 @@ def transform_for_vitepress(text: str) -> str:
     )
     text = re.sub(
         r"\]\(\.\./\.\./\.\./scripts/([^)#]+)\)",
-        rf"](https://github.com/PallasBot/Pallas-Bot/tree/main/scripts/\1)",
+        r"](https://github.com/PallasBot/Pallas-Bot/tree/main/scripts/\1)",
         text,
     )
     text = re.sub(r"\]\(guide/([a-z0-9.-]+)\.md([^)]*)\)", r"](/guide/\1\2)", text)
@@ -485,12 +486,12 @@ def transform_for_vitepress(text: str) -> str:
     )
     text = re.sub(
         r"\]\(\.\./\.\./skills/([^)#]+)\)",
-        rf"](https://github.com/PallasBot/Pallas-Bot/blob/main/docs/skills/\1)",
+        r"](https://github.com/PallasBot/Pallas-Bot/blob/main/docs/skills/\1)",
         text,
     )
     text = re.sub(
         r"\]\(\.\./skills/([^)#]+)\)",
-        rf"](https://github.com/PallasBot/Pallas-Bot/blob/main/docs/skills/\1)",
+        r"](https://github.com/PallasBot/Pallas-Bot/blob/main/docs/skills/\1)",
         text,
     )
     text = re.sub(r"\]\(4\.0-start\.md([^)]*)\)", r"](/guide/4.0-start\1)", text)
@@ -555,6 +556,15 @@ def sync(dest_root: Path) -> int:
         topo_dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(topo_src, topo_dst)
         print("sync assets/concepts-topology.svg -> src/public/assets/concepts-topology.svg")
+    runtime_src = DOCS / "assets" / "message-runtime-architecture.svg"
+    runtime_dst = src_root / "public" / "assets" / "message-runtime-architecture.svg"
+    if runtime_src.is_file():
+        runtime_dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(runtime_src, runtime_dst)
+        print(
+            "sync assets/message-runtime-architecture.svg -> "
+            "src/public/assets/message-runtime-architecture.svg"
+        )
     for rel_src, rel_dst in FILE_MAP.items():
         source = DOCS / rel_src
         if not source.is_file():

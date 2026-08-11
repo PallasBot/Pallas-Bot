@@ -157,7 +157,7 @@ A: 表示 **Postgres 里没有叫 `PallasBot` 的库**，而 Bot 的 **`PG_DB`**
 
 ### PostgreSQL 是否一定要用超级用户 / 管理员账号？
 
-A: **不必。** 4.0 默认路径只连目标库做建表与迁移；`pg_stat_statements` 在独立事务里尝试启用，失败只降级诊断。Compose 用 `POSTGRES_DB` 建好库即可。托管 PG 请先建空库再填连接信息；可选扩展见 `deploy/pg/extensions.sql`。对应需求：[Issue #222](https://github.com/PallasBot/Pallas-Bot/issues/222)。
+A: **不必。** 默认路径只连目标库做建表与迁移，不会尝试安装 `pg_stat_statements`。需要慢查询统计时，在 `[env]` 显式设置 `PG_STAT_STATEMENTS_ENABLED = "true"`；数据库管理员还须预加载 `pg_stat_statements`，并让该账号能够创建扩展或预先创建它。Compose 用 `POSTGRES_DB` 建好库即可。托管 PG 请先建空库再填连接信息；可选扩展见 `deploy/pg/extensions.sql`。对应需求：[Issue #222](https://github.com/PallasBot/Pallas-Bot/issues/222)。
 
 ### Docker 里日志写「连接 MongoDB 127.0.0.1:27017」对吗？
 
@@ -169,7 +169,7 @@ A: 常见原因是 **volume 把整个 `/app/resource` 挂成宿主机目录**，
 
 ### 本地 `docker build` 拉 `python:3.12-slim` 报 `registry-1.docker.io` / `EOF`？
 
-A: 多为 **Docker Hub 访问不稳定**（国内常见）。可在仓库根目录使用带 **`BASE_IMAGE`** 的镜像前缀构建，例如：`docker build --build-arg BASE_IMAGE=docker.m.daocloud.io/library/python:3.12-slim -t pallasbot:local .`（以你当前能访问的镜像站为准）；或为 Docker 配置 **registry-mirrors** / 代理。详见 [Docker 部署](/deploy/docker) 排障。
+A: 多为 **Docker Hub 访问不稳定**（国内常见）。可在仓库根目录使用带 **`BASE_IMAGE`** 的镜像前缀构建，例如：`docker build --build-arg BASE_IMAGE=docker.m.daocloud.io/library/python:3.12-slim -t pallasbot:local .`（以你当前能访问的镜像站为准）；或为 Docker 配置 **registry-mirrors** / 代理。完整的 Compose 镜像覆盖、uv 索引与 WebUI Git 镜像边界见 [Docker 部署 · 下载慢与镜像源](/deploy/docker#下载慢与镜像源)。
 
 ### Docker Compose 起内置 Postgres 时，还要不要在 compose 里再配一套 `POSTGRES_USER`？
 
@@ -193,7 +193,7 @@ A: **不能混为一谈。** LLM 聊天固定走 Bot 内核 Provider，在 **AI 
 
 ### 3.x 的 `src/plugins` 插件在 4.0 还能用吗？
 
-A: **不能沿用旧路径。** 4.0 已移除 `src/` 目录；内置玩法迁至 **`packages/`** 与 **`pallas-plugin-*` 官方插件**，社区插件应使用 **`pallas.api.*`** 与 **`packages/<name>/` 或 `local/plugins/`** 布局。从 3.x 升级请读 [4.0 迁移指南](/guide/4.0-migration)。
+A: **不能沿用旧加载目录。** 3.x 的 NoneBot `plugin_dirs` 指向 `src/plugins/`；4.0 已改为 `packages/`，不会再扫描 `src/plugins/`。内置玩法迁至 **`packages/`** 与 **`pallas-plugin-*` 官方插件**；站点私有插件放 `local/plugins/`，社区插件应使用 **`pallas.api.*`**。从 3.x 升级请读 [4.0 迁移指南](/guide/4.0-migration)。
 
 ### 社区作者如何只依赖内核、不克隆整仓？
 

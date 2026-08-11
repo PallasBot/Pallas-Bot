@@ -15,6 +15,8 @@ if TYPE_CHECKING:
 class WorkJobStore(Protocol):
     async def enqueue(self, job: WorkJob) -> WorkJob: ...
 
+    async def requeue_terminal(self, job: WorkJob) -> tuple[WorkJob, bool]: ...
+
     async def enqueue_many(self, jobs: list[WorkJob]) -> list[WorkJob]: ...
 
     async def claim(self, *, owner: str, lease_sec: float) -> WorkJob | None: ...
@@ -57,6 +59,28 @@ class MemoryWorkJobStore:
             self._available_at[job.id] = time.monotonic()
             self._enqueued_at[job.id] = time.monotonic()
             return job
+
+    async def requeue_terminal(self, job: WorkJob) -> tuple[WorkJob, bool]:
+        async with self._lock:
+            existing_id = self._idempotency.get(job.idempotency_key)
+            if existing_id is None:
+                self._jobs[job.id] = job
+                self._idempotency[job.idempotency_key] = job.id
+                self._available_at[job.id] = time.monotonic()
+                self._enqueued_at[job.id] = time.monotonic()
+                return job, True
+            if existing_id not in self._completed and existing_id not in self._dead_lettered:
+                return self._jobs[existing_id], False
+            self._jobs.pop(existing_id, None)
+            self._available_at.pop(existing_id, None)
+            self._enqueued_at.pop(existing_id, None)
+            self._completed.discard(existing_id)
+            self._dead_lettered.discard(existing_id)
+            self._jobs[job.id] = job
+            self._idempotency[job.idempotency_key] = job.id
+            self._available_at[job.id] = time.monotonic()
+            self._enqueued_at[job.id] = time.monotonic()
+            return job, True
 
     async def enqueue_many(self, jobs: list[WorkJob]) -> list[WorkJob]:
         return [await self.enqueue(job) for job in jobs]

@@ -10,6 +10,7 @@
 | --- | --- |
 | 第一次装 | [快速开始](guide/quickstart.md) |
 | 要装插件 | [安装插件](guide/install-plugins.md) |
+| 想了解消息为何更快、更稳 | [核心概念与统一消息入口](guide/concepts.md) |
 | 配聊天或媒体能力 | [LLM 对话、媒体与 AI Runtime](guide/ai-runtime-choice.md) |
 | 号主 / VPS 运维 | [运维入口](maintainer/quickstart.md) |
 | 插件作者 | [Developer](developer/index.md) |

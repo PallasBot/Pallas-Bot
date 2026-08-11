@@ -52,8 +52,8 @@ def format_cache_fallback_warning(*, key: str, stale_sec: float, err: Exception)
             token_hint = "；已配置 GitHub token"
         else:
             token_hint = ""
-        return f"Pallas-Bot 控制台: 更新检查请求失败，已使用{window}内的缓存结果{token_hint}（key={key}）err={err}"
-    return f"Pallas-Bot 控制台: 读取失败，已使用{window}内的缓存结果（key={key}）err={err}"
+        return f"[控制台] 更新检查请求失败，已使用{window}内的缓存结果{token_hint}（key={key}）err={err}"
+    return f"[控制台] 读取失败，已使用{window}内的缓存结果（key={key}）err={err}"
 
 
 async def cached_read(
@@ -74,20 +74,20 @@ async def cached_read(
         return await inflight
 
     async def run() -> Any:
-        t = time.monotonic()
         stale_hit = _READ_CACHE.get(key)
         try:
             data = await loader()
         except Exception as exc:
-            if stale_hit and t < float(stale_hit["stale_exp"]):
+            if stale_hit and time.monotonic() < float(stale_hit["stale_exp"]):
                 logger.warning(format_cache_fallback_warning(key=key, stale_sec=stale_sec, err=exc))
                 return cache_value_copy(stale_hit["data"])
             raise
         stored = cache_value_copy(data)
+        cached_at = time.monotonic()
         _READ_CACHE[key] = {
             "data": stored,
-            "exp": t + max(0.05, ttl_sec),
-            "stale_exp": t + max(ttl_sec, stale_sec),
+            "exp": cached_at + max(0.05, ttl_sec),
+            "stale_exp": cached_at + max(ttl_sec, stale_sec),
         }
         return cache_value_copy(stored)
 

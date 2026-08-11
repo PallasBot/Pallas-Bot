@@ -33,6 +33,7 @@ _INGRESS_DISPATCH_FIELDS = frozenset({
     "chat_drop_on_overload",
     "route_index_enabled",
     "dispatch_lanes_enabled",
+    "lane_chat_adaptive_max",
     "send_queue_enabled",
 })
 

@@ -19,10 +19,6 @@ _EMPTY_MOE = {"simple": "", "medium": "", "complex": "", "vision": ""}
 _EMPTY_TASKS = {
     "llm_chat": "",
     "drunk": "",
-    "repeater_fallback": "",
-    "repeater_polish": "",
-    "repeater_polish_lite": "",
-    "repeater_select": "",
     "affect_refine": "",
 }
 

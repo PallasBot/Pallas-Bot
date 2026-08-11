@@ -5,7 +5,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Body, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from packages.pb_webui.console_openapi_models import (
     PluginConfigData as _PluginConfigData,
@@ -17,6 +17,7 @@ from packages.pb_webui.console_openapi_models import (
     _ApiOkResponse,
 )
 from pallas.product.llm.ops_api import BehaviorPattern, BehaviorScene, ensure_default_behavior_patterns
+from pallas.product.persona.account_profile import AccountPersonaProfile
 
 from .ai_extension_api import ai_extension_http_json
 from .config import Config
@@ -179,6 +180,43 @@ class _LlmEmbeddingProbeBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     text: str = Field(default="ping", max_length=200)
+
+
+class _LlmSingDefaultsBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    default_speaker: str | None = Field(default=None, max_length=64)
+    preferred_backend: str | None = Field(default=None, max_length=64)
+    speaker_backends: dict[str, str] | None = None
+    song_cache_days: StrictInt | None = Field(default=None, ge=1, le=3650)
+    song_cache_size: StrictInt | None = Field(default=None, ge=0, le=10000)
+
+
+class _LlmSingDefaultsData(BaseModel):
+    default_speaker: str
+    preferred_backend: str
+    speaker_backends: dict[str, str]
+    song_cache_days: int = Field(ge=1, le=3650)
+    song_cache_size: int = Field(ge=0, le=10000)
+    writable: bool | None = None
+
+
+class _PersonaObserveBotRow(BaseModel):
+    account: int
+    group_style_enabled: bool = True
+    account_profile: AccountPersonaProfile
+    base: dict[str, Any]
+    base_hints: list[str] = Field(default_factory=list)
+    resolved: dict[str, Any] | None = None
+    resolved_hints: list[str] = Field(default_factory=list)
+
+
+class _PersonaObserveData(BaseModel):
+    group_id: int | None = None
+    group_style_snapshot: dict[str, Any] | None = None
+    affect_refine: dict[str, Any] | None = None
+    affect_triggers: list[dict[str, Any]] = Field(default_factory=list)
+    bots: list[_PersonaObserveBotRow] = Field(default_factory=list)
 
 
 class _CommunityConnectivityProbeRow(BaseModel):
@@ -405,10 +443,6 @@ class _LlmLocalRoutingTaskModelsBody(BaseModel):
 
     llm_chat: str = ""
     drunk: str = ""
-    repeater_fallback: str = ""
-    repeater_polish: str = ""
-    repeater_polish_lite: str = ""
-    repeater_select: str = ""
 
 
 class _LlmLocalRoutingConfigBody(BaseModel):
@@ -951,19 +985,19 @@ def register_common_config_router(
     @router.put(
         f"{x}/common-config/llm/media-models/sing/defaults",
         include_in_schema=True,
+        response_model=_ApiOkResponse[_LlmSingDefaultsData],
+        response_model_exclude_none=True,
     )
-    async def _llm_media_models_sing_defaults_put(body: dict[str, Any]) -> JSONResponse:
+    async def _llm_media_models_sing_defaults_put(body: _LlmSingDefaultsBody) -> JSONResponse:
         from pallas.product.llm.ops_api import put_sing_defaults
 
-        payload = body if isinstance(body, dict) else {}
-        if (
-            payload.get("default_speaker") is None
-            and payload.get("preferred_backend") is None
-            and payload.get("speaker_backends") is None
-        ):
+        payload = body.model_dump(exclude_none=True)
+        if not payload:
             raise HTTPException(
                 status_code=400,
-                detail="至少提供 default_speaker、preferred_backend 或 speaker_backends",
+                detail=(
+                    "至少提供 default_speaker、preferred_backend、speaker_backends、song_cache_days 或 song_cache_size"
+                ),
             )
         try:
             data = await put_sing_defaults(payload)
@@ -973,7 +1007,7 @@ def register_common_config_router(
             raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
-        return JSONResponse({"ok": True, "data": data})
+        return {"ok": True, "data": data}
 
     @router.get(
         f"{x}/common-config/llm/media-models/tts/voices",
@@ -1343,11 +1377,15 @@ def register_common_config_router(
             raise HTTPException(status_code=int(replay_result.get("status_code") or 502), detail=detail)
         return JSONResponse({"ok": True, "data": replay_result.get("data") or {}})
 
-    @router.get(f"{x}/common-config/llm/persona-observe", include_in_schema=True)
+    @router.get(
+        f"{x}/common-config/llm/persona-observe",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_PersonaObserveData],
+    )
     async def _llm_persona_observe_get(
         group_id: int | None = Query(default=None, ge=1, description="群号；省略则仅展示 bot 基线"),
         accounts: str | None = Query(default=None, description="逗号分隔 bot account，省略则全部"),
-    ) -> JSONResponse:
+    ) -> dict[str, Any]:
         from pallas.product.persona.observe import build_persona_observe_payload, parse_observe_accounts
 
         try:
@@ -1357,4 +1395,4 @@ def register_common_config_router(
             )
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
-        return JSONResponse({"ok": True, "data": data})
+        return {"ok": True, "data": data}

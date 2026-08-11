@@ -51,6 +51,69 @@ def test_dispatch_metrics_include_lane_capacity_snapshot() -> None:
     assert payload["lanes"] == {"chat": {"limit": 8, "in_use": 6}}
 
 
+def test_dispatch_metrics_include_route_candidates(monkeypatch) -> None:
+    monkeypatch.setattr(dispatch_metrics, "route_candidate_metrics_snapshot", lambda: [{"route_modules": ["help"]}])
+
+    snap = dispatch_metrics.dispatch_metrics_snapshot()
+
+    assert snap["route_candidates"] == [{"route_modules": ["help"]}]
+
+
+def test_merge_dispatch_metrics_aggregates_route_candidates() -> None:
+    merged = dispatch_metrics.merge_dispatch_metrics([
+        {
+            "day_key": "2026-08-10",
+            "route_candidates": [
+                {
+                    "route_modules": ["drink"],
+                    "messages": 3,
+                    "route_index_hits": 3,
+                    "matchers_selected": 6,
+                    "direct_error": 0,
+                    "direct_handled": 0,
+                    "matcher_handled": 3,
+                    "ingress_duration_ms_p95": 12.0,
+                }
+            ],
+        },
+        {
+            "day_key": "2026-08-10",
+            "route_candidates": [
+                {
+                    "route_modules": ["drink"],
+                    "messages": 4,
+                    "route_index_hits": 4,
+                    "matchers_selected": 8,
+                    "direct_error": 0,
+                    "direct_handled": 0,
+                    "matcher_handled": 4,
+                    "ingress_duration_ms_p95": 20.0,
+                }
+            ],
+        },
+    ])
+
+    assert merged["route_candidates"] == [
+        {
+            "route_modules": ["drink"],
+            "messages": 7,
+            "route_index_hits": 7,
+            "route_index_fallbacks": 0,
+            "matchers_considered": 0,
+            "matchers_selected": 14,
+            "matchers_run": 0,
+            "direct_handled": 0,
+            "direct_fallback": 0,
+            "direct_error": 0,
+            "matcher_handled": 7,
+            "direct_visible_actions": 0,
+            "direct_effect_actions": 0,
+            "ingress_duration_ms_p95": 20.0,
+            "eligible": True,
+        }
+    ]
+
+
 def test_chatter_overload_degraded_counter() -> None:
     dispatch_metrics.clear_dispatch_metrics_for_tests()
     dispatch_metrics.record_chatter_overload_degraded()

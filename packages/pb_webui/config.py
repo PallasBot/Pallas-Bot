@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from pallas.console.webui import install_hot_reload_config, plugin_config_proxy
 from pallas.console.webui.field_help import field_help
@@ -50,14 +50,22 @@ class Config(BaseModel):
         json_schema_extra=_ui("前端包", 10),
     )
     pallas_webui_dist_zip_repo: str = Field(
-        default="PallasBot/Pallas-Bot",
+        default="PallasBot/Pallas-Bot-WebUI",
         description=field_help(
             "自动下载前端时使用的 GitHub 仓库",
-            "格式为 所有者/仓库名，例如 PallasBot/Pallas-Bot",
-            "dist.zip 随主仓 Release 发布；仅在上面的 zip 直链留空时生效",
+            "格式为 所有者/仓库名，例如 PallasBot/Pallas-Bot-WebUI",
+            "默认使用 WebUI 仓库 Release；仅在上面的 zip 直链留空时生效",
         ),
         json_schema_extra=_ui("前端包", 20),
     )
+
+    @field_validator("pallas_webui_dist_zip_repo", mode="before")
+    @classmethod
+    def normalize_legacy_webui_dist_zip_repo(cls, value: object) -> object:
+        from .manager import normalize_webui_dist_zip_repo
+
+        return normalize_webui_dist_zip_repo(value)
+
     pallas_webui_dist_zip_tag: str = Field(
         default="",
         description=field_help(
@@ -233,11 +241,11 @@ def on_pallas_webui_config_reload(cfg: Config) -> None:
         frontend = "react"
     patch_console_meta(pallas_webui_dev_mode=dev_mode, frontend=frontend)
     if dev_mode:
-        logger.warning("Pallas-Bot 控制台: 已关闭 API 与静态页鉴权（仅限本机开发）")
+        logger.warning("[控制台] 已关闭 API 与静态页鉴权（仅限本机开发）")
     else:
-        logger.info("Pallas-Bot 控制台: 已恢复控制台 API 与静态页鉴权")
+        logger.info("[控制台] 已恢复控制台 API 与静态页鉴权")
     logger.info(
-        "Pallas-Bot 控制台: frontend={}（静态目录在启动时绑定，切换栈请重启）",
+        "[控制台] frontend={}（静态目录在启动时绑定，切换栈请重启）",
         frontend,
     )
     try:
@@ -245,7 +253,7 @@ def on_pallas_webui_config_reload(cfg: Config) -> None:
 
         reschedule_webui_auto_update_job(cfg)
     except Exception:  # noqa: BLE001
-        logger.exception("Pallas-Bot 控制台: 重载 WebUI 自动更新调度失败")
+        logger.exception("[控制台] 重载 WebUI 自动更新调度失败")
 
 
 plugin_webui = install_hot_reload_config(
