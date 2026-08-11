@@ -68,6 +68,7 @@ DEFAULT_OFFLINE_QUALITY_CASES = (
     OfflineQualityCase("short_fact", "这也要再动？", "ACK", "fact"),
     OfflineQualityCase("short_vent", "又临时改了，烦", "ACK", "emotion"),
     OfflineQualityCase("short_tease", "你就会学动物叫？", "JOKE", "short_tease"),
+    OfflineQualityCase("wake_early", "明天六点叫我", "JOKE", "short_tease"),
     OfflineQualityCase("direct_answer", "这个参数怎么配？", "ANSWER", "answer"),
 )
 
@@ -76,6 +77,7 @@ _QUALITY_SCENARIOS = (
     ("short_fact", "这也要再动？", "ACK", "fact", "给出直接结论", ("客服腔",)),
     ("short_vent", "又临时改了，烦", "ACK", "emotion", "接住情绪但不说教", ("说教",)),
     ("short_tease", "你就会学动物叫？", "JOKE", "short_tease", "轻短接梗", ("角色扮演扩写",)),
+    ("wake_early", "明天六点叫我", "JOKE", "short_tease", "先短促惊讶再接话", ("完整独白", "浮夸让步", "客服式收尾")),
     ("direct_answer", "这个参数怎么配？", "ANSWER", "answer", "回答当前问题", ("编造配置",)),
     ("missing_tool_arg", "帮我搜一下", "ANSWER", "answer", "追问搜索内容", ("假称已搜索",)),
     ("tool_command", "查一下公开公告", "ANSWER", "answer", "调用查询工具或说明限制", ("假称执行成功",)),

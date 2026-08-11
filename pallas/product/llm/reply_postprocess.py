@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import random
 
+_SHORT_REPLY_SPLIT_PUNCTUATION = frozenset("。！？!?")
+
 # 常见近音/形近替换，刻意保守，避免引入额外依赖
 _TYPO_MAP: dict[str, tuple[str, ...]] = {
     "的": ("得", "地"),
@@ -49,6 +51,27 @@ def apply_chinese_typo(text: str, *, error_rate: float = 0.01, rng_seed: int | N
         if rng.random() < rate:
             chars[idx] = rng.choice(alts)
     return "".join(chars)
+
+
+def split_short_reply_segments(text: str) -> list[str]:
+    plain = str(text or "").strip()
+    if not plain:
+        return []
+    segments: list[str] = []
+    start = 0
+    for index, char in enumerate(plain):
+        if char not in _SHORT_REPLY_SPLIT_PUNCTUATION:
+            continue
+        segment = plain[start : index + 1].strip()
+        if segment:
+            segments.append(segment)
+        start = index + 1
+        if len(segments) == 2:
+            break
+    tail = plain[start:].strip()
+    if tail:
+        segments.append(tail)
+    return segments if len(segments) > 1 else [plain]
 
 
 def apply_reply_postprocess(

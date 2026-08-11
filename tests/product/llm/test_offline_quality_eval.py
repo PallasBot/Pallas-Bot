@@ -24,6 +24,7 @@ def test_default_cases_are_anonymous_and_cover_each_reply_target() -> None:
     }
     assert all("牛牛" not in case.user_text for case in DEFAULT_OFFLINE_QUALITY_CASES)
     assert all(case.user_text for case in DEFAULT_OFFLINE_QUALITY_CASES)
+    assert any(case.case_id == "wake_early" for case in DEFAULT_OFFLINE_QUALITY_CASES)
 
 
 def test_load_offline_base_system_prompt_uses_explicit_path(tmp_path) -> None:
