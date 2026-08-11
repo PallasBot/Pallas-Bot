@@ -89,7 +89,7 @@ async def run_ai_callback(
         logger.warning("AI callback get_bot failed task={} bot_id={}: {}", task_id, bot_id_str, e)
     logger.info(
         f"Bot [{bot_id_str or '<missing>'}] resolved AI task [id={task_id}], "
-        f"status [{status}], task_type [{str(task.get('task_type') or '').strip()}], group [{group_id}]"
+        f"a [{str(task.get('task_type') or '').strip()}] request in group [{group_id}], status [{status}]"
     )
     logger.debug(
         "AI callback resolved detail task={} has_text={} has_file={} song_id={} chunk_index={} "
@@ -163,12 +163,8 @@ async def run_ai_callback(
                 at_user = task.get("user_id")
                 at_user_id = int(at_user) if at_user is not None else None
                 logger.info(
-                    "AI callback delivering image task={} bot_id={} group_id={} at_user_id={} bytes={}",
-                    task_id,
-                    getattr(bot, "self_id", bot_id_str or "<missing>"),
-                    group_id,
-                    at_user_id,
-                    len(file_bytes),
+                    f"Bot [{getattr(bot, 'self_id', bot_id_str or '<missing>')}] delivering a "
+                    f"[{task_type}] image [id={task_id}] to group [{group_id}], length [{len(file_bytes)}]"
                 )
                 delivered = (
                     await send_group_image(
@@ -183,12 +179,8 @@ async def run_ai_callback(
                     invoke_media_task_success(task, image_bytes=file_bytes, group_id=int(group_id))
             elif task_type in VOICE_TASK_TYPES or (song_id is not None and chunk_index is not None):
                 logger.info(
-                    "AI callback delivering voice task={} bot_id={} group_id={} task_type={} bytes={}",
-                    task_id,
-                    getattr(bot, "self_id", bot_id_str or "<missing>"),
-                    group_id,
-                    task_type,
-                    len(file_bytes),
+                    f"Bot [{getattr(bot, 'self_id', bot_id_str or '<missing>')}] delivering a "
+                    f"[{task_type}] voice [id={task_id}] to group [{group_id}], length [{len(file_bytes)}]"
                 )
                 delivered = await send_group_voice(bot, group_id, file_bytes) and delivered
                 if delivered and file_bytes:
@@ -223,7 +215,7 @@ async def run_ai_callback(
 
         logger.info(
             f"Bot [{bot_id_str or '<missing>'}] completed AI task [id={task_id}], "
-            f"delivered [{delivered}], task_type [{str(task.get('task_type') or '').strip()}], group [{group_id}]"
+            f"a [{str(task.get('task_type') or '').strip()}] request in group [{group_id}], delivered [{delivered}]"
         )
         return {"message": "ok" if delivered else "failed"}
 
