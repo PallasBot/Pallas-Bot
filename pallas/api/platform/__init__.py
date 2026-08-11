@@ -5,7 +5,11 @@
 
 # ── AI callback ──
 from pallas.core.platform.ai_callback.media_task_hooks import register_media_task_hooks
-from pallas.core.platform.ai_callback.task_types import DRAW_IMAGE_TASK_TYPE
+from pallas.core.platform.ai_callback.task_types import (
+    DRAW_IMAGE_TASK_TYPE,
+    SING_TASK_TYPES,
+    TTS_TASK_TYPE,
+)
 
 # ── Bot 角色 ──
 from pallas.core.platform.bot_runtime.roles import (
@@ -126,6 +130,8 @@ from pallas.product.llm.tools.declare import llm_command_tool_row
 __all__ = [
     # AI callback
     "DRAW_IMAGE_TASK_TYPE",
+    "SING_TASK_TYPES",
+    "TTS_TASK_TYPE",
     "register_media_task_hooks",
     # Bot 角色
     "bot_role",

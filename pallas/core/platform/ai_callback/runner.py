@@ -202,6 +202,8 @@ async def run_ai_callback(
                     key,
                 )
                 delivered = await send_group_voice(bot, group_id, file_bytes) and delivered
+                if delivered and file_bytes:
+                    invoke_media_task_success(task, image_bytes=file_bytes, group_id=int(group_id))
 
         if (
             task_type == CHAT_DRUNK_TASK_TYPE

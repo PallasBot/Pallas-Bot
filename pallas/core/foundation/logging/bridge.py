@@ -180,8 +180,17 @@ def display_log_name(logger_name: str) -> str:
     return _pascal_case(name.split(".", 1)[0]) if name else ""
 
 
+_PASCAL_CASE_ACRONYMS = {"tts": "TTS"}
+
+
 def _pascal_case(value: str) -> str:
-    return "".join(part[:1].upper() + part[1:] for part in re.split(r"[_-]+", value) if part)
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    lowered = text.casefold()
+    if lowered in _PASCAL_CASE_ACRONYMS:
+        return _PASCAL_CASE_ACRONYMS[lowered]
+    return "".join(part[:1].upper() + part[1:] for part in re.split(r"[_-]+", text) if part)
 
 
 def _format_repo_log(record: dict[str, Any], template: str) -> str:

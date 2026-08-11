@@ -842,6 +842,12 @@ async def handle_llm_chat(
 
     await refresh_llm_chat_cooldown(event, default_cd_sec=llm_cfg.llm_chat_cooldown_sec)
     record_bot_llm_task(LLM_CHAT_TASK_TYPE, "submit_ok")
+    logger.info(
+        format_plugin_event(
+            "submit_reply",
+            f"Bot [{bot.self_id}] submitted a reply for user [{user_id}] in group [{group_id or '-'}]",
+        )
+    )
 
     if group_id is not None:
         try:

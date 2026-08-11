@@ -928,3 +928,34 @@ async def test_run_ai_callback_duplicate_claim_returns_404(monkeypatch: pytest.M
         await ai_callback_runner.run_ai_callback("task-dup-voice", status="success", text="ok")
 
     assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_run_ai_callback_voice_delivery_invokes_media_task_hook(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.platform.ai_callback import media_task_hooks as hooks_mod
+
+    seen: list[tuple] = []
+    hooks_mod.register_media_task_hooks(
+        "sing",
+        on_success=lambda task, blob, gid: seen.append((task["task_type"], gid, len(blob))),
+    )
+    try:
+        bot = MagicMock()
+        bot.call_api = AsyncMock(return_value={"message_id": 12})
+        monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
+        monkeypatch.setattr(
+            ai_callback_runner.TaskManager,
+            "claim_task",
+            AsyncMock(
+                return_value={"bot_id": "111", "group_id": 222, "user_id": 333, "task_type": "sing"}
+            ),
+        )
+        file = MagicMock()
+        file.read = AsyncMock(return_value=b"\xff\xf3\xc4" * 100)
+
+        result = await ai_callback_runner.run_ai_callback("task-sing", status="success", file=file)
+
+        assert result == {"message": "ok"}
+        assert seen == [("sing", 222, 300)]
+    finally:
+        hooks_mod.clear_media_task_hooks_for_tests()

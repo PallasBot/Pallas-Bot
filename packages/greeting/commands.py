@@ -271,6 +271,12 @@ async def handle_call_me(bot: Bot, event: GroupMessageEvent):
     file_path = get_random_voice(operator, greeting_voices)
     if file_path:
         voice_bytes = await asyncio.to_thread(file_path.read_bytes)
+        logger.info(
+            format_plugin_event(
+                "greet",
+                f"Bot [{bot.self_id}] replied a greeting voice to user [{event.user_id}] in group [{event.group_id}]",
+            )
+        )
         await call_me_cmd.finish(MessageSegment.record(file=voice_bytes))
 
 
@@ -297,6 +303,12 @@ async def handle_to_me(bot: Bot, event: GroupMessageEvent):
     file_path = get_random_voice(operator, greeting_voices)
     if file_path:
         voice_bytes = await asyncio.to_thread(file_path.read_bytes)
+        logger.info(
+            format_plugin_event(
+                "greet",
+                f"Bot [{bot.self_id}] replied a greeting voice to user [{event.user_id}] in group [{event.group_id}]",
+            )
+        )
         await to_me_cmd.finish(MessageSegment.record(file=voice_bytes))
 
 
@@ -331,6 +343,12 @@ async def handle_notice(event: _NoticeEvent):
             group_id=event.group_id,
             user_id=event.user_id,
         )
+        logger.info(
+            format_plugin_event(
+                "poke_reply",
+                f"Bot [{event.self_id}] poked back user [{event.user_id}] in group [{event.group_id}]",
+            )
+        )
 
     elif event.notice_type == "group_increase":
         if event.user_id == event.self_id:
@@ -348,6 +366,12 @@ async def handle_notice(event: _NoticeEvent):
                 )
             else:
                 return
+        logger.info(
+            format_plugin_event(
+                "welcome",
+                f"Bot [{event.self_id}] welcomed user [{event.user_id}] to group [{event.group_id}]",
+            )
+        )
         await all_notice.finish(msg)
 
     elif event.notice_type == "group_admin" and event.sub_type == "set" and event.user_id == event.self_id:
@@ -361,6 +385,12 @@ async def handle_notice(event: _NoticeEvent):
             await all_notice.send(custom_msg)
         file_path = get_voice_filepath(operator, "干员报到")
         if file_path:
+            logger.info(
+                format_plugin_event(
+                    "welcome",
+                    f"Bot [{event.self_id}] welcomed a new friend",
+                )
+            )
             await all_notice.finish(MessageSegment.record(file=file_path.read_bytes()))
 
     elif event.notice_type == "group_ban" and event.sub_type == "ban" and event.user_id == event.self_id:
