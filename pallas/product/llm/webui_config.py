@@ -494,10 +494,10 @@ class LlmWebuiConfig(BaseModel):
         ),
     )
     llm_current_turn_decision_enabled: bool = Field(
-        default=True,
+        default=False,
         description=field_help(
-            "回复前要不要先用小模型想一下「回不回、怎么回、要不要用工具」",
-            "开=多一次决策请求，再决定动作（默认）；关=走原来的直接回复流程，不额外花钱",
+            "回复前先想一下「回不回、怎么回、要不要用工具」",
+            "开=多加一次模型决策请求再决定动作（多一次耗时与费用）；关=走规则判定后直接生成（默认，省一次模型往返）",
             "开启后请到「接入 → 任务编排」里给「本轮动作决策」选提供方与模型",
         ),
     )
@@ -512,8 +512,8 @@ class LlmWebuiConfig(BaseModel):
     llm_chat_queue_merge: bool = Field(
         default=True,
         description=field_help(
-            "冷却期间有人连发多条 @，要不要合并成只处理最后一次",
-            "开=冷却内连发只保留最后一次（省钱、少刷屏，推荐）；关=每条都排队处理，更费更吵",
+            "冷却/排队期连发多条 @，要不要合并成一次回复",
+            "开=合并为一次回复（省钱、少刷屏，推荐）；关=逐条排队、每条单独回复，轮到时会引用原消息",
             "与频率限制配合；关闭后高峰期请求量会明显上升",
         ),
     )

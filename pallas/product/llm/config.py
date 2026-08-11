@@ -252,7 +252,7 @@ class LlmConfig(BaseModel):
     llm_repeater_writeback_enabled: bool = Field(default=True)
     conversation_feature_level: str = Field(default="")
     llm_reply_gate_enabled: bool = Field(default=True)
-    llm_current_turn_decision_enabled: bool = Field(default=True)
+    llm_current_turn_decision_enabled: bool = Field(default=False)
     llm_current_turn_decision_model: str = Field(default="")
     llm_reply_gate_min_chars: int = Field(default=1, ge=0, le=32)
     llm_chat_queue_merge: bool = Field(default=True)
@@ -464,7 +464,7 @@ def get_llm_config() -> LlmConfig:
             llm_repeater_writeback_enabled=_env_bool("LLM_REPEATER_WRITEBACK_ENABLED", True),
             conversation_feature_level=resolve_conversation_feature_level_raw(),
             llm_reply_gate_enabled=_env_bool("LLM_REPLY_GATE_ENABLED", True),
-            llm_current_turn_decision_enabled=_env_bool("LLM_CURRENT_TURN_DECISION_ENABLED", True),
+            llm_current_turn_decision_enabled=_env_bool("LLM_CURRENT_TURN_DECISION_ENABLED", False),
             llm_current_turn_decision_model=_env_str("LLM_CURRENT_TURN_DECISION_MODEL"),
             llm_reply_gate_min_chars=_env_int("LLM_REPLY_GATE_MIN_CHARS", 1),
             llm_chat_queue_merge=_env_bool("LLM_CHAT_QUEUE_MERGE", True),
