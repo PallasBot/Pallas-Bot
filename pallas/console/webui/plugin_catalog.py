@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import ast
 import importlib
+import importlib.metadata
 import importlib.util
+import tomllib
 from pathlib import Path  # noqa: TC003
 from typing import Any
 
@@ -28,7 +30,7 @@ from pallas.core.platform.plugin_runtime.plugin_identity import canonical_plugin
 
 _PLUGINS_ROOT = PROJECT_ROOT / "packages"
 
-PluginSourceKind = str  # "core" | "extra" | "bundled" | "local" | "pip"
+PluginSourceKind = str  # "core" | "extra" | "bundled" | "community" | "local" | "pip"
 
 _INFRA_NAME_PREFIXES = (
     "nonebot",
@@ -422,6 +424,53 @@ def community_plugin_row_for_plugin(plugin_id: str) -> dict[str, Any] | None:
     return None
 
 
+def catalog_plugin_source(plugin_id: str, source: PluginSourceKind) -> PluginSourceKind:
+    if source == "local" and community_plugin_row_for_plugin(plugin_id) is not None:
+        return "community"
+    return source
+
+
+def installed_distribution_version(package: str, module_name: str) -> str | None:
+    candidates = [extra_package_for_plugin(package)]
+    top_level = (module_name or "").split(".", 1)[0]
+    if top_level:
+        try:
+            candidates.extend(importlib.metadata.packages_distributions().get(top_level, ()))
+        except Exception:  # noqa: BLE001
+            pass
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            return importlib.metadata.version(candidate)
+        except importlib.metadata.PackageNotFoundError:
+            continue
+    return None
+
+
+def plugin_version(
+    package: str,
+    source: PluginSourceKind,
+    *,
+    package_root: Path | None = None,
+    module_name: str = "",
+) -> str | None:
+    installed = installed_distribution_version(package, module_name)
+    if installed:
+        return installed
+    if source not in ("local", "community") or package_root is None:
+        return None
+    try:
+        with (package_root / "pyproject.toml").open("rb") as f:
+            project = tomllib.load(f).get("project")
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+    version = project.get("version") if isinstance(project, dict) else None
+    if version is None:
+        return None
+    return str(version).strip() or None
+
+
 def _resolve_remote_catalog_visuals(plugin_id: str) -> dict[str, str | None]:
     community = community_plugin_row_for_plugin(plugin_id)
     if community is not None:
@@ -554,6 +603,13 @@ def build_plugin_catalog_rows(
             file_path = getattr(mod, "__file__", "") if mod is not None else ""
             if file_path:
                 root = Path(file_path).resolve().parent
+        plugin_source = catalog_plugin_source(resolved_plugin_id, plugin_source)
+        version = plugin_version(
+            resolved_plugin_id,
+            plugin_source,
+            package_root=root,
+            module_name=module_name,
+        )
         visuals = resolve_catalog_visuals(
             plugin_id=resolved_plugin_id,
             plugin_source=plugin_source,
@@ -577,6 +633,7 @@ def build_plugin_catalog_rows(
             "global_disable_protected": g_protected,
             "plugin_source": plugin_source,
             "plugin_source_dir": plugin_source_dir,
+            "plugin_version": version,
             "extra_package": extra_package_for_plugin(resolved_plugin_id),
             "avatar": visuals["avatar"],
             "icon": visuals["icon"],

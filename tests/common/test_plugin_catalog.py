@@ -4,6 +4,7 @@ import pytest
 
 from pallas.console.webui.plugin_catalog import (
     build_plugin_catalog_rows,
+    catalog_plugin_source,
     discover_extra_plugin_packages,
     discover_plugin_packages,
     discover_pyproject_plugin_modules,
@@ -11,8 +12,32 @@ from pallas.console.webui.plugin_catalog import (
     infer_plugin_source,
     package_load_role,
     plugin_source_from_module_path,
+    plugin_version,
     resolve_catalog_visuals,
 )
+
+
+def test_catalog_plugin_source_marks_registered_local_plugin_as_community(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "pallas.console.webui.plugin_catalog.community_plugin_row_for_plugin",
+        lambda plugin_id: {"plugin_id": plugin_id} if plugin_id == "demo_local" else None,
+    )
+
+    assert catalog_plugin_source("demo_local", "local") == "community"
+    assert catalog_plugin_source("manual_local", "local") == "local"
+    assert catalog_plugin_source("take_name", "bundled") == "bundled"
+
+
+def test_plugin_version_prefers_distribution_then_local_pyproject(tmp_path, monkeypatch) -> None:
+    root = tmp_path / "demo"
+    root.mkdir()
+    (root / "pyproject.toml").write_text("[project]\nversion = '1.2.3'\n", encoding="utf-8")
+    monkeypatch.setattr(
+        "pallas.console.webui.plugin_catalog.installed_distribution_version",
+        lambda _package, _module_name: None,
+    )
+
+    assert plugin_version("demo", "local", package_root=root) == "1.2.3"
 
 
 def test_discover_bundled_packages():
