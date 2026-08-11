@@ -290,10 +290,24 @@ class ImageCacheRow(Base):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     cq_code: Mapped[str] = mapped_column(Text, unique=True, nullable=False)
+    content_hash: Mapped[str | None] = mapped_column(Text, nullable=True, index=True)
     # 原生二进制 BYTEA。旧库 base64_data 由 init_pg → _ensure_pg_image_cache_blob_data 幂等迁移。
     blob_data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     ref_times: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     date: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+
+
+class StickerLabelRow(Base):
+    """按原始二进制内容哈希缓存的表情语义标签。"""
+
+    __tablename__ = "sticker_label"
+
+    content_hash: Mapped[str] = mapped_column(Text, primary_key=True)
+    is_sticker: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    prompt_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    labeled_at: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    label_json: Mapped[Any] = mapped_column(_JsonB, nullable=False)
 
 
 class LlmChatMessageRow(Base):
@@ -491,6 +505,16 @@ def _ensure_pg_image_cache_blob_data(connection) -> None:
         )
         connection.execute(text("ALTER TABLE image_cache DROP COLUMN base64_data"))
         logger.info("image_cache: base64_data → blob_data 迁移完成")
+
+
+def _ensure_pg_image_cache_content_hash(connection) -> None:
+    insp = inspect(connection)
+    if not insp.has_table("image_cache"):
+        return
+    names = {c["name"] for c in insp.get_columns("image_cache")}
+    if "content_hash" not in names:
+        connection.execute(text("ALTER TABLE image_cache ADD COLUMN content_hash TEXT"))
+    connection.execute(text("CREATE INDEX IF NOT EXISTS ix_image_cache_content_hash ON image_cache (content_hash)"))
 
 
 def _ensure_pg_group_config_blocked_user_ids(connection) -> None:
@@ -779,6 +803,7 @@ async def get_session(*, read_only: bool = False):
 # 启动期 DDL ensure 注册表（step_id 稳定，供控制台与可观测使用）
 PG_SCHEMA_ENSURE_STEPS: list[tuple[str, Any]] = [
     ("ddl.image_cache_blob_data", _ensure_pg_image_cache_blob_data),
+    ("ddl.image_cache_content_hash", _ensure_pg_image_cache_content_hash),
     ("ddl.group_config_blocked_user_ids", _ensure_pg_group_config_blocked_user_ids),
     ("ddl.background_job_lease_id", _ensure_pg_background_job_lease_id),
     ("ddl.group_config_style_profile", _ensure_pg_group_config_style_profile),
@@ -1124,6 +1149,7 @@ def row_to_image_cache(row: ImageCacheRow) -> ImageCache:
 
     return ImageCache.model_construct(
         cq_code=row.cq_code,
+        content_hash=row.content_hash,
         blob_data=row.blob_data,
         ref_times=row.ref_times,
         date=row.date,
@@ -2263,6 +2289,24 @@ class PgImageCacheRepository:
             row = result.scalar_one_or_none()
             return row_to_image_cache(row) if row else None
 
+    async def find_by_content_hash(self, content_hash: str) -> ImageCache | None:
+        async with get_session(read_only=True) as session:
+            stmt = (
+                select(ImageCacheRow)
+                .where(ImageCacheRow.content_hash == content_hash)
+                .order_by(ImageCacheRow.date.desc(), ImageCacheRow.id.desc())
+                .limit(1)
+            )
+            row = (await session.execute(stmt)).scalars().first()
+            return row_to_image_cache(row) if row else None
+
+    async def bind_content_hash(self, cq_code: str, content_hash: str) -> None:
+        async with get_session() as session:
+            await session.execute(
+                update(ImageCacheRow).where(ImageCacheRow.cq_code == cq_code).values(content_hash=content_hash)
+            )
+            await session.commit()
+
     async def find_latest_with_blob(self) -> ImageCache | None:
         async with get_session(read_only=True) as session:
             stmt = (
@@ -2292,6 +2336,7 @@ class PgImageCacheRepository:
         async with get_session() as session:
             stmt = pg_insert(ImageCacheRow).values(
                 cq_code=_s(cache.cq_code) or "",
+                content_hash=_s(cache.content_hash),
                 blob_data=cache.blob_data,
                 ref_times=cache.ref_times,
                 date=cache.date,
@@ -2304,6 +2349,7 @@ class PgImageCacheRepository:
         async with get_session() as session:
             stmt = pg_insert(ImageCacheRow).values(
                 cq_code=_s(cache.cq_code) or "",
+                content_hash=_s(cache.content_hash),
                 blob_data=cache.blob_data,
                 ref_times=cache.ref_times,
                 date=cache.date,
@@ -2314,6 +2360,7 @@ class PgImageCacheRepository:
                     "ref_times": stmt.excluded.ref_times,
                     "date": stmt.excluded.date,
                     "blob_data": stmt.excluded.blob_data,
+                    "content_hash": stmt.excluded.content_hash,
                 },
             )
             await session.execute(stmt)

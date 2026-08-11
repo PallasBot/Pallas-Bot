@@ -4,6 +4,14 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 
+def test_repeater_derives_controlled_sticker_intent() -> None:
+    from packages.repeater.sticker_followup import derive_repeater_sticker_intent
+
+    assert derive_repeater_sticker_intent("笑死我了") == "emotion:开心 action:大笑"
+    assert derive_repeater_sticker_intent("我有点委屈") == "emotion:委屈"
+    assert derive_repeater_sticker_intent("普通回复") == ""
+
+
 def test_repeater_sticker_followup_config_defaults() -> None:
     from packages.repeater.config import Config
 
@@ -65,9 +73,7 @@ async def test_repeater_sticker_followup_skips_non_plain_text_reply(monkeypatch:
     get_recent_images = AsyncMock()
     monkeypatch.setattr(sticker_followup, "get_recent_images", get_recent_images)
 
-    assert not await sticker_followup.maybe_send_repeater_sticker_followup(
-        MagicMock(), 100, "[CQ:face,id=14]", cfg=cfg
-    )
+    assert not await sticker_followup.maybe_send_repeater_sticker_followup(MagicMock(), 100, "[CQ:face,id=14]", cfg=cfg)
     get_recent_images.assert_not_awaited()
 
 

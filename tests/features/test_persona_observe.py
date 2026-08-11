@@ -49,3 +49,6 @@ async def test_build_persona_observe_payload_without_group(monkeypatch: pytest.M
     assert len(payload["bots"]) == 1
     assert payload["bots"][0]["resolved"] is None
     assert payload["bots"][0]["base"]["warmth"] == pytest.approx(0.05)
+    assert payload["bots"][0]["account_profile"]["source"] == "derived"
+    assert "seed_prefs" not in payload["bots"][0]
+    assert "seed_source" not in payload["bots"][0]

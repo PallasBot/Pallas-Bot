@@ -130,6 +130,9 @@ def test_export_console_openapi_matches_console_prefix(monkeypatch) -> None:
     assert sing_defaults_data_properties["writable"]["anyOf"][0]["type"] == "boolean"
     assert "/pallas/api/common-config/llm/wizard/status" not in payload["paths"]
 
+    local_routing_tasks = payload["components"]["schemas"]["_LlmLocalRoutingTaskModelsBody"]["properties"]
+    assert set(local_routing_tasks) == {"llm_chat", "drunk"}
+
     wave2_paths = (
         "/pallas/api/shard-observability",
         "/pallas/api/ingress-dispatch",

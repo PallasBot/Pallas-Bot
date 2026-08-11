@@ -2,13 +2,92 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field
+
+from packages.pb_webui.console_openapi_models import _ApiOkResponse
+from pallas.product.persona.group_expression_profile import GroupExpressionProfile
 
 if TYPE_CHECKING:
     from packages.pb_webui.config import Config
+
+
+class _StickerLabelStatsData(BaseModel):
+    total: int = 0
+    sticker: int = 0
+    not_sticker: int = 0
+    current_version: int = 0
+    low_confidence: int = 0
+
+
+class _StickerLabelJobErrorData(BaseModel):
+    job_id: str = ""
+    created_at: float = 0
+    state: str = ""
+    error: str = ""
+
+
+class _StickerLabelJobStatsData(BaseModel):
+    pending: int = 0
+    failed: int = 0
+    recent_errors: list[_StickerLabelJobErrorData] = Field(default_factory=list)
+
+
+class _StickerLabelOverviewData(BaseModel):
+    labels: _StickerLabelStatsData
+    jobs: _StickerLabelJobStatsData
+    lazy_labels_paused: bool = False
+    label_circuit_open: bool = False
+    vlm_refine_avoided: int = 0
+    vlm_refine_actual: int = 0
+    send_hits: int = 0
+
+
+class _StickerLabelRequeueBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["requeue"]
+
+
+class _StickerLabelPauseBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["pause"]
+    paused: bool
+
+
+class _StickerLabelClearBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["clear"]
+    content_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+StickerLabelMaintenanceBody = Annotated[
+    _StickerLabelRequeueBody | _StickerLabelPauseBody | _StickerLabelClearBody,
+    Field(discriminator="action"),
+]
+
+
+class _StickerLabelRequeueResult(BaseModel):
+    requeued: int = 0
+    queued: int = 0
+    skipped: int = 0
+    missing_cache: int = 0
+
+
+class _StickerLabelPauseResult(BaseModel):
+    lazy_labels_paused: bool
+
+
+class _StickerLabelClearResult(BaseModel):
+    cleared: bool
+
+
+StickerLabelMaintenanceResult = _StickerLabelRequeueResult | _StickerLabelPauseResult | _StickerLabelClearResult
 
 
 def register_llm_ops_router(
@@ -406,9 +485,7 @@ def register_llm_ops_router(
         bot_id: int = Query(..., ge=1),
         group_id: int | None = Query(default=None, ge=0),
         plain_text: str = Query(default="", description="编译用人设原文；可空"),
-        purpose: str = Query(default="chat"),
         mode: str = Query(default="normal"),
-        include_repeater_overlay: bool = Query(default=False),
     ) -> JSONResponse:
         from pallas.product.persona.bundle_export import build_persona_asset_bundle_v1
 
@@ -417,29 +494,83 @@ def register_llm_ops_router(
                 bot_id,
                 group_id,
                 plain_text,
-                purpose=purpose,
                 mode=mode,
-                include_repeater_overlay=include_repeater_overlay,
             )
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data.model_dump()})
 
-    @router.get(f"{x}/common-config/llm/persona/group-style", include_in_schema=True)
+    @router.get(
+        f"{x}/common-config/llm/persona/group-style",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[GroupExpressionProfile],
+    )
     async def _llm_persona_group_style_get(
+        bot_id: int | None = Query(
+            default=None,
+            ge=1,
+            description="Bot QQ；提供后合并对应 bot/group/scene 的 semantic snapshot",
+        ),
         group_id: int = Query(..., ge=1),
-        window_hours: int = Query(default=168, ge=1, le=720),
-    ) -> JSONResponse:
-        from pallas.core.foundation.db import make_context_repository, make_message_repository
-        from pallas.product.persona.group_profiler import build_group_style_profile_from_recent_repos
+        scene: str = Query(default="group_chat", min_length=1, max_length=64),
+    ) -> dict[str, Any]:
+        from pallas.core.foundation.db import make_group_config_repository
+        from pallas.product.llm import repeater_semantic_style
+        from pallas.product.persona.group_expression_profile import resolve_group_expression_profile
 
         try:
-            data = await build_group_style_profile_from_recent_repos(
-                group_id=group_id,
-                message_repo=make_message_repository(),
-                context_repo=make_context_repository(),
-                window_hours=window_hours,
+            config = await make_group_config_repository().get(group_id)
+            style_profile = getattr(config, "style_profile", None) if config is not None else None
+            semantic_profile = None
+            if bot_id is not None:
+                repeater_semantic_style.refresh_semantic_style_cache()
+                semantic_profile = repeater_semantic_style.cached_semantic_style_profile(
+                    bot_id,
+                    group_id,
+                    scene,
+                )
+            profile = resolve_group_expression_profile(
+                style_profile if isinstance(style_profile, dict) else None,
+                semantic_profile,
             )
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
+        return {"ok": True, "data": profile.model_dump(mode="json")}
+
+    @router.get(
+        f"{x}/common-config/llm/persona/sticker-labels",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_StickerLabelOverviewData],
+    )
+    async def _sticker_label_overview_get() -> JSONResponse:
+        from pallas.product.llm.sticker_label_observability import build_sticker_label_overview
+
+        try:
+            data = await build_sticker_label_overview()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
+
+    @router.post(
+        f"{x}/common-config/llm/persona/sticker-labels/manage",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[StickerLabelMaintenanceResult],
+    )
+    async def _sticker_label_maintenance_post(
+        body: StickerLabelMaintenanceBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.llm import sticker_label_observability
+
+        action = body.action
+        if action == "requeue":
+            return JSONResponse({"ok": True, "data": await sticker_label_observability.requeue_stale_sticker_labels()})
+        if action == "pause":
+            paused = sticker_label_observability.set_lazy_sticker_labels_paused(body.paused)
+            return JSONResponse({"ok": True, "data": {"lazy_labels_paused": paused}})
+        if action == "clear":
+            cleared = await sticker_label_observability.clear_sticker_label(body.content_hash)
+            return JSONResponse({"ok": True, "data": {"cleared": cleared}})
+        raise HTTPException(status_code=400, detail="action must be requeue, pause, or clear")

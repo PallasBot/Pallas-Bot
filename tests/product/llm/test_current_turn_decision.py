@@ -287,36 +287,6 @@ def test_reply_target_keeps_short_social_generation_on_the_current_turn() -> Non
     ) == "silent"
 
 
-def test_reply_target_is_only_attached_to_the_current_generation_prompt() -> None:
-    from pallas.product.llm.kernel_runner import system_prompt_with_reply_target
-
-    prompt = system_prompt_with_reply_target(
-        "base persona",
-        {"reply_target": "short_tease"},
-    )
-
-    assert prompt == (
-        "base persona\n\n【本轮回复目标】\n"
-        "只围绕当前句开一个短玩笑，不引入角色背景、动作描写、邀约或新话题。"
-    )
-    assert system_prompt_with_reply_target("base persona", {}) == "base persona"
-
-
-def test_semantic_style_block_follows_reply_target_instruction() -> None:
-    from pallas.product.llm.kernel_runner import system_prompt_with_reply_target
-
-    prompt = system_prompt_with_reply_target(
-        "base persona",
-        {
-            "reply_target": "short_tease",
-            "semantic_style_prompt_block": "【本群表达校准】\n保持：短句接梗。",
-        },
-    )
-
-    assert prompt is not None
-    assert prompt.index("【本轮回复目标】") < prompt.index("【本群表达校准】")
-
-
 def test_answer_reply_target_keeps_relationship_replies_in_current_context() -> None:
     instruction = build_reply_target_instruction("answer")
 

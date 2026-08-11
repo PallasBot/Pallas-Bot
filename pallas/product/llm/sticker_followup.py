@@ -11,6 +11,7 @@ from typing import Any
 
 _LAST_REPEATER_IMAGE_SENT_AT: dict[int, float] = {}
 _RECENT_REPEATER_IMAGES: dict[int, deque[str]] = defaultdict(lambda: deque(maxlen=8))
+_RECENT_REPEATER_IMAGE_HASHES: dict[int, deque[str]] = defaultdict(lambda: deque(maxlen=8))
 _STICKER_FOLLOWUP_SCHEDULED_AT: dict[int, deque[float]] = defaultdict(deque)
 _SENSITIVE_RESULT_TERMS = ("权限", "封禁", "风控", "安全", "隐私", "密钥", "token", "密码")
 _OUTGOING_HOOK_BOUND = False
@@ -68,17 +69,30 @@ def should_schedule_outgoing_sticker(
     return True
 
 
-def note_repeater_image_sent(group_id: int, image_key: str, *, now: float | None = None) -> None:
+def recent_repeater_image_hashes(group_id: int) -> tuple[str, ...]:
+    return tuple(_RECENT_REPEATER_IMAGE_HASHES[int(group_id)])
+
+
+def note_repeater_image_sent(
+    group_id: int,
+    image_key: str,
+    *,
+    content_hash: str = "",
+    now: float | None = None,
+) -> None:
     key = str(image_key or "").strip()
     if not key:
         return
     _LAST_REPEATER_IMAGE_SENT_AT[int(group_id)] = time.monotonic() if now is None else float(now)
     _RECENT_REPEATER_IMAGES[int(group_id)].append(key)
+    if content_hash:
+        _RECENT_REPEATER_IMAGE_HASHES[int(group_id)].append(str(content_hash))
 
 
 def reset_repeater_image_followup_state_for_tests() -> None:
     _LAST_REPEATER_IMAGE_SENT_AT.clear()
     _RECENT_REPEATER_IMAGES.clear()
+    _RECENT_REPEATER_IMAGE_HASHES.clear()
     _STICKER_FOLLOWUP_SCHEDULED_AT.clear()
 
 

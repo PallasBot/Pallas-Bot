@@ -50,36 +50,23 @@ def test_should_collect_llm_repeater_feedback_rejects_long_explanatory_reply() -
     assert accepted is False
 
 
-def test_should_collect_llm_repeater_feedback_accepts_repeater_polish_lite() -> None:
+def test_should_collect_llm_repeater_feedback_rejects_unknown_task() -> None:
     accepted = should_collect_llm_repeater_feedback(
-        task_type="repeater_polish_lite",
+        task_type="other",
         group_id=123,
         user_text="嘎嘎",
         reply_text="我赌你的枪里",
         source_tags=[],
     )
 
-    assert accepted is True
+    assert accepted is False
 
 
-def test_should_collect_llm_repeater_feedback_uses_fallback_when_trigger_missing() -> None:
-    accepted = should_collect_llm_repeater_feedback(
-        task_type="repeater_select",
-        group_id=123,
-        user_text="",
-        reply_text="摸摸",
-        source_tags=[],
-        fallback_text="候选句",
-    )
+def test_normalize_feedback_llm_route_strips_explicit_route() -> None:
+    from pallas.product.llm.repeater_feedback import normalize_feedback_llm_route
 
-    assert accepted is True
-
-
-def test_resolve_feedback_llm_route_maps_repeater_task() -> None:
-    from pallas.product.llm.repeater_feedback import resolve_feedback_llm_route
-
-    assert resolve_feedback_llm_route(task_type="repeater_polish_lite", llm_route="") == "corpus_polish_lite"
-    assert resolve_feedback_llm_route(task_type="llm_chat", llm_route="plain_llm_chat") == "plain_llm_chat"
+    assert normalize_feedback_llm_route("") == ""
+    assert normalize_feedback_llm_route("  plain_llm_chat  ") == "plain_llm_chat"
 
 
 def test_build_feedback_entry_defaults_writeback_false() -> None:
@@ -120,10 +107,61 @@ def test_maybe_append_feedback_marks_writeback_eligible_only_for_strong_scene(mo
         "user_text": "你又来这套",
     }
 
-    maybe_append_llm_repeater_feedback("req-strong", {**task, "scene_tier": "strong"}, "少来。")
+    maybe_append_llm_repeater_feedback(
+        "req-strong",
+        {
+            **task,
+            "scene_tier": "strong",
+            "semantic_style_source_example_id": "source:1",
+            "semantic_style_direct_candidate": "少来。",
+        },
+        "少来。",
+        bot_message_id=7788,
+        semantic_source_bound=True,
+    )
     maybe_append_llm_repeater_feedback("req-weak", {**task, "scene_tier": "weak"}, "少来。")
 
     assert [entry.eligible_for_writeback for entry in appended] == [True, False]
+    assert appended[0].bot_message_id == 7788
+    assert appended[0].semantic_source_example_id == "source:1"
+    assert appended[0].semantic_scene == "group_chat"
+    assert appended[1].semantic_source_example_id == ""
+
+
+def test_bot_message_lookup_uses_revision_index_and_invalidates_on_rewrite(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_feedback as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod.clear_group_feedback_entries_cache()
+    first = mod.build_feedback_entry(
+        bot_id=100,
+        group_id=42,
+        user_id=200,
+        request_id="first",
+        user_text="前句",
+        reply_text="接话",
+        bot_message_id=5001,
+    )
+    mod.append_feedback_entry(first)
+    original_iter = mod._iter_feedback_entries
+    scans = 0
+
+    def counted_iter(path):
+        nonlocal scans
+        scans += 1
+        yield from original_iter(path)
+
+    monkeypatch.setattr(mod, "_iter_feedback_entries", counted_iter)
+    assert mod.find_feedback_entry_by_bot_message_id(bot_id=100, group_id=42, bot_message_id=5001) == first
+    assert mod.find_feedback_entry_by_bot_message_id(bot_id=100, group_id=42, bot_message_id=5001) == first
+    assert scans == 1
+    second = first.model_copy(update={"entry_id": "second", "request_id": "second", "bot_message_id": 5002})
+    mod.append_feedback_entry(second)
+    assert mod.find_feedback_entry_by_bot_message_id(bot_id=100, group_id=42, bot_message_id=5002) == second
+    assert scans == 1
+    mod._write_feedback_entries([second])
+    assert mod.find_feedback_entry_by_bot_message_id(bot_id=100, group_id=42, bot_message_id=5001) is None
+    assert scans == 2
 
 
 def test_build_feedback_entry_keeps_scene_tier() -> None:

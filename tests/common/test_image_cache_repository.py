@@ -34,6 +34,17 @@ async def test_insert_and_find(beanie_fixture):
 
 
 @pytest.mark.asyncio
+async def test_find_by_content_hash_resolves_cache_without_exposing_cq_code(beanie_fixture):
+    repo = MongoImageCacheRepository()
+    await repo.insert(ImageCache(cq_code="[CQ:image,file=private.image]", content_hash="a" * 64, blob_data=b"image"))
+
+    found = await repo.find_by_content_hash("a" * 64)
+
+    assert found is not None
+    assert bytes(found.blob_data or b"") == b"image"
+
+
+@pytest.mark.asyncio
 async def test_save_increments_ref_times(beanie_fixture):
     repo = MongoImageCacheRepository()
     cq = "[CQ:image,file=b.image]"

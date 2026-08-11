@@ -1,6 +1,8 @@
 from pydantic import BaseModel, Field
 
-LengthPref = str
+from .account_profile import AccountPersonaProfile
+from .group_expression_profile import GroupExpressionProfile
+
 Tone = str
 ArchetypeName = str
 
@@ -9,12 +11,14 @@ class ResolvedPersona(BaseModel):
     """解析后的接话风格参数，供复读选句与主动发言使用。"""
 
     source: str = "auto"
+    account_profile: AccountPersonaProfile = Field(default_factory=AccountPersonaProfile)
+    group_expression_profile: GroupExpressionProfile = Field(default_factory=GroupExpressionProfile)
+    affect_triggers: list[dict] = Field(default_factory=list)
     preset_label: str = "自动"
     archetype: ArchetypeName = ""
     tone: Tone = "neutral"
     reply_bias: float = Field(default=1.0, ge=0.5, le=2.0)
     speak_bias: float = Field(default=1.0, ge=0.5, le=2.0)
-    length_pref: LengthPref = "any"
     activity_reply_bias: float = Field(
         default=0.5,
         ge=0.25,

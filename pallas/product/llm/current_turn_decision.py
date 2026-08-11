@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from pallas.product.llm.inference_params import task_token_budget
 from pallas.product.llm.reply_necessity import has_reply_obligation, is_low_value_social_turn
 
 
@@ -20,6 +22,7 @@ class CurrentTurnAction(StrEnum):
 
 class CurrentTurnSocialAction(StrEnum):
     ACK = "ACK"
+    AFFECTION = "AFFECTION"
     JOKE = "JOKE"
     STANCE = "STANCE"
     ANSWER = "ANSWER"
@@ -33,6 +36,41 @@ class CurrentTurnDeliveryStyle(StrEnum):
 
 
 ReplyTarget = Literal["fact", "emotion", "short_tease", "answer", "silent"]
+
+
+def current_turn_field(decision: object, name: str, default: Any = None) -> Any:
+    """Read a decision field from either the validated model or a mapping."""
+    if isinstance(decision, Mapping):
+        return decision.get(name, default)
+    return getattr(decision, name, default)
+
+
+def normalize_current_turn_action(decision: object) -> CurrentTurnAction:
+    raw = current_turn_field(decision, "action", CurrentTurnAction.REPLY)
+    value = str(getattr(raw, "value", raw) or "").strip().upper()
+    try:
+        return CurrentTurnAction(value)
+    except ValueError:
+        return CurrentTurnAction.REPLY
+
+
+def normalize_current_turn_social_action(decision: object) -> CurrentTurnSocialAction:
+    raw = current_turn_field(decision, "social_action", CurrentTurnSocialAction.ANSWER)
+    value = str(getattr(raw, "value", raw) or "").strip().upper()
+    try:
+        return CurrentTurnSocialAction(value)
+    except ValueError:
+        return CurrentTurnSocialAction.ANSWER
+
+
+def current_turn_decision_is_known(decision: object) -> bool:
+    raw_action = current_turn_field(decision, "action")
+    raw_social_action = current_turn_field(decision, "social_action")
+    action = str(getattr(raw_action, "value", raw_action) or "")
+    social_action = str(getattr(raw_social_action, "value", raw_social_action) or "")
+    return action.strip().upper() in CurrentTurnAction._value2member_map_ and (
+        social_action.strip().upper() in CurrentTurnSocialAction._value2member_map_
+    )
 
 
 class CurrentTurnDecisionInput(BaseModel):
@@ -90,7 +128,11 @@ def should_read_persistent_memory_for_turn(
 ) -> bool:
     """Keep retrieval out of short social turns without changing reply routing."""
     action = str(getattr(social_action, "value", social_action) or "").strip().upper()
-    if action in {CurrentTurnSocialAction.ACK.value, CurrentTurnSocialAction.JOKE.value}:
+    if action in {
+        CurrentTurnSocialAction.ACK.value,
+        CurrentTurnSocialAction.AFFECTION.value,
+        CurrentTurnSocialAction.JOKE.value,
+    }:
         return False
     current = str(text or "").strip()
     return not (len(current) <= 24 and bool(_SHORT_SOCIAL_MEMORY_TURN_RE.search(current)))
@@ -125,6 +167,8 @@ def resolve_reply_target(
         if _SHORT_SOCIAL_MEMORY_TURN_RE.search(plain):
             return "emotion"
         return "fact"
+    if social_value == CurrentTurnSocialAction.AFFECTION.value:
+        return "emotion"
     if social_value == CurrentTurnSocialAction.JOKE.value:
         return "short_tease"
     if has_reply_obligation(plain) or social_value in {
@@ -162,10 +206,11 @@ def build_current_turn_decision_prompt(turn: CurrentTurnDecisionInput) -> str:
     return (
         "Classify this current chat turn. Reply with JSON only: "
         '{"action":"REPLY|PASS|TOOL|FOLLOW_UP",'
-        '"social_action":"ACK|JOKE|STANCE|ANSWER|ASK_ONE",'
+        '"social_action":"ACK|AFFECTION|JOKE|STANCE|ANSWER|ASK_ONE",'
         '"delivery_style":"PLAIN|QUOTE|MENTION"}. '
         "social_action is the visible conversational move, not a writing style. "
         "ACK is for a short vent, acknowledgement, or low-stakes reaction. "
+        "AFFECTION is for warmly receiving praise or responding to affectionate, clingy, or cute behavior. "
         "JOKE is for banter or a playful reaction. "
         "For a short ACK or JOKE without a question or request, use PASS. "
         "STANCE is only for an explicit request for an opinion or choice. "
@@ -258,14 +303,14 @@ async def decide_current_turn_with_model(
                     "content": (
                         "Return only a JSON object with action, social_action, and delivery_style. "
                         "Allowed actions: REPLY, PASS, TOOL, FOLLOW_UP. "
-                        "Allowed social actions: ACK, JOKE, STANCE, ANSWER, ASK_ONE. "
+                        "Allowed social actions: ACK, AFFECTION, JOKE, STANCE, ANSWER, ASK_ONE. "
                         "Allowed delivery styles: PLAIN, QUOTE, MENTION."
                     ),
                 },
                 {"role": "user", "content": build_current_turn_decision_prompt(turn)},
             ],
             model="",
-            options={"temperature": 0, "max_tokens": 48},
+            options={"temperature": 0, "max_tokens": task_token_budget("turn_decision")},
             task="turn_decision",
         )
     except Exception:

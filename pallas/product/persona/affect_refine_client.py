@@ -67,7 +67,6 @@ def build_affect_refine_payload(
         payload_profile["derived"] = {
             "warmth_bias": derived.get("warmth_bias"),
             "assertiveness_bias": derived.get("assertiveness_bias"),
-            "length_pref": derived.get("length_pref"),
             "chaos_bias": derived.get("chaos_bias"),
         }
 
@@ -112,7 +111,7 @@ def build_affect_refine_user_prompt(payload: dict[str, Any]) -> str:
         lines.append(
             "derived: "
             f"warmth_bias={derived.get('warmth_bias')}, assertiveness_bias={derived.get('assertiveness_bias')}, "
-            f"length_pref={derived.get('length_pref')}, chaos_bias={derived.get('chaos_bias')}"
+            f"chaos_bias={derived.get('chaos_bias')}"
         )
     if raw:
         lines.append(
@@ -180,6 +179,7 @@ def normalize_affect_refine_llm_body(data: dict[str, Any]) -> dict[str, Any]:
 
 async def post_affect_refine(payload: dict[str, Any]) -> dict[str, Any] | None:
     """经 Bot 内核 provider 完成 refine；失败返回 None 由上层走启发式。"""
+    from pallas.product.llm.inference_params import task_token_budget
     from pallas.product.llm.provider_client import LlmProviderError, complete_chat_message
 
     messages = [
@@ -190,7 +190,7 @@ async def post_affect_refine(payload: dict[str, Any]) -> dict[str, Any] | None:
         message = await complete_chat_message(
             messages,
             model="",
-            options={"temperature": 0.3, "max_tokens": 512},
+            options={"temperature": 0.3, "max_tokens": task_token_budget("affect_refine")},
             task="affect_refine",
         )
     except LlmProviderError as exc:

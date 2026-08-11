@@ -17,6 +17,7 @@ from packages.pb_webui.console_openapi_models import (
     _ApiOkResponse,
 )
 from pallas.product.llm.ops_api import BehaviorPattern, BehaviorScene, ensure_default_behavior_patterns
+from pallas.product.persona.account_profile import AccountPersonaProfile
 
 from .ai_extension_api import ai_extension_http_json
 from .config import Config
@@ -198,6 +199,24 @@ class _LlmSingDefaultsData(BaseModel):
     song_cache_days: int = Field(ge=1, le=3650)
     song_cache_size: int = Field(ge=0, le=10000)
     writable: bool | None = None
+
+
+class _PersonaObserveBotRow(BaseModel):
+    account: int
+    group_style_enabled: bool = True
+    account_profile: AccountPersonaProfile
+    base: dict[str, Any]
+    base_hints: list[str] = Field(default_factory=list)
+    resolved: dict[str, Any] | None = None
+    resolved_hints: list[str] = Field(default_factory=list)
+
+
+class _PersonaObserveData(BaseModel):
+    group_id: int | None = None
+    group_style_snapshot: dict[str, Any] | None = None
+    affect_refine: dict[str, Any] | None = None
+    affect_triggers: list[dict[str, Any]] = Field(default_factory=list)
+    bots: list[_PersonaObserveBotRow] = Field(default_factory=list)
 
 
 class _CommunityConnectivityProbeRow(BaseModel):
@@ -424,10 +443,6 @@ class _LlmLocalRoutingTaskModelsBody(BaseModel):
 
     llm_chat: str = ""
     drunk: str = ""
-    repeater_fallback: str = ""
-    repeater_polish: str = ""
-    repeater_polish_lite: str = ""
-    repeater_select: str = ""
 
 
 class _LlmLocalRoutingConfigBody(BaseModel):
@@ -1362,11 +1377,15 @@ def register_common_config_router(
             raise HTTPException(status_code=int(replay_result.get("status_code") or 502), detail=detail)
         return JSONResponse({"ok": True, "data": replay_result.get("data") or {}})
 
-    @router.get(f"{x}/common-config/llm/persona-observe", include_in_schema=True)
+    @router.get(
+        f"{x}/common-config/llm/persona-observe",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_PersonaObserveData],
+    )
     async def _llm_persona_observe_get(
         group_id: int | None = Query(default=None, ge=1, description="群号；省略则仅展示 bot 基线"),
         accounts: str | None = Query(default=None, description="逗号分隔 bot account，省略则全部"),
-    ) -> JSONResponse:
+    ) -> dict[str, Any]:
         from pallas.product.persona.observe import build_persona_observe_payload, parse_observe_accounts
 
         try:
@@ -1376,4 +1395,4 @@ def register_common_config_router(
             )
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
-        return JSONResponse({"ok": True, "data": data})
+        return {"ok": True, "data": data}

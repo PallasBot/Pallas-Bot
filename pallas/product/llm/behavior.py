@@ -59,6 +59,8 @@ class BehaviorRun(BaseModel):
     scene: BehaviorScene
     user_text: str = ""
     reply_text: str = ""
+    bubble_count: int = 1
+    bubble_rhythm: str = "single"
     selected_pattern_ids: list[str] = Field(default_factory=list)
     selected_actions: list[BehaviorAction] = Field(default_factory=list)
     selected_expression_ids: list[str] = Field(default_factory=list)

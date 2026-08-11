@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .prompt_guard import sanitize_prompt_literal, wrap_stats_block
+from .prompt_guard import sanitize_prompt_literal
 
 
 class PersonaDisposition(BaseModel):
@@ -51,21 +51,3 @@ def resolve_persona_disposition(bot_persona: dict[str, Any] | None) -> PersonaDi
         )
     except (TypeError, ValueError):
         return PersonaDisposition()
-
-
-def compile_disposition_prompt(bot_persona: dict[str, Any] | None) -> str:
-    disposition = resolve_persona_disposition(bot_persona)
-    lines: list[str] = []
-    if disposition.approach:
-        lines.append(f"处事：{disposition.approach}")
-    if disposition.initiative:
-        lines.append(f"主动：{disposition.initiative}")
-    if disposition.conflict:
-        lines.append(f"分歧：{disposition.conflict}")
-    if disposition.do:
-        lines.append("偏好：" + "；".join(disposition.do))
-    if disposition.dont:
-        lines.append("避免：" + "；".join(disposition.dont))
-    if not lines:
-        return ""
-    return wrap_stats_block("account_disposition", "\n".join(["【账号处事风格】", *lines]))

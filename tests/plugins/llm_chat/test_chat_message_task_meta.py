@@ -146,7 +146,8 @@ async def test_handle_llm_chat_sends_low_value_direct_social_to_turn_decision(
     monkeypatch.setattr(mod, "list_user_llm_messages", AsyncMock(return_value=[]))
     monkeypatch.setattr(mod, "latest_llm_assistant_reply", AsyncMock(return_value=""))
     monkeypatch.setattr(
-        "pallas.product.llm.repeater_persona_context.load_recent_bot_plain_replies",
+        mod,
+        "load_recent_bot_plain_replies",
         AsyncMock(return_value=[]),
     )
     turn_decision = AsyncMock(side_effect=AssertionError("explicit trigger must reach current-turn decision"))
@@ -212,7 +213,8 @@ async def test_handle_llm_chat_submits_required_tool_intent_despite_low_social_s
     monkeypatch.setattr(mod, "maybe_auto_save_episode", AsyncMock())
     monkeypatch.setattr(mod, "resolve_login_nickname", AsyncMock(return_value=""))
     monkeypatch.setattr(
-        "pallas.product.llm.repeater_persona_context.load_recent_bot_plain_replies",
+        mod,
+        "load_recent_bot_plain_replies",
         AsyncMock(return_value=[]),
     )
     monkeypatch.setattr(
@@ -301,9 +303,6 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
             llm_memory_rag_enabled=False,
             llm_relationship_notes_enabled=False,
             llm_chat_enabled=True,
-            llm_select_enabled=True,
-            llm_polish_lite_enabled=False,
-            llm_polish_enabled=False,
             llm_chat_cooldown_sec=3,
             llm_chat_queue_merge=True,
             llm_speak_followup_enabled=False,
@@ -317,7 +316,14 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
         "build_persona_llm_context",
         AsyncMock(
             return_value=(
-                SimpleNamespace(system="sys", metadata=SimpleNamespace(persona={})),
+                SimpleNamespace(
+                    system="sys",
+                    sections=SimpleNamespace(
+                        base="核心人格",
+                        self_identity="【同伴牛牛】\n你不是其他牛牛。",
+                    ),
+                    metadata=SimpleNamespace(persona={}),
+                ),
                 None,
                 None,
             )
@@ -328,7 +334,6 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     async def fake_context(*_args, **kwargs) -> SimpleNamespace:
         assert decision_called, "current turn decision must run before context assembly"
         assert kwargs["allow_persistent_memory"] is False
-        assert kwargs["allow_expression_reference"] is False
         return SimpleNamespace(
             system_prompt="sys",
             knowledge_retrieval_trace={"hit_count": 1},
@@ -405,6 +410,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
             style_anchor="短句轻怼。",
             prompt_block="【本群表达校准】\n保持：短句轻怼。",
             direct_candidate="没救了",
+            source_example_id="semantic:source:1",
         )
     )
     monkeypatch.setattr(
@@ -412,7 +418,8 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
         semantic_style_mock,
     )
     monkeypatch.setattr(
-        "pallas.product.llm.repeater_persona_context.load_recent_bot_plain_replies",
+        mod,
+        "load_recent_bot_plain_replies",
         AsyncMock(return_value=["群内上一句", "群内更早一句"]),
     )
     submit_mock = AsyncMock(return_value=SimpleNamespace(ok=True, task_id="ai-task-1", status="queued"))
@@ -447,6 +454,12 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     assert "【收尾变化参考】" not in submit_request.system_prompt
     assert "【语料收尾参考】" not in submit_request.system_prompt
     assert "【本群表达校准】" not in submit_request.system_prompt
+    assert "【群表达指导】" in submit_request.system_prompt
+    assert "【同伴牛牛】" in submit_request.system_prompt
+    assert "你不是其他牛牛。" in submit_request.system_prompt
+    assert "短句轻怼。" in submit_request.system_prompt
+    assert "【回复形状与输出契约】" in submit_request.system_prompt
+    assert '"reply_segments"' in submit_request.system_prompt
     assert "【本轮表达去重】" not in "\n".join(submit_request.style_user_hints)
     assert "【收尾变化参考】" not in "\n".join(submit_request.style_user_hints)
     assert "本轮直接回答当前问题，别补一整套客套。" not in "\n".join(submit_request.style_user_hints)
@@ -457,8 +470,10 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     assert "same_utterance_redup" not in submit_request.llm_rewrite_metadata
     assert submit_request.llm_rewrite_metadata["social_action"] == "ACK"
     assert submit_request.llm_rewrite_metadata["reply_target"] == "fact"
-    assert submit_request.llm_rewrite_metadata["semantic_style_prompt_block"] == "【本群表达校准】\n保持：短句轻怼。"
+    assert "semantic_style_prompt_block" not in submit_request.llm_rewrite_metadata
     assert submit_request.llm_rewrite_metadata["semantic_style_direct_candidate"] == "没救了"
+    assert submit_request.llm_rewrite_metadata["semantic_style_source_example_id"] == "semantic:source:1"
+    assert added["payload"]["semantic_style_source_example_id"] == "semantic:source:1"
     assert submit_request.include_session_history is True
     assert submit_request.session_history_limit == 2
     assert submit_request.include_group_ambient_history is False
@@ -499,9 +514,6 @@ async def test_handle_llm_chat_submits_explicit_mention_without_wait(monkeypatch
             llm_memory_rag_enabled=False,
             llm_relationship_notes_enabled=False,
             llm_chat_enabled=True,
-            llm_select_enabled=False,
-            llm_polish_lite_enabled=False,
-            llm_polish_enabled=False,
             llm_chat_cooldown_sec=3,
             llm_chat_queue_merge=True,
             llm_speak_followup_enabled=False,
@@ -584,9 +596,6 @@ async def test_handle_llm_chat_submits_federated_alias_hard_wake(monkeypatch: py
             llm_memory_rag_enabled=False,
             llm_relationship_notes_enabled=False,
             llm_chat_enabled=True,
-            llm_select_enabled=False,
-            llm_polish_lite_enabled=False,
-            llm_polish_enabled=False,
             llm_chat_cooldown_sec=3,
             llm_chat_queue_merge=True,
             llm_speak_followup_enabled=False,

@@ -2,25 +2,21 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import time
+from contextlib import nullcontext
 from io import BytesIO
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from nonebot import logger
 
 from pallas.core.foundation.logging.bridge import format_business_event
-from pallas.core.platform.ai_callback.delivery import send_group_message
 from pallas.core.platform.ai_callback.handlers import (
     should_append_llm_session,
     should_suppress_llm_duplicate_reply,
 )
-from pallas.core.platform.ai_callback.task_types import (
-    LLM_CHAT_TASK_TYPE,
-    REPEATER_FALLBACK_TASK_TYPE,
-    REPEATER_POLISH_LITE_TASK_TYPE,
-    REPEATER_POLISH_TASK_TYPE,
-    REPEATER_SELECT_TASK_TYPE,
-)
+from pallas.core.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE
 from pallas.product.llm.behavior import BehaviorAction, BehaviorRun, BehaviorScene
 from pallas.product.llm.behavior_store import append_behavior_run
 from pallas.product.llm.config import get_llm_config
@@ -29,6 +25,23 @@ from pallas.product.llm.session_store import append_llm_message, compact_user_ll
 from pallas.product.llm.task_metrics import record_bot_llm_route, record_bot_llm_task
 
 STICKER_IMAGE_MAX_SIDE = 160
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+
+def bubble_delay_seconds(previous_segment: str) -> float:
+    """Return a brief bounded pause after a visible chat bubble."""
+    return min(0.6, 0.12 + min(len(str(previous_segment or "").strip()), 48) * 0.01)
+
+
+async def sleep_between_bubbles(
+    delay: float,
+    sleeper: Callable[[float], Awaitable[None] | None],
+) -> None:
+    result = sleeper(delay)
+    if inspect.isawaitable(result):
+        await result
 
 
 def prepare_sticker_image(image_bytes: bytes, *, max_side: int = STICKER_IMAGE_MAX_SIDE) -> bytes:
@@ -103,25 +116,47 @@ async def send_repeater_emotion_image(
                 break
     if not candidates:
         return False
-    raw_image = candidates[0][0]
-    from pallas.product.llm.sticker_followup import note_repeater_image_sent, should_send_repeater_image
+    from pallas.product.llm.sticker_followup import (
+        note_repeater_image_sent,
+        recent_repeater_image_hashes,
+        should_send_repeater_image,
+    )
+    from pallas.product.llm.sticker_labels import content_hash_for_bytes
+    from pallas.product.llm.sticker_selector import should_refine_with_vision
+
+    ranked, labels = await rank_cached_sticker_candidates(
+        user_text,
+        candidates,
+        recent_hashes=recent_repeater_image_hashes(int(group_id)),
+    )
+    if not ranked:
+        return False
+    raw_image = ranked[0].candidate.cq_code
 
     cfg = get_llm_config()
-    if bool(getattr(cfg, "llm_sticker_vision_enabled", False)):
+    if bool(getattr(cfg, "llm_sticker_vision_enabled", False)) and should_refine_with_vision(ranked, labels):
         from pallas.product.llm.sticker_vision import allow_sticker_vision_enqueue, enqueue_sticker_vision_job
 
         timeout_sec = float(getattr(cfg, "llm_sticker_vision_timeout_sec", 15.0) or 15.0)
         if allow_sticker_vision_enqueue(int(getattr(cfg, "llm_sticker_vision_max_per_hour", 12) or 0)):
+            candidate_by_code = dict(candidates)
+            vision_candidates = [
+                (item.candidate.cq_code, candidate_by_code[item.candidate.cq_code])
+                for item in ranked[: int(getattr(cfg, "llm_sticker_vision_candidate_count", 4) or 4)]
+            ]
             job_key = f"{int(bot_id)}:{int(group_id)}:{int(time.time() * 1000)}:{hash(raw_image)}"
             try:
                 await enqueue_sticker_vision_job(
-                    candidates[: int(getattr(cfg, "llm_sticker_vision_candidate_count", 4) or 4)],
+                    vision_candidates,
                     user_text=user_text,
                     timeout_sec=timeout_sec,
                     idempotency_key=f"sticker_vision.select:{job_key}",
                     bot_id=int(bot_id),
                     group_id=int(group_id),
                     fallback_cq_code=raw_image,
+                    cooldown_sec=int(
+                        cooldown_sec if cooldown_sec is not None else getattr(cfg, "llm_chat_sticker_cooldown_sec", 90)
+                    ),
                 )
             except Exception as exc:
                 logger.debug(format_business_event("视觉表情跟随", "已跳过", group=group_id, error=type(exc).__name__))
@@ -145,8 +180,62 @@ async def send_repeater_emotion_image(
     except Exception as e:
         logger.debug(format_business_event("表情跟随投递", "已跳过", group=group_id, error=type(e).__name__))
         return False
-    note_repeater_image_sent(int(group_id), raw_image)
+    note_repeater_image_sent(int(group_id), raw_image, content_hash=content_hash_for_bytes(cached))
     return True
+
+
+def _consume_sticker_label_enqueue_result(task: asyncio.Task[bool]) -> None:
+    try:
+        task.result()
+    except Exception as exc:
+        logger.debug("sticker label enqueue skipped: {}", exc)
+
+
+async def rank_cached_sticker_candidates(
+    intent: str,
+    candidates: list[tuple[str, bytes]],
+    *,
+    recent_hashes: tuple[str, ...] = (),
+    source: object | None = None,
+):
+    """读取已有标签并懒入队缺失标签，不等待视觉标注任务。"""
+    from pallas.product.llm.sticker_label_jobs import (
+        StickerLabelSource,
+        enqueue_sticker_label_candidate,
+        sticker_label_repository,
+    )
+    from pallas.product.llm.sticker_labels import content_hash_for_bytes
+    from pallas.product.llm.sticker_selector import StickerCandidate, rank_sticker_candidates
+
+    resolved_source = source if isinstance(source, StickerLabelSource) else StickerLabelSource.FOLLOWUP_CANDIDATE
+    candidate_by_hash: dict[str, tuple[str, bytes]] = {}
+    for cq_code, image in candidates:
+        candidate_by_hash.setdefault(content_hash_for_bytes(image), (cq_code, image))
+    labels = {}
+    repository = sticker_label_repository()
+    for content_hash, (cq_code, image) in candidate_by_hash.items():
+        try:
+            label = await repository.get(content_hash)
+        except Exception as exc:
+            logger.debug("sticker label lookup skipped: {}", exc)
+            label = None
+        if label is None:
+            followup_task = asyncio.create_task(
+                enqueue_sticker_label_candidate(cache_key=cq_code, content=image, source=resolved_source),
+                name=f"sticker_label_followup:{content_hash[:12]}",
+            )
+            followup_task.add_done_callback(_consume_sticker_label_enqueue_result)
+        else:
+            labels[content_hash] = label
+    return (
+        rank_sticker_candidates(
+            intent,
+            [StickerCandidate(cq_code, content_hash_for_bytes(image)) for cq_code, image in candidates],
+            labels,
+            recent_hashes=recent_hashes,
+        ),
+        labels,
+    )
 
 
 async def send_cached_sticker_image(bot: Any, group_id: int) -> bool:
@@ -170,20 +259,7 @@ async def send_cached_sticker_image(bot: Any, group_id: int) -> bool:
     return True
 
 
-_TRACKED_LLM_TASKS = frozenset({
-    LLM_CHAT_TASK_TYPE,
-    REPEATER_FALLBACK_TASK_TYPE,
-    REPEATER_POLISH_TASK_TYPE,
-    REPEATER_POLISH_LITE_TASK_TYPE,
-    REPEATER_SELECT_TASK_TYPE,
-})
-
-_REPEATER_CALLBACK_TASKS = frozenset({
-    REPEATER_FALLBACK_TASK_TYPE,
-    REPEATER_POLISH_TASK_TYPE,
-    REPEATER_POLISH_LITE_TASK_TYPE,
-    REPEATER_SELECT_TASK_TYPE,
-})
+_TRACKED_LLM_TASKS = frozenset({LLM_CHAT_TASK_TYPE})
 
 _MENTION_LAST_SENT_AT: dict[int, float] = {}
 
@@ -219,11 +295,18 @@ def note_llm_reply_mention_sent(group_id: object, *, now: float | None = None) -
         _MENTION_LAST_SENT_AT[int(group_id)] = time.monotonic() if now is None else now
 
 
-def maybe_append_llm_repeater_feedback(task_id: str, task: dict, reply_text: str) -> None:
+def maybe_append_llm_repeater_feedback(
+    task_id: str,
+    task: dict,
+    reply_text: str,
+    *,
+    bot_message_id: int | None = None,
+    semantic_source_bound: bool = False,
+) -> None:
     from pallas.product.llm.repeater_feedback import (
         append_feedback_entry,
         build_feedback_entry,
-        resolve_feedback_llm_route,
+        normalize_feedback_llm_route,
         should_collect_llm_repeater_feedback,
     )
 
@@ -233,17 +316,19 @@ def maybe_append_llm_repeater_feedback(task_id: str, task: dict, reply_text: str
     user_text = str(task.get("user_text") or "").strip()
     source_tags = [str(item).strip() for item in list(task.get("source_tags") or []) if str(item).strip()]
     group_id = int(task.get("group_id") or 0)
+    direct_candidate = str(task.get("semantic_style_direct_candidate") or "").strip()
+    semantic_source_example_id = str(task.get("semantic_style_source_example_id") or "").strip()
+    if not semantic_source_bound or not direct_candidate or str(reply_text or "").strip() != direct_candidate:
+        semantic_source_example_id = ""
     if not should_collect_llm_repeater_feedback(
         task_type=str(task.get("task_type") or "").strip(),
         group_id=group_id,
         user_text=user_text,
         reply_text=reply_text,
         source_tags=source_tags,
-        fallback_text=str(task.get("fallback_text") or "").strip(),
     ):
         return
     try:
-        task_type = str(task.get("task_type") or "").strip()
         append_feedback_entry(
             build_feedback_entry(
                 entry_id=task_id,
@@ -256,17 +341,30 @@ def maybe_append_llm_repeater_feedback(task_id: str, task: dict, reply_text: str
                 behavior_scene=str(task.get("behavior_scene") or "").strip(),
                 scene_tier=str(task.get("scene_tier") or "").strip(),
                 behavior_actions=list(task.get("behavior_actions") or []),
-                llm_route=resolve_feedback_llm_route(
-                    task_type=task_type,
-                    llm_route=str(task.get("llm_route") or "").strip(),
-                ),
+                llm_route=normalize_feedback_llm_route(task.get("llm_route")),
                 source_tags=source_tags,
                 eligible_for_bias=True,
                 eligible_for_writeback=str(task.get("scene_tier") or "").strip().lower() == "strong",
+                bot_message_id=int(bot_message_id or 0),
+                semantic_source_example_id=semantic_source_example_id,
+                semantic_scene="group_chat",
             )
         )
     except Exception as e:
         logger.warning("AI callback append llm_repeater feedback failed task={}: {}", task_id, e)
+
+
+def semantic_source_matches_delivery(
+    task: dict,
+    *,
+    reply_segments: list[str],
+    bot_message_id: int | None,
+    text_delivered: bool,
+) -> bool:
+    candidate = str(task.get("semantic_style_direct_candidate") or "").strip()
+    return bool(
+        len(reply_segments) == 1 and bot_message_id and text_delivered and str(reply_segments[0]).strip() == candidate
+    )
 
 
 def track_llm_callback(task: dict, event: str) -> None:
@@ -274,56 +372,12 @@ def track_llm_callback(task: dict, event: str) -> None:
     if task_type in _TRACKED_LLM_TASKS:
         record_bot_llm_task(task_type, event)
         if event == "callback_ok":
-            from pallas.product.llm.repeater_feedback import resolve_feedback_llm_route
+            from pallas.product.llm.repeater_feedback import normalize_feedback_llm_route
 
             record_bot_llm_route(
                 task_type,
-                resolve_feedback_llm_route(
-                    task_type=task_type,
-                    llm_route=str(task.get("llm_route") or "").strip(),
-                ),
+                normalize_feedback_llm_route(task.get("llm_route")),
             )
-
-
-async def evaluate_repeater_callback_text(task: dict, reply_text: str) -> bool:
-    task_type = str(task.get("task_type") or "").strip()
-    if task_type not in _REPEATER_CALLBACK_TASKS:
-        return True
-    from packages.repeater.responder import Responder
-
-    text = str(reply_text or "").strip()
-    if not text:
-        return False
-    fallback = str(task.get("fallback_text") or "").strip()
-    if fallback and text == fallback:
-        return True
-    bot_id = int(task.get("bot_id") or 0)
-    group_id = int(task.get("group_id") or 0)
-    user_text = str(task.get("user_text") or "").strip()
-    reply_mode = str(task.get("reply_mode") or "normal").strip().lower() or "normal"
-    recent_sent = []
-    persona = None
-    affect_triggers = None
-    if bot_id and group_id:
-        try:
-            from pallas.product.persona import resolve_persona_for_message
-            from pallas.product.persona.loader import load_affect_triggers
-
-            persona = await resolve_persona_for_message(bot_id, group_id, user_text or text)
-            affect_triggers = await load_affect_triggers(group_id)
-        except Exception:
-            persona = None
-            affect_triggers = None
-    accepted, _score = Responder.evaluate_llm_candidate_text(
-        text,
-        base_score=0.8,
-        min_score=0.55,
-        recent_sent=recent_sent,
-        persona=persona,
-        affect_triggers=affect_triggers,
-        reply_mode=reply_mode,
-    )
-    return accepted
 
 
 async def deliver_llm_callback_success(
@@ -339,25 +393,29 @@ async def deliver_llm_callback_success(
     history_summary: str | None,
     history_keep_messages: int | None,
     suppress_empty_fallback: bool = False,
+    sleeper: Callable[[float], Awaitable[None] | None] | None = None,
 ) -> tuple[str, bool, bool]:
     """处理 LLM 回调文本并投递到群。返回 (reply_text, text_delivered, delivered)。"""
     delivered = bot is not None
     reply_text = str(text or "").strip()
     text_delivered = False
+    bot_message_id: int | None = None
     task_type = str(task.get("task_type") or "").strip()
-    if task_type == REPEATER_SELECT_TASK_TYPE:
-        from pallas.product.llm.select import resolve_select_callback_text
-
-        pool = task.get("candidate_pool") or []
-        fallback = str(task.get("fallback_text") or "").strip()
-        reply_text = resolve_select_callback_text(reply_text, pool, fallback)
-    elif should_suppress_llm_duplicate_reply(task, reply_text):
+    if should_suppress_llm_duplicate_reply(task, reply_text):
         fallback = str(task.get("fallback_text") or "").strip()
         reply_text = fallback if fallback and fallback != reply_text else ""
-    from pallas.product.llm.output_filter import resolve_output_filtered_reply
+    from pallas.product.llm.models import StructuredChatReply
+    from pallas.product.llm.output_filter import profile_for_task_type, resolve_output_filtered_chat_reply
+    from pallas.product.llm.structured_reply import parse_structured_reply
 
     had_reply_before_filter = bool(reply_text)
-    reply_text = resolve_output_filtered_reply(task, reply_text)
+    direct_candidate = str(task.get("semantic_style_direct_candidate") or "").strip()
+    structured_reply = StructuredChatReply.single(reply_text)
+    if not (direct_candidate and reply_text == direct_candidate) and profile_for_task_type(task_type) is not None:
+        structured_reply = parse_structured_reply(reply_text)
+    structured_reply = resolve_output_filtered_chat_reply(task, structured_reply)
+    reply_segments = list(structured_reply.reply_segments)
+    reply_text = structured_reply.logical_text
     if task_type == LLM_CHAT_TASK_TYPE and reply_text:
         from pallas.product.llm.message_guard import strip_leading_self_at_mentions
         from pallas.product.persona.self_identity import DEFAULT_SELF_ALIASES
@@ -370,11 +428,13 @@ async def deliver_llm_callback_success(
         )
         bot_id_raw = task.get("bot_id")
         bot_self_id = int(bot_id_raw) if bot_id_raw is not None and str(bot_id_raw).isdigit() else None
-        reply_text = strip_leading_self_at_mentions(
-            reply_text,
+        first_segment = strip_leading_self_at_mentions(
+            reply_segments[0] if reply_segments else "",
             bot_self_id=bot_self_id,
             mention_names=mention_names,
         )
+        reply_segments = [first_segment, *reply_segments[1:]] if first_segment else reply_segments[1:]
+        reply_text = "\n".join(reply_segments)
     if task_type == LLM_CHAT_TASK_TYPE and not had_reply_before_filter:
         from pallas.product.llm.chat_empty_fallback import resolve_llm_chat_empty_fallback
 
@@ -383,60 +443,84 @@ async def deliver_llm_callback_success(
             reply_text,
             suppress_empty_fallback=suppress_empty_fallback,
         )
-    if task_type in _REPEATER_CALLBACK_TASKS and reply_text:
-        accepted = await evaluate_repeater_callback_text(task, reply_text)
-        if not accepted:
-            fallback = str(task.get("fallback_text") or "").strip()
-            if fallback and fallback != reply_text and await evaluate_repeater_callback_text(task, fallback):
-                reply_text = fallback
-            else:
-                reply_text = ""
-    learned_reply_text = reply_text
-    reply_segments = [reply_text] if reply_text else []
-    if reply_text:
+        reply_segments = [reply_text] if reply_text else []
+    learned_reply_text = "\n".join(reply_segments)
+    delivery_segments = list(reply_segments)
+    if delivery_segments:
         from pallas.product.llm.reply_postprocess import apply_reply_postprocess
 
         cfg = get_llm_config()
-        reply_segments = apply_reply_postprocess(
-            reply_text,
-            enabled=bool(cfg.llm_reply_postprocess_enabled),
-            typo_enabled=bool(cfg.llm_reply_typo_enabled),
-            typo_rate=float(cfg.llm_reply_typo_rate),
-            split_enabled=bool(cfg.llm_reply_split_enabled),
-            split_max_chars=int(cfg.llm_reply_split_max_chars),
-            trim_terminal_period_enabled=bool(cfg.llm_reply_trim_terminal_period_enabled),
-            trim_terminal_period_rate=float(cfg.llm_reply_trim_terminal_period_rate),
-        )
-        reply_text = "".join(reply_segments)
-    if reply_segments and group_id and bot is not None:
+        delivery_segments = [
+            processed
+            for segment in delivery_segments
+            if (
+                processed := apply_reply_postprocess(
+                    segment,
+                    enabled=bool(cfg.llm_reply_postprocess_enabled),
+                    typo_enabled=bool(cfg.llm_reply_typo_enabled),
+                    typo_rate=float(cfg.llm_reply_typo_rate),
+                    trim_terminal_period_enabled=bool(cfg.llm_reply_trim_terminal_period_enabled),
+                    trim_terminal_period_rate=float(cfg.llm_reply_trim_terminal_period_rate),
+                )
+            )
+        ]
+    structured_sticker_requested = bool(
+        delivery_segments
+        and structured_reply.sticker_intent != "none"
+        and group_id
+        and bot is not None
+        and bool(getattr(cfg, "llm_chat_sticker_enabled", False))
+    )
+    if delivery_segments and group_id and bot is not None:
         logger.info(
             "AI callback delivering text task={} bot_id={} group_id={} length={} segments={} task_type={}",
             task_id,
             getattr(bot, "self_id", bot_id_str or "<missing>"),
             group_id,
-            len(reply_text),
-            len(reply_segments),
+            len(learned_reply_text),
+            len(delivery_segments),
             task_type,
         )
-        text_delivered = True
+        bubble_sleeper = sleeper or asyncio.sleep
         reply_to_message_id, at_user_id = resolve_llm_reply_delivery(
             task,
             group_id=group_id,
             mention_cooldown_sec=int(cfg.llm_reply_mention_cooldown_sec),
         )
-        for index, segment in enumerate(reply_segments):
-            ok = await send_group_message(
-                bot,
-                group_id,
-                segment,
-                reply_to_message_id=reply_to_message_id if index == 0 else None,
-                at_user_id=at_user_id if index == 0 else None,
-            )
+        sent_indexes: list[int] = []
+        from pallas.product.llm.sticker_followup import suppress_outgoing_sticker_followup
+
+        for index, segment in enumerate(delivery_segments):
+            if index:
+                await sleep_between_bubbles(bubble_delay_seconds(delivery_segments[index - 1]), bubble_sleeper)
+            from pallas.core.platform.ai_callback.delivery import send_group_message_with_receipt
+
+            ownership = suppress_outgoing_sticker_followup() if structured_sticker_requested else nullcontext()
+            with ownership:
+                receipt = await send_group_message_with_receipt(
+                    bot,
+                    group_id,
+                    segment,
+                    reply_to_message_id=reply_to_message_id if index == 0 else None,
+                    at_user_id=at_user_id if index == 0 else None,
+                )
+            if index == 0:
+                bot_message_id = receipt.message_id
+            ok = receipt.delivered
             if index == 0 and ok and at_user_id is not None:
                 note_llm_reply_mention_sent(group_id)
-            text_delivered = bool(ok) and text_delivered
+            if not ok:
+                logger.warning(
+                    "AI callback bubble delivery stopped task={} sent_indexes={} failed_index={}",
+                    task_id,
+                    sent_indexes,
+                    index,
+                )
+                break
+            sent_indexes.append(index)
+        text_delivered = len(sent_indexes) == len(delivery_segments)
         delivered = text_delivered and delivered
-    if should_append_llm_session(task) and learned_reply_text:
+    if text_delivered and should_append_llm_session(task) and learned_reply_text:
         raw_group_id = task.get("group_id")
         scope_group = int(raw_group_id) if raw_group_id is not None else None
         speaker_id = int(task.get("user_id") or 0)
@@ -459,7 +543,39 @@ async def deliver_llm_callback_success(
     from pallas.product.llm.repeater_feedback import is_feedback_task_type
 
     if is_feedback_task_type(task_type) and learned_reply_text and text_delivered:
-        maybe_append_llm_repeater_feedback(task_id, task, learned_reply_text)
+        semantic_source_bound = semantic_source_matches_delivery(
+            task,
+            reply_segments=delivery_segments,
+            bot_message_id=bot_message_id,
+            text_delivered=text_delivered,
+        )
+        maybe_append_llm_repeater_feedback(
+            task_id,
+            task,
+            learned_reply_text,
+            bot_message_id=bot_message_id,
+            semantic_source_bound=semantic_source_bound,
+        )
+    if text_delivered and structured_sticker_requested:
+        from pallas.product.llm.sticker_followup import should_schedule_outgoing_sticker
+
+        if should_schedule_outgoing_sticker(
+            int(group_id),
+            learned_reply_text,
+            cooldown_sec=int(getattr(cfg, "llm_chat_sticker_cooldown_sec", 90)),
+            max_per_hour=int(getattr(cfg, "llm_chat_sticker_max_per_hour", 8)),
+        ):
+            followup_task = asyncio.create_task(
+                send_repeater_emotion_image(
+                    bot,
+                    int(group_id),
+                    int(bot_id),
+                    int(task.get("user_id") or 0),
+                    structured_reply.sticker_intent,
+                ),
+                name=f"llm_sticker_followup:{task_id}",
+            )
+            followup_task.add_done_callback(_consume_sticker_label_enqueue_result)
     if learned_reply_text and text_delivered and group_id:
         scene_tier = str(task.get("scene_tier") or "").strip()
         channel = "at_chat" if task_type == LLM_CHAT_TASK_TYPE else "strong" if scene_tier == "strong" else "group"
@@ -490,7 +606,7 @@ async def deliver_llm_callback_success(
             except Exception:
                 logger.debug("reply effect eval skipped task={}", task_id)
     behavior_scene = str(task.get("behavior_scene") or "").strip()
-    if task_type == LLM_CHAT_TASK_TYPE and behavior_scene:
+    if text_delivered and task_type == LLM_CHAT_TASK_TYPE and behavior_scene:
         append_behavior_run(
             BehaviorRun(
                 request_id=task_id,
@@ -501,6 +617,8 @@ async def deliver_llm_callback_success(
                 scene=BehaviorScene(behavior_scene),
                 user_text=str(task.get("user_text") or "").strip(),
                 reply_text=learned_reply_text,
+                bubble_count=len(delivery_segments),
+                bubble_rhythm="multi" if len(delivery_segments) > 1 else "single",
                 selected_pattern_ids=[
                     str(item) for item in list(task.get("behavior_pattern_ids") or []) if str(item).strip()
                 ],
@@ -514,7 +632,11 @@ async def deliver_llm_callback_success(
                     str(item) for item in list(task.get("selected_catchphrase_ids") or []) if str(item).strip()
                 ],
                 behavior_hint_text=str(task.get("behavior_hint") or "").strip(),
-                auto_feedback_payload={"agent_trace": parsed_agent_trace} if parsed_agent_trace else {},
+                auto_feedback_payload={
+                    **({"agent_trace": parsed_agent_trace} if parsed_agent_trace else {}),
+                    "bubble_count": len(delivery_segments),
+                    "bubble_rhythm": "multi" if len(delivery_segments) > 1 else "single",
+                },
             )
         )
     track_llm_callback(task, "callback_ok")

@@ -73,6 +73,8 @@ _PARTICIPATION_INVITATION_TERMS = ("一起", "来不来", "去不去", "带上",
 _RECIPROCAL_SOCIAL_QUESTION_RE = re.compile(
     r"(?:^|[。！？!?]\s*)(?:你呢|你(?:那边)?(?:怎么样|咋样)|你吃没|你吃了吗)[？?]\s*$"
 )
+_SHORT_SOCIAL_ACTIONS = frozenset({"ACK", "AFFECTION", "JOKE"})
+_RECIPROCAL_QUESTION_ACTIONS = _SHORT_SOCIAL_ACTIONS | {"STANCE", "ANSWER"}
 _HARD_PRESSURE_CHAT_RE = re.compile(r"(?:少废话|闭嘴|滚|自己想|别来烦我|别烦我|爱咋咋地)[，,。!！\s]*$")
 _PRICKLY_CHAT_RE = re.compile(r"(?:关我什么事|与我无关|不关我的事|懒得理你|别找我)[，,。!！\s]*$")
 _SUPPORTIVE_CONTEXT_DEFLECTION_RE = re.compile(r"(?:哎呀)?这个我不会嘛[，,。!！\s]*$")
@@ -217,20 +219,22 @@ def inspect_persona_output(
     if target == "fact" and _FACT_REPLY_COMPLIANCE_RE.fullmatch(plain):
         quality_rule_ids.append("fact_reply_compliance_template")
         rule_ids.append("fact_reply_compliance_template")
-    if action in {"ACK", "JOKE"} and any(pattern.fullmatch(plain) for pattern in _SHORT_SOCIAL_DEFERENTIAL_PATTERNS):
+    if action in _SHORT_SOCIAL_ACTIONS and any(
+        pattern.fullmatch(plain) for pattern in _SHORT_SOCIAL_DEFERENTIAL_PATTERNS
+    ):
         quality_rule_ids.append("short_social_deferential_template")
         rule_ids.append("short_social_deferential_template")
-    if action in {"ACK", "JOKE"} and persona_topic_terms:
+    if action in _SHORT_SOCIAL_ACTIONS and persona_topic_terms:
         quality_rule_ids.append("persona_topic_hijack")
         rule_ids.append("persona_topic_hijack")
-    if action in {"ACK", "JOKE"} and unprompted_self_aliases:
+    if action in _SHORT_SOCIAL_ACTIONS and unprompted_self_aliases:
         quality_rule_ids.append("unprompted_self_alias")
         rule_ids.append("unprompted_self_alias")
-    if action in {"ACK", "JOKE", "STANCE", "ANSWER"} and _RECIPROCAL_SOCIAL_QUESTION_RE.search(plain):
+    if action in _RECIPROCAL_QUESTION_ACTIONS and _RECIPROCAL_SOCIAL_QUESTION_RE.search(plain):
         quality_rule_ids.append("reciprocal_social_question")
         rule_ids.append("reciprocal_social_question")
     if (
-        action in {"ACK", "JOKE"}
+        action in _SHORT_SOCIAL_ACTIONS
         and not any(term in current for term in _PARTICIPATION_INVITATION_TERMS)
         and _SHORT_SOCIAL_ROLEPLAY_EXPANSION_RE.search(plain)
     ):

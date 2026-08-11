@@ -12,11 +12,8 @@ from pallas.core.foundation.paths import plugin_data_dir
 _STORE_VER = 1
 _TASKS = frozenset({
     "llm_chat",
-    "repeater_polish",
-    "repeater_polish_lite",
-    "repeater_fallback",
-    "repeater_select",
     "affect_refine",
+    "sticker_label",
     "sticker_vision",
 })
 _EVENTS = frozenset({
@@ -57,14 +54,6 @@ _EVENTS = frozenset({
 })
 _ROUTE_BUCKETS = frozenset({
     "plain_llm_chat",
-    "corpus_select",
-    "corpus_polish_lite",
-    "corpus_polish",
-    "corpus_fallback",
-    "pipeline_select",
-    "pipeline_rewrite",
-    "pipeline_stitch",
-    "pipeline_generate",
 })
 
 _lock = threading.Lock()
@@ -136,7 +125,7 @@ def _counters_from_snapshot(raw: dict[str, Any]) -> dict[str, int]:
                 c = int(count or 0)
                 if c <= 0:
                     continue
-                route_key = normalize_llm_route_name(str(route))
+                route_key = str(route or "").strip().lower() or "plain_llm_chat"
                 out[f"route:{task_key}:{route_key}"] = c
     if out:
         return out
@@ -279,7 +268,7 @@ def merge_llm_task_snapshots(rows: list[dict[str, Any]]) -> dict[str, Any]:
                 if isinstance(route_counts, dict):
                     dst_route_counts = dst.setdefault("route_counts", {})
                     for route, count in route_counts.items():
-                        route_key = normalize_llm_route_name(str(route))
+                        route_key = str(route or "").strip().lower() or "plain_llm_chat"
                         dst_route_counts[route_key] = int(dst_route_counts.get(route_key, 0)) + int(count or 0)
         src_totals = row.get("totals")
         if isinstance(src_totals, dict):

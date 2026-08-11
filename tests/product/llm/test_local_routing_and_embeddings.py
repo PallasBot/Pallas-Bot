@@ -39,5 +39,13 @@ def test_local_routing_store_roundtrip(tmp_path, monkeypatch) -> None:
     clear_local_routing_cache()
     exported = export_local_routing_for_api()
     assert exported["local_multi_model_enabled"] is True
+    assert (
+        not {
+            "repeater_select",
+            "repeater_polish",
+            "repeater_polish_lite",
+            "repeater_fallback",
+        }
+        & exported["task_models"].keys()
+    )
     assert resolve_local_task_model("llm_chat") == "qwen3:14b"
-    assert resolve_local_task_model("repeater_select") == "qwen3:8b"

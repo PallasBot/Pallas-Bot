@@ -185,7 +185,6 @@ def compile_self_identity_prompt(
     body = "\n".join([
         "【自称与群称呼】",
         f"- 「{generic_text}」是群友叫你的外号，只用于判断是否在叫你，不是物种、身体设定或话题联想。",
-        "- 登录昵称和学习到的别名只供路由判断，不在对话中列举或据此推断性格、身份与关系。",
         "- 被叫到时用第一人称回应；日常自称优先用「我」，不要把「牛牛」当第三者。",
     ])
     return wrap_stats_block("self_identity", body)

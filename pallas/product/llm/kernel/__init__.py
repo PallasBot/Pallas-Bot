@@ -1,16 +1,13 @@
 """Conversation kernel shared by repeater and llm_chat."""
 
-from pallas.product.llm.kernel.candidates import CandidateSource, ConversationCandidate
 from pallas.product.llm.kernel.context import ConversationContext
 from pallas.product.llm.kernel.decision import (
     DecisionResult,
     decide_direct_chat_action,
     decide_repeater_action,
     plan_direct_chat_stages,
-    plan_generation_stages,
 )
 from pallas.product.llm.kernel.feedback_models import FeedbackBiasSnapshot, PromotionCandidate
-from pallas.product.llm.kernel.generation import GenerationPlan, GenerationTask, build_repeater_generation_plan
 from pallas.product.llm.kernel.memory_governance import (
     MemoryAssetKind,
     MemoryReadPolicy,
@@ -44,9 +41,7 @@ from pallas.product.llm.kernel.observability import (
 )
 
 __all__ = [
-    "CandidateSource",
     "ConversationAction",
-    "ConversationCandidate",
     "ConversationContext",
     "ConversationFeatureLevel",
     "ConversationMode",
@@ -56,15 +51,12 @@ __all__ = [
     "DecisionResult",
     "DecisionTrace",
     "FeedbackBiasSnapshot",
-    "GenerationPlan",
     "GenerationStage",
-    "GenerationTask",
     "MemoryAssetKind",
     "MemoryReadPolicy",
     "PromotionCandidate",
     "behavior_scene_to_conversation_scene",
     "build_conversation_kernel_status",
-    "build_repeater_generation_plan",
     "can_apply_feedback_bias",
     "can_collect_feedback",
     "can_promote_writeback",
@@ -78,7 +70,6 @@ __all__ = [
     "list_recent_conversation_traces",
     "normalize_conversation_mode",
     "plan_direct_chat_stages",
-    "plan_generation_stages",
     "resolve_conversation_feature_level",
     "resolve_memory_read_policy",
     "runtime_state_summary_metadata",

@@ -5,15 +5,11 @@ from pallas.product.llm.kernel import (
     ConversationAction,
     ConversationContext,
     ConversationFeatureLevel,
-    ConversationMode,
     ConversationPath,
     ConversationScene,
-    GenerationStage,
     behavior_scene_to_conversation_scene,
-    build_repeater_generation_plan,
     decide_direct_chat_action,
     decide_repeater_action,
-    plan_generation_stages,
     resolve_conversation_feature_level,
     resolve_memory_read_policy,
 )
@@ -33,24 +29,12 @@ def test_decision_trace_serializes_kernel_fields() -> None:
         action=ConversationAction.REPLY_CORPUS,
         trace_reason="corpus_reply",
         opportunity_accepted=True,
-        generation_stages=["select", "rewrite"],
+        generation_stages=[],
     )
     row = trace.to_trace_row()
     assert row["kind"] == "conversation_decision_trace"
     assert row["action"] == "reply_corpus"
     assert row["scene"] == "banter"
-
-
-def test_plan_generation_stages_only_allows_selecting_grounded_corpus_reply() -> None:
-    stages = plan_generation_stages(
-        has_candidate_pool=True,
-        candidate_pool_size=3,
-        has_grounded_candidate=True,
-        select_enabled=True,
-        polish_enabled=True,
-        polish_lite_enabled=False,
-    )
-    assert stages == [GenerationStage.SELECT]
 
 
 def test_decide_repeater_action_skips_when_opportunity_rejected() -> None:
@@ -70,10 +54,6 @@ def test_decide_repeater_action_skips_when_opportunity_rejected() -> None:
     )
     result = decide_repeater_action(
         ctx,
-        llm_enabled=True,
-        select_enabled=True,
-        polish_enabled=True,
-        polish_lite_enabled=False,
         has_grounded_candidate=False,
         opportunity_accepted=False,
         feature_level=ConversationFeatureLevel.FULL_CONVERSATION_KERNEL,
@@ -82,7 +62,7 @@ def test_decide_repeater_action_skips_when_opportunity_rejected() -> None:
     assert result.opportunity_accepted is False
 
 
-def test_decide_repeater_action_plans_stages_for_plus_decision() -> None:
+def test_decide_repeater_action_returns_grounded_corpus_without_generation_stages() -> None:
     ctx = ConversationContext.for_repeater(
         plain_text="嗯",
         group_id=1,
@@ -99,15 +79,12 @@ def test_decide_repeater_action_plans_stages_for_plus_decision() -> None:
     )
     result = decide_repeater_action(
         ctx,
-        llm_enabled=True,
-        select_enabled=True,
-        polish_enabled=False,
-        polish_lite_enabled=False,
         has_grounded_candidate=True,
         opportunity_accepted=True,
         feature_level=ConversationFeatureLevel.REPEATER_PLUS_DECISION,
     )
-    assert result.generation_stages == [GenerationStage.SELECT]
+    assert result.action == ConversationAction.REPLY_CORPUS
+    assert result.generation_stages == []
 
 
 def test_decide_repeater_action_blocks_llm_stages_for_legacy_repeater() -> None:
@@ -127,10 +104,6 @@ def test_decide_repeater_action_blocks_llm_stages_for_legacy_repeater() -> None:
     )
     result = decide_repeater_action(
         ctx,
-        llm_enabled=True,
-        select_enabled=True,
-        polish_enabled=True,
-        polish_lite_enabled=False,
         has_grounded_candidate=True,
         opportunity_accepted=True,
         feature_level=ConversationFeatureLevel.LEGACY_REPEATER,
@@ -200,22 +173,8 @@ def test_memory_read_policy_disables_behavioral_learning_by_default() -> None:
     assert policy.allow_writeback is False
 
 
-def test_build_repeater_generation_plan_exposes_stage_names() -> None:
-    plan = build_repeater_generation_plan(
-        path=ConversationPath.REPEATER_ASSIST,
-        stages=[GenerationStage.SELECT, GenerationStage.GENERATE],
-        scene=ConversationScene.SMALLTALK,
-        mode=ConversationMode.NORMAL,
-        user_text="测试",
-        candidate_pool=["一", "二"],
-        candidate_text="一",
-        fallback_text="一",
-    )
-    assert plan.stage_names == ["select", "generate"]
-
-
-def test_persona_affect_contract_prefers_short_length_for_short_persona() -> None:
+def test_persona_affect_contract_ignores_legacy_account_length() -> None:
     from pallas.product.persona.model import ResolvedPersona
 
     contract = build_persona_affect_contract(ResolvedPersona(length_pref="short"))
-    assert contract.preferred_length_max <= 16
+    assert contract.preferred_length_max == 36

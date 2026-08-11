@@ -23,7 +23,7 @@ def test_compile_expression_habits_lines_prefers_phrase_and_dedupes() -> None:
     ]
 
 
-def test_build_expression_habits_suffix_includes_short_chaos_hint() -> None:
+def test_build_expression_habits_suffix_does_not_duplicate_length_hint() -> None:
     suffix = build_expression_habits_suffix({
         "sample": {"affect_triggers": [{"phrase": "牛牛税"}]},
         "derived": {"length_pref": "short", "chaos_bias": 0.2},
@@ -31,4 +31,4 @@ def test_build_expression_habits_suffix_includes_short_chaos_hint() -> None:
 
     assert suffix.startswith("\n【表达习惯参考】")
     assert "牛牛税" in suffix
-    assert "顺手短句" in suffix
+    assert "顺手短句" not in suffix

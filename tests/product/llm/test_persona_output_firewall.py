@@ -253,6 +253,32 @@ def test_detects_deferential_short_social_template() -> None:
     assert result.trace["rule_ids"] == ["short_social_deferential_template"]
 
 
+@pytest.mark.parametrize(
+    ("text", "self_aliases", "rule_id"),
+    [
+        ("行啊，那你骂吧，我听着呢。", [], "short_social_deferential_template"),
+        ("谢谢你，改天请你喝米诺斯的酒。", [], "persona_topic_hijack"),
+        ("牛牛都精神了。", ["牛牛"], "unprompted_self_alias"),
+        ("嘿嘿，谢谢。你呢？", [], "reciprocal_social_question"),
+        ("谢谢夸奖，给你竖个大拇指。", [], "short_social_roleplay_expansion"),
+    ],
+)
+def test_affection_uses_short_social_expansion_protection(
+    text: str,
+    self_aliases: list[str],
+    rule_id: str,
+) -> None:
+    result = inspect_persona_output(
+        text,
+        self_aliases=self_aliases,
+        current_user_text="你真可爱",
+        social_action="AFFECTION",
+        reply_target="emotion",
+    )
+
+    assert rule_id in result.rule_ids
+
+
 def test_detects_unrelated_persona_topic_in_short_social_reply() -> None:
     result = inspect_persona_output(
         "行啊，骂完记得请我喝一杯，米诺斯的酒可不便宜。",

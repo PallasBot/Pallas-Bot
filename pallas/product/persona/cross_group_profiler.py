@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import math
 import time
+from datetime import UTC, datetime
 from typing import Any
 
+from .group_expression_profile import GroupExpressionProfile
 from .group_profiler import DEFAULT_WINDOW_HOURS
 
 MIN_GROUP_COUNT = 2
@@ -11,51 +13,32 @@ MIN_TOTAL_WEIGHT = 15.0
 MAX_GROUP_WEIGHT = 50.0
 _WEIGHT_HALF_LIFE_HOURS = 168
 
-_LENGTH_ORD: dict[str, float] = {"short": 0.0, "medium": 1.0, "long": 2.0}
-_LENGTH_FROM_ORD: tuple[str, ...] = ("short", "medium", "long")
-
-
-def _clamp(value: float, lower: float, upper: float) -> float:
-    return max(lower, min(upper, value))
-
 
 def group_style_weight(style_profile: dict[str, Any], *, now_ts: int) -> float:
-    derived = style_profile.get("derived")
-    if not isinstance(derived, dict):
-        return 0.0
-    sample = style_profile.get("sample")
-    if not isinstance(sample, dict):
-        return 0.0
-
-    answer_count = max(0, int(sample.get("answer_count") or 0))
-    message_count = max(0, int(sample.get("message_count") or 0))
+    profile = GroupExpressionProfile.from_style_profile(style_profile)
+    aggregate = profile.aggregate
+    answer_count = max(0, int(aggregate.answer_count))
+    message_count = max(0, int(aggregate.message_count))
     if answer_count <= 0 or message_count <= 0:
         return 0.0
 
     sample_weight = math.sqrt(float(answer_count)) * math.sqrt(float(message_count))
     sample_weight = min(sample_weight, MAX_GROUP_WEIGHT)
 
-    teach_weight = float(sample.get("forced_teach_weight") or 0.0)
+    teach_weight = float(aggregate.forced_teach_weight)
     if teach_weight > 0:
         sample_weight *= 1.0 + min(0.5, teach_weight * 0.08)
 
-    contamination = sample.get("contamination_skipped")
-    if isinstance(contamination, dict):
-        msg_skip = max(0, int(contamination.get("message_count") or 0))
-        ans_skip = max(0, int(contamination.get("answer_count") or 0))
+    skip_total = int(aggregate.contamination_skipped_messages) + int(aggregate.contamination_skipped_answers)
+    if skip_total > 0:
         kept_total = max(1, message_count + answer_count)
-        skip_total = msg_skip + ans_skip
-        if skip_total > 0:
-            ratio = skip_total / (kept_total + skip_total)
-            if ratio >= 0.2:
-                sample_weight *= max(0.2, 1.0 - ratio)
+        ratio = skip_total / (kept_total + skip_total)
+        if ratio >= 0.2:
+            sample_weight *= max(0.2, 1.0 - ratio)
 
-    updated_at = int(style_profile.get("updated_at") or 0)
-    if updated_at <= 0:
-        decay = 1.0
-    else:
-        age_hours = max(0.0, (int(now_ts) - updated_at) / 3600.0)
-        decay = 0.5 ** (age_hours / float(_WEIGHT_HALF_LIFE_HOURS))
+    updated_at = profile.updated_at.timestamp()
+    age_hours = max(0.0, (int(now_ts) - updated_at) / 3600.0)
+    decay = 0.5 ** (age_hours / float(_WEIGHT_HALF_LIFE_HOURS))
 
     return sample_weight * decay
 
@@ -67,10 +50,9 @@ def build_bot_cross_group_persona(
     now_ts: int | None = None,
     window_hours: int = DEFAULT_WINDOW_HOURS,
 ) -> dict[str, Any]:
-    """将多头牛近期活跃群的 style_profile.derived 加权汇总为 bot_config.persona。"""
+    """汇总账号所在群的结构化表达画像，不生成账号人格覆盖。"""
     now = int(now_ts or time.time())
-    weighted: list[tuple[float, dict[str, Any]]] = []
-    total_answer_count = 0
+    weighted: list[tuple[float, GroupExpressionProfile]] = []
 
     for _gid, profile in group_profiles:
         if not isinstance(profile, dict):
@@ -78,57 +60,40 @@ def build_bot_cross_group_persona(
         weight = group_style_weight(profile, now_ts=now)
         if weight <= 0:
             continue
-        derived = profile.get("derived")
-        if not isinstance(derived, dict):
-            continue
-        sample = profile.get("sample")
-        if isinstance(sample, dict):
-            total_answer_count += int(sample.get("answer_count") or 0)
-        weighted.append((weight, derived))
+        weighted.append((weight, GroupExpressionProfile.from_style_profile(profile)))
 
     total_weight = sum(w for w, _ in weighted)
     profile: dict[str, Any] = {
         "version": 1,
-        "source": "cross_group",
-        "updated_at": now,
-        "sample": {
+        "source": "cross_group_expression",
+        "updated_at": datetime.fromtimestamp(now, tz=UTC).isoformat(),
+        "aggregate": {
+            "sample_count": sum(item.aggregate.sample_count for _, item in weighted),
+            "window_hours": int(window_hours),
+            "message_count": sum(item.aggregate.message_count for _, item in weighted),
+            "answer_count": sum(item.aggregate.answer_count for _, item in weighted),
+            "distinct_answer_keywords": sum(item.aggregate.distinct_answer_keywords for _, item in weighted),
+            "active_hour_count": sum(item.aggregate.active_hour_count for _, item in weighted),
+            "contamination_skipped_messages": sum(
+                item.aggregate.contamination_skipped_messages for _, item in weighted
+            ),
+            "contamination_skipped_answers": sum(item.aggregate.contamination_skipped_answers for _, item in weighted),
+        },
+        "reply_shape": {"length_pref": "any"},
+        "summary": {
             "window_hours": int(window_hours),
             "bot_id": int(bot_id),
             "group_count": len(weighted),
             "total_weight": round(total_weight, 3),
-            "total_answer_count": total_answer_count,
         },
     }
 
     if len(weighted) < MIN_GROUP_COUNT or total_weight < MIN_TOTAL_WEIGHT:
         return profile
 
-    reply_sum = 0.0
-    speak_sum = 0.0
-    chaos_sum = 0.0
-    warmth_sum = 0.0
-    assertiveness_sum = 0.0
-    length_ord_sum = 0.0
-
-    for weight, derived in weighted:
-        reply_sum += weight * float(derived.get("reply_bias_mul") or 1.0)
-        speak_sum += weight * float(derived.get("speak_bias_mul") or 1.0)
-        chaos_sum += weight * float(derived.get("chaos_bias") or 0.0)
-        warmth_sum += weight * float(derived.get("warmth_bias") or 0.0)
-        assertiveness_sum += weight * float(derived.get("assertiveness_bias") or 0.0)
-        length_key = str(derived.get("length_pref") or "medium").strip()
-        length_ord_sum += weight * _LENGTH_ORD.get(length_key, 1.0)
-
-    inv = 1.0 / total_weight
-    length_ord = _clamp(round(length_ord_sum * inv), 0.0, 2.0)
-    length_idx = int(length_ord + 0.5)
-
-    profile["derived"] = {
-        "reply_bias_mul": round(_clamp(reply_sum * inv, 0.85, 1.15), 3),
-        "speak_bias_mul": round(_clamp(speak_sum * inv, 0.9, 1.1), 3),
-        "length_pref": _LENGTH_FROM_ORD[length_idx],
-        "chaos_bias": round(_clamp(chaos_sum * inv, 0.0, 0.25), 3),
-        "warmth_bias": round(_clamp(warmth_sum * inv, -0.35, 0.35), 3),
-        "assertiveness_bias": round(_clamp(assertiveness_sum * inv, -0.1, 0.4), 3),
-    }
+    shape_weights: dict[str, float] = {}
+    for weight, item in weighted:
+        key = item.reply_shape.length_pref
+        shape_weights[key] = shape_weights.get(key, 0.0) + weight
+    profile["reply_shape"]["length_pref"] = max(shape_weights, key=shape_weights.get)
     return profile

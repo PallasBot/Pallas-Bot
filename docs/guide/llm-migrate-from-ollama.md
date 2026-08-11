@@ -25,7 +25,7 @@
 | `OLLAMA_HOST` / `OLLAMA_PORT` | Provider 接入配置 | 在 Bot WebUI「AI 配置 → 接入」填写 Base URL |
 | `OLLAMA_MODEL` | Provider 接入配置 | 在 Bot WebUI 为 Provider 选择模型 |
 | `OLLAMA_SYSTEM_PROMPT` 等 | `llm_chat` 插件页 | 可选自定义人设文件；默认走 `compile_persona_prompt` |
-| `LLM_REPEATER_MODE` | （已退役） | 旧值可保留，升级后会被忽略 |
+| `LLM_REPEATER_MODE` | （已删除） | 遗留值会被忽略，可从配置中移除 |
 | — | `LLM_TOOLS_ENABLED` | 方舟等 tool，默认 `true`（总闸开时生效） |
 | — | `LLM_SESSION_ENABLED` | 多轮会话，默认 `true` |
 | — | `LLM_GOVERNANCE_ENABLED` | 冷却/并发/字数，默认 `true` |

@@ -2,7 +2,6 @@
 
 from .compile_group_style import (
     build_group_style_hints,
-    compile_group_style_prompt,
     compile_group_style_snapshot,
 )
 from .compile_persona_prompt import (
@@ -50,7 +49,6 @@ __all__ = [
     "clear_base_system_prompt_cache",
     "clear_bot_cross_group_dirty_state",
     "clear_group_style_dirty_state",
-    "compile_group_style_prompt",
     "compile_group_style_snapshot",
     "compile_persona_prompt",
     "compile_persona_prompt_for",

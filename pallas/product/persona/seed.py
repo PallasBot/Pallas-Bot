@@ -8,8 +8,9 @@ from typing import Any
 from .auto import archetype_for_bot_id
 from .model import ResolvedPersona
 
-SEED_PREF_CHOICES: tuple[str, ...] = ("short", "long", "chaotic", "restrained", "warm")
+SEED_PREF_CHOICES: tuple[str, ...] = ("chaotic", "restrained", "warm")
 _MAX_PREFS = 2
+_ACCOUNT_PROFILE_PREFS = frozenset(("chaotic", "restrained", "warm"))
 
 
 def normalize_seed_prefs(raw: object) -> list[str]:
@@ -28,10 +29,23 @@ def normalize_seed_prefs(raw: object) -> list[str]:
 def derive_auto_seed_prefs(bot_id: int) -> list[str]:
     archetype = archetype_for_bot_id(int(bot_id))
     if archetype == "terse":
-        return ["short", "restrained"]
+        return ["restrained"]
     if archetype == "chaotic":
-        return ["short", "chaotic"]
-    return ["warm", "long"]
+        return ["chaotic"]
+    return ["warm"]
+
+
+def extract_stored_seed_prefs(persona_dict: dict[str, Any] | None) -> tuple[list[str], str] | None:
+    if not isinstance(persona_dict, dict):
+        return None
+    for key, source in (("seed_override", "manual"), ("seed", "auto")):
+        stored = persona_dict.get(key)
+        if not isinstance(stored, dict):
+            continue
+        prefs = normalize_seed_prefs(stored.get("prefs"))
+        if any(pref in _ACCOUNT_PROFILE_PREFS for pref in prefs):
+            return prefs, source
+    return None
 
 
 def build_auto_seed_payload(bot_id: int) -> dict[str, Any]:
@@ -66,23 +80,13 @@ def apply_seed_prefs(persona: ResolvedPersona, prefs: list[str]) -> ResolvedPers
         return persona
     payload = persona.model_dump()
     for pref in normalized:
-        if pref == "short":
-            payload["length_pref"] = "short"
-            payload["chaos_bias"] = max(float(payload.get("chaos_bias") or 0.0), 0.18)
-        elif pref == "long":
-            payload["length_pref"] = "long"
-            payload["chaos_bias"] = min(float(payload.get("chaos_bias") or 0.0), 0.12)
-        elif pref == "chaotic":
+        if pref == "chaotic":
             payload["chaos_bias"] = max(float(payload.get("chaos_bias") or 0.0), 0.42)
-            if str(payload.get("length_pref") or "") not in ("short", "long"):
-                payload["length_pref"] = "short"
             payload["assertiveness"] = max(-1.0, min(1.0, float(payload.get("assertiveness") or 0.0) + 0.12))
         elif pref == "restrained":
             payload["chaos_bias"] = min(float(payload.get("chaos_bias") or 0.0), 0.08)
             payload["warmth"] = max(-1.0, min(1.0, float(payload.get("warmth") or 0.0) - 0.1))
             payload["assertiveness"] = max(-1.0, min(1.0, float(payload.get("assertiveness") or 0.0) - 0.08))
-            if str(payload.get("length_pref") or "") == "any":
-                payload["length_pref"] = "medium"
         elif pref == "warm":
             payload["warmth"] = max(-1.0, min(1.0, float(payload.get("warmth") or 0.0) + 0.22))
             payload["reply_bias"] = max(0.5, min(2.0, float(payload.get("reply_bias") or 1.0) * 1.06))
@@ -98,6 +102,14 @@ def merge_persona_with_seed_patch(
 ) -> dict[str, Any]:
     """合并 WebUI 种子补丁，保留 cross_group / aliases 等既有字段。"""
     merged: dict[str, Any] = dict(existing) if isinstance(existing, dict) else {}
+    if "account_profile" in patch:
+        raw_profile = patch.get("account_profile")
+        if raw_profile is None:
+            merged.pop("account_profile", None)
+        elif isinstance(raw_profile, dict):
+            from .account_profile import AccountPersonaProfile
+
+            merged["account_profile"] = AccountPersonaProfile.model_validate(raw_profile).model_dump()
     if "seed_override" in patch:
         override = patch.get("seed_override")
         if override is None:

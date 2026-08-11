@@ -156,6 +156,7 @@ async def enqueue_repeater_learn(chat: Chat, event: GroupMessageEvent) -> bool:
     """仅抢占成功的牛写入 durable outbox，实际学习在 work aux 执行。"""
     if not await claim_group_message_event(_LEARN_PLUGIN, event, int(event.self_id)):
         return False
+    observe_quoted_semantic_style_feedback(event)
     if should_skip_repeater_learn_enqueue():
         from pallas.core.platform.ingress.hotpath_metrics import record_learn_skipped_pressure
 
@@ -190,6 +191,26 @@ async def enqueue_repeater_learn(chat: Chat, event: GroupMessageEvent) -> bool:
     record_learn_enqueued()
     record_learn_buffered()
     return True
+
+
+def observe_quoted_semantic_style_feedback(event: GroupMessageEvent) -> object | None:
+    replied_message_id = 0
+    for segment in getattr(event, "message", ()):
+        if segment.type == "reply" and str(segment.data.get("id") or "").isdigit():
+            replied_message_id = int(segment.data["id"])
+            break
+    if replied_message_id <= 0:
+        return
+    from pallas.product.llm.repeater_feedback import record_quoted_semantic_style_feedback
+
+    return record_quoted_semantic_style_feedback(
+        bot_id=int(event.self_id),
+        group_id=int(event.group_id),
+        replied_bot_message_id=replied_message_id,
+        following_created_at=int(event.time),
+        following_user_id=int(event.user_id),
+        following_text=str(event.get_plaintext() or "").strip(),
+    )
 
 
 def build_semantic_style_job(payload: dict[str, object], event: GroupMessageEvent) -> WorkJob | None:

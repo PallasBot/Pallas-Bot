@@ -52,7 +52,6 @@ def test_extract_self_aliases_merges_learned_after_defaults() -> None:
 def test_compile_self_identity_prompt_keeps_login_nickname_out_of_role_context() -> None:
     prompt = compile_self_identity_prompt(login_nickname="小牛")
     assert "牛牛" in prompt
-    assert "登录昵称和学习到的别名只供路由判断" in prompt
     assert "小牛" not in prompt
 
 

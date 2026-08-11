@@ -19,6 +19,7 @@ from pallas.core.platform.shard import context as shard_ctx
 from pallas.core.platform.shard.repeater_ingress_metrics import record_repeater_reply_selection
 from pallas.product.llm.kernel.memory_governance import can_apply_feedback_bias
 from pallas.product.llm.repeater_feedback import group_feedback_bias_snapshot
+from pallas.product.persona.group_expression_profile import GroupReplyShapeHint
 from pallas.product.persona.model import ResolvedPersona
 from pallas.product.persona.scorer import freshness_multiplier, message_weight_multiplier
 
@@ -234,6 +235,7 @@ class Responder:
         recent_message: list[str],
         affect_triggers,
         mode: str,
+        reply_shape=None,
         feedback_snapshot: dict | None = None,
     ) -> float:
         from pallas.product.persona.scorer import (
@@ -251,7 +253,12 @@ class Responder:
         for sample in answer.messages:
             text = sample.removeprefix("牛牛")
             sample_weight = (
-                message_weight_multiplier(text, persona, affect_triggers=affect_triggers)
+                message_weight_multiplier(
+                    text,
+                    persona,
+                    affect_triggers=affect_triggers,
+                    reply_shape=reply_shape,
+                )
                 * freshness_multiplier(text, recent_sent, persona=persona)
                 * Responder._sample_mode_multiplier(
                     text,
@@ -627,7 +634,6 @@ class Responder:
             return None
 
         from pallas.product.persona import resolve_persona_for_message
-        from pallas.product.persona.loader import load_affect_triggers
         from pallas.product.persona.scorer import scaled_answer_threshold
 
         from .activity_gate import group_has_hosted_activity
@@ -638,10 +644,11 @@ class Responder:
             group_id,
             str(getattr(chat_data, "plain_text", "") or chat_data.raw_message or ""),
         )
+        expression_profile = getattr(persona, "group_expression_profile", None)
+        reply_shape = getattr(expression_profile, "reply_shape", GroupReplyShapeHint())
         persona_ms = (time.perf_counter() - t_persona) * 1000.0
-        t_affect = time.perf_counter()
-        affect_triggers = await load_affect_triggers(group_id)
-        affect_ms = (time.perf_counter() - t_affect) * 1000.0
+        affect_triggers = list(getattr(persona, "affect_triggers", []) or [])
+        affect_ms = 0.0
         in_hosted_activity = group_has_hosted_activity(group_id) and not chat_data.to_me
         group_activity = Responder._group_activity_score(group_msgs)
         reply_mode = Responder._roll_active_mode(
@@ -806,6 +813,7 @@ class Responder:
                 recent_message=recent_message,
                 affect_triggers=affect_triggers,
                 mode=reply_mode,
+                reply_shape=reply_shape,
                 feedback_snapshot=feedback_snapshot,
             )
             for answer in candidate_answers.values()

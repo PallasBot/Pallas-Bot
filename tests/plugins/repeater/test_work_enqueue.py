@@ -301,3 +301,4 @@ def test_repeater_work_handlers_include_image_cache_capture() -> None:
     assert "repeater.semantic_style" in repeater_work_handlers()
     assert "repeater.semantic_style.backfill.scan" in repeater_work_handlers()
     assert "repeater.semantic_style.visual" in repeater_work_handlers()
+    assert "sticker.label.visual" in repeater_work_handlers()

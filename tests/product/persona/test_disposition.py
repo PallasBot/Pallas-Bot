@@ -1,10 +1,10 @@
 from pallas.product.persona.compile_persona_prompt import compile_persona_prompt
-from pallas.product.persona.disposition import compile_disposition_prompt
+from pallas.product.persona.disposition import resolve_persona_disposition
 from pallas.product.persona.model import ResolvedPersona
 
 
-def test_compile_disposition_prompt_keeps_account_style_compact() -> None:
-    prompt = compile_disposition_prompt({
+def test_resolve_persona_disposition_keeps_account_style_compact() -> None:
+    disposition = resolve_persona_disposition({
         "disposition": {
             "approach": "先接住再判断",
             "initiative": "被明确叫到才主动回应",
@@ -14,12 +14,12 @@ def test_compile_disposition_prompt_keeps_account_style_compact() -> None:
         }
     })
 
-    assert "【账号处事风格】" in prompt
-    assert prompt.count("短句") == 1
-    assert "客服腔" in prompt
+    assert disposition.approach == "先接住再判断"
+    assert disposition.do == ["短句", "直说结论"]
+    assert disposition.dont == ["客服腔"]
 
 
-def test_chat_prompt_includes_disposition_but_repeater_does_not() -> None:
+def test_chat_prompt_keeps_disposition_out_of_final_system() -> None:
     persona = ResolvedPersona()
     bot_persona = {"disposition": {"approach": "先接住再判断"}}
 
@@ -31,14 +31,5 @@ def test_chat_prompt_includes_disposition_but_repeater_does_not() -> None:
         bot_persona=bot_persona,
         prompt_profile="chat",
     )
-    repeater = compile_persona_prompt(
-        persona,
-        None,
-        bot_id=1,
-        base_system="基础",
-        bot_persona=bot_persona,
-        prompt_profile="repeater",
-    )
-
-    assert "【账号处事风格】" in chat.system
-    assert "【账号处事风格】" not in repeater.system
+    assert "【账号处事风格】" not in chat.system
+    assert "先接住再判断" not in chat.system

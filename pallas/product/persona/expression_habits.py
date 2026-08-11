@@ -17,7 +17,6 @@ def compile_expression_habits_lines(style_profile: dict[str, Any] | None) -> lis
         return []
 
     sample = style_profile.get("sample") if isinstance(style_profile.get("sample"), dict) else {}
-    derived = style_profile.get("derived") if isinstance(style_profile.get("derived"), dict) else {}
 
     triggers = sample.get("affect_triggers") if isinstance(sample.get("affect_triggers"), list) else []
     phrases: list[str] = []
@@ -37,11 +36,6 @@ def compile_expression_habits_lines(style_profile: dict[str, Any] | None) -> lis
     lines: list[str] = []
     if phrases:
         lines.append("群里常接这些说法/梗：" + "、".join(phrases[:3]))
-
-    length_pref = str(derived.get("length_pref") or "").strip()
-    chaos_bias = float(derived.get("chaos_bias") or 0.0)
-    if length_pref == "short" and chaos_bias >= 0.15:
-        lines.append("顺手短句更自然，别解释太满")
 
     return lines
 

@@ -7,6 +7,7 @@ from operator import itemgetter
 import pytest
 
 from pallas.product.persona.auto import derive_persona_from_bot_id
+from pallas.product.persona.group_expression_profile import GroupReplyShapeHint
 from pallas.product.persona.scorer import (
     answer_popularity_multiplier,
     chaos_message_multiplier,
@@ -21,7 +22,7 @@ from pallas.product.persona.scorer import (
 def test_derive_persona_differs_by_bot_id() -> None:
     a = derive_persona_from_bot_id(10001)
     b = derive_persona_from_bot_id(10002)
-    assert a.reply_bias != b.reply_bias or a.tone != b.tone or a.length_pref != b.length_pref
+    assert a.reply_bias != b.reply_bias or a.tone != b.tone or a.account_profile != b.account_profile
 
 
 def test_reply_bias_lowers_threshold() -> None:
@@ -34,13 +35,54 @@ def test_reply_bias_lowers_threshold() -> None:
     assert scaled_answer_threshold(base, quiet, in_hosted_activity=False) > base
 
 
-def test_message_weight_prefers_short_for_terse_preset() -> None:
+def test_message_weight_length_only_uses_group_reply_shape() -> None:
     from pallas.product.persona.model import ResolvedPersona
 
-    persona = ResolvedPersona(length_pref="short", tone="terse")
-    assert message_weight_multiplier("好", persona) > message_weight_multiplier(
-        "这是一句明显偏长的接话测试文本", persona
+    persona = ResolvedPersona()
+    short = GroupReplyShapeHint(length_pref="short")
+    long = GroupReplyShapeHint(length_pref="long")
+    short_text = "好"
+    long_text = "这是一句明显偏长的接话测试文本，长度足以体现群聊回复形状，而且还需要继续补充一些内容"
+    assert message_weight_multiplier(short_text, persona, reply_shape=short) > message_weight_multiplier(
+        long_text, persona, reply_shape=short
     )
+    assert message_weight_multiplier(long_text, persona, reply_shape=long) > message_weight_multiplier(
+        short_text, persona, reply_shape=long
+    )
+
+
+def test_account_axes_are_monotonic_bounded_and_length_independent() -> None:
+    from pallas.product.persona.account_profile import AccountPersonaProfile
+    from pallas.product.persona.model import ResolvedPersona
+
+    text = "这是一句长度固定的普通群聊候选"
+    neutral = message_weight_multiplier(text, ResolvedPersona())
+    lively = message_weight_multiplier(
+        text,
+        ResolvedPersona(account_profile=AccountPersonaProfile(energy=1.0, warmth=1.0)),
+    )
+    restrained = message_weight_multiplier(
+        text,
+        ResolvedPersona(account_profile=AccountPersonaProfile(restraint=1.0)),
+    )
+    mischievous = message_weight_multiplier(
+        "草，这也太离谱了吧！",
+        ResolvedPersona(account_profile=AccountPersonaProfile(mischief=1.0)),
+    )
+    plain = message_weight_multiplier("这是普通陈述", ResolvedPersona())
+
+    assert neutral < lively <= neutral * 1.25
+    assert neutral * 0.75 <= restrained < neutral
+    assert mischievous > plain
+    for shape in (GroupReplyShapeHint(length_pref="short"), GroupReplyShapeHint(length_pref="long")):
+        quiet_ratio = message_weight_multiplier("好", ResolvedPersona(), reply_shape=shape) / message_weight_multiplier(
+            text, ResolvedPersona(), reply_shape=shape
+        )
+        lively_persona = ResolvedPersona(account_profile=AccountPersonaProfile(energy=1.0))
+        lively_ratio = message_weight_multiplier("好", lively_persona, reply_shape=shape) / message_weight_multiplier(
+            text, lively_persona, reply_shape=shape
+        )
+        assert lively_ratio == pytest.approx(quiet_ratio)
 
 
 def test_low_info_multiplier() -> None:
@@ -139,7 +181,7 @@ async def test_resolve_persona_merges_group_style_profile(monkeypatch: pytest.Mo
 
     assert resolved.reply_bias == pytest.approx(1.1)
     assert resolved.speak_bias == pytest.approx(0.95)
-    assert resolved.length_pref == "long"
+    assert "length_pref" not in resolved.model_fields
     assert resolved.chaos_bias == pytest.approx(0.2)
     assert resolved.warmth == pytest.approx(0.1)
     assert resolved.assertiveness == pytest.approx(0.15)
@@ -219,7 +261,7 @@ async def test_speaker_uses_group_aware_persona(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr("packages.repeater.speaker.time.time", lambda: 10_000.0)
     monkeypatch.setattr(
         "packages.repeater.speaker.Speaker._pick_speak_message",
-        lambda persona, pool, recently: pool[-1],
+        lambda persona, pool, recently, **kwargs: pool[-1],
     )
 
     message_dict = {
