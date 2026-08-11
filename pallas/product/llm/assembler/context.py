@@ -20,6 +20,7 @@ class ChatContextBundle:
     """Retrieved reference blocks kept separate until prompt assembly."""
 
     memory: str = ""
+    group_timeline: str = ""
     knowledge: str = ""
     relationship: str = ""
     person_facts: str = ""
@@ -29,7 +30,7 @@ class ChatContextBundle:
     stage_durations_ms: dict[str, int] = field(default_factory=dict)
 
     def blocks(self) -> list[str]:
-        return [self.memory, self.knowledge, self.relationship, self.person_facts]
+        return [self.group_timeline, self.memory, self.knowledge, self.relationship, self.person_facts]
 
 
 async def assemble_direct_chat_context(
@@ -40,6 +41,7 @@ async def assemble_direct_chat_context(
     query_text: str,
     cfg: Any,
     allow_persistent_memory: bool = True,
+    group_timeline: str = "",
 ) -> ChatContextBundle:
     """Retrieve each context source without deciding prompt order or layout."""
 
@@ -116,6 +118,7 @@ async def assemble_direct_chat_context(
     }
     return ChatContextBundle(
         memory=memory_result.system_prompt,
+        group_timeline=group_timeline,
         knowledge=knowledge_result.system_prompt,
         relationship=relationship_result.system_prompt,
         person_facts=person_facts_result.system_prompt,

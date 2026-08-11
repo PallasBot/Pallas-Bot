@@ -81,6 +81,9 @@ class Message(Document):
     is_plain_text: bool = True
     plain_text: str = Field(...)
     keywords: str = Field(...)
+    sender_name: str = Field(default="")
+    message_id: int | None = Field(default=None)
+    reply_to_message_id: int | None = Field(default=None)
     time: int = Field(default_factory=lambda: int(time.time()))
 
     class Settings:

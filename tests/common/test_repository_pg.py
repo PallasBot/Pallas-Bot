@@ -882,6 +882,36 @@ async def test_message_find_recent_in_group(pg_engine):
         ),
     ])
     rows = await repo.find_recent_in_group(gid, before_time=250, limit=8)
+
+    assert [row.plain_text for row in rows] == ["a", "b"]
+
+
+@pytest.mark.asyncio
+async def test_message_find_recent_in_group_keeps_timeline_metadata(pg_engine):
+    from pallas.core.foundation.db.modules import Message
+    from pallas.core.foundation.db.repository_pg import PgMessageRepository
+
+    repo = PgMessageRepository()
+    await repo.bulk_insert([
+        Message.model_construct(
+            group_id=88002,
+            user_id=10,
+            bot_id=1,
+            raw_message="[CQ:reply,id=90]还是笨蛋欸",
+            is_plain_text=True,
+            plain_text="还是笨蛋欸",
+            keywords="笨蛋",
+            sender_name="兔兔",
+            message_id=101,
+            reply_to_message_id=90,
+            time=100,
+        )
+    ])
+
+    row = (await repo.find_recent_in_group(88002))[0]
+    assert row.sender_name == "兔兔"
+    assert row.message_id == 101
+    assert row.reply_to_message_id == 90
     assert [m.plain_text for m in rows] == ["a", "b"]
     one = await repo.find_recent_in_group(gid, before_time=250, user_id=20, limit=1)
     assert len(one) == 1

@@ -341,6 +341,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     async def fake_context(*_args, **kwargs) -> SimpleNamespace:
         assert decision_called, "current turn decision must run before context assembly"
         assert kwargs["allow_persistent_memory"] is False
+        assert kwargs["group_timeline"] == "【刚才的群聊】\n- 兔兔：还是笨蛋欸"
         return SimpleNamespace(
             system_prompt="sys",
             knowledge_retrieval_trace={"hit_count": 1},
@@ -369,6 +370,11 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
 
     monkeypatch.setattr(mod, "decide_current_turn_with_model", fake_current_turn_decision)
     monkeypatch.setattr(mod, "assemble_direct_chat_context", fake_context)
+    monkeypatch.setattr(
+        mod,
+        "build_recent_group_timeline",
+        AsyncMock(return_value="【刚才的群聊】\n- 兔兔：还是笨蛋欸"),
+    )
     monkeypatch.setattr(
         mod,
         "classify_behavior_scene",
@@ -468,6 +474,8 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(monkeypatch: pyte
     assert "【语料收尾参考】" not in submit_request.system_prompt
     assert "【本群表达校准】" not in submit_request.system_prompt
     assert "【群表达指导】" in submit_request.system_prompt
+    assert "【刚才的群聊】" in submit_request.system_prompt
+    assert "兔兔：还是笨蛋欸" in submit_request.system_prompt
     assert "【同伴牛牛】" in submit_request.system_prompt
     assert "你不是其他牛牛。" in submit_request.system_prompt
     assert "短句轻怼。" in submit_request.system_prompt

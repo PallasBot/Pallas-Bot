@@ -144,6 +144,31 @@ async def test_message_repo_bulk_insert(beanie_fixture):
 
 
 @pytest.mark.asyncio
+async def test_message_repo_preserves_group_timeline_metadata(beanie_fixture):
+    repo = MongoMessageRepository()
+    message = Message(
+        group_id=123,
+        user_id=456,
+        bot_id=789,
+        raw_message="[CQ:reply,id=100]现在才叫我",
+        is_plain_text=True,
+        plain_text="现在才叫我",
+        keywords="现在 叫我",
+        sender_name="兔兔",
+        message_id=101,
+        reply_to_message_id=100,
+        time=int(time.time()),
+    )
+
+    await repo.bulk_insert([message])
+
+    saved = (await repo.find_recent_in_group(123))[0]
+    assert saved.sender_name == "兔兔"
+    assert saved.message_id == 101
+    assert saved.reply_to_message_id == 100
+
+
+@pytest.mark.asyncio
 async def test_upsert_answer_increments_existing(beanie_fixture):
     """已存在的 answer 应原子 inc count 并更新 time；append_on_existing=True 时 push message。"""
     repo = MongoContextRepository()

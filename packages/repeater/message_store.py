@@ -49,6 +49,9 @@ class MessageStore:
             is_plain_text=chat_data.is_plain_text,
             plain_text=chat_data.plain_text,
             keywords=chat_data.keywords,
+            sender_name=chat_data.sender_name,
+            message_id=chat_data.message_id,
+            reply_to_message_id=chat_data.reply_to_message_id,
             time=chat_data.time,
         )
 
@@ -105,6 +108,9 @@ class MessageStore:
                     is_plain_text=chat_data.is_plain_text,
                     plain_text=chat_data.plain_text,
                     keywords=chat_data.keywords,
+                    sender_name=chat_data.sender_name,
+                    message_id=chat_data.message_id,
+                    reply_to_message_id=chat_data.reply_to_message_id,
                     time=chat_data.time,
                 )
             )

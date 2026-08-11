@@ -159,6 +159,9 @@ class MessageRow(Base):
     is_plain_text: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     plain_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
     keywords: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    sender_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    reply_to_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     time: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
 
@@ -694,6 +697,20 @@ def _ensure_pg_message_group_user_time_index(connection) -> None:
     )
 
 
+def _ensure_pg_message_timeline_metadata(connection) -> None:
+    """旧 message 表补群时间线所需的身份与引用元数据。"""
+    insp = inspect(connection)
+    if not insp.has_table("message"):
+        return
+    names = {column["name"] for column in insp.get_columns("message")}
+    if "sender_name" not in names:
+        connection.execute(text("ALTER TABLE message ADD COLUMN sender_name TEXT NOT NULL DEFAULT ''"))
+    if "message_id" not in names:
+        connection.execute(text("ALTER TABLE message ADD COLUMN message_id BIGINT"))
+    if "reply_to_message_id" not in names:
+        connection.execute(text("ALTER TABLE message ADD COLUMN reply_to_message_id BIGINT"))
+
+
 def _ensure_pg_context_answer_reply_index(connection) -> None:
     """context_answer 表补 context_id+count+time 索引。"""
     insp = inspect(connection)
@@ -819,6 +836,7 @@ PG_SCHEMA_ENSURE_STEPS: list[tuple[str, Any]] = [
     ("ddl.llm_relationship_delta_columns", _ensure_pg_llm_relationship_delta_columns),
     ("ddl.message_group_time_index", _ensure_pg_message_group_time_index),
     ("ddl.message_group_user_time_index", _ensure_pg_message_group_user_time_index),
+    ("ddl.message_timeline_metadata", _ensure_pg_message_timeline_metadata),
     ("ddl.context_answer_reply_index", _ensure_pg_context_answer_reply_index),
     ("ddl.context_answer_message_reply_index", _ensure_pg_context_answer_message_reply_index),
 ]
@@ -1676,6 +1694,9 @@ def row_to_message(row: MessageRow) -> Message:
         is_plain_text=bool(row.is_plain_text),
         plain_text=str(row.plain_text),
         keywords=str(row.keywords),
+        sender_name=str(row.sender_name or ""),
+        message_id=int(row.message_id) if row.message_id is not None else None,
+        reply_to_message_id=int(row.reply_to_message_id) if row.reply_to_message_id is not None else None,
         time=int(row.time),
     )
 
@@ -1760,6 +1781,9 @@ class PgMessageRepository:
                         "is_plain_text": m.is_plain_text,
                         "plain_text": _s(m.plain_text) or "",
                         "keywords": _s(m.keywords) or "",
+                        "sender_name": _s(m.sender_name) or "",
+                        "message_id": m.message_id,
+                        "reply_to_message_id": m.reply_to_message_id,
                         "time": m.time,
                     }
                     for m in batch

@@ -13,18 +13,21 @@ def normalize_work_text(value: object) -> str:
     return str(value).replace("\x00", "")
 
 
-def chat_data_to_dict(chat_data: Any) -> dict[str, int | str]:
+def chat_data_to_dict(chat_data: Any) -> dict[str, int | str | None]:
     return {
         "group_id": int(chat_data.group_id),
         "user_id": int(chat_data.user_id),
         "bot_id": int(chat_data.bot_id),
         "raw_message": normalize_work_text(chat_data.raw_message),
         "plain_text": normalize_work_text(chat_data.plain_text),
+        "sender_name": normalize_work_text(getattr(chat_data, "sender_name", "")),
+        "message_id": getattr(chat_data, "message_id", None),
+        "reply_to_message_id": getattr(chat_data, "reply_to_message_id", None),
         "time": int(chat_data.time),
     }
 
 
-def message_to_dict(message: Any) -> dict[str, int | str | bool]:
+def message_to_dict(message: Any) -> dict[str, int | str | bool | None]:
     return {
         "group_id": int(message.group_id),
         "user_id": int(message.user_id),
@@ -34,13 +37,16 @@ def message_to_dict(message: Any) -> dict[str, int | str | bool]:
         "time": int(message.time),
         "is_plain_text": bool(message.is_plain_text),
         "keywords": normalize_work_text(message.keywords),
+        "sender_name": normalize_work_text(getattr(message, "sender_name", "")),
+        "message_id": getattr(message, "message_id", None),
+        "reply_to_message_id": getattr(message, "reply_to_message_id", None),
     }
 
 
 @dataclass(frozen=True, slots=True)
 class RepeaterLearnPayload:
-    chat: dict[str, int | str]
-    predecessor: dict[str, int | str | bool] | None
+    chat: dict[str, int | str | None]
+    predecessor: dict[str, int | str | bool | None] | None
 
     def to_dict(self) -> dict[str, Any]:
         return {

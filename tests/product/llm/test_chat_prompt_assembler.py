@@ -21,6 +21,7 @@ def test_chat_prompt_assembler_uses_fixed_order_without_aliases_or_duplicates() 
             needs_grounding=False,
         ),
         context=ChatContextBundle(
+            group_timeline="【刚才的群聊】\n- 兔兔：还是笨蛋欸",
             memory="【长期记忆】\n- 一起看过戏。",
             knowledge="【知识】\n- 可用命令。",
             relationship="【关系】\n- 老群友。",
@@ -46,6 +47,7 @@ def test_chat_prompt_assembler_uses_fixed_order_without_aliases_or_duplicates() 
         "【核心人格】",
         "【自称】",
         "【本轮策略】",
+        "【刚才的群聊】",
         "【长期记忆】",
         "【知识】",
         "【关系】",

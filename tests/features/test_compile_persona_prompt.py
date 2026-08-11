@@ -42,7 +42,7 @@ def test_load_at_chat_system_prompt_avoids_assistant_style() -> None:
     text = load_at_chat_system_prompt()
     assert "帕拉斯" in text
     assert "群聊里有人明确 @ 你" in text
-    assert "拆成多条短气泡" in text
+    assert "短话自然就一条发完" in text
     assert "不要默认称呼对方为博士" in text
     assert "禁止客服/助手口吻" in text
     assert "有啥想聊" in text
@@ -224,6 +224,15 @@ def test_at_chat_prompt_does_not_default_to_emotional_closure() -> None:
     prompt = load_at_chat_system_prompt()
 
     assert "不用急着替他找办法或下结论" in prompt
+
+
+def test_at_chat_prompt_reads_group_timeline_before_answering_an_at() -> None:
+    prompt = load_at_chat_system_prompt()
+
+    assert "看得到刚才的群聊时" in prompt
+    assert "当前这句在接哪一句" in prompt
+    assert "不只对一个 @ 本身作答" in prompt
+    assert "两个独立反应时才拆成多条短气泡" in prompt
 
 
 def test_base_prompt_uses_personality_as_judgment_not_character_performance() -> None:

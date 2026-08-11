@@ -35,6 +35,7 @@ from pallas.product.llm.current_turn_decision import (
 )
 from pallas.product.llm.followup_window import in_followup_window, note_hard_speak_trigger
 from pallas.product.llm.governance import check_llm_chat_gate, refresh_llm_chat_cooldown
+from pallas.product.llm.group_timeline import build_recent_group_timeline
 from pallas.product.llm.kernel import (
     ConversationContext,
     behavior_scene_to_conversation_scene,
@@ -600,6 +601,15 @@ async def handle_llm_chat(
         recent_assistant_replies=recent_reply_texts[:6],
     )
     direct_context_started = time.perf_counter()
+    group_timeline = ""
+    if group_id is not None and (is_to_me or speak_trigger in {"alias", "mention", "followup"}):
+        try:
+            group_timeline = await build_recent_group_timeline(
+                int(group_id),
+                current_message_id=message_id or None,
+            )
+        except Exception:
+            logger.debug("group timeline context skipped group={}", group_id)
     assembled_context = await assemble_direct_chat_context(
         bot_id=int(bot.self_id),
         group_id=group_id,
@@ -607,6 +617,7 @@ async def handle_llm_chat(
         query_text=focus_text,
         cfg=llm_cfg,
         allow_persistent_memory=include_persistent_history,
+        group_timeline=group_timeline,
     )
     pre_submit_context_durations_ms["direct_context"] = int((time.perf_counter() - direct_context_started) * 1000)
     for stage, duration in getattr(assembled_context, "stage_durations_ms", {}).items():
@@ -617,6 +628,7 @@ async def handle_llm_chat(
     else:
         chat_context = ChatContextBundle(
             memory=str(getattr(assembled_context, "system_prompt", "") or ""),
+            group_timeline=group_timeline,
             knowledge_retrieval_trace=dict(getattr(assembled_context, "knowledge_retrieval_trace", {}) or {}),
             hybrid_retrieval_trace=dict(getattr(assembled_context, "hybrid_retrieval_trace", {}) or {}),
             relationship_trace=dict(getattr(assembled_context, "relationship_trace", {}) or {}),
