@@ -7,6 +7,7 @@ from nonebot.exception import IgnoredException
 from nonebot.internal.matcher import Matcher
 from nonebot.message import event_preprocessor, run_preprocessor
 
+from pallas.api.logging import format_plugin_event
 from pallas.api.perm import AclSubject, evaluate_acl
 from pallas.core.perm.plugin_acl import plugin_acl_key
 from pallas.core.platform.ingress.plugin_command_plaintext import is_plugin_command_plaintext
@@ -152,3 +153,9 @@ async def register_plugin_manager():
     if not refreshed and not disabled_plugin_snapshot_ready():
         logger.warning("[帮助] 插件禁用快照未就绪，暂时回退按需读取配置")
     logger.debug("[帮助] 插件禁用预处理已注册")
+    logger.info(
+        format_plugin_event(
+            "ready",
+            "Registered the plugin disable preprocessor",
+        )
+    )
