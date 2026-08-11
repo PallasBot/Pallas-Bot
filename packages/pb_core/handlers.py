@@ -52,7 +52,15 @@ async def handle_plugins(ctx: PluginHandlerContext) -> None:
 async def handle_update_check(ctx: PluginHandlerContext) -> None:
     config_cmd = parse_update_config_command(ctx.plain_text)
     if config_cmd is not None:
-        await ctx.finish(apply_update_config_command(config_cmd))
+        result = apply_update_config_command(config_cmd)
+        if not result.startswith("配置失败"):
+            logger.info(
+                format_plugin_event(
+                    "configure_update",
+                    f"Bot [{ctx.event.self_id}] updated automatic update configuration [{config_cmd.kind}]",
+                )
+            )
+        await ctx.finish(result)
         return
     action = parse_update_action(ctx.plain_text)
     if action is None:
@@ -72,7 +80,26 @@ async def handle_update_check(ctx: PluginHandlerContext) -> None:
             default_cd_sec=_UPDATE_APPLY_CD_SEC,
         )
         await ctx.matcher.send(f"开始更新（{action}）…")
-    await ctx.finish(await apply_update_action(action))
+    result = await apply_update_action(action)
+    if action == "check":
+        logger.info(format_plugin_event("check_update", f"Bot [{ctx.event.self_id}] checked available updates"))
+    elif action in _UPDATE_APPLY_ACTIONS:
+        if result.startswith("更新失败"):
+            logger.warning(
+                format_plugin_event(
+                    "apply_update",
+                    f"Bot [{ctx.event.self_id}] failed to apply [{action}] updates",
+                )
+            )
+        else:
+            status = "partially completed" if "失败" in result else "completed"
+            logger.info(
+                format_plugin_event(
+                    "apply_update",
+                    f"Bot [{ctx.event.self_id}] {status} [{action}] updates",
+                )
+            )
+    await ctx.finish(result)
 
 
 async def handle_add_bot_admin(ctx: PluginHandlerContext) -> None:
