@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from pallas.core.platform.bot_runtime import ingress_dispatch_runtime as runtime
@@ -56,16 +58,25 @@ async def test_runtime_starts_and_stops_conversation_scheduler_in_order(monkeypa
     monkeypatch.setattr(runtime, "is_hub_role", lambda: False)
     monkeypatch.setattr(runtime, "get_driver", lambda: driver)
     monkeypatch.setattr(runtime, "route_index_enabled", lambda: False)
-    monkeypatch.setattr(runtime, "get_ingress_dispatch_runtime_config", lambda: object())
+    monkeypatch.setattr(
+        runtime,
+        "get_ingress_dispatch_runtime_config",
+        lambda: SimpleNamespace(conversation_scheduler_concurrency=2, send_queue_workers=2),
+    )
     monkeypatch.setattr(runtime, "configure_direct_runtime", lambda: events.append("configure_direct"))
     monkeypatch.setattr(runtime, "install_send_queue", lambda: events.append("install_send"))
     monkeypatch.setattr(runtime, "start_send_queue_workers", lambda: record_async("start_send"))
     monkeypatch.setattr(runtime, "start_conversation_scheduler", lambda: record_async("start_scheduler"))
+    monkeypatch.setattr(runtime, "start_adaptive_capacity_loop", lambda: events.append("start_adaptive"))
+    monkeypatch.setattr(runtime, "install_onebot_backpressure", lambda: events.append("install_backpressure"))
     monkeypatch.setattr(runtime, "install_matcher_dispatch", lambda: events.append("install_matcher"))
     monkeypatch.setattr(runtime, "start_dispatch_stats_logger", lambda: events.append("start_stats"))
+    monkeypatch.setattr(runtime, "register_startup_ready", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(runtime, "stop_dispatch_stats_logger", lambda: record_async("stop_stats"))
+    monkeypatch.setattr(runtime, "stop_adaptive_capacity_loop", lambda: record_async("stop_adaptive"))
     monkeypatch.setattr(runtime, "stop_conversation_scheduler", lambda: record_async("stop_scheduler"))
     monkeypatch.setattr(runtime, "uninstall_matcher_dispatch", lambda: events.append("uninstall_matcher"))
+    monkeypatch.setattr(runtime, "uninstall_onebot_backpressure", lambda: events.append("uninstall_backpressure"))
     monkeypatch.setattr(runtime, "stop_send_queue_workers", lambda: record_async("stop_send"))
     monkeypatch.setattr(runtime, "uninstall_send_queue", lambda: events.append("uninstall_send"))
     monkeypatch.setattr(runtime, "matcher_dispatch_enabled", lambda: False)
@@ -82,11 +93,15 @@ async def test_runtime_starts_and_stops_conversation_scheduler_in_order(monkeypa
         "install_send",
         "start_send",
         "start_scheduler",
+        "start_adaptive",
+        "install_backpressure",
         "install_matcher",
         "start_stats",
         "stop_stats",
+        "stop_adaptive",
         "stop_scheduler",
         "uninstall_matcher",
+        "uninstall_backpressure",
         "stop_send",
         "uninstall_send",
     ]

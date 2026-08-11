@@ -351,7 +351,9 @@ class Responder:
             return False, 0.0
         score = max(0.0, float(base_score))
         if persona is not None:
-            score *= message_weight_multiplier(plain, persona, affect_triggers=affect_triggers)
+            expression_profile = getattr(persona, "group_expression_profile", None)
+            reply_shape = getattr(expression_profile, "reply_shape", GroupReplyShapeHint())
+            score *= message_weight_multiplier(plain, persona, affect_triggers=affect_triggers, reply_shape=reply_shape)
             score *= freshness_multiplier(plain, recent_sent or [], persona=persona)
         mode = str(reply_mode or "normal").strip().lower()
         try:

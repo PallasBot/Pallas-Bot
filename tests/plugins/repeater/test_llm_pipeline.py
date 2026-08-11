@@ -28,7 +28,11 @@ def test_evaluate_llm_candidate_text_penalizes_duplicate_recent_reply() -> None:
 
 
 def test_evaluate_llm_candidate_text_prefers_short_text_for_short_persona() -> None:
-    persona = ResolvedPersona(length_pref="short")
+    from pallas.product.persona.group_expression_profile import GroupExpressionProfile, GroupReplyShapeHint
+
+    persona = ResolvedPersona(
+        group_expression_profile=GroupExpressionProfile(reply_shape=GroupReplyShapeHint(length_pref="short"))
+    )
     accepted_short, score_short = Responder.evaluate_llm_candidate_text(
         "好耶",
         base_score=0.5,
@@ -42,6 +46,7 @@ def test_evaluate_llm_candidate_text_prefers_short_text_for_short_persona() -> N
         persona=persona,
     )
     assert accepted_short is True
+    assert accepted_long is False
     assert score_short > score_long
 
 

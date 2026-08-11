@@ -231,7 +231,12 @@ async def evaluate_offline_case(
     judge: Completion | None = None,
 ) -> OfflineQualityResult:
     """Generate one anonymous case without delivery, storage, or memory writes."""
-    system_prompt = base_system_prompt
+    from pallas.product.llm.current_turn_decision import build_reply_target_instruction
+
+    system_prompt = str(base_system_prompt or "").strip()
+    instruction = build_reply_target_instruction(case.reply_target)
+    if instruction:
+        system_prompt = f"{system_prompt}\n\n【本轮回复目标】\n{instruction}"
     messages = [
         {"role": "system", "content": str(system_prompt or "")},
         {"role": "user", "content": f"{_OFFLINE_USER_PREFIX}{case.user_text}"},
