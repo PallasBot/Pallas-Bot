@@ -239,6 +239,13 @@ class ShardObservabilityData(BaseModel):
     pg_pool: dict[str, Any] | None = None
 
 
+class SystemRestartAvailabilityData(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    restart_available: bool = False
+    deployment_mode: str = ""
+
+
 class IngressDispatchData(BaseModel):
     model_config = ConfigDict(extra="allow")
 

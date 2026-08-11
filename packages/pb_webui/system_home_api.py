@@ -29,6 +29,9 @@ from packages.pb_webui.console_openapi_models import (
     ShardObservabilityData as _ShardObservabilityData,
 )
 from packages.pb_webui.console_openapi_models import (
+    SystemRestartAvailabilityData as _SystemRestartAvailabilityData,
+)
+from packages.pb_webui.console_openapi_models import (
     _ApiOkResponse,
 )
 from pallas.core.shared.utils.format_exception import format_exception_for_log
@@ -575,6 +578,26 @@ def register_system_home_router(
                 "message": "已安排重启，数秒后进程将重新拉起。",
             },
         })
+
+    @router.get(
+        f"{x}/system/restart-availability",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_SystemRestartAvailabilityData],
+    )
+    async def _system_restart_availability() -> dict[str, Any]:
+        """壳层判断侧栏重启按钮；轻量、不含 GitHub 等网络请求。"""
+        from pallas.console.cli.bot_process import bot_lifecycle_available
+
+        from .manager import inspect_bot_deployment
+
+        deploy = inspect_bot_deployment()
+        return {
+            "ok": True,
+            "data": {
+                "restart_available": bot_lifecycle_available(),
+                "deployment_mode": deploy.get("deployment_mode", ""),
+            },
+        }
 
     @router.get(f"{x}/shard-registry", include_in_schema=True)
     async def _shard_registry() -> JSONResponse:

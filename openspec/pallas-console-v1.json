@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.1.32-96-g3d2e0081-dirty",
+    "version": "v4.1.32-126-g1f7413ba-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -6816,6 +6816,72 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/system/restart-availability": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " System Restart Availability",
+        "description": "壳层判断侧栏重启按钮；轻量、不含 GitHub 等网络请求。",
+        "operationId": "_system_restart_availability_pallas_api_system_restart_availability_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse_SystemRestartAvailabilityData_"
+                }
               }
             }
           },
@@ -26031,6 +26097,23 @@
         "type": "object",
         "title": "ShardObservabilityData"
       },
+      "SystemRestartAvailabilityData": {
+        "properties": {
+          "restart_available": {
+            "type": "boolean",
+            "title": "Restart Available",
+            "default": false
+          },
+          "deployment_mode": {
+            "type": "string",
+            "title": "Deployment Mode",
+            "default": ""
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "SystemRestartAvailabilityData"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -26788,6 +26871,28 @@
           "data"
         ],
         "title": "_ApiOkResponse[ShardObservabilityData]"
+      },
+      "_ApiOkResponse_SystemRestartAvailabilityData_": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/SystemRestartAvailabilityData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "_ApiOkResponse[SystemRestartAvailabilityData]"
       },
       "_ApiOkResponse_Union__SemanticStyleStatusData___SemanticStyleQualityData__": {
         "properties": {
