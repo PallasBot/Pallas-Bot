@@ -13,6 +13,7 @@ from nonebot.exception import ActionFailed
 from nonebot.rule import Rule
 from nonebot.typing import T_State  # noqa: TC002
 
+from pallas.api.logging import format_plugin_event
 from pallas.api.perm import group_message_permission_for_command
 from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.core.shared.dream_ban_ack_state import DREAM_BAN_ACK_SENT_STATE_KEY
@@ -167,7 +168,11 @@ async def handle_ban_reply(bot: Bot, event: GroupMessageEvent, state: T_State):
     banned = await Chat.ban(event.group_id, event.self_id, raw_message, str(event.user_id))
     if banned:
         logger.info(
-            format_business_event("复读禁言", "已完成", bot=event.self_id, group=event.group_id, user=event.user_id)
+            format_plugin_event(
+                "ban",
+                f"Bot [{event.self_id}] banned a repeater reply in group [{event.group_id}] "
+                f"at user [{event.user_id}]'s request",
+            )
         )
         if not state.get(DREAM_BAN_ACK_SENT_STATE_KEY):
             state[REPEATER_BAN_ACK_SENT_STATE_KEY] = True
@@ -197,8 +202,10 @@ async def handle_ban_recalled(bot: Bot, event: GroupRecallNoticeEvent, state: T_
     banned = await Chat.ban(event.group_id, event.self_id, raw_message, str(f"recall by {event.operator_id}"))
     if banned:
         logger.info(
-            format_business_event(
-                "复读禁言", "已完成", bot=event.self_id, group=event.group_id, operator=event.operator_id
+            format_plugin_event(
+                "ban",
+                f"Bot [{event.self_id}] banned a recalled repeater reply in group [{event.group_id}] "
+                f"at operator [{event.operator_id}]'s request",
             )
         )
         if not state.get(DREAM_BAN_ACK_SENT_STATE_KEY):
@@ -221,6 +228,10 @@ async def handle_ban_latest(bot: Bot, event: GroupMessageEvent, state: T_State):
 
     if await Chat.ban(event.group_id, event.self_id, "", str(event.user_id)):
         logger.info(
-            format_business_event("复读禁言", "已完成", bot=event.self_id, group=event.group_id, user=event.user_id)
+            format_plugin_event(
+                "ban",
+                f"Bot [{event.self_id}] banned its latest repeater reply in group [{event.group_id}] "
+                f"at user [{event.user_id}]'s request",
+            )
         )
         await finish_ban_ack(ban_msg_latest.finish, event)

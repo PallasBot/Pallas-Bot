@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 from itertools import starmap
 
+from pallas.api.logging import format_plugin_event
 from pallas.core.foundation.config import BotConfig
 from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.core.platform.bot_runtime.send_unavailable import BOT_SEND_UNAVAILABLE_ERRORS, log_bot_send_unavailable
@@ -288,7 +289,10 @@ async def send_repeater_answers(bot_id: int, group_id: int, answers, *, fanout: 
             with suppress_outgoing_sticker_followup():
                 await bot.send_group_msg(group_id=group_id, message=msg)
             logger.info(
-                format_business_event("复读回复", "已发送", bot=bot_id, group=group_id, mode=log_tag, content=msg)
+                format_plugin_event(
+                    "fanout" if fanout else "reply",
+                    f"Bot [{bot_id}] replied in group [{group_id}]: {msg}",
+                )
             )
 
             from .sticker_followup import maybe_send_repeater_sticker_followup

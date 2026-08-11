@@ -12,6 +12,7 @@ from nonebot.typing import T_State
 from nonebot_plugin_alconna import message_reaction
 from nonebot_plugin_apscheduler import scheduler
 
+from pallas.api.logging import format_plugin_event
 from pallas.core.foundation.logging.bridge import format_business_event
 
 from .config import get_repeater_config
@@ -291,14 +292,10 @@ async def send_reaction(bot: Bot, event: Event, emoji_code: str) -> None:
         else:
             await message_reaction(emoji_code, str(message_id), event, bot, delete=False)
         _maybe_feedback_emoji_fit(emoji_code, score=3)
-        logger.debug(
-            format_business_event(
-                "表情回应",
-                "已发送",
-                bot=bot_id,
-                group=group_id,
-                message_id=message_id,
-                emoji=emoji_code,
+        logger.info(
+            format_plugin_event(
+                "reaction",
+                f"Bot [{bot_id}] reacted to message [{message_id}] in group [{group_id}] with [{emoji_code}]",
             )
         )
     except asyncio.CancelledError:

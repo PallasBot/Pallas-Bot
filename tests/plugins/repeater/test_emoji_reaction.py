@@ -158,6 +158,33 @@ async def test_send_reaction_uses_native_api_for_snowluma(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_send_reaction_logs_successful_reaction_at_info(monkeypatch):
+    import packages.repeater.emoji_reaction as mod
+
+    event = SimpleNamespace(message_id=99, group_id=1, self_id="10001")
+    bot = SimpleNamespace(self_id="10001")
+    info_logs: list[str] = []
+
+    async def send_native(*_args, **_kwargs):
+        return None
+
+    async def app_name(_bot):
+        return "SnowLuma"
+
+    monkeypatch.setattr(mod, "send_msg_emoji_like", send_native)
+    monkeypatch.setattr(mod, "onebot_app_name", app_name)
+    monkeypatch.setattr(mod, "_maybe_feedback_emoji_fit", lambda *_a, **_k: None)
+    monkeypatch.setattr(mod.logger, "info", info_logs.append)
+
+    try:
+        await mod.send_reaction(bot, event, "66")
+    finally:
+        mod.sent_reactions.pop("10001", None)
+
+    assert info_logs == ["[Reaction] Bot [10001] reacted to message [99] in group [1] with [66]."]
+
+
+@pytest.mark.asyncio
 async def test_send_reaction_reserves_message_before_awaiting_protocol(monkeypatch):
     import packages.repeater.emoji_reaction as mod
 

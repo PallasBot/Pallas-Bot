@@ -9,6 +9,7 @@ from nonebot import get_bot, get_driver, logger
 from nonebot.exception import ActionFailed
 from nonebot_plugin_apscheduler import scheduler
 
+from pallas.api.logging import format_plugin_event
 from pallas.core.foundation.db.lifecycle_service import run_lifecycle_dataset_maintenance
 from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.core.platform.ingress.message_load import should_pause_tasks
@@ -84,7 +85,13 @@ async def speak_up():
                         "group_id": group_id,
                     },
                 )
-            logger.info(format_business_event("主动发言", "已发送", bot=bot_id, group=group_id, poke=bool(target_id)))
+            suffix = f" and poked user [{target_id}]" if target_id else ""
+            logger.info(
+                format_plugin_event(
+                    "speak_up",
+                    f"Bot [{bot_id}] spoke up in group [{group_id}]: {msg}{suffix}",
+                )
+            )
         except ActionFailed as e:
             logger.warning(
                 format_business_event("主动发言", "发送失败", bot=bot_id, group=group_id, error=type(e).__name__)
