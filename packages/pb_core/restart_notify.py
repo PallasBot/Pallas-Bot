@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from nonebot import logger
 
+from pallas.api.logging import format_plugin_event
 from pallas.core.foundation.paths import plugin_data_dir
 
 if TYPE_CHECKING:
@@ -112,4 +113,9 @@ async def maybe_notify_restart_online(bot: Bot) -> None:
         )
         return
     clear_restart_notify_pending()
-    logger.info("pb_core restart notify sent bot={} user={}", bot_id, pending.user_id)
+    logger.info(
+        format_plugin_event(
+            "restart_online",
+            f"Bot [{bot_id}] notified user [{pending.user_id}] that its [{pending.mode}] restart completed",
+        )
+    )
