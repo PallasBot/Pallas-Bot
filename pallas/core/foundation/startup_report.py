@@ -177,6 +177,21 @@ def _format_plugins(raw: str) -> str:
         text += "：" + "，".join(parts)
     if "skip" in kv:
         text += f"；配置跳过 {kv['skip']}"
+        source_labels = {
+            "local": "本地",
+            "src": "内置",
+            "official": "官方",
+            "nonebot": "NoneBot",
+            "community": "社区",
+            "extra": "额外目录",
+        }
+        source_parts = []
+        for item in (kv.get("skip_sources", "") or "").split(","):
+            source, separator, count = item.partition(":")
+            if separator and source in source_labels:
+                source_parts.append(f"{source_labels[source]} {count}")
+        if source_parts:
+            text += "：" + "，".join(source_parts)
     return text
 
 
@@ -313,7 +328,13 @@ def build_startup_summary_lines(
     """构造中文摘要行；返回 ``(info_lines, warning_lines)``。"""
     runtime = base_lines if base_lines is not None else _runtime_base_lines()
     fact_map = facts if facts is not None else dict(_collector.facts)
-    fact_lines = [f"[{_FACT_LABELS.get(key, key)}] {_format_fact(key, value)}" for key, value in fact_map.items()]
+    fact_lines = []
+    for key, value in fact_map.items():
+        formatted = _format_fact(key, value)
+        if key == "plugins":
+            fact_lines.append(f"[初始化] {formatted}")
+        else:
+            fact_lines.append(f"[{_FACT_LABELS.get(key, key)}] {formatted}")
     info_lines = [
         "[初始化] Pallas-Bot 已就绪",
         *[f"[初始化] {line}" for line in runtime],

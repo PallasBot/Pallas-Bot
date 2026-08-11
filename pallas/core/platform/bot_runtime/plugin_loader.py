@@ -8,6 +8,7 @@ import json
 import subprocess
 import sys
 import time
+from collections import Counter
 from operator import itemgetter
 from typing import TYPE_CHECKING
 
@@ -50,11 +51,29 @@ _PLUGIN_LOAD_SLOW_SECONDS = 1.0
 _PLUGIN_LOAD_DIAGNOSTIC_LIMIT = 3
 _startup_plugin_load_failures: list[str] = []
 _startup_plugin_load_slow: list[tuple[str, float]] = []
+_startup_plugin_skip_sources: Counter[str] = Counter()
 
 
 def reset_startup_plugin_load_diagnostics() -> None:
     _startup_plugin_load_failures.clear()
     _startup_plugin_load_slow.clear()
+    _startup_plugin_skip_sources.clear()
+
+
+def _record_startup_plugin_skip(module_path: str) -> None:
+    if module_path.startswith("packages."):
+        source = "src"
+    elif module_path.startswith("pallas_plugin_"):
+        source = "official"
+    elif module_path.startswith("nonebot_plugin_"):
+        source = "nonebot"
+    else:
+        source = "extra"
+    _startup_plugin_skip_sources[source] += 1
+
+
+def startup_plugin_skip_source_fact() -> str:
+    return ",".join(f"{source}:{count}" for source, count in sorted(_startup_plugin_skip_sources.items()))
 
 
 def _plugin_display_name(module_path: str) -> str:
@@ -289,8 +308,7 @@ def _load_plugin_module(
     if importlib.util.find_spec(module_path) is None:
         record_startup_plugin_load_failure(module_path)
         logger.error(
-            "启动：{} 跳过 {}（未发现模块）",
-            role_label,
+            "跳过 {}：未发现模块",
             module_path,
         )
         return False
@@ -336,13 +354,15 @@ def _load_discovered_plugin_modules(
         short = _short_name(mod)
         slot = _load_slot_key(mod)
         if mod in skip_module_paths:
-            logger.info("启动：{} 跳过 {}（配置排除）", role_label, mod)
+            _record_startup_plugin_skip(mod)
+            logger.info("跳过 {}：配置排除", mod)
             continue
         if short in skip_short:
-            logger.info("启动：{} 跳过 {}（配置禁用）", role_label, mod)
+            _record_startup_plugin_skip(mod)
+            logger.info("跳过 {}：配置禁用", mod)
             continue
         if slot in loaded_short:
-            logger.info("启动：{} 跳过 {}（同名插件已加载）", role_label, mod)
+            logger.info("跳过 {}：同名插件已加载", mod)
             continue
         if _load_plugin_module(mod, role_label=role_label, loaded_short=loaded_short):
             count += 1
@@ -372,8 +392,7 @@ def _load_toml_extra_plugin_dirs(
             if _load_slot_key(entry.name) in loaded_short:
                 sub_rel = f"{rel_dir.rstrip('/')}/{entry.name}"
                 logger.info(
-                    "启动：{} 跳过 {}（同名插件已加载）",
-                    role_label,
+                    "跳过 {}：同名插件已加载",
                     sub_rel,
                 )
                 continue
@@ -482,11 +501,11 @@ def load_plugins_for_role() -> None:
     from pallas.core.platform.bot_runtime.kernel_runtime import register_kernel_runtime
 
     reset_startup_plugin_load_diagnostics()
-    logger.info("[插件] 载入中...")
+    logger.info("[初始化] 插件载入中...")
 
     if is_unified_role():
         loaded_short: set[str] = set()
-        load_apscheduler_plugin_first(role_label="unified", loaded_short=loaded_short)
+        nonebot_loaded = int(load_apscheduler_plugin_first(role_label="unified", loaded_short=loaded_short))
         register_kernel_runtime()
 
         bootstrap_dirs = resolve_extra_plugin_dirs()
@@ -520,11 +539,13 @@ def load_plugins_for_role() -> None:
             skip_short=unified_skip,
             loaded_short=loaded_short,
         )
+        skip_sources = startup_plugin_skip_source_fact()
         register_startup_fact(
             "plugins",
             f"local={local_loaded + local_extra} src={loaded} official={pip_extra} "
-            f"nonebot={nonebot_extra} community={community_loaded + community_extra} "
-            f"extra={extra_dir_loaded + extra_extra} skip={len(unified_skip)}",
+            f"nonebot={nonebot_loaded + nonebot_extra} community={community_loaded + community_extra} "
+            f"extra={extra_dir_loaded + extra_extra} skip={len(unified_skip)}"
+            f"{f' skip_sources={skip_sources}' if skip_sources else ''}",
         )
         register_startup_plugin_load_diagnostics()
         logger.debug(
@@ -548,7 +569,7 @@ def load_plugins_for_role() -> None:
 
     loaded_short: set[str] = set()
     role_label = "hub" if is_hub_role() else "worker"
-    load_apscheduler_plugin_first(role_label=role_label, loaded_short=loaded_short)
+    nonebot_loaded = int(load_apscheduler_plugin_first(role_label=role_label, loaded_short=loaded_short))
     register_kernel_runtime()
 
     if is_hub_role():
@@ -581,11 +602,13 @@ def load_plugins_for_role() -> None:
             include_extra_dirs=False,
         )
         bundled_total = len(resolve_hub_bundled_module_paths())
+        skip_sources = startup_plugin_skip_source_fact()
         register_startup_fact(
             "plugins",
             f"local={local_loaded + local_extra} modules={loaded}/{bundled_total} official={pip_extra} "
-            f"nonebot={nonebot_extra} community={community_loaded + community_extra} "
-            f"extra={extra_dir_loaded + extra_extra}",
+            f"nonebot={nonebot_loaded + nonebot_extra} community={community_loaded + community_extra} "
+            f"extra={extra_dir_loaded + extra_extra}"
+            f"{f' skip_sources={skip_sources}' if skip_sources else ''}",
         )
         register_startup_plugin_load_diagnostics()
         logger.debug(
@@ -637,11 +660,13 @@ def load_plugins_for_role() -> None:
     from pallas.core.platform.shard.registry.config import get_shard_registry_settings
 
     s = get_shard_registry_settings()
+    skip_sources = startup_plugin_skip_source_fact()
     register_startup_fact(
         "plugins",
         f"local={local_loaded + local_extra} src={loaded} official={pip_extra} "
-        f"nonebot={nonebot_extra} community={community_loaded + community_extra} "
-        f"extra={extra_dir_loaded + extra_extra} skip={len(worker_skip)}",
+        f"nonebot={nonebot_loaded + nonebot_extra} community={community_loaded + community_extra} "
+        f"extra={extra_dir_loaded + extra_extra} skip={len(worker_skip)}"
+        f"{f' skip_sources={skip_sources}' if skip_sources else ''}",
     )
     register_startup_plugin_load_diagnostics()
     logger.debug(

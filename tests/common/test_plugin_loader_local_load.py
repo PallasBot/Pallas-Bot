@@ -40,9 +40,9 @@ def test_load_discovered_plugin_modules_applies_skip_rules(monkeypatch):
     assert calls == [("packages.keep", "worker", {"already"})]
     assert loaded_short == {"already", "keep"}
     assert records == [
-        ("启动：{} 跳过 {}（配置排除）", ("worker", "packages.skip_by_path")),
-        ("启动：{} 跳过 {}（配置禁用）", ("worker", "packages.skip_me")),
-        ("启动：{} 跳过 {}（同名插件已加载）", ("worker", "packages.already")),
+        ("跳过 {}：配置排除", ("packages.skip_by_path",)),
+        ("跳过 {}：配置禁用", ("packages.skip_me",)),
+        ("跳过 {}：同名插件已加载", ("packages.already",)),
     ]
 
 
@@ -114,8 +114,8 @@ def test_load_plugin_module_logs_neutral_message_when_module_missing(monkeypatch
     assert loaded is False
     assert records == [
         (
-            "启动：{} 跳过 {}（未发现模块）",
-            ("hub", "packages.relogin_bot"),
+            "跳过 {}：未发现模块",
+            ("packages.relogin_bot",),
         )
     ]
     assert "uv sync" not in records[0][0]
