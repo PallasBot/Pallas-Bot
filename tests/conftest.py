@@ -8,12 +8,17 @@ import pytest
 
 
 @pytest.fixture
-async def beanie_fixture():
+async def beanie_fixture(monkeypatch: pytest.MonkeyPatch):
     """
     Initialize beanie with mongomock_motor for in-memory MongoDB testing.
 
     Registers all Document models and clears collections after each test.
     """
+    monkeypatch.setenv("DB_BACKEND", "mongodb")
+    import nonebot
+
+    monkeypatch.setattr(nonebot.get_driver().config, "db_backend", "mongodb", raising=False)
+
     from beanie import init_beanie
     from mongomock_motor import AsyncMongoMockClient
 

@@ -1,7 +1,7 @@
 import asyncio
 import random
 
-from nonebot import get_bot, on_command, on_message, on_notice
+from nonebot import get_bot, logger, on_command, on_message, on_notice
 from nonebot.adapters import Bot, Event
 from nonebot.adapters.onebot.v11 import (
     FriendAddNoticeEvent,
@@ -20,6 +20,7 @@ from nonebot.rule import Rule, to_me
 from nonebot.typing import T_State
 
 from packages.blacklist import invalidate_group_ban_gate_cache, invalidate_user_ban_gate_cache
+from pallas.api.logging import format_plugin_event
 from pallas.api.perm import (
     group_message_permission_for_command,
     private_message_permission_for_command,
@@ -114,6 +115,12 @@ async def handle_friend_welcome_message(bot: Bot, event: PrivateMessageEvent, st
     if images:
         parts.append("图片")
     label = "＋".join(parts)
+    logger.info(
+        format_plugin_event(
+            "set_friend_welcome",
+            f"Bot [{bot_id}] saved a {label} friend welcome message",
+        )
+    )
     await set_friend_welcome.finish(f"好友欢迎消息（{label}）已设置成功！")
 
 
@@ -136,6 +143,9 @@ async def handle_clear_friend_welcome(bot: Bot, event: PrivateMessageEvent):
     after = list(d.glob("friend_welcome*"))
 
     if len(before) > len(after):
+        logger.info(
+            format_plugin_event("clear_friend_welcome", f"Bot [{event.self_id}] cleared its friend welcome message")
+        )
         await clear_friend_welcome.finish("好友欢迎消息已清除！")
     else:
         await clear_friend_welcome.finish("未设置自定义好友欢迎消息")
@@ -199,6 +209,12 @@ async def handle_group_welcome_message(bot: Bot, event: MessageEvent, state: T_S
     if images:
         parts.append("图片")
     label = "＋".join(parts)
+    logger.info(
+        format_plugin_event(
+            "set_group_welcome",
+            f"Bot [{bot_id}] saved a {label} welcome message for group [{group_id}]",
+        )
+    )
     await set_group_welcome.finish(f"本群入群欢迎（{label}）已设置成功！")
 
 
@@ -224,6 +240,12 @@ async def handle_clear_group_welcome(bot: Bot, event: GroupMessageEvent):
     after = list(d.glob("group_welcome*"))
 
     if len(before) > len(after):
+        logger.info(
+            format_plugin_event(
+                "clear_group_welcome",
+                f"Bot [{event.self_id}] cleared the welcome message for group [{event.group_id}]",
+            )
+        )
         await clear_group_welcome.finish("本群入群欢迎已清除！")
     else:
         await clear_group_welcome.finish("未设置自定义本群入群欢迎")

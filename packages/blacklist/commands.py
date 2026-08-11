@@ -1,7 +1,8 @@
-from nonebot import on_command
+from nonebot import logger, on_command
 from nonebot.adapters import Bot
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, PrivateMessageEvent
 
+from pallas.api.logging import format_plugin_event
 from pallas.api.perm import permission_for_command
 from pallas.core.foundation.config import GroupConfig, UserConfig
 from pallas.product.ban_gate.snapshot import patch_group_banned, patch_group_blocked_users, patch_user_banned
@@ -58,6 +59,8 @@ blacklist_list_cmd = on_command(
 async def handle_blacklist_list(bot: Bot, event: GroupMessageEvent | PrivateMessageEvent):
     group_id = event.group_id if isinstance(event, GroupMessageEvent) else None
     message = await build_blacklist_view_message(group_id)
+    scope = f"group [{group_id}]" if group_id is not None else "global scope"
+    logger.info(format_plugin_event("list_blacklist", f"Bot [{event.self_id}] listed the blacklist for {scope}"))
     await blacklist_list_cmd.finish(message)
 
 
@@ -74,6 +77,12 @@ async def handle_blacklist_add(bot: Bot, event: GroupMessageEvent | PrivateMessa
             await UserConfig(uid).ban()
             await patch_user_banned(uid, True)
         await invalidate_user_ban_gate_cache(targets)
+        logger.info(
+            format_plugin_event(
+                "block_user",
+                f"Bot [{event.self_id}] blocked [{len(targets)}] users globally at user [{event.user_id}]'s request",
+            )
+        )
         await blacklist_add_cmd.finish(
             f"米诺斯不再眷顾这 {len(targets)} 个灵魂（全局）：{', '.join(map(str, targets))}"
         )
@@ -81,6 +90,13 @@ async def handle_blacklist_add(bot: Bot, event: GroupMessageEvent | PrivateMessa
     await GroupConfig(event.group_id).add_blocked_users(targets)
     await patch_group_blocked_users(event.group_id, await GroupConfig(event.group_id).blocked_user_ids())
     await invalidate_group_ban_gate_cache(event.group_id)
+    logger.info(
+        format_plugin_event(
+            "block_user",
+            f"Bot [{event.self_id}] blocked [{len(targets)}] users in group [{event.group_id}] "
+            f"at user [{event.user_id}]'s request",
+        )
+    )
     await blacklist_add_cmd.finish(f"在这里，米诺斯不再响应这 {len(targets)} 个灵魂：{', '.join(map(str, targets))}")
 
 
@@ -97,6 +113,12 @@ async def handle_blacklist_remove(bot: Bot, event: GroupMessageEvent | PrivateMe
             await UserConfig(uid).unban()
             await patch_user_banned(uid, False)
         await invalidate_user_ban_gate_cache(targets)
+        logger.info(
+            format_plugin_event(
+                "unblock_user",
+                f"Bot [{event.self_id}] unblocked [{len(targets)}] users globally at user [{event.user_id}]'s request",
+            )
+        )
         await blacklist_remove_cmd.finish(
             f"这 {len(targets)} 个灵魂又获得了米诺斯的眷顾（全局）：{', '.join(map(str, targets))}"
         )
@@ -104,6 +126,13 @@ async def handle_blacklist_remove(bot: Bot, event: GroupMessageEvent | PrivateMe
     await GroupConfig(event.group_id).remove_blocked_users(targets)
     await patch_group_blocked_users(event.group_id, await GroupConfig(event.group_id).blocked_user_ids())
     await invalidate_group_ban_gate_cache(event.group_id)
+    logger.info(
+        format_plugin_event(
+            "unblock_user",
+            f"Bot [{event.self_id}] unblocked [{len(targets)}] users in group [{event.group_id}] "
+            f"at user [{event.user_id}]'s request",
+        )
+    )
     await blacklist_remove_cmd.finish(f"在这里，米诺斯又愿倾听这 {len(targets)} 个灵魂：{', '.join(map(str, targets))}")
 
 
@@ -123,9 +152,18 @@ async def handle_blacklist_add_group(bot: Bot, event: GroupMessageEvent | Privat
         await GroupConfig(gid).ban()
         await patch_group_banned(gid, True)
     await invalidate_group_ban_gate_cache(targets)
-    scope = "本群" if isinstance(event, GroupMessageEvent) and targets == [event.group_id] else "全局"
+    current_group = isinstance(event, GroupMessageEvent) and targets == [event.group_id]
+    log_scope = "current group" if current_group else "global"
+    display_scope = "本群" if current_group else "全局"
+    logger.info(
+        format_plugin_event(
+            "block_group",
+            f"Bot [{event.self_id}] blocked [{len(targets)}] groups in {log_scope} scope "
+            f"at user [{event.user_id}]'s request",
+        )
+    )
     await blacklist_add_group_cmd.finish(
-        f"米诺斯不再眷顾这 {len(targets)} 个群聊（{scope}）：{', '.join(map(str, targets))}"
+        f"米诺斯不再眷顾这 {len(targets)} 个群聊（{display_scope}）：{', '.join(map(str, targets))}"
     )
 
 
@@ -145,7 +183,16 @@ async def handle_blacklist_remove_group(bot: Bot, event: GroupMessageEvent | Pri
         await GroupConfig(gid).unban()
         await patch_group_banned(gid, False)
     await invalidate_group_ban_gate_cache(targets)
-    scope = "本群" if isinstance(event, GroupMessageEvent) and targets == [event.group_id] else "全局"
+    current_group = isinstance(event, GroupMessageEvent) and targets == [event.group_id]
+    log_scope = "current group" if current_group else "global"
+    display_scope = "本群" if current_group else "全局"
+    logger.info(
+        format_plugin_event(
+            "unblock_group",
+            f"Bot [{event.self_id}] unblocked [{len(targets)}] groups in {log_scope} scope "
+            f"at user [{event.user_id}]'s request",
+        )
+    )
     await blacklist_remove_group_cmd.finish(
-        f"这 {len(targets)} 个群聊又获得了米诺斯的眷顾（{scope}）：{', '.join(map(str, targets))}"
+        f"这 {len(targets)} 个群聊又获得了米诺斯的眷顾（{display_scope}）：{', '.join(map(str, targets))}"
     )

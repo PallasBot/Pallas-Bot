@@ -1,6 +1,9 @@
+from nonebot import logger
 from nonebot.adapters.onebot.v11 import Bot, GroupMessageEvent, PrivateMessageEvent
 from nonebot.permission import SUPERUSER
 from nonebot.typing import T_State
+
+from pallas.api.logging import format_plugin_event
 
 from .help_args import parse_help_args
 from .markdown_generator import HelpMarkdownIssue
@@ -74,6 +77,12 @@ async def handle_help_command(
             total_plugin_count=len(all_rows),
             total_enabled_count=enabled_count,
         )
+        logger.info(
+            format_plugin_event(
+                "show_menu",
+                f"Bot [{bot_id}] showed [{enabled_count}] enabled plugins in group [{group_id or '-'}]",
+            )
+        )
         return
 
     plugin_identifier = args[0]
@@ -100,6 +109,12 @@ async def handle_help_command(
                 return
             assert detail_data is not None
             await send_plugin_detail_image(detail_data, matcher=matcher, group_id=group_id)
+            logger.info(
+                format_plugin_event(
+                    "show_plugin",
+                    f"Bot [{bot_id}] showed plugin [{plugin_name}] details in group [{group_id or '-'}]",
+                )
+            )
             return
 
         # 非插件名时，尝试把单条参数当作命令/功能名，跨插件直达功能详情页
@@ -117,6 +132,13 @@ async def handle_help_command(
             )
             if issue is HelpMarkdownIssue.OK and detail_data is not None:
                 await send_function_detail_image(detail_data, matcher=matcher, group_id=group_id)
+                logger.info(
+                    format_plugin_event(
+                        "show_function",
+                        f"Bot [{bot_id}] showed [{target.plugin_name}.{target.func_name}] details "
+                        f"in group [{group_id or '-'}]",
+                    )
+                )
                 return
         elif len(targets) > 1:
             preview = "、".join(f"{t.plugin_display}·{t.func_name}" for t in targets[:6])
@@ -157,6 +179,12 @@ async def handle_help_command(
             return
         assert detail_data is not None
         await send_function_detail_image(detail_data, matcher=matcher, group_id=group_id)
+        logger.info(
+            format_plugin_event(
+                "show_function",
+                f"Bot [{bot_id}] showed [{plugin_name}.{function_identifier}] details in group [{group_id or '-'}]",
+            )
+        )
         return
 
     await matcher.finish("博士，你说的太多了，我跟不上了...")
@@ -197,4 +225,11 @@ async def handle_plugin_operation(
             group_id = int(args[1])
 
     success, message = await toggle_plugin(plugin_name, group_id, bot_id, action, is_superuser=is_superuser)
+    if success:
+        logger.info(
+            format_plugin_event(
+                "enable_plugin" if action == "enable" else "disable_plugin",
+                f"Bot [{bot_id}] {action}d plugin [{plugin_name}] in group [{group_id or '-'}]",
+            )
+        )
     await matcher.finish(message)
