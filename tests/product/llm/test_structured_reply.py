@@ -130,6 +130,11 @@ def test_validate_reply_chars_allows_normal_zh() -> None:
     assert ok is True
 
 
+def test_validate_reply_chars_allows_standalone_question_mark() -> None:
+    ok, _reason = validate_reply_chars("？")
+    assert ok is True
+
+
 def test_validate_reply_chars_rejects_xml_json_tokens() -> None:
     ok, reason = validate_reply_chars("你好 <reply>hi</reply>")
     assert ok is False

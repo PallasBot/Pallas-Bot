@@ -44,6 +44,9 @@ _SHORT_VENT_GENERIC_QUESTION_RE = re.compile(
 )
 _SHORT_VENT_ADVICE_RE = re.compile(r"(?:^|[，,])\s*(?:先|要不|不如|可以|最好|建议|试试|别).{0,12}(?:吧|。|！|!|$)")
 _PRESENCE_CHECK_RE = re.compile(r"(?:你|您)?(?:还)?(?:在|在线)吗[，,。.!！?？~～\s]*$")
+_ALIAS_WAKE_GENERIC_REPLY_RE = re.compile(
+    r"^(?:(?:说吧(?:[，,、\s]*(?:什么事|啥事))?)|(?:什么事|啥事|怎么了|怎么啦))[。.!！?？~～\s]*$"
+)
 _GENERIC_PRAISE_TERMS = ("有实力", "太强", "厉害啊", "厉害了")
 _FACT_REPLY_COMPLIANCE_RE = re.compile(
     r"^(?:(?:改|行|好)(?:吧|呗)|(?:行|好)[，,\s]*(?:那)?(?:就)?这样吧)[，,。.!！?？~～\s]*$"
@@ -162,6 +165,7 @@ def inspect_persona_output(
     current = str(current_user_text or "").strip().rsplit("\n", 1)[-1].strip()
     short_vent = is_short_vent(current)
     is_presence_check = bool(_PRESENCE_CHECK_RE.search(current))
+    is_bare_self_alias_wake = _is_bare_self_alias_wake(current, self_aliases)
     action = str(social_action or "").strip().upper()
     target = str(reply_target or "").strip().lower()
     user_is_hostile = any(term in current for term in ("滚", "闭嘴", "别烦我", "去死"))
@@ -200,6 +204,9 @@ def inspect_persona_output(
     if is_presence_check and len(plain) > 4:
         quality_rule_ids.append("presence_check_overexplained")
         rule_ids.append("presence_check_overexplained")
+    if is_bare_self_alias_wake and _ALIAS_WAKE_GENERIC_REPLY_RE.fullmatch(plain):
+        quality_rule_ids.append("alias_wake_generic_reply")
+        rule_ids.append("alias_wake_generic_reply")
     if (
         (target in {"emotion", "help"} or (target == "answer" and _SUPPORTIVE_HELP_REQUEST_RE.search(current)))
         and action in {"ACK", "ANSWER", "STANCE"}
@@ -279,6 +286,13 @@ def _find_unprompted_self_aliases(
     return tuple(found)
 
 
+def _is_bare_self_alias_wake(current_user_text: str, self_aliases: list[str]) -> bool:
+    compact = re.sub(r"[\s，,。.!！?？：:;；~～]+", "", str(current_user_text or "").casefold())
+    if not compact:
+        return False
+    return any(compact == str(alias or "").strip().casefold() for alias in self_aliases if str(alias or "").strip())
+
+
 def resolve_persona_output(
     text: str,
     *,
@@ -345,6 +359,11 @@ def persona_output_retry_instruction(rule_ids: tuple[str, ...] | list[str]) -> s
         return "上一句擅自安排了下一步。只接住这句情绪，不提建议、做法或时间安排。"
     if "presence_check_overexplained" in rules:
         return "上一句在确认是否在线时补了状态和反问。只回答是否在，四字以内，不追加任何话。"
+    if "alias_wake_generic_reply" in rules:
+        return (
+            "对方只是在叫你的别名，不要用说吧、什么事、怎么了这类客服式泛问。"
+            "换成像群友被叫到名的短回应，例如？或干嘛。"
+        )
     if "fact_reply_ungrounded_praise" in rules:
         return "上一句无根据地夸人了。只接当前这句话，不泛夸、不鼓励。"
     if "fact_reply_overextended" in rules:

@@ -21,6 +21,7 @@ _REASONING_PREFIX_RE = re.compile(
 _BAD_TOKEN_CHARS = frozenset("<>{}|｜▁")
 _ALLOWED_ASCII_PUNCT = frozenset(".,?!;:'\"()-_~`@#&+*=%^/\n\t \r")
 _EMPTY_MEM_TOKENS = frozenset({"无", "none", "n/a", "null", "无内容", "无可记"})
+_STANDALONE_CHAT_RE = re.compile(r"^[？?]$")
 
 
 StructuredReply = StructuredChatReply
@@ -144,6 +145,8 @@ def validate_reply_chars(text: str) -> tuple[bool, str]:
     plain = str(text or "").strip()
     if not plain:
         return False, "empty"
+    if _STANDALONE_CHAT_RE.fullmatch(plain):
+        return True, ""
     if len(plain) > 500:
         return False, f"too long ({len(plain)})"
     cjk_count = 0

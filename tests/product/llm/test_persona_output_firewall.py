@@ -131,6 +131,29 @@ def test_allows_brief_presence_check_reply() -> None:
     assert result.rule_ids == ()
 
 
+@pytest.mark.parametrize("reply", ["说吧", "什么事？", "说吧，什么事？"])
+def test_rejects_generic_reply_to_bare_self_alias_wake(reply: str) -> None:
+    result = inspect_persona_output(
+        reply,
+        self_aliases=["牛牛", "帕拉斯"],
+        current_user_text="牛牛",
+        social_action="ACK",
+    )
+
+    assert result.rule_ids == ("alias_wake_generic_reply",)
+
+
+def test_allows_natural_reply_to_bare_self_alias_wake() -> None:
+    result = inspect_persona_output(
+        "干嘛",
+        self_aliases=["牛牛"],
+        current_user_text="牛牛",
+        social_action="ACK",
+    )
+
+    assert result.rule_ids == ()
+
+
 def test_detects_reciprocal_social_question_after_an_answer() -> None:
     result = inspect_persona_output(
         "挺好，老样子，训练出任务都没落下。你呢？",
