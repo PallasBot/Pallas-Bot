@@ -48,10 +48,15 @@ from pallas.core.platform.shard.ingress_metrics import (
 
 _GATE_REGISTERED = False
 _PRE_SCHEDULER_GATE_COMPLETE: ContextVar[bool] = ContextVar("pre_scheduler_ingress_gate_complete", default=False)
+_LOCAL_ONLY_FEDERATE_COMMANDS = frozenset({"#pallas"})
 
 
 def ingress_gate_active() -> bool:
     return ingress_gate_runtime_active()
+
+
+def local_only_federate_command(plain: str) -> bool:
+    return (plain or "").strip().casefold() in _LOCAL_ONLY_FEDERATE_COMMANDS
 
 
 def pallas_at_targets(event: GroupMessageEvent) -> frozenset[int]:
@@ -123,6 +128,7 @@ async def ingress_group_message_gate(bot, event) -> None:
             raise IgnoredException("self-sent bot message")
         sender_is_fleet_bot = known_bot_sender(user_id=user_id, self_id=self_id)
         pallas_ats = pallas_at_targets(event)
+        local_only_federate = local_only_federate_command(plain)
         fanout_bypass = ingress_fanout_bypasses_claim(plain)
         if fanout_bypass:
             ingress_fanout_early_exit(
@@ -144,7 +150,11 @@ async def ingress_group_message_gate(bot, event) -> None:
         touch_federate_present_group(int(event.group_id))
 
         # 本机无能力、对端显式有：即使本地不认作命令，也不得抢 federate claim。
-        if not pallas_ats and should_yield_federate_ingress_for_peer_command(int(event.group_id), plain=plain):
+        if (
+            not local_only_federate
+            and not pallas_ats
+            and should_yield_federate_ingress_for_peer_command(int(event.group_id), plain=plain)
+        ):
             outcome = "federate_peer_command_yield"
             if metrics:
                 record_ingress_early_discard("federate")
@@ -152,7 +162,8 @@ async def ingress_group_message_gate(bot, event) -> None:
 
         # 仅命令走粘性群归属；闲聊 / @LLM 等 chat 车道只靠 claim，避免热群钉死一台。
         if (
-            not pallas_ats
+            not local_only_federate
+            and not pallas_ats
             and legacy_command_traffic(plain, group_only=True)
             and not should_process_federate_group_on_current_deployment(
                 int(event.group_id),
@@ -250,7 +261,7 @@ async def ingress_group_message_gate(bot, event) -> None:
         if metrics:
             record_ingress_event()
 
-        if not pallas_ats:
+        if not local_only_federate and not pallas_ats:
             candidate_capability: str | None = None
             if alias_target_is_hosted:
                 candidate_capability = "hosted_activity"
