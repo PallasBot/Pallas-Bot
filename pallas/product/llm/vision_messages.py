@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 from nonebot import logger
 
+from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.product.llm.providers_store import (
     find_provider,
     load_providers_document,
@@ -71,11 +72,11 @@ async def fetch_image_data_uri(url: str) -> str | None:
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             response = await client.get(target)
         if response.status_code != 200:
-            logger.warning("vision fetch non-200 url={} status={}", target[:160], response.status_code)
+            logger.warning(format_business_event("视觉图片拉取", "失败", status=response.status_code))
             return None
         data = response.content
         if not data or len(data) > _VISION_MAX_BYTES:
-            logger.warning("vision fetch size rejected url={} bytes={}", target[:160], len(data or b""))
+            logger.warning(format_business_event("视觉图片拉取", "已拒绝", bytes=len(data or b"")))
             return None
         mime = str(response.headers.get("content-type") or "image/jpeg").split(";")[0].strip() or "image/jpeg"
         if not mime.startswith("image/"):
@@ -83,7 +84,7 @@ async def fetch_image_data_uri(url: str) -> str | None:
         encoded = base64.b64encode(data).decode("ascii")
         return f"data:{mime};base64,{encoded}"
     except httpx.HTTPError as exc:
-        logger.warning("vision fetch failed url={} err={}", target[:160], exc)
+        logger.warning(format_business_event("视觉图片拉取", "失败", error=type(exc).__name__))
         return None
 
 
@@ -176,7 +177,9 @@ async def describe_images_as_text(
         if text:
             return f"[图片理解]\n{text}"
     except LlmProviderError as exc:
-        logger.warning("vision describe failed provider={} err={}", helper.get("id"), exc)
+        logger.warning(
+            format_business_event("视觉图片理解", "失败", provider=helper.get("id"), error=type(exc).__name__)
+        )
     return f"[用户发送了 {len(urls)} 张图片：理解失败，已省略]"
 
 
@@ -199,9 +202,9 @@ async def prepare_messages_for_provider_capabilities(
         data_uris = await fetch_vision_data_uris(metadata)
         if data_uris:
             content = openai_vision_user_content(plain, data_uris)
-            logger.info("vision multimodal prepared: images={} plain_len={}", len(data_uris), len(plain))
+            logger.debug(format_business_event("视觉多模态请求", "已准备", images=len(data_uris), plain_len=len(plain)))
             return replace_last_user_content(messages, content)
-        logger.warning("vision multimodal skipped: no fetchable images")
+        logger.warning(format_business_event("视觉多模态请求", "已降级", reason="no_fetchable_images"))
         return replace_last_user_content(messages, plain or _DEFAULT_VISION_PROMPT)
 
     if provider_needs_vision_text_fallback(provider_row):
@@ -210,7 +213,7 @@ async def prepare_messages_for_provider_capabilities(
         merged = plain
         if described:
             merged = f"{plain}\n{described}".strip() if plain else described
-        logger.info("vision text fallback prepared: plain_len={} desc_len={}", len(plain), len(described))
+        logger.debug(format_business_event("视觉文本回退", "已准备", plain_len=len(plain), desc_len=len(described)))
         return replace_last_user_content(messages, merged or _DEFAULT_VISION_PROMPT)
 
     return messages

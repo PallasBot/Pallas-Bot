@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from nonebot import get_driver, logger
 
+from pallas.core.foundation.startup_report import register_startup_ready
 from pallas.core.platform.multi_bot.group import claim_group_message_event
 from pallas.core.platform.work_jobs.models import WorkJob
 from pallas.core.platform.work_jobs.runtime import build_work_job_store
@@ -341,6 +342,10 @@ def bind_repeater_learn_lifecycle() -> None:
     @driver.on_startup
     async def _on_startup():
         await start_repeater_learn_worker()
+        register_startup_ready(
+            "复读学习队列",
+            f"workers={len(_worker_tasks)} queue_max={learn_queue_max_size()}",
+        )
 
     @driver.on_shutdown
     async def _on_shutdown():

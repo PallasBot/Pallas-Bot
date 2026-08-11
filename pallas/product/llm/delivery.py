@@ -8,6 +8,7 @@ from typing import Any
 
 from nonebot import logger
 
+from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.core.platform.ai_callback.delivery import send_group_message
 from pallas.core.platform.ai_callback.handlers import (
     should_append_llm_session,
@@ -123,7 +124,7 @@ async def send_repeater_emotion_image(
                     fallback_cq_code=raw_image,
                 )
             except Exception as exc:
-                logger.info("LLM vision emotion followup enqueue skipped group={}: {}", group_id, exc)
+                logger.debug(format_business_event("视觉表情跟随", "已跳过", group=group_id, error=type(exc).__name__))
             else:
                 return True
     configured_cooldown = getattr(cfg, "llm_chat_sticker_cooldown_sec", 90)
@@ -142,7 +143,7 @@ async def send_repeater_emotion_image(
     try:
         await bot.call_api("send_group_msg", message=message, group_id=int(group_id))
     except Exception as e:
-        logger.info("LLM emotion followup image skipped group={}: {}", group_id, e)
+        logger.debug(format_business_event("表情跟随投递", "已跳过", group=group_id, error=type(e).__name__))
         return False
     note_repeater_image_sent(int(group_id), raw_image)
     return True
@@ -164,7 +165,7 @@ async def send_cached_sticker_image(bot: Any, group_id: int) -> bool:
             group_id=int(group_id),
         )
     except Exception as e:
-        logger.info("LLM cached sticker test skipped group={}: {}", group_id, e)
+        logger.debug(format_business_event("缓存贴纸投递", "已跳过", group=group_id, error=type(e).__name__))
         return False
     return True
 

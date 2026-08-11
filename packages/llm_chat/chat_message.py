@@ -9,6 +9,7 @@ from ulid import ULID
 
 from pallas.api.perm import group_message_permission_for_command
 from pallas.core.foundation.config import TaskManager
+from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.core.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE
 from pallas.product.llm import ChatSubmitRequest, get_llm_config, is_llm_chat_service_enabled, submit_chat_task
 from pallas.product.llm.assembler import assemble_tool_bundle
@@ -726,13 +727,16 @@ async def handle_llm_chat(
         hint = "" if result.status == "shared_budget_busy" else user_message_for_submit_status(result.status)
         if hint:
             await send_message(hint)
-        logger.info(
-            "llm chat submit skipped: status={} request_id={} message_id={} group={} user={}",
-            result.status,
-            request_id,
-            getattr(event, "message_id", None),
-            group_id,
-            user_id,
+        logger.debug(
+            format_business_event(
+                "智能对话提交",
+                "已跳过",
+                status=result.status,
+                request_id=request_id,
+                message_id=getattr(event, "message_id", None),
+                group=group_id,
+                user=user_id,
+            )
         )
         return
 

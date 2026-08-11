@@ -12,7 +12,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
 
 from pallas.console.cli.log_paths import EMBED_AUX_LOG, WORK_AUX_LOG
-from pallas.core.foundation.logging import REPO_FILE_LOG_FORMAT
+from pallas.core.foundation.logging import format_repo_file_log
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping
@@ -848,7 +848,7 @@ def install_nonebot_log_sink() -> None:
     logger.add(
         _sink_dispatch,
         level="INFO",
-        format=REPO_FILE_LOG_FORMAT,
+        format=format_repo_file_log,
         colorize=False,
         # 分片多进程同时刷启动日志时，enqueue 可能阻塞 lifespan 导致 worker 永不 listen
         enqueue=False,

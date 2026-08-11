@@ -37,7 +37,7 @@ async def test_bot_connect_ensures_runtime_storage(monkeypatch: pytest.MonkeyPat
 @pytest.mark.asyncio
 async def test_bot_connect_logs_when_runtime_storage_already_ready(monkeypatch: pytest.MonkeyPatch) -> None:
     mod._connected_bots.clear()
-    info_calls: list[tuple[str, tuple[object, ...]]] = []
+    debug_calls: list[tuple[str, tuple[object, ...]]] = []
 
     async def clear_protocol_bot_offline(_qq: int) -> None:
         return None
@@ -49,13 +49,13 @@ async def test_bot_connect_logs_when_runtime_storage_already_ready(monkeypatch: 
     monkeypatch.setattr(mod, "ensure_bot_runtime_storage", ensure_bot_runtime_storage)
     monkeypatch.setattr(mod, "note_bot_session_seen", lambda _qq: None)
     monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: False)
-    monkeypatch.setattr(mod.logger, "info", lambda msg, *args: info_calls.append((msg, args)))
+    monkeypatch.setattr(mod.logger, "debug", lambda msg, *args: debug_calls.append((msg, args)))
 
     bot = SimpleNamespace(self_id="1354970010", type="OneBot V11")
 
     await mod.on_bot_connect(bot)
 
-    assert ("[Bot {:>10}] runtime storage already ready on connect.", ("1354970010",)) in info_calls
+    assert ("[Bot {:>10}] runtime storage already ready on connect.", ("1354970010",)) in debug_calls
 
 
 @pytest.mark.asyncio

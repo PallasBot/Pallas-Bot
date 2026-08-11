@@ -10,6 +10,7 @@ from nonebot.exception import ActionFailed
 from nonebot_plugin_apscheduler import scheduler
 
 from pallas.core.foundation.db.lifecycle_service import run_lifecycle_dataset_maintenance
+from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.core.platform.ingress.message_load import should_pause_tasks
 from pallas.core.platform.shard import context as shard_ctx
 
@@ -59,7 +60,7 @@ async def speak_up():
         return
 
     for msg in messages:
-        logger.info(f"bot [{bot_id}] ready to speak [{msg}] to group [{group_id}]")
+        logger.debug(format_business_event("主动发言", "已准备", bot=bot_id, group=group_id, content_len=len(str(msg))))
         try:
             from pallas.product.llm.sticker_followup import suppress_outgoing_sticker_followup
 
@@ -83,12 +84,10 @@ async def speak_up():
                         "group_id": group_id,
                     },
                 )
+            logger.info(format_business_event("主动发言", "已发送", bot=bot_id, group=group_id, poke=bool(target_id)))
         except ActionFailed as e:
             logger.warning(
-                "bot [{}] speak_up send failed group [{}]: {}",
-                bot_id,
-                group_id,
-                e,
+                format_business_event("主动发言", "发送失败", bot=bot_id, group=group_id, error=type(e).__name__)
             )
             return
         await asyncio.sleep(random.randint(2, 5))

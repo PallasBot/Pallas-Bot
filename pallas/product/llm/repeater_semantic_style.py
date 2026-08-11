@@ -19,6 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pallas.core.foundation.db import make_local_context_repository, make_message_repository
 from pallas.core.foundation.fs_lock import atomic_write_text, interprocess_file_lock
 from pallas.core.foundation.paths import plugin_data_dir
+from pallas.core.foundation.startup_report import register_startup_ready, register_startup_scheduled
 from pallas.core.platform.work_jobs.models import WorkJob
 from pallas.core.platform.work_jobs.runtime import build_work_job_store
 
@@ -1440,6 +1441,7 @@ def register_semantic_style_cache_startup_hook() -> None:
         global _reload_task, _backfill_task
         refresh_semantic_style_cache(force=True)
         _reload_task = asyncio.create_task(_refresh_loop(), name="repeater_semantic_style_cache")
+        register_startup_ready("语义风格缓存")
 
         async def _backfill_loop() -> None:
             await asyncio.sleep(_SEMANTIC_STYLE_BACKFILL_START_DELAY_SEC)
@@ -1451,6 +1453,10 @@ def register_semantic_style_cache_startup_hook() -> None:
                 await asyncio.sleep(_SEMANTIC_STYLE_BACKFILL_INTERVAL_SEC)
 
         _backfill_task = asyncio.create_task(_backfill_loop(), name="repeater_semantic_style_backfill")
+        register_startup_scheduled(
+            "语义风格回填",
+            f"delay={_SEMANTIC_STYLE_BACKFILL_START_DELAY_SEC}s interval={_SEMANTIC_STYLE_BACKFILL_INTERVAL_SEC}s",
+        )
 
     @driver.on_shutdown
     async def _on_shutdown() -> None:

@@ -7,14 +7,14 @@ import pathlib
 from datetime import datetime
 from typing import Any
 
-from pallas.core.foundation.logging import REPO_FILE_LOG_FORMAT
+from pallas.core.foundation.logging import format_repo_file_log
 from pallas.core.platform.shard import context as shard_ctx
 from pallas.core.platform.shard.logs.errors import append_shard_log_error_from_sink, log_stem_for_shard
 from pallas.core.platform.shard.logs.session import maybe_rotate_logs_for_new_session
 from pallas.core.platform.shard.logs.view import shard_logs_dir
 from pallas.core.platform.shard.registry.config import get_shard_registry_settings
 
-_SHARD_LOG_FORMAT = REPO_FILE_LOG_FORMAT
+_SHARD_LOG_FORMAT = format_repo_file_log
 _FILE_ROTATION = "30 MB"
 _FILE_RETENTION = 14
 _INSTALLED = False

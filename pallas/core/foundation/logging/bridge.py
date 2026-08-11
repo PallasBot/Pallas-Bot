@@ -13,8 +13,10 @@ if TYPE_CHECKING:
     from logging import LogRecord
     from typing import Any
 
-REPO_CONSOLE_LOG_FORMAT = "<g>{time:MM-DD HH:mm:ss}</g> [<lvl>{level:<8}</lvl>] <c><u>{{{name:<12}}}</u></c> {message}"
-REPO_FILE_LOG_FORMAT = "{time:MM-DD HH:mm:ss} [{level:<8}] {{{name:<12}}} {message}"
+REPO_CONSOLE_LOG_FORMAT = (
+    "<g>{time:MM-DD HH:mm:ss}</g> [<lvl>{level:<8}</lvl>] <c><u>{{{extra[display_name]:<12}}}</u></c> {message}\n"
+)
+REPO_FILE_LOG_FORMAT = "{time:MM-DD HH:mm:ss} [{level:<8}] {{{extra[display_name]:<12}}} {message}\n"
 
 _TRANSIENT_UVICORN_MESSAGES = (
     "keepalive ping failed",
@@ -64,9 +66,6 @@ _BUSINESS_LOG_LABELS = (
     ("packages.request_handler", "Request"),
     ("packages.take_name", "TakeName"),
     ("packages.drink", "Drink"),
-    ("packages", "Plugin"),
-    ("pallas_plugin_", "Plugin"),
-    ("nonebot_plugin_", "Plugin"),
     ("pallas.product.llm", "LLM"),
     ("pallas.product.persona", "Persona"),
     ("pallas.product.corpus", "Corpus"),
@@ -80,6 +79,49 @@ _BUSINESS_LOG_LABELS = (
     ("pallas.extensions", "Extension"),
     ("pallas", "Pallas"),
 )
+
+_DISPLAY_LOG_NAME_PREFIXES = (
+    "packages.",
+    "pallas_plugin_",
+    "nonebot_plugin_",
+    "pallas.core",
+    "pallas.product",
+    "pallas.console",
+    "pallas.extensions",
+    "pallas",
+)
+
+_BUSINESS_EVENT_ACTIONS = {
+    "复读回复": "Reply",
+    "复读禁言": "Repeater ban",
+    "禁言目标读取": "Ban target lookup",
+    "禁言目标撤回": "Ban target recall",
+    "主动发言": "Scheduled message",
+    "语料回填批次": "Corpus backfill batch",
+    "视觉表情跟随": "Vision sticker follow-up",
+    "表情跟随投递": "Sticker follow-up delivery",
+    "缓存贴纸投递": "Cached sticker delivery",
+    "贴纸视觉选择": "Sticker vision selection",
+    "贴纸视觉投递": "Sticker vision delivery",
+    "视觉图片拉取": "Vision image fetch",
+    "视觉图片理解": "Vision image analysis",
+    "视觉多模态请求": "Vision multimodal request",
+    "视觉文本回退": "Vision text fallback",
+    "智能对话提交": "Chat submission",
+}
+
+_BUSINESS_EVENT_RESULTS = {
+    "已准备": "prepared",
+    "已发送": "sent",
+    "已完成": "completed",
+    "已跳过": "skipped",
+    "已降级": "degraded",
+    "已拒绝": "rejected",
+    "未命中": "not matched",
+    "失败": "failed",
+    "发送失败": "failed to send",
+    "已入队": "queued",
+}
 
 _QUIET_LIBRARY_LOGGER_NAMES = (
     "uvicorn",
@@ -114,6 +156,42 @@ _QUIET_LIBRARY_LOGGER_NAMES = (
 )
 
 
+def display_log_name(logger_name: str) -> str:
+    """返回日志中展示的短名称，不改动原始 logger name。"""
+    name = (logger_name or "").strip()
+    if name in {"pallas", "pallas.core"} or name.startswith("pallas.core."):
+        return "Core"
+    if name.startswith("packages."):
+        return _pascal_case(name.split(".", 2)[1])
+    for prefix in ("pallas_plugin_", "nonebot_plugin_"):
+        if name.startswith(prefix):
+            return _pascal_case(name.removeprefix(prefix).split(".", 1)[0])
+    if name.startswith("pallas.product."):
+        return _pascal_case(name.split(".", 3)[2])
+    if name.startswith("pallas.console."):
+        return "Console"
+    if name.startswith("pallas.extensions."):
+        return "Extension"
+    return _pascal_case(name.split(".", 1)[0]) if name else ""
+
+
+def _pascal_case(value: str) -> str:
+    return "".join(part[:1].upper() + part[1:] for part in re.split(r"[_-]+", value) if part)
+
+
+def _format_repo_log(record: dict[str, Any], template: str) -> str:
+    record["extra"]["display_name"] = display_log_name(str(record.get("name", "")))
+    return template
+
+
+def format_repo_console_log(record: dict[str, Any]) -> str:
+    return _format_repo_log(record, REPO_CONSOLE_LOG_FORMAT)
+
+
+def format_repo_file_log(record: dict[str, Any]) -> str:
+    return _format_repo_log(record, REPO_FILE_LOG_FORMAT)
+
+
 def _stdlib_logger_channel_label(logger_name: str) -> str:
     """把 stdlib logger 名收成简短标签；``.error`` 易被误认为级别，故单独映射。"""
     name = (logger_name or "").strip()
@@ -135,7 +213,28 @@ def prefix_business_log_message(logger_name: str, message: str) -> str:
     for prefix, label in _BUSINESS_LOG_LABELS:
         if name == prefix or name.startswith(f"{prefix}.") or (prefix.endswith("_") and name.startswith(prefix)):
             return f"[{label}] {stripped}"
+    if name.startswith(_DISPLAY_LOG_NAME_PREFIXES):
+        return f"[{display_log_name(name)}] {stripped}"
     return text
+
+
+def format_business_event(action: str, result: str, /, **fields: object) -> str:
+    """生成单行英文结果叙事，省略空字段。"""
+    if action == "复读回复" and result == "已发送":
+        bot = fields.get("bot")
+        group = fields.get("group")
+        content = _format_business_field(fields.get("content"))
+        return f"Bot {bot} replied in group {group}: {content}"
+
+    subject = _BUSINESS_EVENT_ACTIONS.get(action, action)
+    outcome = _BUSINESS_EVENT_RESULTS.get(result, result)
+    text = f"{subject} {outcome}".strip()
+    values = [f"{key}={_format_business_field(value)}" for key, value in fields.items() if value not in (None, "")]
+    return f"{text}: {' '.join(values)}" if values else text
+
+
+def _format_business_field(value: object) -> str:
+    return str(value).replace("\r", "\\r").replace("\n", "\\n")
 
 
 def _is_quiet_access_line(text: str) -> bool:
@@ -143,6 +242,12 @@ def _is_quiet_access_line(text: str) -> bool:
     if '" 5' in text or '" 4' in text:  # 4xx/5xx 仍可见
         return False
     return any(marker in text for marker in _QUIET_ACCESS_PATH_MARKERS)
+
+
+def is_websocket_connection_noise(text: str) -> bool:
+    """WebSocket 正常握手由 Bot 接入状态覆盖，生产 INFO 下不逐条输出。"""
+    plain = (text or "").strip()
+    return plain == "connection open" or ('"WebSocket ' in plain and plain.endswith('" [accepted]'))
 
 
 def _is_transient_asgi_failure(record: LogRecord) -> bool:
@@ -174,6 +279,9 @@ class ChannelLoguruHandler(LoguruHandler):
         if label == "HTTP 服务" and any(part in text for part in _TRANSIENT_UVICORN_MESSAGES):
             record.levelno = logging.WARNING
             record.levelname = "WARNING"
+        elif label == "HTTP 服务" and is_websocket_connection_noise(text):
+            record.levelno = logging.DEBUG
+            record.levelname = "DEBUG"
         elif record.name == "uvicorn.access" and _is_quiet_access_line(text):
             record.levelno = logging.DEBUG
             record.levelname = "DEBUG"
@@ -203,7 +311,7 @@ def install_repo_console_log_format() -> None:
         level=0,
         diagnose=False,
         filter=nb_log.default_filter,
-        format=REPO_CONSOLE_LOG_FORMAT,
+        format=format_repo_console_log,
     )
 
 

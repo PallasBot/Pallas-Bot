@@ -40,7 +40,7 @@ def note_disconnected_bot(qq: int) -> None:
 
 async def on_bot_connect(bot: Bot) -> None:
     if bot.self_id.isnumeric() and bot.type == "OneBot V11":
-        logger.info("[Bot {:>10}] connected.", bot.self_id)
+        logger.debug("[Bot {:>10}] connected.", bot.self_id)
         qq = int(bot.self_id)
         from pallas.core.platform.shard.presence import close_local_bot_connection
         from pallas.core.platform.shard.presence_health import (
@@ -68,7 +68,7 @@ async def on_bot_connect(bot: Bot) -> None:
             if initialized:
                 logger.info("[Bot {:>10}] runtime storage initialized on connect.", bot.self_id)
             else:
-                logger.info("[Bot {:>10}] runtime storage already ready on connect.", bot.self_id)
+                logger.debug("[Bot {:>10}] runtime storage already ready on connect.", bot.self_id)
         except Exception as err:
             logger.warning("[Bot {:>10}] runtime storage ensure failed: {}", bot.self_id, err)
         try:

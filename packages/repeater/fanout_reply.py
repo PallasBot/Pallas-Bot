@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 from itertools import starmap
 
 from pallas.core.foundation.config import BotConfig
+from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.core.platform.bot_runtime.send_unavailable import BOT_SEND_UNAVAILABLE_ERRORS, log_bot_send_unavailable
 from pallas.core.platform.multi_bot.dedup import try_claim_group_message_once
 from pallas.core.platform.shard import context as shard_ctx
@@ -267,7 +268,15 @@ async def send_repeater_answers(bot_id: int, group_id: int, answers, *, fanout: 
         if not msg:
             continue
 
-        logger.info(f"bot [{bot_id}] ready to send [{str(msg)[:30]}] to group [{group_id}] ({log_tag})")
+        logger.debug(
+            format_business_event(
+                "复读回复",
+                "已准备",
+                bot=bot_id,
+                group=group_id,
+                mode=log_tag,
+            )
+        )
 
         await asyncio.sleep(delay)
 
@@ -278,6 +287,9 @@ async def send_repeater_answers(bot_id: int, group_id: int, answers, *, fanout: 
 
             with suppress_outgoing_sticker_followup():
                 await bot.send_group_msg(group_id=group_id, message=msg)
+            logger.info(
+                format_business_event("复读回复", "已发送", bot=bot_id, group=group_id, mode=log_tag, content=msg)
+            )
 
             from .sticker_followup import maybe_send_repeater_sticker_followup
 
@@ -304,7 +316,7 @@ async def send_repeater_answers(bot_id: int, group_id: int, answers, *, fanout: 
             shutup = await is_shutup(bot_id, group_id)
 
             if not shutup:
-                logger.info(f"bot [{bot_id}] ready to ban [{str(item)}] in group [{group_id}] ({log_tag})")
+                logger.debug(format_business_event("复读禁言", "已准备", bot=bot_id, group=group_id, mode=log_tag))
 
                 await Chat.ban(group_id, bot_id, str(item), "ActionFailed")
 

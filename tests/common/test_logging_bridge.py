@@ -7,7 +7,12 @@ from pallas.core.foundation.logging.bridge import (
     REPO_CONSOLE_LOG_FORMAT,
     ChannelLoguruHandler,
     _stdlib_logger_channel_label,
+    display_log_name,
+    format_business_event,
+    format_repo_console_log,
+    format_repo_file_log,
     is_matcher_lifecycle_noise,
+    is_websocket_connection_noise,
     prefix_business_log_message,
 )
 from pallas.core.foundation.logging.event_log import (
@@ -40,18 +45,53 @@ def test_stdlib_logger_channel_label_uses_repo_aliases() -> None:
 
 def test_repo_console_log_format_aligns_level_and_source() -> None:
     assert "{level:<8}" in REPO_CONSOLE_LOG_FORMAT
-    assert "{{{name:<12}}}" in REPO_CONSOLE_LOG_FORMAT
+    assert "{{{extra[display_name]:<12}}}" in REPO_CONSOLE_LOG_FORMAT
+
+
+def test_repo_console_log_uses_core_display_name_without_rewriting_logger_name() -> None:
+    record = {"name": "pallas.core", "extra": {}}
+
+    assert format_repo_console_log(record) == REPO_CONSOLE_LOG_FORMAT
+    assert record["name"] == "pallas.core"
+    assert record["extra"]["display_name"] == "Core"
+
+
+def test_repo_console_log_capitalizes_other_display_names() -> None:
+    record = {"name": "repeater", "extra": {}}
+
+    format_repo_console_log(record)
+
+    assert record["extra"]["display_name"] == "Repeater"
+
+
+def test_display_log_name_normalizes_builtin_and_external_plugin_packages() -> None:
+    assert display_log_name("packages.take_name.handlers") == "TakeName"
+    assert display_log_name("pallas_plugin_protocol.runtime") == "Protocol"
+    assert display_log_name("nonebot_plugin_apscheduler") == "Apscheduler"
+
+
+def test_repo_file_log_formatter_ends_each_record_with_a_newline() -> None:
+    record = {"name": "pallas", "extra": {}}
+
+    assert format_repo_file_log(record).endswith("\n")
 
 
 def test_business_log_messages_get_module_labels_without_duplicates() -> None:
     assert prefix_business_log_message("packages.repeater.learn_queue", "queued batch") == "[Learn] queued batch"
     assert prefix_business_log_message("packages.repeater.fanout_reply", "[Reply] sent") == "[Reply] sent"
     assert prefix_business_log_message("packages.llm_chat.chat_message", "completed") == "[Chat] completed"
-    assert prefix_business_log_message("packages.roulette.service", "started") == "[Plugin] started"
-    assert prefix_business_log_message("pallas_plugin_protocol.runtime", "started") == "[Plugin] started"
-    assert prefix_business_log_message("nonebot_plugin_apscheduler", "job added") == "[Plugin] job added"
+    assert prefix_business_log_message("packages.roulette.service", "started") == "[Roulette] started"
+    assert prefix_business_log_message("pallas_plugin_protocol.runtime", "started") == "[Protocol] started"
+    assert prefix_business_log_message("nonebot_plugin_apscheduler", "job added") == "[Apscheduler] job added"
     assert prefix_business_log_message("pallas.product.llm.client", "request failed") == "[LLM] request failed"
     assert prefix_business_log_message("third_party.client", "unchanged") == "unchanged"
+
+
+def test_format_business_event_writes_reply_as_a_narrative_with_body() -> None:
+    assert format_business_event("复读回复", "已发送", bot=10001, group=20002, content="line one\nline two") == (
+        "Bot 10001 replied in group 20002: line one\\nline two"
+    )
+    assert format_business_event("语料回填批次", "已跳过", reason=None) == "Corpus backfill batch skipped"
 
 
 def test_console_log_messages_use_bracketed_prefix() -> None:
@@ -90,6 +130,27 @@ def test_is_matcher_lifecycle_noise() -> None:
     assert is_matcher_lifecycle_noise("Event notice.group_msg_emoji_like.add is ignored")
     assert not is_matcher_lifecycle_noise("Error when running EventPreProcessors. Event ignored!")
     assert not is_matcher_lifecycle_noise("ingress_dispatch: stats group_messages=1")
+
+
+def test_websocket_connection_handshake_noise_is_quiet_but_lifecycle_stays_visible() -> None:
+    assert is_websocket_connection_noise('172.17.0.8:32864 - "WebSocket /onebot/v11/ws" [accepted]')
+    assert is_websocket_connection_noise("connection open")
+    assert not is_websocket_connection_noise("Application startup complete.")
+    assert not is_websocket_connection_noise("connection closed")
+
+    handler = ChannelLoguruHandler()
+    record = logging.LogRecord(
+        name="uvicorn.error",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg="connection open",
+        args=(),
+        exc_info=None,
+    )
+    handler.emit(record)
+    assert record.levelno == logging.DEBUG
+    assert record.levelname == "DEBUG"
 
 
 def test_compact_inbound_event_log_folds_long_url() -> None:
