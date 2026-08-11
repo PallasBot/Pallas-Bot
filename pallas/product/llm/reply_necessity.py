@@ -175,7 +175,7 @@ def score_reply_necessity(
     if has_reply_obligation(plain):
         score += 20
         parts.append("obligation+20")
-    if is_low_value_social_turn(plain):
+    if is_low_value_social_turn(plain) and not (is_mentioned or is_followup):
         score -= 35
         parts.append("low_social-35")
     if has_recent_back_and_forth:

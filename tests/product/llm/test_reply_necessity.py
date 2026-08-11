@@ -71,6 +71,17 @@ def test_mentioned_question_crosses_reply_necessity_threshold() -> None:
     assert result.score >= REPLY_NECESSITY_TRIGGER_SCORE
 
 
+def test_mentioned_short_social_turn_crosses_reply_necessity_threshold() -> None:
+    result = evaluate_reply_necessity_gate(
+        text="牛牛晚饭吃了没",
+        is_mentioned=True,
+        has_recent_back_and_forth=True,
+    )
+
+    assert result.decision == "proceed"
+    assert result.score >= REPLY_NECESSITY_TRIGGER_SCORE
+
+
 @pytest.mark.parametrize(
     ("kwargs", "name"),
     [
