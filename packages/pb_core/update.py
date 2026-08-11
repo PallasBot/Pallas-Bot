@@ -232,7 +232,9 @@ async def format_update_check_text() -> str:
     installed = get_installed_webui_version()
     webui_current = str(installed.get("tag") or "").strip() or "unknown"
     web_bits = [f"当前 {webui_current}"]
-    repo = str(getattr(cfg, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot")
+    from packages.pb_webui.manager import DEFAULT_WEBUI_DIST_ZIP_REPO
+
+    repo = str(getattr(cfg, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO)
     asset = str(getattr(cfg, "pallas_webui_dist_zip_asset", "") or "dist.zip")
     try:
         web_latest = await fetch_latest_webui_release(repo, token=token, asset_name=asset)

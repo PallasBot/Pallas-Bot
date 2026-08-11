@@ -118,9 +118,16 @@ async def resolve_github_release_asset_urls(
     return dedup
 
 
-DEFAULT_WEBUI_DIST_ZIP_REPO = "PallasBot/Pallas-Bot"
+DEFAULT_WEBUI_DIST_ZIP_REPO = "PallasBot/Pallas-Bot-WebUI"
 DEFAULT_WEBUI_DIST_ZIP_ASSET = "dist.zip"
 BUNDLED_WEBUI_DIST_ZIP = resource_dir("webui", "dist.zip")
+
+
+def normalize_webui_dist_zip_repo(value: object) -> str:
+    repo = str(value or "").strip()
+    if repo == "PallasBot/Pallas-Bot":
+        return DEFAULT_WEBUI_DIST_ZIP_REPO
+    return repo
 
 
 def webui_frontend_stack() -> str:

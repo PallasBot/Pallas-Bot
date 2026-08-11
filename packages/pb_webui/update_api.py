@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .console_read_cache import cached_read, drop_read_cache
 from .extended_common import check_pallas_write_token
+from .manager import DEFAULT_WEBUI_DIST_ZIP_REPO
 
 if TYPE_CHECKING:
     from .config import Config
@@ -41,7 +42,7 @@ async def _load_webui_update_check_payload(plugin_config: Config) -> dict[str, A
 
     from .manager import fetch_latest_webui_release, get_installed_webui_version
 
-    repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot")
+    repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO)
     asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
     github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
     installed = get_installed_webui_version()
@@ -255,7 +256,7 @@ def register_update_router(
 
     @router.get(f"{x}/update/check", include_in_schema=True)
     async def _update_check() -> JSONResponse:
-        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot")
+        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO)
         asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         cache_key = f"update_check_webui:{repo}:{asset}:{bool(github_token)}"
@@ -280,7 +281,7 @@ def register_update_router(
     @router.get(f"{x}/update/check-all", include_in_schema=True)
     async def _update_check_all() -> JSONResponse:
         """一次返回 WebUI 与 Bot 更新检查结果（GS 控制台同款聚合接口）。"""
-        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot")
+        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO)
         asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         webui_key = f"update_check_webui:{repo}:{asset}:{bool(github_token)}"
@@ -552,7 +553,7 @@ def register_update_router(
         )
         from pallas.core.shared.utils.format_exception import format_exception_for_log
 
-        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot")
+        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO)
         asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
         tag = str(getattr(plugin_config, "pallas_webui_dist_zip_tag", "") or "")
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
@@ -687,7 +688,7 @@ def register_update_router(
     async def _warm_console_read_caches_impl() -> None:
         from pallas.product.community_stats.public_stats import fetch_community_public_stats
 
-        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot")
+        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO)
         asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         webui_key = f"update_check_webui:{repo}:{asset}:{bool(github_token)}"

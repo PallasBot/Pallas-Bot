@@ -303,7 +303,9 @@ async def _run_webui_target(*, config: Any | None = None, force: bool = False) -
         )
         return out
 
-    repo = str(getattr(cfg, "pallas_webui_dist_zip_repo", "") or "PallasBot/Pallas-Bot")
+    from .manager import DEFAULT_WEBUI_DIST_ZIP_REPO
+
+    repo = str(getattr(cfg, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO)
     asset = str(getattr(cfg, "pallas_webui_dist_zip_asset", "") or "dist.zip")
     tag = str(getattr(cfg, "pallas_webui_dist_zip_tag", "") or "").strip() or latest_tag
     logger.info(

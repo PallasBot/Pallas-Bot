@@ -8,7 +8,11 @@ from typing import TYPE_CHECKING, Any
 
 from nonebot import logger
 
-from packages.pb_webui.manager import DEFAULT_WEBUI_DIST_ZIP_ASSET, DEFAULT_WEBUI_DIST_ZIP_REPO
+from packages.pb_webui.manager import (
+    DEFAULT_WEBUI_DIST_ZIP_ASSET,
+    DEFAULT_WEBUI_DIST_ZIP_REPO,
+    normalize_webui_dist_zip_repo,
+)
 from pallas.core.foundation.bot_version import pallas_bot_repo_root, write_runtime_overlay_version
 from pallas.core.foundation.config.repo_settings import merged_repo_settings_upper
 from pallas.core.shared.utils.format_exception import format_exception_for_log
@@ -116,7 +120,7 @@ async def apply_docker_bot_release(
 def webui_update_settings_from_repo() -> dict[str, str]:
     env = merged_repo_settings_upper()
     return {
-        "repo": (env.get("PALLAS_WEBUI_DIST_ZIP_REPO") or DEFAULT_WEBUI_DIST_ZIP_REPO).strip(),
+        "repo": normalize_webui_dist_zip_repo(env.get("PALLAS_WEBUI_DIST_ZIP_REPO") or DEFAULT_WEBUI_DIST_ZIP_REPO),
         "asset": (env.get("PALLAS_WEBUI_DIST_ZIP_ASSET") or DEFAULT_WEBUI_DIST_ZIP_ASSET).strip(),
         "tag": (env.get("PALLAS_WEBUI_DIST_ZIP_TAG") or "").strip(),
         "github_token": (env.get("PALLAS_PROTOCOL_GITHUB_TOKEN") or "").strip(),
