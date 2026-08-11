@@ -20,6 +20,18 @@ def test_record_bot_llm_task_snapshot() -> None:
     clear_llm_task_metrics_for_tests()
 
 
+def test_record_bot_llm_task_background_events() -> None:
+    clear_llm_task_metrics_for_tests()
+    record_bot_llm_task("llm_chat", "background_enqueued")
+    record_bot_llm_task("llm_chat", "background_coalesced")
+    snap = llm_task_metrics_snapshot()
+    assert snap["by_task"]["llm_chat"]["background_enqueued"] == 1
+    assert snap["by_task"]["llm_chat"]["background_coalesced"] == 1
+    assert snap["totals"]["background_enqueued"] == 1
+    assert snap["totals"]["background_coalesced"] == 1
+    clear_llm_task_metrics_for_tests()
+
+
 def test_track_llm_callback_ignores_retired_repeater_task() -> None:
     from pallas.product.llm.delivery import track_llm_callback
 

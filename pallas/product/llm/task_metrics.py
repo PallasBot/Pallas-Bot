@@ -19,6 +19,8 @@ _TASKS = frozenset({
 _EVENTS = frozenset({
     "submit_ok",
     "submit_skip",
+    "background_enqueued",
+    "background_coalesced",
     "callback_ok",
     "callback_fail",
     "reply_gate_skip",

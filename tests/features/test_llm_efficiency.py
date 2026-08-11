@@ -27,7 +27,7 @@ def test_reply_gate_disabled_always_proceeds() -> None:
     assert evaluate_llm_reply_gate("[CQ:face,id=123]", cfg=cfg) == "proceed"
 
 
-def test_chat_queue_merge_last_wins_on_cooldown() -> None:
+def test_chat_queue_merge_single_stash_on_cooldown() -> None:
     clear_chat_queue_for_tests()
     cfg = LlmConfig(llm_chat_queue_merge=True)
     stash_chat_during_cooldown(1, 2, 3, "第一条", cfg=cfg)
