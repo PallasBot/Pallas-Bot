@@ -60,7 +60,9 @@ def test_chat_prompt_assembler_uses_fixed_order_without_aliases_or_duplicates() 
     assert prompt.count("我一直都在呀") == 1
     assert "登录昵称" not in prompt
     assert "学习别名" not in prompt
-    assert '"reply_segments"' in prompt
+    assert "必须使用 JSON 的 reply_segments" in prompt
+    assert "先发即时反应" in prompt
+    assert "六点？" in prompt
 
 
 def test_chat_prompt_assembler_keeps_quote_replies_within_casual_shape() -> None:

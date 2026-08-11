@@ -425,7 +425,15 @@ async def deliver_llm_callback_success(
         structured_reply = parse_structured_reply(reply_text)
     structured_reply = resolve_output_filtered_chat_reply(task, structured_reply)
     reply_segments = list(structured_reply.reply_segments)
-    reply_text = structured_reply.logical_text
+    if (
+        task_type == LLM_CHAT_TASK_TYPE
+        and str(task.get("reply_total_length_band") or "") == "short"
+        and len(reply_segments) == 1
+    ):
+        from pallas.product.llm.reply_postprocess import split_short_reply_segments
+
+        reply_segments = split_short_reply_segments(reply_segments[0])
+    reply_text = "\n".join(reply_segments)
     if task_type == LLM_CHAT_TASK_TYPE and reply_text:
         from pallas.product.llm.message_guard import strip_leading_self_at_mentions
         from pallas.product.persona.self_identity import DEFAULT_SELF_ALIASES

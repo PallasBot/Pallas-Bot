@@ -501,6 +501,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     assert payload["message_id"] == 40004
     assert payload["reply_to_message_id"] == 40003
     assert payload["reply_candidate_ids"] == [40003, 40004]
+    assert payload["reply_total_length_band"] == "complete"
     feedback_hint.assert_not_called()
     submit_request = submit_mock.await_args.args[0]
     assert "【本轮表达去重】" not in submit_request.system_prompt
@@ -530,6 +531,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     assert "same_utterance_redup" not in submit_request.llm_rewrite_metadata
     assert submit_request.llm_rewrite_metadata["social_action"] == "ACK"
     assert submit_request.llm_rewrite_metadata["reply_target"] == "fact"
+    assert submit_request.llm_rewrite_metadata["reply_total_length_band"] == "complete"
     assert "semantic_style_prompt_block" not in submit_request.llm_rewrite_metadata
     assert submit_request.llm_rewrite_metadata["semantic_style_direct_candidate"] == "没救了"
     assert submit_request.llm_rewrite_metadata["semantic_style_source_example_id"] == "semantic:source:1"

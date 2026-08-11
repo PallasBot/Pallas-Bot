@@ -10,6 +10,7 @@ def test_anonymous_quality_matrix_covers_personas_and_scenarios() -> None:
     assert {case.persona_id for case in ANONYMOUS_QUALITY_MATRIX} == {"calm", "warm", "direct"}
     assert all(case.expected_action for case in ANONYMOUS_QUALITY_MATRIX)
     assert all(case.forbidden_traits for case in ANONYMOUS_QUALITY_MATRIX)
+    assert {case.scene for case in ANONYMOUS_QUALITY_MATRIX} >= {"wake_early"}
 
 
 def test_quality_judge_dimensions_cover_memory_tool_and_silence() -> None:

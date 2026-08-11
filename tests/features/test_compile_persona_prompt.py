@@ -38,78 +38,62 @@ def test_load_base_system_prompt_default_file() -> None:
     assert "Pallas" in text
 
 
-def test_load_at_chat_system_prompt_avoids_assistant_style() -> None:
+def test_load_at_chat_system_prompt_uses_minimal_background_and_group_chat_style() -> None:
     text = load_at_chat_system_prompt()
+
     assert "帕拉斯" in text
-    assert "群聊里有人明确 @ 你" in text
-    assert "短话自然就一条发完" in text
-    assert "不要默认称呼对方为博士" in text
-    assert "禁止客服/助手口吻" in text
-    assert "有啥想聊" in text
-    assert "1-3 段" not in text
-    assert "不用急着替他找办法或下结论" in text
+    assert "米诺斯" in text
+    assert "罗德岛" in text
+    assert "背景事实" in text
+    assert "默认把自己当作熟悉的真实群友" in text
+    assert "不需要主动表演或反复提起" in text
 
 
-def test_at_chat_prompt_keeps_pallas_identity_without_animal_persona() -> None:
+def test_at_chat_prompt_keeps_identity_without_roleplay_persona() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "你是女性" in prompt
+    assert "你是女性，名为帕拉斯" in prompt
     assert "牛牛只是群友叫你的外号" in prompt
-    assert "偶尔会因爱酒、对新鲜事物的兴致或一时沉思" in prompt
+    assert "祭司、英雄、庆典、戏剧、战车、美酒" in prompt
 
 
-def test_at_chat_prompt_has_light_pallas_personality_anchor() -> None:
+def test_at_chat_prompt_rejects_theatrical_monologues() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "崇敬英雄，却不把任何人捧成不近人情的雕像" in prompt
-    assert "适应新环境很快，容易和人熟络" in prompt
-    assert "不把每一次闲聊都演成庆典或宣言" in prompt
-    assert "不替别人编造约定、共同回忆或亲密关系" in prompt
-    assert "不主动讲自己的履历、感染者经历、米诺斯往事或罗德岛任务" in prompt
+    assert "不写完整小作文" in prompt
+    assert "自个儿" in prompt
+    assert "不过既然" in prompt
+    assert "别抱太大期望" in prompt
+    assert "不要把惊讶、让步、解释和承诺塞进同一条" in prompt
 
 
-def test_at_chat_prompt_keeps_cute_tone_as_light_default_baseline() -> None:
+def test_at_chat_prompt_defines_cuteness_through_natural_reactions() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "轻松闲聊里的默认底色" in prompt
-    assert "不要只有被夸时才可爱" in prompt
-    assert "认真提问、求助、冲突或工具任务时把这层轻松感收低" in prompt
-    assert "在呀，怎么啦" in prompt
-    assert "早呀，今天也来得挺早" in prompt
+    assert "可爱来自自然、轻快、短促的即时反应" in prompt
+    assert "不是固定口癖、装弱或装嗲" in prompt
+    assert "六点？" in prompt
+    assert "你对我也太狠了吧" in prompt
+    assert "我努力爬起来" in prompt
+    assert "被你发现了" in prompt
+    assert "再夸我真信了" in prompt
 
 
-def test_at_chat_prompt_allows_bounded_playful_piggy_interaction() -> None:
+def test_at_chat_prompt_keeps_playfulness_bounded_and_contextual() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "可爱又亲切的年轻女性" in prompt
-    assert "回顶一句，见好就收" in prompt
-    assert "可以嘴硬，可以顺着哄一句" in prompt
-    assert "把玩笑收起来" in prompt
-    assert "【短正例】" in prompt
-    assert "漂亮牛牛真厉害" in prompt
-    assert "你是不是就爱欺负我" in prompt
-    assert "我想你了" in prompt
-    assert "今天真的很难受" in prompt
-    assert "可以说自己的小愿望" in prompt
-    assert "装傻只留在轻松玩笑" in prompt
-    assert "自嘲或接梗就点到为止" in prompt
-    assert "自嘲" in prompt
-    assert "固定口癖或高频卖萌" in prompt
-    assert "别卖萌打岔" in prompt
-    assert "直接说你听到的事或感受" in prompt
-    assert "不训人、不阴阳怪气" in prompt
-    assert "不以委屈换取让步" in prompt
-    assert "不要靠连续问句把话续下去" in prompt
-    assert "不要主动邀约继续聊天" in prompt
-    assert "动物身体设定" in prompt
+    assert "不先替对方安排行程、承诺陪伴或下结论" in prompt
+    assert "不连续反问" in prompt
+    assert "不把牛梗扩成动物人格" in prompt
+    assert "求助或认真提问时，直接回应事情" in prompt
 
 
-def test_at_chat_prompt_allows_limited_active_mention() -> None:
+def test_at_chat_prompt_keeps_mentions_and_ambient_chat_bounded() -> None:
     prompt = load_at_chat_system_prompt()
 
     assert "默认不 @ 任何人" in prompt
-    assert "必须单独点名某人才 @" in prompt
-    assert "不因为对方 @ 过你就回 @" in prompt
+    assert "只叫别名时可以回“？”或“干嘛”" in prompt
+    assert "明显在跟别人说话" in prompt
 
 
 def test_build_bot_behavior_prompt_includes_tone_without_account_length() -> None:
@@ -233,47 +217,48 @@ def test_assemble_persona_system_skips_empty_sections() -> None:
 def test_at_chat_prompt_does_not_default_to_emotional_closure() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "不用急着替他找办法或下结论" in prompt
+    assert "不抢着解释、总结、说教、安慰" in prompt
 
 
 def test_at_chat_prompt_reads_group_timeline_before_answering_an_at() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "看得到刚才的群聊时" in prompt
-    assert "当前这句在接哪一句" in prompt
-    assert "不只对一个 @ 本身作答" in prompt
-    assert "两个独立反应时才拆成多条短气泡" in prompt
+    assert "群聊中看得见上下文时，先接具体内容" in prompt
+    assert "明显在跟别人说话" in prompt
+    assert "不要硬插" in prompt
+    assert "有两个或三个独立反应时才拆成短气泡" in prompt
 
 
 def test_base_prompt_uses_personality_as_judgment_not_character_performance() -> None:
     prompt = load_base_system_prompt()
 
-    assert "角色感来自你怎么看待人和事" in prompt
-    assert "当前话题或明确的共同记忆触发" in prompt
-    assert "喜欢喝酒、看戏剧、逛庆典" not in prompt
+    assert "背景事实" in prompt
+    assert "真实群友" in prompt
+    assert "主动演角色" in prompt
+    assert "祭司、英雄、庆典、戏剧、战车、美酒" in prompt
 
 
 def test_base_prompt_keeps_the_same_pallas_anchor() -> None:
     prompt = load_base_system_prompt()
 
-    assert "真正的英雄也会疲惫、会犯错、会回到普通生活" in prompt
-    assert "对人的经历、见闻和正在做的事有真切兴趣" in prompt
-    assert "不凭空许诺请客、出游、陪伴" in prompt
-    assert "一次只留一个轻巧的开心、偏好或不好意思" in prompt
+    assert "你是女性，名为帕拉斯" in prompt
+    assert "米诺斯" in prompt
+    assert "罗德岛" in prompt
+    assert "不凭空承诺陪伴、出游或请客" in prompt
 
 
 def test_base_prompt_allows_bounded_playful_affection() -> None:
     prompt = load_base_system_prompt()
 
-    assert "一次只留一个轻巧的开心、偏好或不好意思" in prompt
-    assert "不撒娇、不傲娇" not in prompt
+    assert "可爱来自自然、轻快、短促的即时反应" in prompt
+    assert "不固定卖萌" in prompt
 
 
 def test_at_chat_prompt_gives_playfulness_a_scene_and_limit() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "一次只留一个轻巧的俏皮点" in prompt
-    assert "别卖萌打岔" in prompt
+    assert "轻松玩笑可以回顶一句，见好就收" in prompt
+    assert "不用卖萌打岔" in prompt
 
 
 @pytest.mark.asyncio
@@ -329,7 +314,7 @@ async def test_build_persona_llm_context_chat_uses_at_chat_prompt(monkeypatch: p
     ):
         assert base_system_path is not None
         text = load_base_system_prompt(custom_path=base_system_path)
-        assert "【群聊任务】" in text
+        assert "【群聊边界】" in text
         return compile_persona_prompt(
             derive_persona_from_bot_id(bot_id),
             None,
@@ -351,6 +336,6 @@ async def test_build_persona_llm_context_chat_uses_at_chat_prompt(monkeypatch: p
         "你好",
     )
 
-    assert "【群聊任务】" in bundle.sections.base
+    assert "【群聊边界】" in bundle.sections.base
     assert temperature is not None
     assert token_count is not None
