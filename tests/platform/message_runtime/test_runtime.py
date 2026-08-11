@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -55,6 +56,11 @@ class PassiveLegacyBridgeHandler(StatusHandler):
         return HandlingOutcome(handled=False, fallback_to_matcher=True)
 
 
+class ThirdPartyHandler(StatusHandler):
+    handler_id = "third_party.command"
+    modules = frozenset({"third_party"})
+
+
 def _context() -> MessageContext:
     return MessageContext(
         ingress_id="i-1",
@@ -103,6 +109,34 @@ async def test_direct_runtime_attributes_the_executing_handler() -> None:
     outcome = await MessageRuntime(MessagePlanner(registry), registry).execute(_context(), bot=object(), event=object())
 
     assert outcome.handler_id == "pb_core.status"
+
+
+@pytest.mark.asyncio
+async def test_direct_runtime_falls_back_without_executing_disabled_plugin(monkeypatch: pytest.MonkeyPatch) -> None:
+    handler = ThirdPartyHandler()
+    registry = RuntimeHandlerRegistry()
+    registry.register(handler)
+    plugin_disabled = AsyncMock(return_value=True)
+    monkeypatch.setattr("packages.help.plugin_manager.is_plugin_disabled", plugin_disabled)
+
+    outcome = await MessageRuntime(MessagePlanner(registry), registry).execute(
+        replace(_context(), route_modules=frozenset({"third_party"})), bot="bot", event="event"
+    )
+
+    plugin_disabled.assert_awaited_once_with(
+        "third_party",
+        group_id=2,
+        bot_id=1,
+        bot="bot",
+        event="event",
+    )
+    assert outcome == HandlingOutcome(
+        handled=False,
+        handler_id="third_party.command",
+        fallback_to_matcher=True,
+        fallback_reason="plugin_disabled",
+    )
+    assert handler.calls == 0
 
 
 @pytest.mark.asyncio
