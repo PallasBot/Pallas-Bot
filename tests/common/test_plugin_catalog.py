@@ -5,16 +5,29 @@ import pytest
 from pallas.console.webui.plugin_catalog import (
     build_plugin_catalog_rows,
     catalog_plugin_source,
+    classify_distribution_source,
     discover_extra_plugin_packages,
     discover_plugin_packages,
     discover_pyproject_plugin_modules,
     expected_loaded_in_catalog_process,
     infer_plugin_source,
+    normalize_distribution_name,
     package_load_role,
     plugin_source_from_module_path,
     plugin_version,
     resolve_catalog_visuals,
 )
+
+
+def test_normalize_distribution_name_accepts_pypi_separators() -> None:
+    assert normalize_distribution_name("Pallas.Plugin.Maa") == "pallas-plugin-maa"
+    assert normalize_distribution_name("pallas_plugin_maa") == "pallas-plugin-maa"
+
+
+def test_classify_distribution_source_uses_plugin_prefixes() -> None:
+    assert classify_distribution_source("pallas_plugin_maa") == "official"
+    assert classify_distribution_source("nonebot_plugin_apscheduler") == "nonebot"
+    assert classify_distribution_source("sqlalchemy") is None
 
 
 def test_catalog_plugin_source_marks_registered_local_plugin_as_community(monkeypatch) -> None:
@@ -167,7 +180,7 @@ def test_catalog_lists_worker_plugin(monkeypatch):
     assert "duel" in by_name
     assert by_name["duel"]["load_role"] == "worker"
     assert by_name["duel"]["metadata"] is not None
-    assert by_name["duel"]["plugin_source"] == "extra"
+    assert by_name["duel"]["plugin_source"] == "official"
     assert by_name["duel"].get("extra_package") == "pallas-plugin-duel"
     assert by_name["duel"]["catalog_process_role"] == "hub"
     assert by_name["duel"]["expected_in_catalog_process"] is False
@@ -227,7 +240,7 @@ def test_catalog_lists_pyproject_apscheduler_on_hub(monkeypatch):
     by_name = {r["name"]: r for r in rows}
     assert "nonebot_plugin_apscheduler" in by_name
     row = by_name["nonebot_plugin_apscheduler"]
-    assert row["plugin_source"] == "pip"
+    assert row["plugin_source"] == "nonebot"
     assert row["load_role"] == "infra"
 
 
@@ -304,7 +317,7 @@ def test_catalog_marks_pyproject_plugin_with_config(monkeypatch) -> None:
     rows = build_plugin_catalog_rows()
     by_name = {r["name"]: r for r in rows}
 
-    assert by_name["acme_demo_plugin"]["plugin_source"] == "pip"
+    assert by_name["acme_demo_plugin"]["plugin_source"] == "nonebot"
     assert by_name["acme_demo_plugin"]["has_config"] is True
 
 
@@ -351,6 +364,7 @@ def test_catalog_exposes_resolved_identity_for_official_pip_plugin(monkeypatch) 
     assert row["resolved_module"] == "pallas_plugin_draw"
     assert row["configurable"] is True
     assert row["extra_package"] == "pallas-plugin-draw"
+    assert row["plugin_source"] == "official"
 
 
 def test_catalog_lists_unloaded_official_subplugins_from_package_modules(monkeypatch) -> None:
@@ -388,6 +402,7 @@ def test_catalog_lists_unloaded_official_subplugins_from_package_modules(monkeyp
     assert "sing" in by_name
     assert by_name["sing"]["module"] == "pallas_plugin_sing"
     assert by_name["sing"]["extra_package"] == "pallas-plugin-ai-media"
+    assert by_name["sing"]["plugin_source"] == "official"
 
 
 def test_catalog_row_reuses_official_extension_visuals(monkeypatch) -> None:

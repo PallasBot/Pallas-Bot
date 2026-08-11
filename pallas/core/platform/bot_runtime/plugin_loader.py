@@ -499,7 +499,7 @@ def load_plugins_for_role() -> None:
             loaded_short=loaded_short,
         )
 
-        pypi_extra, local_extra, community_extra, extra_extra = load_pyproject_extra_plugins(
+        nonebot_extra, local_extra, community_extra, extra_extra = load_pyproject_extra_plugins(
             role_label="unified",
             skip_short=unified_skip,
             loaded_short=loaded_short,
@@ -515,17 +515,17 @@ def load_plugins_for_role() -> None:
         register_startup_fact(
             "plugins",
             f"local={local_loaded + local_extra} src={loaded} official={pip_extra} "
-            f"pypi={pypi_extra} community={community_loaded + community_extra} "
+            f"nonebot={nonebot_extra} community={community_loaded + community_extra} "
             f"extra={extra_dir_loaded + extra_extra} skip={len(unified_skip)}",
         )
         register_startup_plugin_load_diagnostics()
         logger.debug(
-            "启动：unified local={} community={} src={} official={} pypi={} extra_dirs={} skip={}",
+            "启动：unified local={} community={} src={} official={} nonebot={} extra_dirs={} skip={}",
             local_loaded + local_extra,
             community_loaded,
             loaded,
             pip_extra,
-            pypi_extra,
+            nonebot_extra,
             extra_dir_loaded + extra_extra,
             sorted(unified_skip),
         )
@@ -566,7 +566,7 @@ def load_plugins_for_role() -> None:
             skip_short=frozenset(),
             loaded_short=loaded_short,
         )
-        pypi_extra, local_extra, community_extra, extra_extra = load_pyproject_extra_plugins(
+        nonebot_extra, local_extra, community_extra, extra_extra = load_pyproject_extra_plugins(
             role_label="hub",
             skip_short=merge_startup_skip_plugins(WORKER_SKIP_PLUGIN_NAMES),
             loaded_short=loaded_short,
@@ -576,18 +576,18 @@ def load_plugins_for_role() -> None:
         register_startup_fact(
             "plugins",
             f"local={local_loaded + local_extra} modules={loaded}/{bundled_total} official={pip_extra} "
-            f"pypi={pypi_extra} community={community_loaded + community_extra} "
+            f"nonebot={nonebot_extra} community={community_loaded + community_extra} "
             f"extra={extra_dir_loaded + extra_extra}",
         )
         register_startup_plugin_load_diagnostics()
         logger.debug(
-            "启动：hub local={} community={} modules={}/{} official={} pypi={} extra_dirs={}",
+            "启动：hub local={} community={} modules={}/{} official={} nonebot={} extra_dirs={}",
             local_loaded + local_extra,
             community_loaded,
             loaded,
             bundled_total,
             pip_extra,
-            pypi_extra,
+            nonebot_extra,
             extra_dir_loaded + extra_extra,
         )
         return
@@ -611,7 +611,7 @@ def load_plugins_for_role() -> None:
         loaded_short=loaded_short,
     )
 
-    pypi_extra, local_extra, community_extra, extra_extra = load_pyproject_extra_plugins(
+    nonebot_extra, local_extra, community_extra, extra_extra = load_pyproject_extra_plugins(
         role_label="worker",
         skip_short=worker_skip,
         loaded_short=loaded_short,
@@ -632,18 +632,18 @@ def load_plugins_for_role() -> None:
     register_startup_fact(
         "plugins",
         f"local={local_loaded + local_extra} src={loaded} official={pip_extra} "
-        f"pypi={pypi_extra} community={community_loaded + community_extra} "
+        f"nonebot={nonebot_extra} community={community_loaded + community_extra} "
         f"extra={extra_dir_loaded + extra_extra} skip={len(worker_skip)}",
     )
     register_startup_plugin_load_diagnostics()
     logger.debug(
-        "启动：worker shard={} local={} community={} src={} official={} pypi={} extra_dirs={} skip={}",
+        "启动：worker shard={} local={} community={} src={} official={} nonebot={} extra_dirs={} skip={}",
         s.shard_id,
         local_loaded + local_extra,
         community_loaded,
         loaded,
         pip_extra,
-        pypi_extra,
+        nonebot_extra,
         extra_dir_loaded + extra_extra,
         sorted(worker_skip),
     )

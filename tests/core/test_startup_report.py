@@ -117,7 +117,7 @@ def test_startup_summary_aggregates_plugin_ready_events() -> None:
 
     info_lines, warning_lines = startup_report.build_startup_summary_lines(base_lines=[])
 
-    assert "[Ready] Plugin [arcana] registered commands [Draw]." in info_lines
+    assert "[Ready] Plugin [arcana] registered commands [Draw]" in info_lines
     assert warning_lines == []
 
 
@@ -128,7 +128,7 @@ def test_startup_summary_lists_failed_and_slow_plugins() -> None:
     info_lines, warning_lines = startup_report.build_startup_summary_lines(
         base_lines=[],
         facts={
-            "plugins": "local=8 src=12 pip=12 extra=0 skip=2",
+            "plugins": "local=8 src=12 official=12 nonebot=0 extra=0 skip=2",
             "plugin_failures": "weather,bilibili",
             "plugin_slow": "ai_media=1.42,protocol=1.08",
         },
@@ -146,11 +146,11 @@ def test_format_helpers_cover_common_facts() -> None:
     assert startup_report._format_llm("ok v=4.0.0 provider=chain model=moonshot chat=enabled") == (
         "已就绪：版本 4.0.0，Provider chain，模型 moonshot，智能对话已启用"
     )
-    assert startup_report._format_plugins("local=8 src=12 official=12 pypi=3 community=4 extra=2 skip=2") == (
-        "已成功载入 41 个插件：本地 8，内置 12，官方 12，PyPI 3，社区 4，额外目录 2；跳过 2"
+    assert startup_report._format_plugins("local=8 src=12 official=12 nonebot=3 pypi=3 community=4 extra=2 skip=2") == (
+        "已成功载入 41 个插件：本地 8，内置 12，官方 12，NoneBot 3，社区 4，额外目录 2；跳过 2"
     )
     assert startup_report._format_plugins("local=1 modules=12/14 official=3 pypi=2 extra=0") == (
-        "已成功载入 18 个插件：本地 1，内置 12/14，官方 3，PyPI 2"
+        "已成功载入 16 个插件：本地 1，内置 12/14，官方 3"
     )
     assert (
         startup_report._format_ingress("prefix=74 exact=68 modules=13 strict=False")

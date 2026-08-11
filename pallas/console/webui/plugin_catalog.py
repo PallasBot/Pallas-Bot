@@ -6,6 +6,7 @@ import ast
 import importlib
 import importlib.metadata
 import importlib.util
+import re
 import tomllib
 from pathlib import Path  # noqa: TC003
 from typing import Any
@@ -30,7 +31,7 @@ from pallas.core.platform.plugin_runtime.plugin_identity import canonical_plugin
 
 _PLUGINS_ROOT = PROJECT_ROOT / "packages"
 
-PluginSourceKind = str  # "core" | "extra" | "bundled" | "community" | "local" | "pip"
+PluginSourceKind = str  # "core" | "bundled" | "official" | "community" | "nonebot" | "local"
 
 _INFRA_NAME_PREFIXES = (
     "nonebot",
@@ -47,6 +48,20 @@ _INFRA_EXACT = frozenset({
     "nonebot_plugin_alconna",
 })
 _BRAND_AVATAR_PATH = "/pallas/assets/brand-avatar.png"
+
+
+def normalize_distribution_name(name: str) -> str:
+    """按 PyPI 规范统一 distribution 名称。"""
+    return re.sub(r"[-_.]+", "-", str(name or "").strip().lower())
+
+
+def classify_distribution_source(name: str) -> PluginSourceKind | None:
+    normalized = normalize_distribution_name(name)
+    if normalized.startswith("pallas-plugin-"):
+        return "official"
+    if normalized.startswith("nonebot-plugin-"):
+        return "nonebot"
+    return None
 
 
 def discover_plugin_packages() -> list[str]:
@@ -424,9 +439,20 @@ def community_plugin_row_for_plugin(plugin_id: str) -> dict[str, Any] | None:
     return None
 
 
-def catalog_plugin_source(plugin_id: str, source: PluginSourceKind) -> PluginSourceKind:
+def catalog_plugin_source(
+    plugin_id: str,
+    source: PluginSourceKind,
+    *,
+    module_name: str = "",
+) -> PluginSourceKind:
     if source == "local" and community_plugin_row_for_plugin(plugin_id) is not None:
         return "community"
+    if source == "extra" or is_extra_plugin(plugin_id):
+        return "official"
+    if community_plugin_row_for_plugin(plugin_id) is not None:
+        return "community"
+    if source == "pip":
+        return classify_distribution_source(module_name) or classify_distribution_source(plugin_id) or source
     return source
 
 
@@ -621,7 +647,11 @@ def build_plugin_catalog_rows(
             file_path = getattr(mod, "__file__", "") if mod is not None else ""
             if file_path:
                 root = Path(file_path).resolve().parent
-        plugin_source = catalog_plugin_source(resolved_plugin_id, plugin_source)
+        plugin_source = catalog_plugin_source(
+            resolved_plugin_id,
+            plugin_source,
+            module_name=module_name,
+        )
         version = plugin_version(
             resolved_plugin_id,
             plugin_source,
@@ -721,7 +751,7 @@ def build_plugin_catalog_rows(
             meta=meta,
             loaded=loaded,
             role="infra",
-            plugin_source="pip",
+            plugin_source="nonebot",
             plugin_source_dir=None,
             has_config=module_has_config_module(module_name),
             loaded_plugin=p,
@@ -755,7 +785,7 @@ def build_plugin_catalog_rows(
                 meta=meta,
                 loaded=loaded,
                 role=package_load_role(resolved_plugin_id),
-                plugin_source="extra" if len(module_paths) == 1 else "pip",
+                plugin_source="official",
                 plugin_source_dir=None,
                 has_config=module_has_config_module(module_name),
                 loaded_plugin=p,
@@ -774,6 +804,13 @@ def build_plugin_catalog_rows(
             continue
         if not is_infrastructure_plugin_name(nb_name, module_name):
             continue
+        plugin_metadata = getattr(p, "metadata", None)
+        if (
+            classify_distribution_source(nb_name) is None
+            and classify_distribution_source(module_name) is None
+            and plugin_metadata is None
+        ):
+            continue
         pkg_key = short or nb_name
         seen_packages.add(pkg_key)
         _append_row(
@@ -783,7 +820,9 @@ def build_plugin_catalog_rows(
             meta=metadata_to_dict(getattr(p, "metadata", None)),
             loaded=True,
             role="infra",
-            plugin_source="pip",
+            plugin_source=(
+                classify_distribution_source(nb_name) or classify_distribution_source(module_name) or "nonebot"
+            ),
             plugin_source_dir=None,
             has_config=module_has_config_module(module_name),
             loaded_plugin=p,

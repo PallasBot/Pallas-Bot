@@ -155,10 +155,10 @@ def _format_plugins(raw: str) -> str:
     bundled_loaded = bundled_raw.split("/", 1)[0]
     bundled = int(bundled_loaded or 0)
     official = int(kv.get("official", kv.get("pip", "0")) or 0)
-    pypi = int(kv.get("pypi", "0") or 0)
+    nonebot = int(kv.get("nonebot", "0") or 0)
     community = int(kv.get("community", "0") or 0)
     extra = int(kv.get("extra", "0") or 0)
-    total = local + bundled + official + pypi + community + extra
+    total = local + bundled + official + nonebot + community + extra
     parts = []
     if local:
         parts.append(f"本地 {local}")
@@ -166,8 +166,8 @@ def _format_plugins(raw: str) -> str:
         parts.append(f"内置 {bundled_raw}")
     if official:
         parts.append(f"官方 {official}")
-    if pypi:
-        parts.append(f"PyPI {pypi}")
+    if nonebot:
+        parts.append(f"NoneBot {nonebot}")
     if community:
         parts.append(f"社区 {community}")
     if extra:

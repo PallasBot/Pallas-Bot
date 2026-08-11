@@ -188,10 +188,10 @@ def apply_asset_snapshot_to_rows(kind: str, rows: list[dict[str, Any]]) -> list[
         if kind == "official":
             plugin_ids = copied.get("plugin_ids") or []
             plugin_id = str(plugin_ids[0] if plugin_ids else copied.get("package") or "").strip()
-            plugin_source = "extra"
+            plugin_source = "official"
         else:
             plugin_id = str(copied.get("plugin_id") or "").strip()
-            plugin_source = "local" if copied.get("local_installed") else "pip"
+            plugin_source = "local" if copied.get("local_installed") else "community"
         if not plugin_id:
             out.append(copied)
             continue
