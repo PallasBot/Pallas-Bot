@@ -22,6 +22,12 @@ class LlmChatDirectHandler:
     async def handle(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome:
         if not self.accepts(context):
             return HandlingOutcome(handled=False, fallback_to_matcher=True)
+        if (
+            not context.plain_text.strip()
+            and not getattr(event, "reply", None)
+            and not str(event.get_message()).strip()
+        ):
+            return HandlingOutcome(handled=False, fallback_to_matcher=True, fallback_reason="empty_direct_mention")
         messages: list[object] = []
 
         async def send_message(message: object) -> None:
