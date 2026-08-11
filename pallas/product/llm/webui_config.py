@@ -38,18 +38,6 @@ def default_output_filter_chat_soft_phrases() -> list[str]:
     return list(CHAT_SOFT_RETRY_PHRASES)
 
 
-def default_output_filter_polish_lite_hard_phrases() -> list[str]:
-    from pallas.product.llm.output_filter import POLISH_LITE_HARD_BLOCK_PHRASES
-
-    return list(POLISH_LITE_HARD_BLOCK_PHRASES)
-
-
-def default_output_filter_polish_lite_soft_phrases() -> list[str]:
-    from pallas.product.llm.output_filter import POLISH_LITE_SOFT_RETRY_PHRASES
-
-    return list(POLISH_LITE_SOFT_RETRY_PHRASES)
-
-
 class LlmWebuiConfig(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -464,56 +452,6 @@ class LlmWebuiConfig(BaseModel):
             "每个分片 worker 各自计数；@ 对话与接话限流分开算",
         ),
     )
-    llm_repeater_group_cooldown_sec: int = Field(
-        default=60,
-        ge=0,
-        le=3600,
-        description=field_help(
-            "同一群两次「接话用模型」至少隔多少秒",
-            "默认 60。活跃群想少花钱可调大；0=不限制群冷却（可能很勤、很费）",
-            "只约束接话模型请求，不等于完全不复读语料",
-        ),
-    )
-    llm_repeater_strong_cooldown_sec: int = Field(
-        default=25,
-        ge=0,
-        le=3600,
-        description=field_help(
-            "强场景接话（更值得认真回的那种）两次用模型的最短间隔",
-            "默认 25 秒。想更克制调大；0=不限制。一般可小于普通群冷却",
-            "与普通群冷却配合：强场景有单独节奏，避免连发烧额度",
-        ),
-    )
-    llm_repeater_strong_attempt_rate: float = Field(
-        default=0.55,
-        ge=0.0,
-        le=1.0,
-        description=field_help(
-            "强场景里，大概多大比例会真的去调模型接话",
-            "默认 0.55（约 55%）。想更省调低；想更常认真回可调高到 0.7～0.8",
-            "未抽中时仍可能用语料等方式接话，但不走这次模型请求",
-        ),
-    )
-    llm_repeater_max_inflight: int = Field(
-        default=2,
-        ge=1,
-        le=32,
-        description=field_help(
-            "每个 worker 同时最多跑几路「接话」模型请求",
-            "默认 2。与「智能对话并发」分开。机器吃力就降到 1；过大易拖慢整机",
-            "和全局限流一起卡住高峰，避免接话把额度打爆",
-        ),
-    )
-    llm_repeater_global_rpm: int = Field(
-        default=18,
-        ge=1,
-        le=600,
-        description=field_help(
-            "整套实例每分钟最多多少次接话模型请求",
-            "默认 18。多群很吵可调低省钱；额度宽裕且延迟敏感可略增。别一上来拉到几百",
-            "配了 Redis 时是真正全局限流；否则按 worker 数量分摊估算",
-        ),
-    )
     llm_repeater_feedback_enabled: bool = Field(
         default=True,
         description=field_help(
@@ -603,22 +541,6 @@ class LlmWebuiConfig(BaseModel):
             "须开启「回复输出过滤」；与硬拦列表一起生效",
         ),
     )
-    llm_output_filter_polish_lite_hard_phrases: list[str] = Field(
-        default_factory=default_output_filter_polish_lite_hard_phrases,
-        description=field_help(
-            "轻润色专用的额外硬拦词（只影响「轻改口气」那条路径）",
-            "JSON 数组；会与上方对话硬拦合并后用于轻润色。只拦润色结果时可改这里",
-            "接话模式不是轻润色时，这些额外词基本用不上",
-        ),
-    )
-    llm_output_filter_polish_lite_soft_phrases: list[str] = Field(
-        default_factory=default_output_filter_polish_lite_soft_phrases,
-        description=field_help(
-            "轻润色专用的额外软拦词",
-            "JSON 数组；与对话软拦合并后用于轻润色。同样建议先软后硬",
-            "须开启输出过滤；仅作用于轻润色路径",
-        ),
-    )
     llm_persona_output_firewall: dict[str, object] = Field(
         default_factory=lambda: {
             "version": 1,
@@ -636,8 +558,8 @@ class LlmWebuiConfig(BaseModel):
     llm_reply_postprocess_enabled: bool = Field(
         default=False,
         description=field_help(
-            "发出前要不要做「错别字 / 拆成多条」等后处理",
-            "开=才会应用下面的错别字、拆条等子开关；关=不做这些花样（默认）",
+            "发出前要不要做「错别字 / 省略末尾句号」等后处理",
+            "开=才会应用下面的错别字、末尾句号等子开关；关=不做这些花样（默认）",
             "后处理结果不写回语料学习；想玩味道再开，日常可关",
         ),
     )
@@ -679,22 +601,6 @@ class LlmWebuiConfig(BaseModel):
             "每个字被改成近音错别字的概率（0～1）",
             "默认 0.01。建议 ≤0.03；0.1 已经很花。须同时开启后处理与「偶发错别字」",
             "调太高群友会觉得牛牛打字障碍",
-        ),
-    )
-    llm_reply_split_enabled: bool = Field(
-        default=False,
-        description=field_help(
-            "长回复要不要按句子拆成多条气泡发送",
-            "开=拆成多条；关=一条发完。须先开启回复后处理。想更像真人连发可开",
-            "拆太碎会刷屏，配合下方字数上限一起调",
-        ),
-    )
-    llm_reply_split_max_chars: int = Field(
-        default=36,
-        description=field_help(
-            "拆条时，每一小段大概不超过多少字",
-            "默认 36。想少拆几条就调大（如 60）；过小（如 10）会拆得很碎、很刷屏",
-            "须开启后处理与「按句拆条」",
         ),
     )
     llm_sticker_fit_enabled: bool = Field(
@@ -1032,11 +938,6 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         web_search_api_url=str(repo_env_raw_value("WEB_SEARCH_API_URL") or "").strip(),
         tavily_api_key=str(repo_env_raw_value("TAVILY_API_KEY") or "").strip(),
         llm_chat_max_concurrency=cfg.llm_chat_max_concurrency,
-        llm_repeater_group_cooldown_sec=cfg.llm_repeater_group_cooldown_sec,
-        llm_repeater_strong_cooldown_sec=cfg.llm_repeater_strong_cooldown_sec,
-        llm_repeater_strong_attempt_rate=cfg.llm_repeater_strong_attempt_rate,
-        llm_repeater_max_inflight=cfg.llm_repeater_max_inflight,
-        llm_repeater_global_rpm=cfg.llm_repeater_global_rpm,
         llm_repeater_feedback_enabled=cfg.llm_repeater_feedback_enabled,
         llm_repeater_bias_enabled=cfg.llm_repeater_bias_enabled,
         llm_repeater_writeback_enabled=cfg.llm_repeater_writeback_enabled,
@@ -1048,8 +949,6 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_output_filter_enabled=cfg.llm_output_filter_enabled,
         llm_output_filter_chat_hard_phrases=cfg.llm_output_filter_chat_hard_phrases,
         llm_output_filter_chat_soft_phrases=cfg.llm_output_filter_chat_soft_phrases,
-        llm_output_filter_polish_lite_hard_phrases=cfg.llm_output_filter_polish_lite_hard_phrases,
-        llm_output_filter_polish_lite_soft_phrases=cfg.llm_output_filter_polish_lite_soft_phrases,
         llm_persona_output_firewall=cfg.llm_persona_output_firewall,
         llm_reply_postprocess_enabled=cfg.llm_reply_postprocess_enabled,
         llm_reply_trim_terminal_period_enabled=cfg.llm_reply_trim_terminal_period_enabled,
@@ -1057,8 +956,6 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_reply_mention_cooldown_sec=cfg.llm_reply_mention_cooldown_sec,
         llm_reply_typo_enabled=cfg.llm_reply_typo_enabled,
         llm_reply_typo_rate=cfg.llm_reply_typo_rate,
-        llm_reply_split_enabled=cfg.llm_reply_split_enabled,
-        llm_reply_split_max_chars=cfg.llm_reply_split_max_chars,
         llm_sticker_fit_enabled=cfg.llm_sticker_fit_enabled,
         llm_chat_sticker_enabled=cfg.llm_chat_sticker_enabled,
         llm_chat_sticker_cooldown_sec=cfg.llm_chat_sticker_cooldown_sec,

@@ -15,8 +15,6 @@ class ConversationPath(StrEnum):
 class ConversationAction(StrEnum):
     SKIP = "skip"
     REPLY_CORPUS = "reply_corpus"
-    REPLY_REWRITE = "reply_rewrite"
-    REPLY_STITCH = "reply_stitch"
     REPLY_GENERATE = "reply_generate"
     SPEAK_GENERATE = "speak_generate"
 
@@ -39,9 +37,6 @@ class ConversationMode(StrEnum):
 
 
 class GenerationStage(StrEnum):
-    SELECT = "select"
-    REWRITE = "rewrite"
-    STITCH = "stitch"
     GENERATE = "generate"
 
 
@@ -99,14 +94,3 @@ def behavior_scene_to_conversation_scene(raw: str | ConversationScene) -> Conver
         if item.value == text:
             return item
     return ConversationScene.SMALLTALK
-
-
-def generation_stage_to_action(stage: str | GenerationStage) -> ConversationAction:
-    text = str(stage or "").strip().lower()
-    if text == GenerationStage.SELECT:
-        return ConversationAction.REPLY_CORPUS
-    if text in {GenerationStage.REWRITE, GenerationStage.STITCH}:
-        return ConversationAction.REPLY_REWRITE if text == GenerationStage.REWRITE else ConversationAction.REPLY_STITCH
-    if text == GenerationStage.GENERATE:
-        return ConversationAction.REPLY_GENERATE
-    return ConversationAction.SKIP

@@ -12,7 +12,7 @@ from pallas.product.llm.task_routing import (
 
 
 def test_resolve_submit_task_name_defaults() -> None:
-    assert resolve_submit_task_name("repeater_select") == "repeater_select"
+    assert resolve_submit_task_name("drunk") == "drunk"
     assert resolve_submit_task_name(None, "drunk") == "drunk"
     assert resolve_submit_task_name("", None) == "llm_chat"
 
@@ -58,29 +58,27 @@ async def test_resolve_task_route_bot_kernel_uses_providers_store(monkeypatch: p
     from pallas.product.llm.providers_store import clear_providers_store_cache, save_providers_document
 
     clear_providers_store_cache()
-    save_providers_document(
-        {
-            "providers": [
-                {
-                    "id": "primary",
-                    "kind": "remote",
-                    "base_url": "https://api.example.com/v1",
-                    "api_key": "sk-primary",
-                    "default_model": "model-a",
-                    "task_models": {"llm_chat": "model-a"},
-                },
-                {
-                    "id": "backup",
-                    "kind": "remote",
-                    "base_url": "https://backup.example.com/v1",
-                    "api_key": "sk-backup",
-                    "default_model": "model-b",
-                    "task_models": {"llm_chat": "model-b"},
-                },
-            ],
-            "routing": {"chain_fallback": ["primary", "backup"], "tasks": {"llm_chat": "primary"}},
-        }
-    )
+    save_providers_document({
+        "providers": [
+            {
+                "id": "primary",
+                "kind": "remote",
+                "base_url": "https://api.example.com/v1",
+                "api_key": "sk-primary",
+                "default_model": "model-a",
+                "task_models": {"llm_chat": "model-a"},
+            },
+            {
+                "id": "backup",
+                "kind": "remote",
+                "base_url": "https://backup.example.com/v1",
+                "api_key": "sk-backup",
+                "default_model": "model-b",
+                "task_models": {"llm_chat": "model-b"},
+            },
+        ],
+        "routing": {"chain_fallback": ["primary", "backup"], "tasks": {"llm_chat": "primary"}},
+    })
     cfg = LlmConfig(llm_runtime="bot_kernel", llm_model="", llm_base_url="")
     monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
 
@@ -107,37 +105,35 @@ async def test_resolve_task_route_chain_expands_provider_fallbacks(
     from pallas.product.llm.task_routing import resolve_task_route_chain
 
     clear_providers_store_cache()
-    save_providers_document(
-        {
-            "providers": [
-                {
-                    "id": "primary",
-                    "kind": "remote",
-                    "base_url": "https://api.example.com/v1",
-                    "api_key": "sk-primary",
-                    "default_model": "primary",
-                },
-                {
-                    "id": "fb1",
-                    "kind": "remote",
-                    "base_url": "https://fb1.example.com/v1",
-                    "api_key": "sk-1",
-                    "default_model": "fb-1",
-                },
-                {
-                    "id": "fb2",
-                    "kind": "remote",
-                    "base_url": "https://fb2.example.com/v1",
-                    "api_key": "sk-2",
-                    "default_model": "fb-2",
-                },
-            ],
-            "routing": {
-                "chain_fallback": ["primary", "fb1", "fb2"],
-                "tasks": {"llm_chat": "primary"},
+    save_providers_document({
+        "providers": [
+            {
+                "id": "primary",
+                "kind": "remote",
+                "base_url": "https://api.example.com/v1",
+                "api_key": "sk-primary",
+                "default_model": "primary",
             },
-        }
-    )
+            {
+                "id": "fb1",
+                "kind": "remote",
+                "base_url": "https://fb1.example.com/v1",
+                "api_key": "sk-1",
+                "default_model": "fb-1",
+            },
+            {
+                "id": "fb2",
+                "kind": "remote",
+                "base_url": "https://fb2.example.com/v1",
+                "api_key": "sk-2",
+                "default_model": "fb-2",
+            },
+        ],
+        "routing": {
+            "chain_fallback": ["primary", "fb1", "fb2"],
+            "tasks": {"llm_chat": "primary"},
+        },
+    })
     cfg = LlmConfig(llm_runtime="bot_kernel", llm_model="", llm_base_url="")
     monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
 
@@ -159,26 +155,24 @@ async def test_resolve_task_route_same_provider_tier_backup_model(
     from pallas.product.llm.providers_store import clear_providers_store_cache, save_providers_document
 
     clear_providers_store_cache()
-    save_providers_document(
-        {
-            "providers": [
-                {
-                    "id": "ds",
-                    "kind": "remote",
-                    "base_url": "https://api.example.com/v1",
-                    "api_key": "sk-ds",
-                    "default_model": "flash",
-                    "task_models": {"llm_chat": "flash"},
-                },
-            ],
-            "routing": {
-                "chain_fallback": ["ds"],
-                "tasks": {"llm_chat": "ds"},
-                "tier_backups": {"high": "ds"},
-                "tier_backup_models": {"high": "reasoner"},
+    save_providers_document({
+        "providers": [
+            {
+                "id": "ds",
+                "kind": "remote",
+                "base_url": "https://api.example.com/v1",
+                "api_key": "sk-ds",
+                "default_model": "flash",
+                "task_models": {"llm_chat": "flash"},
             },
-        }
-    )
+        ],
+        "routing": {
+            "chain_fallback": ["ds"],
+            "tasks": {"llm_chat": "ds"},
+            "tier_backups": {"high": "ds"},
+            "tier_backup_models": {"high": "reasoner"},
+        },
+    })
     cfg = LlmConfig(llm_runtime="bot_kernel", llm_model="", llm_base_url="")
     monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
 
@@ -197,26 +191,24 @@ async def test_turn_decision_uses_low_tier_provider_route(monkeypatch: pytest.Mo
     from pallas.product.llm.providers_store import clear_providers_store_cache, save_providers_document
 
     clear_providers_store_cache()
-    save_providers_document(
-        {
-            "providers": [
-                {
-                    "id": "fast",
-                    "kind": "remote",
-                    "base_url": "https://fast.example.com/v1",
-                    "api_key": "sk-fast",
-                    "default_model": "fast-model",
-                    "task_models": {"turn_decision": "decision-model"},
-                }
-            ],
-            "routing": {
-                "chain_fallback": ["fast"],
-                "tasks": {"turn_decision": "fast"},
-                "tier_backups": {"low": "fast"},
-                "tier_backup_models": {"low": "decision-backup"},
-            },
-        }
-    )
+    save_providers_document({
+        "providers": [
+            {
+                "id": "fast",
+                "kind": "remote",
+                "base_url": "https://fast.example.com/v1",
+                "api_key": "sk-fast",
+                "default_model": "fast-model",
+                "task_models": {"turn_decision": "decision-model"},
+            }
+        ],
+        "routing": {
+            "chain_fallback": ["fast"],
+            "tasks": {"turn_decision": "fast"},
+            "tier_backups": {"low": "fast"},
+            "tier_backup_models": {"low": "decision-backup"},
+        },
+    })
     monkeypatch.setattr(
         "pallas.product.llm.config.get_llm_config",
         lambda: LlmConfig(llm_runtime="bot_kernel", llm_model="", llm_base_url=""),

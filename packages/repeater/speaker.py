@@ -43,6 +43,7 @@ class Speaker:
         persona: ResolvedPersona,
         candidate_pool: list[Any],
         recently: deque[str],
+        reply_shape=None,
     ) -> Any:
         recent_list = list(recently)
         keyword_groups: defaultdict[str, list[Any]] = defaultdict(list)
@@ -50,7 +51,15 @@ class Speaker:
             keyword_groups[msg.keywords].append(msg)
 
         groups = list(keyword_groups.values())
-        group_weights = [speak_keyword_group_weight(group, persona, recent_speaks=recent_list) for group in groups]
+        group_weights = [
+            speak_keyword_group_weight(
+                group,
+                persona,
+                recent_speaks=recent_list,
+                reply_shape=reply_shape,
+            )
+            for group in groups
+        ]
         chosen_group = random.choices(groups, weights=group_weights, k=1)[0]
 
         msg_weights = [
@@ -58,6 +67,7 @@ class Speaker:
                 str(getattr(msg, "plain_text", None) or getattr(msg, "raw_message", "") or ""),
                 persona,
                 recent_speaks=recent_list,
+                reply_shape=reply_shape,
             )
             for msg in chosen_group
         ]
@@ -188,7 +198,13 @@ class Speaker:
             candidate_pool = pretend_msg or available_messages
 
             speak_persona = await resolve_persona(bot_id, group_id)
-            first_message = Speaker._pick_speak_message(speak_persona, candidate_pool, recently)
+            reply_shape = speak_persona.group_expression_profile.reply_shape
+            first_message = Speaker._pick_speak_message(
+                speak_persona,
+                candidate_pool,
+                recently,
+                reply_shape=reply_shape,
+            )
             speak = first_message.raw_message
             Speaker._recent_speak[group_id].append(speak)
 

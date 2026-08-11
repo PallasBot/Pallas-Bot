@@ -24,14 +24,12 @@ from pallas.core.platform.shard.coord.ai_task_registry import claim_ai_task_reco
 from pallas.product.llm.delivery import (
     deliver_llm_callback_success,
     deliver_llm_chat_result,
-    evaluate_repeater_callback_text,
     maybe_append_llm_repeater_feedback,
     track_llm_callback,
 )
 
 __all__ = [
     "deliver_llm_chat_result",
-    "evaluate_repeater_callback_text",
     "maybe_append_llm_repeater_feedback",
     "resolve_callback_task",
     "run_ai_callback",

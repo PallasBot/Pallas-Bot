@@ -7,10 +7,8 @@ import json
 import time
 from typing import TYPE_CHECKING, Any
 
-from fastapi import HTTPException
 from nonebot import logger
 
-from pallas.core.platform.ai_callback.task_types import REPEATER_SELECT_TASK_TYPE
 from pallas.product.llm.execution_budget import (
     LlmExecutionSlot,
     release_llm_execution_slot,
@@ -18,12 +16,6 @@ from pallas.product.llm.execution_budget import (
 )
 from pallas.product.llm.governance import LlmChatGovernance
 from pallas.product.llm.models import ChatSubmitRequest, ChatSubmitResult
-from pallas.product.llm.repeater_limit import (
-    check_repeater_llm_allowed,
-    refresh_repeater_group_cooldown,
-    release_repeater_llm_slot,
-    try_acquire_repeater_llm_slot,
-)
 from pallas.product.llm.tool_loop import complete_with_tool_loop
 
 if TYPE_CHECKING:
@@ -32,17 +24,6 @@ if TYPE_CHECKING:
 
 
 from pallas.product.llm.delivery import deliver_llm_chat_result
-
-
-def system_prompt_with_reply_target(system_prompt: str | None, metadata: dict[str, Any]) -> str | None:
-    from pallas.product.llm.current_turn_decision import build_reply_target_instruction
-
-    instruction = build_reply_target_instruction(metadata.get("reply_target"))
-    prompt = str(system_prompt or "").strip()
-    if instruction:
-        prompt = f"{prompt}\n\n【本轮回复目标】\n{instruction}".strip()
-    semantic_style_prompt_block = str(metadata.get("semantic_style_prompt_block") or "").strip()
-    return f"{prompt}\n\n{semantic_style_prompt_block}".strip() if semantic_style_prompt_block else (prompt or None)
 
 
 async def run_kernel_chat_job(
@@ -72,9 +53,8 @@ async def run_kernel_chat_job(
             )
             await deliver_llm_chat_result(request_id, status="success", text=direct_candidate)
             return
-        generation_system_prompt = system_prompt_with_reply_target(system_prompt, metadata)
         content, assistant_message = await complete_with_tool_loop(
-            system_prompt=generation_system_prompt,
+            system_prompt=system_prompt,
             messages=messages,
             metadata=metadata,
             cfg=cfg,
@@ -137,7 +117,7 @@ async def run_kernel_chat_job(
                 },
             ]
             content, assistant_message = await complete_with_tool_loop(
-                system_prompt=generation_system_prompt,
+                system_prompt=system_prompt,
                 messages=retry_messages,
                 metadata={**metadata, "persona_output_retry": 1},
                 cfg=cfg,
@@ -202,19 +182,6 @@ async def run_kernel_chat_job(
             delivery_kwargs["suppress_empty_fallback"] = True
         await deliver_llm_chat_result(request_id, **delivery_kwargs)
     except Exception as exc:
-        if (
-            isinstance(exc, HTTPException)
-            and exc.status_code == 404
-            and str(metadata.get("task") or "").strip() == REPEATER_SELECT_TASK_TYPE
-        ):
-            logger.info("llm kernel select superseded by local fallback: request_id={}", request_id)
-            from pallas.product.llm.runtime_debug import append_runtime_trace
-
-            append_runtime_trace(
-                request_id=request_id,
-                trace={"status": "superseded_by_local_fallback", "agent_trace": None},
-            )
-            return
         logger.exception("llm kernel chat failed: request_id={}", request_id)
         try:
             from pallas.product.llm.runtime_debug import append_runtime_trace
@@ -252,61 +219,6 @@ def schedule_kernel_chat_job(
             execution_slot=execution_slot,
         )
     )
-
-
-async def submit_kernel_repeater_chat_task(
-    request: ChatSubmitRequest,
-    *,
-    system_prompt: str | None,
-    messages: list[dict[str, Any]],
-    metadata: dict[str, Any],
-    timer: SlowPathTimer,
-    message_count: int,
-    cfg: LlmConfig,
-) -> ChatSubmitResult:
-    if request.bot_id is None or request.group_id is None:
-        timer.finish(status="missing_group", request_id=request.request_id)
-        return ChatSubmitResult(status="missing_group", ok=False)
-
-    tier = str(request.scene_tier or "weak").strip().lower() or "weak"
-    skip_reason = await check_repeater_llm_allowed(
-        int(request.bot_id),
-        int(request.group_id),
-        cfg=cfg,
-        scene_tier=tier,
-    )
-    if skip_reason:
-        timer.finish(status=skip_reason, request_id=request.request_id)
-        return ChatSubmitResult(status=skip_reason, ok=False)
-
-    slot = await try_acquire_repeater_llm_slot(cfg=cfg)
-    if slot is None:
-        timer.finish(status="repeater_busy", request_id=request.request_id)
-        return ChatSubmitResult(status="repeater_busy", ok=False)
-    try:
-        execution_slot = await try_acquire_llm_execution_slot(request.priority, cfg=cfg)
-    except Exception:
-        release_repeater_llm_slot(slot)
-        raise
-    if execution_slot is None:
-        release_repeater_llm_slot(slot)
-        timer.finish(status="shared_budget_busy", request_id=request.request_id)
-        return ChatSubmitResult(status="shared_budget_busy", ok=False)
-    try:
-        schedule_kernel_chat_job(
-            request.request_id,
-            system_prompt=system_prompt,
-            messages=messages,
-            metadata=metadata,
-            cfg=cfg,
-            execution_slot=execution_slot,
-        )
-        await refresh_repeater_group_cooldown(int(request.bot_id), int(request.group_id), scene_tier=tier)
-    finally:
-        release_repeater_llm_slot(slot)
-    timer.mark("kernel_schedule")
-    timer.finish(status="processing", request_id=request.request_id, message_count=message_count)
-    return ChatSubmitResult(task_id=request.request_id, status="processing", ok=True)
 
 
 async def submit_kernel_llm_chat_task(

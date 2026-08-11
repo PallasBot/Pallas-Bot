@@ -2,12 +2,33 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass
+
 from nonebot import logger
 from nonebot.adapters.onebot.v11 import Message, MessageSegment
 from nonebot.adapters.onebot.v11.exception import NetworkError
 from nonebot.exception import ActionFailed
 
 _CALLBACK_SEND_ERRORS = (ActionFailed, NetworkError)
+
+
+@dataclass(frozen=True)
+class DeliveryReceipt:
+    delivered: bool
+    message_id: int | None = None
+
+
+def parse_delivery_message_id(value: object) -> int | None:
+    candidate = value.get("message_id") if isinstance(value, Mapping) else getattr(value, "message_id", None)
+    if candidate is None:
+        data = value.get("data") if isinstance(value, Mapping) else getattr(value, "data", None)
+        candidate = data.get("message_id") if isinstance(data, Mapping) else getattr(data, "message_id", None)
+    try:
+        parsed = int(candidate)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
 
 
 def build_group_text_message(
@@ -31,6 +52,24 @@ async def send_group_message(
     reply_to_message_id: int | None = None,
     at_user_id: int | None = None,
 ) -> bool:
+    receipt = await send_group_message_with_receipt(
+        bot,
+        group_id,
+        message,
+        reply_to_message_id=reply_to_message_id,
+        at_user_id=at_user_id,
+    )
+    return receipt.delivered
+
+
+async def send_group_message_with_receipt(
+    bot,
+    group_id: int,
+    message: str,
+    *,
+    reply_to_message_id: int | None = None,
+    at_user_id: int | None = None,
+) -> DeliveryReceipt:
     outgoing = build_group_text_message(
         message,
         reply_to_message_id=reply_to_message_id,
@@ -43,7 +82,7 @@ async def send_group_message(
         len(message or ""),
     )
     try:
-        await bot.call_api(
+        result = await bot.call_api(
             "send_group_msg",
             **{
                 "message": outgoing,
@@ -56,10 +95,13 @@ async def send_group_message(
             group_id,
             len(message or ""),
         )
-        return True
+        return DeliveryReceipt(
+            delivered=True,
+            message_id=parse_delivery_message_id(result),
+        )
     except _CALLBACK_SEND_ERRORS as e:
         logger.warning("AI callback send_group_msg failed group={}: {}", group_id, e)
-        return False
+        return DeliveryReceipt(delivered=False)
 
 
 async def send_group_image(bot, group_id: int, image_bytes: bytes, *, at_user_id: int | None = None) -> bool:

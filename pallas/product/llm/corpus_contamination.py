@@ -139,14 +139,6 @@ FILLER_ONLY_REPLIES: frozenset[str] = frozenset({
     "额？",
 })
 
-POLISH_LITE_HARD_BLOCK_PHRASES: tuple[str, ...] = (
-    "继续聊",
-    "希望每个庆典",
-    "罗德岛的干员",
-)
-
-POLISH_LITE_SOFT_RETRY_PHRASES: tuple[str, ...] = ("换个话题",)
-
 
 @dataclass(frozen=True, slots=True)
 class CorpusContaminationHit:
