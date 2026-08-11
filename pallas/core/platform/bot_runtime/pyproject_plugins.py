@@ -59,7 +59,7 @@ def extra_plugin_dirs_for_role(
     *,
     skip_default_local: bool = True,
 ) -> list[str]:
-    """worker 用：排除已在代码里扫描的 src/plugins。"""
+    """worker 用：排除已由加载器扫描的 packages 目录。"""
     default = _DEFAULT_LOCAL_PLUGIN_DIR.rstrip("/")
     out: list[str] = []
     for d in plugin_dirs:

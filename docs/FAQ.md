@@ -193,7 +193,7 @@ A: **不能混为一谈。** LLM 聊天固定走 Bot 内核 Provider，在 **AI 
 
 ### 3.x 的 `src/plugins` 插件在 4.0 还能用吗？
 
-A: **不能沿用旧路径。** 4.0 已移除 `src/` 目录；内置玩法迁至 **`packages/`** 与 **`pallas-plugin-*` 官方插件**，社区插件应使用 **`pallas.api.*`** 与 **`packages/<name>/` 或 `local/plugins/`** 布局。从 3.x 升级请读 [4.0 迁移指南](/guide/4.0-migration)。
+A: **不能沿用旧加载目录。** 3.x 的 NoneBot `plugin_dirs` 指向 `src/plugins/`；4.0 已改为 `packages/`，不会再扫描 `src/plugins/`。内置玩法迁至 **`packages/`** 与 **`pallas-plugin-*` 官方插件**；站点私有插件放 `local/plugins/`，社区插件应使用 **`pallas.api.*`**。从 3.x 升级请读 [4.0 迁移指南](/guide/4.0-migration)。
 
 ### 社区作者如何只依赖内核、不克隆整仓？
 

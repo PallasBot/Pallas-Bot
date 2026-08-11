@@ -128,12 +128,35 @@ async def fetch_index_from_url(url: str) -> tuple[str, dict[str, Any], list[dict
     return f"url:{url}", meta, plugins
 
 
+def cache_community_plugin_index(meta: dict[str, Any], plugins: list[dict[str, Any]]) -> None:
+    path = PROJECT_ROOT / LOCAL_INDEX_REL
+    payload_plugins: list[dict[str, Any]] = []
+    for plugin in plugins:
+        cached = dict(plugin)
+        cached["id"] = cached.pop("plugin_id", "")
+        cached["repository"] = cached.pop("repository_url", "")
+        payload_plugins.append(cached)
+    payload = {**meta, "plugins": payload_plugins}
+    temp_path = path.with_name(f".{path.name}.tmp")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temp_path.replace(path)
+    except OSError as e:
+        logger.warning("社区插件索引缓存写入失败：{}", e)
+        try:
+            temp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 async def load_community_plugin_index() -> dict[str, Any]:
     """返回 { source, meta, plugins }。远程索引失败时回退本地文件。"""
     url = community_plugin_index_url()
     if url:
         try:
             source, meta, plugins = await fetch_index_from_url(url)
+            cache_community_plugin_index(meta, plugins)
             return {"source": source, "meta": meta, "plugins": plugins}
         except CommunityIndexError as e:
             logger.warning("社区插件索引远程拉取失败，回退本地：{}", e.detail)
