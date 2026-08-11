@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+
+from pallas.product.llm.models import StructuredChatReply
 
 _FENCE_OPEN_RE = re.compile(r"^```(?:json)?\s*", re.IGNORECASE)
 _FENCE_CLOSE_RE = re.compile(r"\s*```$")
@@ -22,14 +23,25 @@ _ALLOWED_ASCII_PUNCT = frozenset(".,?!;:'\"()-_~`@#&+*=%^/\n\t \r")
 _EMPTY_MEM_TOKENS = frozenset({"无", "none", "n/a", "null", "无内容", "无可记"})
 
 
-@dataclass(frozen=True, slots=True)
-class StructuredReply:
-    reply: str
-    intent: str = ""
-    reasoning: str = ""
-    mem: str = ""
-    sticker: str = "none"
-    from_json: bool = False
+StructuredReply = StructuredChatReply
+
+
+def _normalize_sticker_intent(value: object) -> str:
+    if str(value or "").strip().lower() == "send":
+        return "send"
+    if not isinstance(value, dict):
+        return "none"
+    from pallas.product.llm.sticker_labels import ACTION_VOCABULARY, EMOTION_VOCABULARY, TONE_VOCABULARY
+
+    tokens: list[str] = []
+    for key, vocabulary in (("emotion", EMOTION_VOCABULARY), ("action", ACTION_VOCABULARY), ("tone", TONE_VOCABULARY)):
+        raw = value.get(key)
+        supplied = {str(item).strip() for item in raw} if isinstance(raw, list) else {str(raw or "").strip()}
+        tokens.extend(f"{key}:{item}" for item in vocabulary if item in supplied)
+    usage = value.get("usage")
+    values = usage if isinstance(usage, list) else [usage]
+    tokens.extend(f"usage:{str(item).strip()[:160]}" for item in values if str(item or "").strip())
+    return " ".join(tokens) or "none"
 
 
 def _strip_fences(text: str) -> str:
@@ -56,10 +68,30 @@ def _looks_like_plain_chat(text: str) -> bool:
     return True
 
 
-def parse_structured_reply(raw: str) -> StructuredReply:
+def _segments_from_json(data: dict[object, object]) -> tuple[str, ...]:
+    legacy_reply = data.get("reply")
+    if legacy_reply is not None:
+        if not isinstance(legacy_reply, str):
+            return ()
+        reply = legacy_reply.strip()
+        return () if _is_pass_reply(reply) else (reply,) if reply else ()
+    raw_segments = data.get("reply_segments")
+    if not isinstance(raw_segments, list):
+        return ()
+    if not raw_segments or any(not isinstance(item, str) for item in raw_segments):
+        return ()
+    segments = tuple(item.strip() for item in raw_segments)
+    if any(not item or _is_pass_reply(item) or not validate_reply_chars(item)[0] for item in segments):
+        return ()
+    if len(segments) <= 3:
+        return segments
+    return (*segments[:2], "\n".join(segments[2:]))
+
+
+def parse_structured_reply(raw: str) -> StructuredChatReply:
     """解析模型原始输出。JSON 缺 reply / 半截对象 → 空 reply（fail-closed）。"""
     if not raw or not str(raw).strip():
-        return StructuredReply(reply="")
+        return StructuredChatReply()
     s = _strip_fences(str(raw))
     data = None
     try:
@@ -72,43 +104,39 @@ def parse_structured_reply(raw: str) -> StructuredReply:
             except json.JSONDecodeError:
                 data = None
     if isinstance(data, dict):
-        reply = str(data.get("reply") or "").strip()
-        if _is_pass_reply(reply):
-            reply = ""
+        reply_segments = _segments_from_json(data)
         intent = str(data.get("intent") or "").strip().lower()
         reasoning = str(data.get("reasoning") or "").strip()
         mem_raw = data.get("mem")
         mem = str(mem_raw).strip() if mem_raw is not None else ""
         if mem.lower() in _EMPTY_MEM_TOKENS:
             mem = ""
-        sticker = str(data.get("sticker") or "").strip().lower()
-        if sticker != "send":
-            sticker = "none"
-        return StructuredReply(
-            reply=reply,
+        sticker_intent = _normalize_sticker_intent(data.get("sticker"))
+        return StructuredChatReply(
+            reply_segments=reply_segments,
             intent=intent,
             reasoning=reasoning,
             mem=mem,
-            sticker=sticker,
+            sticker_intent=sticker_intent,
             from_json=True,
         )
     if "{" in s:
-        return StructuredReply(reply="")
+        return StructuredChatReply()
     plain = str(raw).strip()
     if _is_pass_reply(plain):
-        return StructuredReply(reply="")
+        return StructuredChatReply()
     if _REASONING_PREFIX_RE.match(plain):
-        return StructuredReply(reply="")
+        return StructuredChatReply()
     if _looks_like_plain_chat(plain):
-        return StructuredReply(reply=plain)
+        return StructuredChatReply.single(plain)
     if plain and not any(ch in _BAD_TOKEN_CHARS for ch in plain) and len(plain) <= 200:
-        return StructuredReply(reply=plain)
-    return StructuredReply(reply="")
+        return StructuredChatReply.single(plain)
+    return StructuredChatReply()
 
 
 def normalize_model_reply(raw: str) -> str:
     """返回可进入后续过滤的可见回复；空串表示不发。"""
-    return parse_structured_reply(raw).reply
+    return parse_structured_reply(raw).logical_text
 
 
 def validate_reply_chars(text: str) -> tuple[bool, str]:

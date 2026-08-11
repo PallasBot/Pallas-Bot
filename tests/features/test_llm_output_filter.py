@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from pallas.core.platform.ai_callback.task_types import (
-    LLM_CHAT_TASK_TYPE,
-    REPEATER_POLISH_LITE_TASK_TYPE,
-)
+from pallas.core.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE
 from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.output_filter import (
     CHAT_HARD_BLOCK_PHRASES,
@@ -38,20 +35,6 @@ def test_match_output_filter_chat_soft_retry() -> None:
     assert hit is not None
     assert hit.tier == "soft_retry"
     assert hit.phrase == "很高兴"
-
-
-def test_match_output_filter_polish_lite_merges_tiers() -> None:
-    hit = match_output_filter("那就继续聊吧", "polish_lite")
-    assert hit is not None
-    assert hit.tier == "hard_block"
-
-
-def test_resolve_output_filtered_reply_uses_fallback() -> None:
-    task = {
-        "task_type": REPEATER_POLISH_LITE_TASK_TYPE,
-        "fallback_text": "好耶",
-    }
-    assert resolve_output_filtered_reply(task, "要不要继续聊？") == "好耶"
 
 
 def test_resolve_output_filtered_reply_silent_without_fallback() -> None:

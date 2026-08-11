@@ -93,7 +93,7 @@ async def test_submit_chat_task_unified_settings_schedule_kernel(monkeypatch: py
     assert metadata["task"] == "drunk"
     assert metadata["task_route"]["task"] == "drunk"
     assert metadata["task_route"]["source"] == "config"
-    assert metadata["token_count"] == 50
+    assert metadata["token_count"] == 240
     assert submit_kernel.await_args.kwargs["messages"][-1]["content"].startswith("【用户消息")
 
 
@@ -146,6 +146,87 @@ async def test_submit_chat_task_unified_llm_chat_payload_includes_agent_stage_pl
     assert "本轮牛格塑形" in str(metadata.get("persona_affect_block") or "")
     assert metadata.get("persona_shaping_active") is True
     assert metadata["hybrid_retrieval_trace"]["memory"]["hit_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_serious_reply_budget_reaches_responses_provider_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm.inference_params import chat_reply_token_budget
+    from pallas.product.llm.provider_client import messages_to_responses_payload
+    from pallas.product.llm.tool_loop import inference_options_from_metadata
+
+    submit_kernel = AsyncMock(return_value=ChatSubmitResult(task_id="task-serious", status="processing", ok=True))
+    monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_llm_chat_task", submit_kernel)
+    monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: False)
+    monkeypatch.setattr(
+        "pallas.product.llm.assembler.assemble_tool_bundle",
+        lambda **_kwargs: {"tools_enabled": False, "tool_schemas": []},
+    )
+
+    result = await submit_chat_task(
+        ChatSubmitRequest(
+            request_id="req-serious-budget",
+            session_id="sess-serious-budget",
+            user_text="我有点难过，想认真聊聊",
+            system_prompt="system",
+            task="llm_chat",
+            token_count=chat_reply_token_budget("serious"),
+        ),
+        cfg=LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True),
+    )
+
+    assert result.ok is True
+    metadata = submit_kernel.await_args.kwargs["metadata"]
+    options = inference_options_from_metadata(metadata)
+    payload = messages_to_responses_payload(
+        submit_kernel.await_args.kwargs["messages"],
+        model="gpt-5",
+        options=options,
+        tools=None,
+    )
+    assert metadata["token_count"] == 256
+    assert payload["max_output_tokens"] == 256
+
+
+@pytest.mark.asyncio
+async def test_tool_reply_budget_reaches_anthropic_provider_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm.inference_params import chat_reply_token_budget
+    from pallas.product.llm.provider_client import messages_to_anthropic_payload
+    from pallas.product.llm.tool_loop import inference_options_from_metadata
+
+    submit_kernel = AsyncMock(return_value=ChatSubmitResult(task_id="task-tool", status="processing", ok=True))
+    monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_llm_chat_task", submit_kernel)
+    monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: False)
+    monkeypatch.setattr(
+        "pallas.product.llm.assembler.assemble_tool_bundle",
+        lambda **_kwargs: {
+            "tools_enabled": True,
+            "tool_schemas": [{"type": "function", "function": {"name": "lookup", "parameters": {}}}],
+        },
+    )
+
+    result = await submit_chat_task(
+        ChatSubmitRequest(
+            request_id="req-tool-budget",
+            session_id="sess-tool-budget",
+            user_text="帮我查一下",
+            system_prompt="system",
+            task="llm_chat",
+            token_count=chat_reply_token_budget("tool"),
+        ),
+        cfg=LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True),
+    )
+
+    assert result.ok is True
+    metadata = submit_kernel.await_args.kwargs["metadata"]
+    options = inference_options_from_metadata(metadata)
+    payload = messages_to_anthropic_payload(
+        submit_kernel.await_args.kwargs["messages"],
+        model="claude-sonnet-4-5",
+        options=options,
+        tools=metadata["tool_schemas"],
+    )
+    assert metadata["token_count"] == 512
+    assert payload["max_tokens"] == 512
 
 
 @pytest.mark.asyncio
@@ -333,71 +414,6 @@ async def test_submit_chat_task_rejects_when_llm_chat_disabled() -> None:
     )
     assert result.ok is False
     assert result.status == "llm_chat_disabled"
-
-
-@pytest.mark.asyncio
-async def test_resolve_chat_messages_repeater_skips_pg_history(monkeypatch: pytest.MonkeyPatch) -> None:
-    async def fail_build(*_args, **_kwargs):
-        raise AssertionError("repeater should not load pg session history")
-
-    monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: True)
-    monkeypatch.setattr("pallas.product.llm.client.build_llm_chat_messages", fail_build)
-
-    messages = await resolve_chat_messages(
-        ChatSubmitRequest(
-            request_id="req-rp",
-            session_id="repeater_fb_1_2_3",
-            user_text="你好",
-            system_prompt="system",
-            bot_id=10001,
-            group_id=20002,
-            user_id=30003,
-            task="repeater_fallback",
-        ),
-        cfg=LlmConfig(llm_chat_enabled=True),
-    )
-    assert len(messages) == 1
-    assert messages[0].role == "user"
-    assert "你好" in messages[0].content
-
-
-@pytest.mark.asyncio
-async def test_submit_chat_task_repeater_payload_has_single_message(monkeypatch: pytest.MonkeyPatch) -> None:
-    submit_kernel = AsyncMock(return_value=ChatSubmitResult(task_id="task-rp", status="processing", ok=True))
-    monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_repeater_chat_task", submit_kernel)
-    monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: True)
-
-    async def fake_route_chain(task: str, *, explicit_model: str | None = None) -> list[TaskRouteSpec]:
-        _ = explicit_model
-        return [
-            TaskRouteSpec(
-                task=task,
-                resolved_model="qwen3:14b",
-                provider_hint="local",
-                source="ai_health",
-            )
-        ]
-
-    monkeypatch.setattr("pallas.product.llm.client.resolve_task_route_chain", fake_route_chain)
-
-    cfg = LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True, llm_governance_enabled=False)
-    result = await submit_chat_task(
-        ChatSubmitRequest(
-            request_id="req-rp2",
-            session_id="repeater_pl_1_2_3",
-            user_text="【候选回复】原句",
-            system_prompt="system",
-            bot_id=10001,
-            group_id=20002,
-            user_id=30003,
-            task="repeater_polish",
-        ),
-        cfg=cfg,
-    )
-    assert result.ok is True
-    assert len(submit_kernel.await_args.kwargs["messages"]) == 1
-    assert submit_kernel.await_args.kwargs["metadata"]["resolved_model"] == "qwen3:14b"
-    assert submit_kernel.await_args.kwargs["metadata"]["task_route"]["task"] == "repeater_polish"
 
 
 @pytest.mark.asyncio

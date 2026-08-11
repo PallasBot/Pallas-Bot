@@ -1,41 +1,61 @@
-"""由群风格画像派生温度与句长预算。"""
+"""按账号表达气质派生温度，并按任务复杂度分配输出预算。"""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal, cast
 
 if TYPE_CHECKING:
     from pallas.product.persona.model import ResolvedPersona
 
 _BASE_TEMPERATURE = 0.55
-_LENGTH_TOKEN_MAP: dict[str, int] = {
-    "short": 128,
-    "medium": 240,
-    "long": 360,
-    "any": 240,
+ChatReplyBudgetBand = Literal["casual", "serious", "tool"]
+TaskBudgetKey = Literal[
+    "llm_chat",
+    "chat",
+    "drunk",
+    "affect_refine",
+    "memory_extract",
+    "turn_decision",
+    "repeater.semantic_style",
+    "sticker_vision",
+    "vision_messages",
+    "memory_graph_extract",
+    "memory_graph_hiergraph",
+    "catchphrase_extract",
+    "offline_quality_eval",
+]
+
+_TASK_TOKEN_BUDGETS: dict[TaskBudgetKey, int] = {
+    "llm_chat": 240,
+    "chat": 240,
+    "drunk": 240,
+    "affect_refine": 512,
+    "memory_extract": 160,
+    "turn_decision": 48,
+    "repeater.semantic_style": 96,
+    "sticker_vision": 32,
+    "vision_messages": 256,
+    "memory_graph_extract": 1200,
+    "memory_graph_hiergraph": 1500,
+    "catchphrase_extract": 200,
+    "offline_quality_eval": 96,
 }
-# 带 tool 查证时需列出数据并口语化总结，短于该值易在句中硬截断。
-_CHAT_TOOLS_TOKEN_FLOOR = 280
+_CHAT_TOOLS_TOKEN_BUDGET = 360
+_CHAT_REPLY_TOKEN_BUDGETS: dict[ChatReplyBudgetBand, int] = {
+    "casual": _TASK_TOKEN_BUDGETS["llm_chat"],
+    "serious": 256,
+    "tool": 512,
+}
 
 
 def derive_llm_inference_params(
     persona: ResolvedPersona,
     *,
     mode: str = "normal",
-    purpose: str = "chat",
 ) -> tuple[float | None, int | None]:
     """返回温度与句长上限；醉酒模式不传温度。"""
     if str(mode or "normal").strip().lower() == "drunk":
-        return None, token_count_for_persona(persona, purpose=purpose)
-
-    if purpose == "select":
-        return 0.28, token_count_for_persona(persona, purpose=purpose)
-
-    if purpose == "polish_lite":
-        return 0.35, token_count_for_persona(persona, purpose=purpose)
-
-    if purpose == "fallback_lite":
-        return 0.42, token_count_for_persona(persona, purpose=purpose)
+        return None, task_token_budget("chat")
 
     temperature = _BASE_TEMPERATURE
     temperature += float(persona.chaos_bias) * 0.25
@@ -45,28 +65,51 @@ def derive_llm_inference_params(
     temperature -= max(0.0, -float(persona.warmth)) * 0.05
     temperature -= max(0.0, -float(persona.bluntness)) * 0.03
     temperature = max(0.2, min(1.1, temperature))
-    return temperature, token_count_for_persona(persona, purpose=purpose)
+    return temperature, task_token_budget("llm_chat")
 
 
-def token_count_for_persona(persona: ResolvedPersona, *, purpose: str = "chat") -> int:
-    length_pref = str(persona.length_pref or "any").strip().lower()
-    base = _LENGTH_TOKEN_MAP.get(length_pref, _LENGTH_TOKEN_MAP["any"])
-    if purpose == "polish":
-        return min(base, 96)
-    if purpose == "select":
-        return 48
-    if purpose == "polish_lite":
-        return 80
-    if purpose == "fallback_lite":
-        return min(base, 128)
-    if purpose == "fallback":
-        return min(base, 160)
+def task_token_budget(
+    task: TaskBudgetKey,
+    *,
+    tools_enabled: bool = False,
+    operation: Literal["", "vision"] = "",
+) -> int:
+    normalized = str(task).strip().lower()
+    if normalized not in _TASK_TOKEN_BUDGETS:
+        raise ValueError(f"unknown LLM task budget key: {normalized or '<empty>'}")
+    key = cast("TaskBudgetKey", normalized)
+    base = _TASK_TOKEN_BUDGETS[key]
+    if tools_enabled and normalized in {"llm_chat", "chat"}:
+        return _CHAT_TOOLS_TOKEN_BUDGET
+    if normalized == "repeater.semantic_style" and str(operation).strip().lower() == "vision":
+        return 100
     return base
 
 
-def chat_token_count_with_tools(token_count: int | None, *, tools_enabled: bool) -> int | None:
-    if token_count is None:
-        return _CHAT_TOOLS_TOKEN_FLOOR if tools_enabled else None
-    if tools_enabled:
-        return max(int(token_count), _CHAT_TOOLS_TOKEN_FLOOR)
-    return int(token_count)
+def chat_reply_token_budget(band: ChatReplyBudgetBand) -> int:
+    normalized = str(band or "").strip().lower()
+    if normalized not in _CHAT_REPLY_TOKEN_BUDGETS:
+        raise ValueError(f"unknown chat reply budget band: {normalized or '<empty>'}")
+    return _CHAT_REPLY_TOKEN_BUDGETS[cast("ChatReplyBudgetBand", normalized)]
+
+
+def resolve_task_token_budget(
+    task: str,
+    *,
+    tools_enabled: bool,
+    requested: int | None,
+) -> int:
+    normalized = str(task or "").strip().lower()
+    if normalized not in _TASK_TOKEN_BUDGETS:
+        raise ValueError(f"unknown LLM task budget key: {normalized or '<empty>'}")
+    key = cast("TaskBudgetKey", normalized)
+    budget = task_token_budget(key, tools_enabled=tools_enabled)
+    if normalized in {"llm_chat", "chat", "drunk"}:
+        if requested is None:
+            return budget
+        max_band: ChatReplyBudgetBand = "tool" if tools_enabled else "serious"
+        requested_budget = min(chat_reply_token_budget(max_band), max(1, int(requested)))
+        return max(budget, requested_budget)
+    if requested is not None:
+        return max(1, int(requested))
+    return budget

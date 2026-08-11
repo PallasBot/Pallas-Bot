@@ -27,6 +27,33 @@ _SCENE_STYLE: dict[ConversationScene, tuple[str, DriftLevel, int]] = {
 }
 
 
+def normalize_scene_label(scene: ConversationScene | str | None) -> str:
+    value = str(getattr(scene, "value", scene) or "").strip().lower()
+    known = {item.value for item in ConversationScene}
+    if value in known:
+        return value
+    return "unknown"
+
+
+def scene_seriousness(scene: ConversationScene | str | None) -> str:
+    label = normalize_scene_label(scene)
+    if label == ConversationScene.PROVOCATION.value:
+        return "conflict"
+    if label in {ConversationScene.VENTING.value, ConversationScene.LIGHT_HELP.value}:
+        return "serious"
+    if label in {item.value for item in ConversationScene}:
+        return "casual"
+    return "serious"
+
+
+def scene_allows_affection(scene: ConversationScene | str | None) -> bool:
+    return normalize_scene_label(scene) not in {"unknown", ConversationScene.PROVOCATION.value}
+
+
+def scene_allows_teasing(scene: ConversationScene | str | None) -> bool:
+    return scene_seriousness(scene) == "casual"
+
+
 def resolve_scene_style_constraints(
     scene: ConversationScene | str | None,
     mode: ConversationMode = ConversationMode.NORMAL,

@@ -11,8 +11,13 @@ from pallas.api.perm import group_message_permission_for_command
 from pallas.core.foundation.config import TaskManager
 from pallas.core.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE
 from pallas.product.llm import ChatSubmitRequest, get_llm_config, is_llm_chat_service_enabled, submit_chat_task
-from pallas.product.llm.assembler import assemble_tool_bundle
-from pallas.product.llm.assembler.context import assemble_direct_chat_context
+from pallas.product.llm.assembler import (
+    ChatPromptAssembler,
+    ResolvedGroupExpression,
+    ToolPromptContext,
+    assemble_tool_bundle,
+)
+from pallas.product.llm.assembler.context import ChatContextBundle, assemble_direct_chat_context
 from pallas.product.llm.behavior import (
     build_behavior_hint_text,
     classify_behavior_scene,
@@ -24,7 +29,6 @@ from pallas.product.llm.current_turn_decision import (
     CurrentTurnAction,
     CurrentTurnDecisionInput,
     decide_current_turn_with_model,
-    resolve_reply_target,
     should_include_recent_pair_for_turn,
     should_read_persistent_memory_for_turn,
 )
@@ -50,10 +54,12 @@ from pallas.product.llm.message_guard import normalize_llm_chat_user_text
 from pallas.product.llm.persona_context import build_persona_llm_context
 from pallas.product.llm.reply_gate import evaluate_llm_reply_gate_result, reply_gate_skip_metric
 from pallas.product.llm.reply_necessity import evaluate_reply_necessity_gate
+from pallas.product.llm.reply_shape import resolve_reply_shape
 from pallas.product.llm.reply_variation import should_wait_for_more
 from pallas.product.llm.session_store import list_user_llm_messages
 from pallas.product.llm.speak_perception import evaluate_speak_perception, speak_perception_metrics
 from pallas.product.llm.task_metrics import record_bot_llm_task
+from pallas.product.llm.turn_policy import resolve_turn_policy
 from pallas.product.persona.peer_bots_prompt import save_peer_alias_from_teach
 from pallas.product.persona.self_identity import (
     extract_self_aliases,
@@ -74,6 +80,30 @@ from .replies import (
     LLM_CHAT_RELATIONSHIP_SAVED_REPLY,
     LLM_CHAT_VAGUE_REPLY,
 )
+
+
+async def load_recent_bot_plain_replies(bot_id: int, group_id: int, *, limit: int = 6) -> list[str]:
+    from pallas.core.foundation.db import make_message_repository
+
+    repo = make_message_repository()
+    try:
+        messages = await repo.find_recent_in_group(int(group_id), before_time=int(time.time()) + 1, limit=48)
+    except Exception:
+        return []
+
+    out: list[str] = []
+    for msg in messages:
+        user_id = int(getattr(msg, "user_id", 0) or 0)
+        message_bot_id = int(getattr(msg, "bot_id", 0) or 0)
+        if user_id != int(bot_id) and message_bot_id != int(bot_id):
+            continue
+        plain = str(getattr(msg, "plain_text", "") or "").strip()
+        if not plain or "[CQ:" in plain:
+            continue
+        out.append(plain)
+        if len(out) >= max(1, int(limit)):
+            break
+    return out
 
 
 def llm_chat_rule(event: Event) -> bool:
@@ -316,7 +346,6 @@ async def handle_llm_chat(
             group_id,
             plain or msg,
             mode="normal",
-            purpose="chat",
             base_system_path=cfg.llm_chat_system_prompt_path or None,
         )
         persona_bundle = bundle
@@ -414,8 +443,6 @@ async def handle_llm_chat(
     recent_turns = await list_user_llm_messages(int(bot.self_id), group_id, user_id, limit=6)
     recent_reply_texts: list[str] = []
     if group_id is not None:
-        from pallas.product.llm.repeater_persona_context import load_recent_bot_plain_replies
-
         try:
             recent_reply_texts = await load_recent_bot_plain_replies(
                 int(bot.self_id),
@@ -439,13 +466,6 @@ async def handle_llm_chat(
         user_text=focus_text,
         recent_texts=recent_plain,
         has_multi_party_overlap=has_multi_party,
-    )
-    from pallas.product.llm.situational_rules import enrich_system_with_situational_rules
-
-    system_prompt = enrich_system_with_situational_rules(
-        system_prompt,
-        focus_text=focus_text,
-        recent_texts=recent_plain,
     )
     conversation_scene = behavior_scene_to_conversation_scene(behavior_scene)
     recent_bot_reply_count = len(recent_reply_texts)
@@ -532,15 +552,16 @@ async def handle_llm_chat(
             user_id,
         )
         return
-    reply_target = resolve_reply_target(
-        focus_text,
-        action=current_turn_decision.action,
-        social_action=current_turn_decision.social_action,
-    )
     if bool(getattr(llm_cfg, "llm_current_turn_decision_enabled", False)) and (
         current_turn_decision.action is not CurrentTurnAction.TOOL
     ):
         tool_meta = {**tool_meta, "tools_enabled": False, "tool_schemas": []}
+    turn_policy = resolve_turn_policy(
+        current_turn_decision,
+        conversation_scene,
+        tools_enabled=bool(tool_meta.get("tools_enabled")),
+    )
+    reply_target = turn_policy.reply_target
     include_persistent_history = should_read_persistent_memory_for_turn(
         focus_text,
         current_turn_decision.social_action,
@@ -563,22 +584,29 @@ async def handle_llm_chat(
     )
     direct_context_started = time.perf_counter()
     assembled_context = await assemble_direct_chat_context(
-        system_prompt,
         bot_id=int(bot.self_id),
         group_id=group_id,
         user_id=user_id,
         query_text=focus_text,
         cfg=llm_cfg,
         allow_persistent_memory=include_persistent_history,
-        allow_expression_reference=not bool(semantic_style.prompt_block),
     )
     pre_submit_context_durations_ms["direct_context"] = int((time.perf_counter() - direct_context_started) * 1000)
     for stage, duration in getattr(assembled_context, "stage_durations_ms", {}).items():
         if isinstance(duration, (int, float)):
             pre_submit_context_durations_ms[str(stage)] = max(0, int(duration))
-    system_prompt = assembled_context.system_prompt
-    knowledge_retrieval_trace = assembled_context.knowledge_retrieval_trace
-    hybrid_retrieval_trace = assembled_context.hybrid_retrieval_trace
+    if isinstance(assembled_context, ChatContextBundle):
+        chat_context = assembled_context
+    else:
+        chat_context = ChatContextBundle(
+            memory=str(getattr(assembled_context, "system_prompt", "") or ""),
+            knowledge_retrieval_trace=dict(getattr(assembled_context, "knowledge_retrieval_trace", {}) or {}),
+            hybrid_retrieval_trace=dict(getattr(assembled_context, "hybrid_retrieval_trace", {}) or {}),
+            relationship_trace=dict(getattr(assembled_context, "relationship_trace", {}) or {}),
+            stage_durations_ms=dict(getattr(assembled_context, "stage_durations_ms", {}) or {}),
+        )
+    knowledge_retrieval_trace = chat_context.knowledge_retrieval_trace
+    hybrid_retrieval_trace = chat_context.hybrid_retrieval_trace
     direct_decision = decide_direct_chat_action(
         direct_ctx,
         feature_level=resolve_conversation_feature_level(llm_cfg),
@@ -623,6 +651,50 @@ async def handle_llm_chat(
                 persona_dict = persona_raw
         except Exception:
             persona_dict = None
+    group_expression_profile = None
+    if persona_bundle is not None:
+        try:
+            from pallas.product.persona.model import ResolvedPersona
+
+            persona_raw = persona_bundle.metadata.persona
+            if isinstance(persona_raw, dict):
+                group_expression_profile = ResolvedPersona(**persona_raw).group_expression_profile
+        except Exception:
+            group_expression_profile = None
+    reply_shape = resolve_reply_shape(turn_policy, group_expression_profile)
+    semantic_examples = list(getattr(semantic_style, "matched_examples", []) or [])[:2]
+    group_expression = ResolvedGroupExpression(
+        style_anchor=str(getattr(semantic_style, "style_anchor", "") or ""),
+        matched_examples=[
+            (str(item[0] or ""), str(item[1] or ""))
+            for item in semantic_examples
+            if isinstance(item, (list, tuple)) and len(item) == 2
+        ],
+    )
+    core_persona = system_prompt
+    if persona_bundle is not None:
+        core_persona = str(getattr(getattr(persona_bundle, "sections", None), "base", "") or core_persona).strip()
+    self_identity = ""
+    if persona_bundle is not None:
+        self_identity = str(getattr(getattr(persona_bundle, "sections", None), "self_identity", "") or "")
+    if not self_identity:
+        from pallas.product.persona.self_identity import compile_self_identity_prompt
+
+        self_identity = compile_self_identity_prompt()
+
+    system_prompt = ChatPromptAssembler().assemble(
+        core_persona=core_persona,
+        self_identity=self_identity,
+        turn_policy=turn_policy,
+        context=chat_context,
+        group_expression=group_expression,
+        reply_shape=reply_shape,
+        tool_context=ToolPromptContext(
+            action_tools_enabled=bool(tool_meta.get("tool_schemas")),
+            ask_before_call=bool(tool_meta.get("ask_before_call")),
+            missing_required_params=dict(tool_meta.get("missing_required_params") or {}),
+        ),
+    )
     login_nickname_started = time.perf_counter()
     login_nick = await resolve_login_nickname(int(bot.self_id))
     pre_submit_context_durations_ms["login_nickname"] = int((time.perf_counter() - login_nickname_started) * 1000)
@@ -670,6 +742,8 @@ async def handle_llm_chat(
             "behavior_pattern_ids": [item.pattern_id for item in behavior_patterns],
             "behavior_actions": [str(item.action) for item in behavior_patterns],
             "behavior_hint": behavior_hint,
+            "semantic_style_source_example_id": getattr(semantic_style, "source_example_id", "") or None,
+            "semantic_style_direct_candidate": semantic_style.direct_candidate or None,
             "reply_max_length": int(scene_constraints.max_length or 0),
             "start_time": time.time(),
             "self_aliases": self_aliases[:8],
@@ -710,8 +784,8 @@ async def handle_llm_chat(
                 "pre_submit_duration_ms": int((time.perf_counter() - route_started) * 1000),
                 "pre_submit_stage_durations_ms": pre_submit_stage_durations_ms,
                 "pre_submit_context_durations_ms": pre_submit_context_durations_ms,
-                "semantic_style_prompt_block": semantic_style.prompt_block or None,
                 "semantic_style_direct_candidate": semantic_style.direct_candidate or None,
+                "semantic_style_source_example_id": getattr(semantic_style, "source_example_id", "") or None,
             },
             tool_metadata=tool_meta,
         ),

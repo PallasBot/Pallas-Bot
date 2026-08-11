@@ -1,126 +1,164 @@
 from __future__ import annotations
 
+import ast
+from pathlib import Path
+
+import pytest
+
 from pallas.product.llm.config import (
     LlmConfig,
-    resolve_llm_polish_lite_enabled,
-    resolve_llm_repeater_flags,
-    resolve_llm_repeater_mode,
 )
-from pallas.product.llm.inference_params import chat_token_count_with_tools, derive_llm_inference_params
+from pallas.product.llm.inference_params import (
+    chat_reply_token_budget,
+    derive_llm_inference_params,
+    resolve_task_token_budget,
+    task_token_budget,
+)
+from pallas.product.llm.tool_loop import inference_options_from_metadata
+from pallas.product.persona.account_profile import AccountPersonaProfile
 from pallas.product.persona.model import ResolvedPersona
 
 
-def test_derive_llm_inference_params_short_persona() -> None:
-    persona = ResolvedPersona(length_pref="short", chaos_bias=0.0, warmth=0.0, assertiveness=0.0)
-    temperature, token_count = derive_llm_inference_params(persona, mode="normal", purpose="chat")
+def test_derive_llm_inference_params_uses_chat_task_budget() -> None:
+    persona = ResolvedPersona(chaos_bias=0.0, warmth=0.0, assertiveness=0.0)
+    temperature, token_count = derive_llm_inference_params(persona, mode="normal")
     assert temperature == 0.55
-    assert token_count == 128
+    assert token_count == 240
 
 
 def test_derive_llm_inference_params_chaotic_warm() -> None:
-    persona = ResolvedPersona(length_pref="long", chaos_bias=0.4, warmth=0.3, assertiveness=0.2)
-    temperature, token_count = derive_llm_inference_params(persona, mode="normal", purpose="fallback")
+    persona = ResolvedPersona(chaos_bias=0.4, warmth=0.3, assertiveness=0.2)
+    temperature, token_count = derive_llm_inference_params(persona, mode="normal")
     assert temperature is not None
     assert temperature > 0.55
-    assert token_count == 160
+    assert token_count == 240
 
 
 def test_derive_llm_inference_params_drunk_skips_temperature() -> None:
-    persona = ResolvedPersona(length_pref="medium")
-    temperature, token_count = derive_llm_inference_params(persona, mode="drunk", purpose="chat")
+    persona = ResolvedPersona()
+    temperature, token_count = derive_llm_inference_params(persona, mode="drunk")
     assert temperature is None
     assert token_count == 240
 
 
-def test_derive_llm_inference_params_polish_caps_tokens() -> None:
-    persona = ResolvedPersona(length_pref="long")
-    _, token_count = derive_llm_inference_params(persona, mode="normal", purpose="polish")
-    assert token_count == 96
+@pytest.mark.parametrize(
+    ("task", "tools_enabled", "expected"),
+    [
+        ("llm_chat", False, 240),
+        ("llm_chat", True, 360),
+        ("affect_refine", False, 512),
+        ("memory_extract", False, 160),
+        ("turn_decision", False, 48),
+        ("repeater.semantic_style", False, 96),
+        ("sticker_vision", False, 32),
+        ("vision_messages", False, 256),
+        ("memory_graph_extract", False, 1200),
+        ("memory_graph_hiergraph", False, 1500),
+        ("catchphrase_extract", False, 200),
+        ("offline_quality_eval", False, 96),
+    ],
+)
+def test_task_token_budget(task: str, tools_enabled: bool, expected: int) -> None:
+    assert task_token_budget(task, tools_enabled=tools_enabled) == expected
 
 
-def test_derive_llm_inference_params_select() -> None:
-    persona = ResolvedPersona(length_pref="long", chaos_bias=0.5)
-    temperature, token_count = derive_llm_inference_params(persona, mode="normal", purpose="select")
-    assert temperature == 0.28
-    assert token_count == 48
+def test_account_profile_does_not_change_token_budget() -> None:
+    quiet = ResolvedPersona(account_profile=AccountPersonaProfile(restraint=1.0))
+    lively = ResolvedPersona(account_profile=AccountPersonaProfile(energy=1.0, mischief=1.0))
+    assert derive_llm_inference_params(quiet)[1] == derive_llm_inference_params(lively)[1] == 240
 
 
-def test_derive_llm_inference_params_polish_lite() -> None:
-    persona = ResolvedPersona(length_pref="long")
-    temperature, token_count = derive_llm_inference_params(persona, mode="normal", purpose="polish_lite")
-    assert temperature == 0.35
-    assert token_count == 80
+@pytest.mark.parametrize(
+    ("band", "tools_enabled", "expected"),
+    [
+        ("casual", False, 240),
+        ("serious", False, 256),
+        ("tool", True, 512),
+    ],
+)
+def test_chat_reply_budget_reaches_final_task_resolution(
+    band: str,
+    tools_enabled: bool,
+    expected: int,
+) -> None:
+    requested = chat_reply_token_budget(band)  # type: ignore[arg-type]
+    resolved = resolve_task_token_budget("llm_chat", tools_enabled=tools_enabled, requested=requested)
+
+    assert requested == expected
+    assert resolved == expected
+    assert inference_options_from_metadata({"token_count": resolved})["num_predict"] == expected
 
 
-def test_derive_llm_inference_params_fallback_lite() -> None:
-    persona = ResolvedPersona(length_pref="long")
-    temperature, token_count = derive_llm_inference_params(persona, mode="normal", purpose="fallback_lite")
-    assert temperature == 0.42
-    assert token_count == 128
+def test_unknown_chat_reply_budget_band_raises() -> None:
+    with pytest.raises(ValueError, match="unknown chat reply budget band"):
+        chat_reply_token_budget("verbose")  # type: ignore[arg-type]
 
 
-def test_chat_token_count_with_tools_floor() -> None:
-    assert chat_token_count_with_tools(128, tools_enabled=True) == 280
-    assert chat_token_count_with_tools(128, tools_enabled=False) == 128
-    assert chat_token_count_with_tools(None, tools_enabled=True) == 280
-    assert chat_token_count_with_tools(None, tools_enabled=False) is None
+def test_chat_explicit_budget_is_capped_at_tool_reply_band() -> None:
+    assert resolve_task_token_budget("llm_chat", tools_enabled=True, requested=9999) == 512
 
 
-def test_resolve_llm_repeater_mode_defaults_to_off(monkeypatch) -> None:
-    monkeypatch.setattr("pallas.product.llm.config.repo_env_raw_value", lambda key: None)
-    assert resolve_llm_repeater_mode() == "off"
-    assert resolve_llm_repeater_flags() == (False, False, False)
-    assert resolve_llm_polish_lite_enabled() is False
+@pytest.mark.parametrize("task", ["llm_chat", "drunk"])
+def test_tool_reply_budget_requires_tools_enabled(task: str) -> None:
+    requested = chat_reply_token_budget("tool")
+
+    assert resolve_task_token_budget(task, tools_enabled=False, requested=requested) == 256
+    assert resolve_task_token_budget(task, tools_enabled=True, requested=requested) == 512
 
 
-def test_llm_config_defaults_to_retired_repeater_assist_off() -> None:
-    assert LlmConfig().llm_repeater_mode == "off"
-    assert LlmConfig().llm_select_enabled is False
+def test_semantic_vision_has_separate_complexity_budget() -> None:
+    assert task_token_budget("repeater.semantic_style", operation="vision") == 100
 
 
-def test_resolve_llm_repeater_mode_ignores_legacy_flags(monkeypatch) -> None:
-    def fake_raw(key: str) -> str | None:
-        values = {
-            "LLM_REPEATER_MODE": "",
-            "LLM_FALLBACK_ENABLED": "true",
-            "LLM_POLISH_ENABLED": "false",
-        }
-        raw = values.get(key)
-        return raw or None
-
-    monkeypatch.setattr("pallas.product.llm.config.repo_env_raw_value", fake_raw)
-    assert resolve_llm_repeater_mode() == "off"
-    assert resolve_llm_repeater_flags() == (False, False, False)
+def test_unknown_task_token_budget_raises() -> None:
+    with pytest.raises(ValueError, match="unknown LLM task budget key"):
+        task_token_budget("llm_caht")  # type: ignore[arg-type]
 
 
-def test_resolve_llm_repeater_mode_disables_legacy_values(monkeypatch) -> None:
-    def fake_raw(key: str) -> str | None:
-        values = {
-            "LLM_REPEATER_MODE": "both",
-            "LLM_FALLBACK_ENABLED": "false",
-            "LLM_POLISH_ENABLED": "false",
-        }
-        return values.get(key)
-
-    monkeypatch.setattr("pallas.product.llm.config.repo_env_raw_value", fake_raw)
-    assert resolve_llm_repeater_mode() == "off"
-    assert resolve_llm_repeater_flags() == (False, False, False)
+def test_non_chat_explicit_budget_is_preserved_after_task_validation() -> None:
+    assert resolve_task_token_budget("memory_extract", tools_enabled=False, requested=192) == 192
 
 
-def test_resolve_llm_repeater_mode_disables_explicit_polish(monkeypatch) -> None:
-    def fake_raw(key: str) -> str | None:
-        return "polish" if key == "LLM_REPEATER_MODE" else None
-
-    monkeypatch.setattr("pallas.product.llm.config.repo_env_raw_value", fake_raw)
-    assert resolve_llm_repeater_mode() == "off"
-    assert resolve_llm_repeater_flags() == (False, False, False)
-    assert resolve_llm_polish_lite_enabled() is False
+def test_unknown_submit_task_does_not_hide_behind_explicit_budget() -> None:
+    with pytest.raises(ValueError, match="unknown LLM task budget key"):
+        resolve_task_token_budget("memory_extrcat", tools_enabled=False, requested=192)
 
 
-def test_resolve_llm_repeater_mode_disables_legacy_select_fallback(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "pallas.product.llm.config.repo_env_raw_value",
-        lambda key: "select_fallback" if key == "LLM_REPEATER_MODE" else None,
-    )
-    assert resolve_llm_repeater_mode() == "off"
-    assert resolve_llm_repeater_flags() == (False, False, False)
+@pytest.mark.parametrize(
+    "relative_path",
+    [
+        "pallas/product/llm/sticker_vision.py",
+        "pallas/product/llm/vision_messages.py",
+        "pallas/product/llm/memory/auto_episode.py",
+        "pallas/product/llm/memory/graph/extract.py",
+        "pallas/product/llm/memory/graph/hiergraph.py",
+        "pallas/product/persona/catchphrase_extract.py",
+        "pallas/product/persona/affect_refine_client.py",
+        "pallas/product/llm/offline_quality_eval.py",
+        "pallas/product/llm/current_turn_decision.py",
+        "pallas/product/llm/repeater_semantic_style.py",
+    ],
+)
+def test_internal_llm_jobs_do_not_hardcode_provider_token_budget(relative_path: str) -> None:
+    tree = ast.parse(Path(relative_path).read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Dict):
+            continue
+        for key, value in zip(node.keys, node.values, strict=True):
+            if isinstance(key, ast.Constant) and key.value in {"max_tokens", "num_predict"}:
+                assert not isinstance(value, ast.Constant) or not isinstance(value.value, int), relative_path
+
+
+def test_llm_config_omits_retired_repeater_mode() -> None:
+    retired = {
+        "llm_repeater_mode",
+        "llm_fallback_enabled",
+        "llm_polish_enabled",
+        "llm_select_enabled",
+        "llm_select_max_candidates",
+        "llm_polish_lite_enabled",
+        "llm_polish_lite_sample_rate",
+        "llm_output_filter_polish_lite_hard_phrases",
+        "llm_output_filter_polish_lite_soft_phrases",
+    }
+    assert retired.isdisjoint(LlmConfig.model_fields)
