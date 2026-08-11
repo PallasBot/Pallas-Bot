@@ -86,7 +86,10 @@ class WorkJobWorker:
             await self._fail_or_dead_letter(job, f"unknown job kind: {job.kind}")
             return None
         lease_task = asyncio.create_task(self._renew_lease(job), name=f"work_job_lease:{job.id}")
-        handler_task = asyncio.create_task(handler(job.payload), name=f"work_job_handler:{job.id}")
+        payload = dict(job.payload)
+        if job.kind == "sticker.label.visual":
+            payload["job_id"] = job.id
+        handler_task = asyncio.create_task(handler(payload), name=f"work_job_handler:{job.id}")
         try:
             done, _ = await asyncio.wait((handler_task, lease_task), return_when=asyncio.FIRST_COMPLETED)
             if handler_task in done:

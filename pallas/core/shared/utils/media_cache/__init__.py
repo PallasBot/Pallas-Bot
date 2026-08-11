@@ -70,6 +70,7 @@ async def handle_image_cache_capture(payload: dict[str, object]) -> None:
             raise RuntimeError(f"image cache download failed status={getattr(rsp, 'status_code', None)}")
         values = {
             "cq_code": cq_code,
+            "content_hash": hashlib.sha256(rsp.content).hexdigest(),
             "blob_data": rsp.content,
             "ref_times": 1,
             "date": int(str(datetime.now().date()).replace("-", "")),
@@ -183,6 +184,17 @@ async def get_image(cq_code) -> bytes | None:
     if not cache:
         return None
     return cache.blob_data
+
+
+async def bind_image_content_hash(cq_code: str, content: bytes) -> str:
+    content_hash = hashlib.sha256(content).hexdigest()
+    await image_cache_repo.bind_content_hash(cq_code, content_hash)
+    return content_hash
+
+
+async def get_image_by_content_hash(content_hash: str) -> bytes | None:
+    cache = await image_cache_repo.find_by_content_hash(content_hash)
+    return bytes(cache.blob_data) if cache and cache.blob_data else None
 
 
 async def get_latest_image() -> bytes | None:

@@ -17,6 +17,8 @@ class WorkJobStore(Protocol):
 
     async def enqueue_many(self, jobs: list[WorkJob]) -> list[WorkJob]: ...
 
+    async def requeue_terminal(self, job: WorkJob) -> WorkJob: ...
+
     async def claim(self, *, owner: str, lease_sec: float) -> WorkJob | None: ...
 
     async def claim_many(self, *, owner: str, lease_sec: float, limit: int) -> list[WorkJob]: ...
@@ -60,6 +62,26 @@ class MemoryWorkJobStore:
 
     async def enqueue_many(self, jobs: list[WorkJob]) -> list[WorkJob]:
         return [await self.enqueue(job) for job in jobs]
+
+    async def requeue_terminal(self, job: WorkJob) -> WorkJob:
+        """只重新激活同一幂等键的终态任务；活跃租约仍保持唯一。"""
+        async with self._lock:
+            existing_id = self._idempotency.get(job.idempotency_key)
+            if existing_id is None:
+                self._jobs[job.id] = job
+                self._idempotency[job.idempotency_key] = job.id
+                self._available_at[job.id] = time.monotonic()
+                self._enqueued_at[job.id] = time.monotonic()
+                return replace(job, reactivated=True)
+            if existing_id in self._completed or existing_id in self._dead_lettered:
+                current = self._jobs[existing_id]
+                refreshed = replace(job, id=existing_id, created_at=current.created_at, attempts=0)
+                self._jobs[existing_id] = refreshed
+                self._completed.discard(existing_id)
+                self._dead_lettered.discard(existing_id)
+                self._available_at[existing_id] = time.monotonic()
+                return replace(refreshed, reactivated=True)
+            return replace(self._jobs[existing_id], reactivated=False)
 
     async def claim(self, *, owner: str, lease_sec: float) -> WorkJob | None:
         now = time.monotonic()

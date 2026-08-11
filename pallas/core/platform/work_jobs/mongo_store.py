@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 import uuid
+from dataclasses import replace
 
 from pymongo import ReturnDocument
 
@@ -47,6 +48,34 @@ class MongoWorkJobStore:
 
     async def enqueue_many(self, jobs: list[WorkJob]) -> list[WorkJob]:
         return [await self.enqueue(job) for job in jobs]
+
+    async def requeue_terminal(self, job: WorkJob) -> WorkJob:
+        from pallas.core.foundation.db.modules import BackgroundJob
+
+        now = time.time()
+        collection = BackgroundJob.get_pymongo_collection()
+        raw = await collection.find_one_and_update(
+            {"idempotency_key": job.idempotency_key, "status": {"$in": ["done", "dead_letter"]}},
+            {
+                "$set": {
+                    "kind": job.kind,
+                    "payload": job.payload,
+                    "status": "pending",
+                    "attempts": 0,
+                    "available_at": now,
+                    "finished_at": None,
+                    "last_error": None,
+                    "lease_owner": None,
+                    "lease_id": None,
+                    "leased_until": None,
+                }
+            },
+            return_document=ReturnDocument.AFTER,
+        )
+        if raw:
+            return replace(work_job_from_mongo(BackgroundJob.model_validate(raw)), reactivated=True)
+        result = await self.enqueue(job)
+        return replace(result, reactivated=result.id == job.id)
 
     async def claim(self, *, owner: str, lease_sec: float) -> WorkJob | None:
         from pallas.core.foundation.db.modules import BackgroundJob

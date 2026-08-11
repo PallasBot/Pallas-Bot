@@ -267,6 +267,7 @@ class BaseImageCache(Document):
 
 class ImageCache(BaseImageCache):
     cq_code: str = Field(...)
+    content_hash: str | None = None
     # 原生二进制 blob（PG BYTEA / Mongo Binary）。在 PG 后端通过 SQLAlchemy LargeBinary 映射；
     # 这里只声明语义类型，具体 DDL 由各 repository 的 ORM 模型负责。
     blob_data: bytes | None = None
@@ -275,7 +276,29 @@ class ImageCache(BaseImageCache):
     class Settings(BaseImageCache.Settings):
         name = "image_cache"
         collection = "image_cache"
-        indexes = [IndexModel([("cq_code", pymongo.HASHED)], name="cq_code_index")]
+        indexes = [
+            IndexModel([("cq_code", pymongo.HASHED)], name="cq_code_index"),
+            IndexModel([("content_hash", pymongo.HASHED)], name="content_hash_index"),
+        ]
+
+
+class StickerLabel(Document):
+    """按原始内容哈希缓存的表情语义标签。"""
+
+    content_hash: str = Field(...)
+    is_sticker: bool = Field(...)
+    confidence: float = Field(...)
+    prompt_version: int = Field(...)
+    labeled_at: int = Field(...)
+    label_json: dict = Field(...)
+
+    class Settings:
+        name = "sticker_label"
+        collection = "sticker_label"
+        indexes = [
+            IndexModel([("content_hash", pymongo.ASCENDING)], name="content_hash_unique", unique=True),
+            IndexModel([("labeled_at", pymongo.DESCENDING), ("content_hash", pymongo.ASCENDING)], name="list_index"),
+        ]
 
 
 class LlmChatMessage(Document):

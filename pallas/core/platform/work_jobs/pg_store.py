@@ -4,11 +4,43 @@ from __future__ import annotations
 
 import time
 import uuid
+from dataclasses import replace
 
 from sqlalchemy import func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from .models import WorkJob
+
+
+def build_requeue_terminal_statement(job: WorkJob, *, now: float):
+    from pallas.core.foundation.db.repository_pg import BackgroundJobRow
+
+    stmt = pg_insert(BackgroundJobRow).values(
+        id=job.id,
+        kind=job.kind,
+        payload=job.payload,
+        idempotency_key=job.idempotency_key,
+        status="pending",
+        attempts=0,
+        available_at=now,
+        created_at=job.created_at,
+    )
+    return stmt.on_conflict_do_update(
+        index_elements=["idempotency_key"],
+        set_={
+            "kind": stmt.excluded.kind,
+            "payload": stmt.excluded.payload,
+            "status": "pending",
+            "attempts": 0,
+            "available_at": now,
+            "finished_at": None,
+            "last_error": None,
+            "lease_owner": None,
+            "lease_id": None,
+            "leased_until": None,
+        },
+        where=BackgroundJobRow.status.in_(("done", "dead_letter")),
+    ).returning(BackgroundJobRow)
 
 
 class PostgresWorkJobStore:
@@ -81,6 +113,33 @@ class PostgresWorkJobStore:
             for key in keys
             if (row := by_key.get(key)) is not None
         ]
+
+    async def requeue_terminal(self, job: WorkJob) -> WorkJob:
+        from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
+
+        now = time.time()
+        async with get_session() as session:
+            row = (await session.execute(build_requeue_terminal_statement(job, now=now))).scalar_one_or_none()
+            reactivated = row is not None
+            if row is None:
+                row = (
+                    await session.execute(
+                        select(BackgroundJobRow)
+                        .where(BackgroundJobRow.idempotency_key == job.idempotency_key)
+                        .with_for_update()
+                    )
+                ).scalar_one()
+            result = WorkJob(
+                row.id,
+                row.kind,
+                dict(row.payload or {}),
+                row.idempotency_key,
+                row.created_at,
+                row.attempts,
+                row.lease_id,
+            )
+            await session.commit()
+        return replace(result, reactivated=reactivated)
 
     async def claim(self, *, owner: str, lease_sec: float) -> WorkJob | None:
         from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
