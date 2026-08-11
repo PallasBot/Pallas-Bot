@@ -15,6 +15,19 @@ def llm_provider_ready() -> bool | None:
     return _llm_provider_ready
 
 
+def build_llm_startup_fact(cfg: Any, endpoint: Any | None) -> str:
+    provider = str(getattr(endpoint, "provider_id", "") or "").strip()
+    model = str(getattr(endpoint, "model", "") or "").strip() or str(getattr(cfg, "llm_model", "") or "").strip()
+    chat_state = "enabled" if bool(getattr(cfg, "llm_chat_enabled", False)) else "disabled"
+    parts = ["ok"]
+    if provider:
+        parts.append(f"provider={provider}")
+    if model:
+        parts.append(f"model={model}")
+    parts.append(f"chat={chat_state}")
+    return " ".join(parts)
+
+
 async def probe_ai_service_health(*, timeout_sec: float = 5.0) -> dict[str, Any]:
     from pallas.core.shared.utils import HTTPXClient
     from pallas.product.llm.config import get_llm_config, llm_server_base_url
@@ -101,16 +114,6 @@ def install_llm_startup_probe() -> None:
         from pallas.product.llm.legacy_guard import log_legacy_chat_config_warnings
 
         log_legacy_chat_config_warnings(cfg)
-        flags = []
-        if cfg.llm_chat_enabled:
-            flags.append("LLM_CHAT")
-        if cfg.llm_fallback_enabled:
-            flags.append("FALLBACK")
-        if cfg.llm_polish_lite_enabled:
-            flags.append("POLISH_LITE")
-        if cfg.llm_polish_enabled:
-            flags.append("POLISH")
-        flag_text = ",".join(flags) if flags else "off"
         llm_switches_on = (
             cfg.llm_chat_enabled or cfg.llm_fallback_enabled or cfg.llm_polish_enabled or cfg.llm_polish_lite_enabled
         )
@@ -120,22 +123,21 @@ def install_llm_startup_probe() -> None:
         from packages.help.plugin_availability import invalidate_plugin_help_availability_cache
 
         invalidate_plugin_help_availability_cache()
-        model = str(cfg.llm_model or "").strip() or "?"
+        from pallas.product.llm.providers_store import resolve_endpoint_for_task
+
+        endpoint = resolve_endpoint_for_task("llm_chat")
+        startup_fact = build_llm_startup_fact(cfg, endpoint)
         if result.get("ok"):
-            register_startup_fact(
-                "llm",
-                f"kernel ok model={model} switches={flag_text}",
-            )
+            register_startup_fact("llm", startup_fact)
             return
         if not result.get("configured"):
             if llm_switches_on:
                 register_startup_warning(
                     "llm",
-                    f"provider_not_configured switches={flag_text}",
+                    "provider_not_configured",
                 )
                 logger.warning(
-                    "[LLM] 内核模式未配置 Provider（接入页或 LLM_BASE_URL + LLM_MODEL） switches={}",
-                    flag_text,
+                    "[LLM] Provider is not configured. Configure it in the console or set LLM_BASE_URL and LLM_MODEL.",
                 )
             else:
                 logger.debug("[LLM] 内核模式未配置 Provider（开关均为关）")
@@ -143,13 +145,12 @@ def install_llm_startup_probe() -> None:
         if llm_switches_on:
             register_startup_warning(
                 "llm",
-                f"provider_unreachable err={result.get('error') or 'unknown'} switches={flag_text}",
+                f"provider_unreachable err={result.get('error') or 'unknown'}",
             )
             logger.warning(
-                "[LLM] Provider 不可达 {} err={} switches={}",
+                "[LLM] Provider is unreachable: {}. Error: {}.",
                 result.get("url") or "",
                 result.get("error") or "unknown",
-                flag_text,
             )
         else:
             logger.debug("[LLM] Provider 无响应（开关均为关）")

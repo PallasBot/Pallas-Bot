@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from nonebot import get_driver, logger
 from nonebot_plugin_apscheduler import scheduler
 
+from pallas.core.foundation.startup_report import register_startup_scheduled, register_startup_skipped
 from pallas.core.platform.bot_runtime.roles import is_sharded_worker
 from pallas.product.llm.corpus_contamination import (
     corpus_cleanup_interval_sec,
@@ -47,6 +48,7 @@ async def run_corpus_cleanup_round() -> None:
 
 async def start_corpus_cleanup_job() -> None:
     if not should_run_corpus_cleanup_scheduler():
+        register_startup_skipped("语料污染扫库", "reason=disabled")
         return
     if scheduler.get_job(_JOB_ID):
         scheduler.remove_job(_JOB_ID)
@@ -63,6 +65,7 @@ async def start_corpus_cleanup_job() -> None:
         next_run_time=datetime.now() + timedelta(seconds=300),
     )
     logger.debug("语料污染扫库：周期 {}s", interval_sec)
+    register_startup_scheduled("语料污染扫库", f"interval={interval_sec}s")
 
 
 async def reload_corpus_cleanup_job() -> None:

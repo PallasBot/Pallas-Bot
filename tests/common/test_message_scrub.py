@@ -311,10 +311,51 @@ def test_startup_log_skips_sharded_worker(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(startup_log, "_hook_installed", False)
 
 
+def test_startup_log_moves_filter_details_into_startup_summary(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    import pallas.product.message_scrub.startup_log as startup_log
+
+    startup_log._hook_installed = False
+    callbacks: list = []
+    cfg = SimpleNamespace(
+        inbound_filter_substrings="blocked",
+        scrub_lexicon_path="",
+        scrub_lexicon_extra="",
+        scrub_baidu_api_key="",
+        scrub_baidu_secret_key="",
+        scrub_review_providers_key_present=True,
+        scrub_review_providers="",
+        inbound_filter_api_timeout_sec=2.0,
+        inbound_filter_api_fail_open=True,
+    )
+    monkeypatch.setattr(startup_log, "get_driver", lambda: SimpleNamespace(on_startup=lambda fn: callbacks.append(fn)))
+    monkeypatch.setattr("pallas.core.platform.bot_runtime.roles.is_sharded_worker", lambda: False)
+    monkeypatch.setattr("pallas.product.message_scrub.config.get_message_scrub_config", lambda: cfg)
+    monkeypatch.setattr("pallas.product.message_scrub.api_chain.build_review_providers", list)
+
+    with (
+        patch.object(startup_log.logger, "info") as mock_info,
+        patch.object(startup_log.logger, "debug") as mock_debug,
+        patch.object(startup_log, "register_startup_ready") as mock_ready,
+    ):
+        startup_log.install_message_scrub_startup_log()
+        asyncio.run(callbacks[0]())
+
+    mock_info.assert_not_called()
+    mock_debug.assert_called_once()
+    mock_ready.assert_called_once_with(
+        "消息过滤",
+        "已启用本地过滤：环境变量子串；远程审查未启用；超时 2 秒，异常时放行",
+    )
+    startup_log._hook_installed = False
+
+
 def test_startup_log_format_helpers() -> None:
     from pallas.product.message_scrub.startup_log import (
         format_api_fail_behavior,
         format_local_sources,
+        format_message_filter_startup_detail,
         format_provider_chain,
         format_remote_chain_summary,
     )
@@ -324,6 +365,15 @@ def test_startup_log_format_helpers() -> None:
     assert format_provider_chain(["baidu", "json_http"]) == "百度 → 自建 HTTP"
     assert format_api_fail_behavior(True) == "放行"
     assert format_api_fail_behavior(False) == "拦截"
+    assert (
+        format_message_filter_startup_detail(
+            local_sources="环境变量子串、词表文件",
+            remote_chain="无（已显式关闭远程审查）",
+            timeout_sec=2.0,
+            fail_behavior="放行",
+        )
+        == "已启用本地过滤：环境变量子串、词表文件；远程审查未启用；超时 2 秒，异常时放行"
+    )
 
     mode, chain = format_remote_chain_summary(
         key_present=False,

@@ -5,7 +5,7 @@ import asyncio
 from nonebot import get_driver, logger
 
 from pallas.core.foundation.db.pool_budget import pool_budget_status
-from pallas.core.foundation.startup_report import register_startup_fact
+from pallas.core.foundation.startup_report import register_startup_fact, register_startup_ready
 from pallas.core.platform.bot_runtime.roles import is_hub_role
 from pallas.core.platform.ingress.adaptive_capacity import adaptive_chat_lane_target, adaptive_scheduler_target
 from pallas.core.platform.ingress.conversation_scheduler import (
@@ -126,6 +126,11 @@ def register_ingress_dispatch_runtime() -> None:
         install_onebot_backpressure()
         install_matcher_dispatch()
         start_dispatch_stats_logger()
+        config = get_ingress_dispatch_runtime_config()
+        register_startup_ready(
+            "入站调度",
+            f"scheduler={config.conversation_scheduler_concurrency} send_workers={config.send_queue_workers}",
+        )
 
     @driver.on_shutdown
     async def uninstall_ingress_dispatch_on_shutdown() -> None:

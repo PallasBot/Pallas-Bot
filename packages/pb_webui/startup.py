@@ -8,7 +8,12 @@ from pallas.console.webui.console_login import (
     install_pallas_http_request_context_middleware,
     prime_shared_console_login,
 )
-from pallas.core.foundation.startup_report import register_startup_fact, register_startup_warning
+from pallas.core.foundation.startup_report import (
+    register_startup_fact,
+    register_startup_ready,
+    register_startup_scheduled,
+    register_startup_warning,
+)
 from pallas.core.platform.bot_runtime.roles import is_sharded_worker
 from pallas.core.shared.utils.format_exception import format_exception_for_log
 
@@ -87,7 +92,7 @@ if not is_sharded_worker():
         frontend = webui_frontend_stack()
         webui_version = get_webui_dist_version() or get_installed_webui_version().get("tag", "")
         if plugin_config.pallas_webui_dev_mode:
-            logger.warning("[控制台] 开发模式，已关闭鉴权")
+            logger.warning("[控制台] 当前为开发模式，登录鉴权已关闭")
         logger.info("[控制台] 前端栈={} static_root={}", frontend, public)
         set_console_meta({
             "static_root": str(public),
@@ -115,8 +120,6 @@ if not is_sharded_worker():
             port=getattr(dconf, "port", None),
         )
         register_startup_fact("console", f"{open_base}{base}/")
-        if plugin_config.pallas_webui_dev_mode:
-            register_startup_warning("console", "dev-mode")
 
         async def bootstrap_webui_dist() -> None:
             if check_webui_exists(public):
@@ -259,7 +262,10 @@ if not is_sharded_worker():
             await refresh_store_asset_snapshot()
 
         if not check_webui_exists(public):
+            register_startup_scheduled("控制台静态资源", "task=bootstrap")
             asyncio.create_task(guarded("webui-dist-bootstrap", bootstrap_webui_dist))
+        else:
+            register_startup_ready("控制台静态资源", f"frontend={frontend}")
         asyncio.create_task(guarded("release-version-check", background_release_checks))
         asyncio.create_task(guarded("console-read-cache-warm", warm_console_read_caches))
         asyncio.create_task(guarded("plugin-store-assets-warm", warm_plugin_store_assets))
