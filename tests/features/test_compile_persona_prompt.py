@@ -68,6 +68,16 @@ def test_at_chat_prompt_has_light_pallas_personality_anchor() -> None:
     assert "不主动讲自己的履历、感染者经历、米诺斯往事或罗德岛任务" in prompt
 
 
+def test_at_chat_prompt_keeps_cute_tone_as_light_default_baseline() -> None:
+    prompt = load_at_chat_system_prompt()
+
+    assert "轻松闲聊里的默认底色" in prompt
+    assert "不要只有被夸时才可爱" in prompt
+    assert "认真提问、求助、冲突或工具任务时把这层轻松感收低" in prompt
+    assert "在呀，怎么啦" in prompt
+    assert "早呀，今天也来得挺早" in prompt
+
+
 def test_at_chat_prompt_allows_bounded_playful_piggy_interaction() -> None:
     prompt = load_at_chat_system_prompt()
 
