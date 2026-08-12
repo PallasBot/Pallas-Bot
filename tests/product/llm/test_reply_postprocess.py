@@ -57,3 +57,18 @@ def test_split_short_reply_caps_at_three_bubbles() -> None:
 
 def test_split_short_reply_keeps_plain_single_line_unchanged() -> None:
     assert split_short_reply_segments("想你") == ["想你"]
+
+
+def test_split_newline_only_mode_ignores_sentence_punctuation() -> None:
+    assert split_short_reply_segments(
+        "六点？你真狠。\n我努力一下。",
+        split_by_punctuation=False,
+    ) == ["六点？你真狠。", "我努力一下。"]
+
+
+def test_split_newline_only_mode_caps_at_max_segments() -> None:
+    assert split_short_reply_segments(
+        "一。\n二\n三\n四",
+        split_by_punctuation=False,
+        max_segments=2,
+    ) == ["一。", "二\n三\n四"]
