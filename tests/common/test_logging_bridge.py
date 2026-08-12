@@ -1,14 +1,15 @@
 import ast
 import io
 import logging
+import re
 from pathlib import Path
 
 from pallas.api.logging import format_plugin_event
 from pallas.core.foundation.logging import event_log
 from pallas.core.foundation.logging.bridge import (
-    REPO_CONSOLE_LOG_FORMAT,
-    REPO_FILE_LOG_FORMAT,
     ChannelLoguruHandler,
+    _display_name_color,
+    _log_prefix_label,
     _stdlib_logger_channel_label,
     display_log_name,
     format_business_event,
@@ -47,13 +48,53 @@ def test_stdlib_logger_channel_label_uses_repo_aliases() -> None:
     assert _stdlib_logger_channel_label("uvicorn.error") == "HTTP 服务"
 
 
-def test_repo_console_log_format_aligns_level_and_source() -> None:
-    assert "{level:<8}" in REPO_CONSOLE_LOG_FORMAT
-    assert "{{{extra[display_name]:<8}}}" in REPO_CONSOLE_LOG_FORMAT
-    assert "{level:<8}" in REPO_FILE_LOG_FORMAT
-    assert "{{{extra[display_name]:<8}}}" in REPO_FILE_LOG_FORMAT
-    assert "{exception}" in REPO_CONSOLE_LOG_FORMAT
-    assert "{exception}" in REPO_FILE_LOG_FORMAT
+def test_repo_console_log_template_colors_display_and_prefix() -> None:
+    record = {"name": "pallas.core.platform.work_jobs.worker", "extra": {}, "message": "work aux: started"}
+
+    template = format_repo_console_log(record)
+
+    assert "{time:MM-DD HH:mm:ss}" in template
+    assert "{level:<8}" in template
+    assert "{message}\n{exception}" in template
+    assert "WorkAux" in template
+    assert "[WorkAux]" in template
+    assert "<g>" in template
+    assert "<lvl>" in template
+    assert record["name"] == "pallas.core.platform.work_jobs.worker"
+    assert record["extra"]["display_name"] == "WorkAux"
+
+
+def test_repo_file_log_template_keeps_plain_text_with_prefix() -> None:
+    record = {"name": "pallas.core.platform.work_jobs.worker", "extra": {}, "message": "work aux: started"}
+
+    template = format_repo_file_log(record)
+
+    assert "{time:MM-DD HH:mm:ss}" in template
+    assert "{message}\n{exception}" in template
+    assert "[WorkAux]" in template
+    assert re.search(r"<[a-z]+>", template) is None
+
+
+def test_display_name_color_is_stable_and_bound() -> None:
+    assert _display_name_color("WorkAux") == _display_name_color("WorkAux")
+    assert _display_name_color("Core") == _display_name_color("Core")
+    assert _display_name_color("WorkAux") in {
+        "<le>",
+        "<ly>",
+        "<lm>",
+        "<lr>",
+        "<lc>",
+        "<lg>",
+        "<lw>",
+        "<m>",
+    }
+
+
+def test_log_prefix_label_skips_when_message_already_tagged() -> None:
+    assert _log_prefix_label("pallas.core.platform.work_jobs.worker", "work aux: started") == "WorkAux"
+    assert _log_prefix_label("pallas.core.foundation.db.repository_pg", "connected") == "DB"
+    assert _log_prefix_label("pallas.core.platform.work_jobs.worker", "[Reply] already tagged") == ""
+    assert _log_prefix_label("third_party.client", "unchanged") == ""
 
 
 def test_repo_file_log_format_renders_exception_traceback() -> None:
@@ -76,10 +117,44 @@ def test_repo_file_log_format_renders_exception_traceback() -> None:
     assert "test_repo_file_log_format_renders_exception_traceback" in out
 
 
+def test_repo_console_log_renders_colors_in_terminal_and_plain_elsewhere() -> None:
+    from loguru import logger
+
+    def emit():
+        patched = logger.patch(lambda record: record.update(name="pallas.core.platform.work_jobs.worker"))
+        patched.warning("work aux: some event happened")
+
+    colored = io.StringIO()
+    handler_id = logger.add(colored, level=0, colorize=True, format=format_repo_console_log)
+    try:
+        emit()
+    finally:
+        logger.remove(handler_id)
+    out = colored.getvalue()
+    assert "\x1b[" in out
+    assert "[WorkAux]" in out
+    assert "<le>" not in out
+    assert "<c>" not in out
+
+    plain = io.StringIO()
+    handler_id = logger.add(plain, level=0, colorize=False, format=format_repo_console_log)
+    try:
+        emit()
+    finally:
+        logger.remove(handler_id)
+    out = plain.getvalue()
+    assert "\x1b[" not in out
+    assert "[WorkAux]" in out
+    assert "<le>" not in out
+    assert "<c>" not in out
+
+
 def test_repo_console_log_uses_core_display_name_without_rewriting_logger_name() -> None:
     record = {"name": "pallas.core", "extra": {}}
 
-    assert format_repo_console_log(record) == REPO_CONSOLE_LOG_FORMAT
+    template = format_repo_console_log(record)
+
+    assert "Core" in template
     assert record["name"] == "pallas.core"
     assert record["extra"]["display_name"] == "Core"
 

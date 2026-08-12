@@ -13,11 +13,16 @@ if TYPE_CHECKING:
     from logging import LogRecord
     from typing import Any
 
-REPO_CONSOLE_LOG_FORMAT = (
-    "<g>{time:MM-DD HH:mm:ss}</g> [<lvl>{level:<8}</lvl>] <c><u>{{{extra[display_name]:<8}}}</u></c> "
-    "{message}\n{exception}"
+_DISPLAY_NAME_COLORS = (
+    "<le>",
+    "<ly>",
+    "<lm>",
+    "<lr>",
+    "<lc>",
+    "<lg>",
+    "<lw>",
+    "<m>",
 )
-REPO_FILE_LOG_FORMAT = "{time:MM-DD HH:mm:ss} [{level:<8}] {{{extra[display_name]:<8}}} {message}\n{exception}"
 
 _TRANSIENT_UVICORN_MESSAGES = (
     "keepalive ping failed",
@@ -214,17 +219,58 @@ def _pascal_case(value: str) -> str:
     return "".join(parts)
 
 
-def _format_repo_log(record: dict[str, Any], template: str) -> str:
-    record["extra"]["display_name"] = display_log_name(record_source_module_name(record))
-    return template
+def _stable_hash(text: str) -> int:
+    h = 0
+    for ch in text:
+        h = (h * 31 + ord(ch)) & 0x7FFFFFFF
+    return h
+
+
+def _display_name_color(display_name: str) -> str:
+    """按显示名稳定映射一个 loguru 颜色标记，同名同色。"""
+    return _DISPLAY_NAME_COLORS[_stable_hash(display_name) % len(_DISPLAY_NAME_COLORS)]
+
+
+def _log_prefix_label(logger_name: str, message: str) -> str:
+    """返回业务前缀标签（不含方括号）；调用方消息已有 ``[`` 前缀则不重复加。"""
+    text = str(message or "").lstrip()
+    if not text or text.startswith("["):
+        return ""
+    name = (logger_name or "").strip()
+    for prefix, label in _BUSINESS_LOG_LABELS:
+        if name == prefix or name.startswith(f"{prefix}.") or (prefix.endswith("_") and name.startswith(prefix)):
+            return label
+    if name.startswith(_DISPLAY_LOG_NAME_PREFIXES):
+        return display_log_name(name)
+    return ""
+
+
+def _compose_repo_log_template(record: dict[str, Any], *, console: bool) -> str:
+    """动态拼接日志模板：模块名与业务前缀按来源稳定配色。"""
+    name = record_source_module_name(record)
+    display = display_log_name(name)
+    record["extra"]["display_name"] = display
+    color = _display_name_color(display)
+    label = _log_prefix_label(name, str(record.get("message") or ""))
+    if console:
+        display_part = f"{color}{display:<8}</>"
+        prefix_part = f"{color}[{label}]</>" if label else ""
+        return (
+            "<g>{time:MM-DD HH:mm:ss}</g> [<lvl>{level:<8}</lvl>] "
+            f"{display_part} {prefix_part} "
+            "{message}\n{exception}"
+        )
+    display_part = f"{display:<8}"
+    prefix_part = f"[{label}] " if label else ""
+    return f"{{time:MM-DD HH:mm:ss}} [{{level:<8}}] {display_part} {prefix_part}{{message}}\n{{exception}}"
 
 
 def format_repo_console_log(record: dict[str, Any]) -> str:
-    return _format_repo_log(record, REPO_CONSOLE_LOG_FORMAT)
+    return _compose_repo_log_template(record, console=True)
 
 
 def format_repo_file_log(record: dict[str, Any]) -> str:
-    return _format_repo_log(record, REPO_FILE_LOG_FORMAT)
+    return _compose_repo_log_template(record, console=False)
 
 
 def _stdlib_logger_channel_label(logger_name: str) -> str:
@@ -240,17 +286,10 @@ def _stdlib_logger_channel_label(logger_name: str) -> str:
 
 def prefix_business_log_message(logger_name: str, message: str) -> str:
     """为主仓业务日志补充稳定类别标签，保留调用方已有标签。"""
-    text = str(message or "")
-    stripped = text.lstrip()
-    if not stripped or stripped.startswith("["):
-        return text
-    name = (logger_name or "").strip()
-    for prefix, label in _BUSINESS_LOG_LABELS:
-        if name == prefix or name.startswith(f"{prefix}.") or (prefix.endswith("_") and name.startswith(prefix)):
-            return f"[{label}] {stripped}"
-    if name.startswith(_DISPLAY_LOG_NAME_PREFIXES):
-        return f"[{display_log_name(name)}] {stripped}"
-    return text
+    label = _log_prefix_label(logger_name, message)
+    if not label:
+        return str(message)
+    return f"[{label}] {str(message).lstrip()}"
 
 
 def format_business_event(action: str, result: str, /, **fields: object) -> str:
@@ -458,7 +497,6 @@ def install_startup_log_noise_patcher() -> None:
         if _PLUGIN_LOAD_SUCCESS_RE.search(plain) or is_matcher_lifecycle_noise(plain):
             record["level"].name = "DEBUG"
             record["level"].no = debug_no
-        record["message"] = prefix_business_log_message(record_source_module_name(record), message)
 
     logger.configure(patcher=patcher)
 
