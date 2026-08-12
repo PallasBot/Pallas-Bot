@@ -9,6 +9,7 @@ import time
 from nonebot import logger
 
 from pallas.core.foundation.db import get_db_backend
+from pallas.core.foundation.logging.throttle import log_rate_limited
 
 _SNAPSHOT_REFRESH_SEC = float(os.getenv("PALLAS_BAN_SNAPSHOT_REFRESH_SEC", "30"))
 _SNAPSHOT_STALE_SEC = float(os.getenv("PALLAS_BAN_SNAPSHOT_STALE_SEC", "120"))
@@ -36,8 +37,14 @@ def bump_ban_gate_snapshot_remote_generation() -> None:
         client = get_coord_redis_client()
         if client is not None:
             client.incr(_REDIS_GEN_KEY)
-    except Exception:
-        pass
+    except Exception as e:
+        log_rate_limited(
+            logger,
+            "warning",
+            "coord_gen.ban_gate_snapshot",
+            "bump ban-gate snapshot redis generation failed: {}",
+            e,
+        )
 
 
 def sync_ban_gate_snapshot_remote_generation() -> bool:

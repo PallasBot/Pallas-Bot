@@ -203,11 +203,26 @@ async def shot(self_id: int, user_id: int, group_id: int) -> Callable[[], Awaita
                 return None
 
             async def group_leave() -> None:
-                await get_bot(str(self_id)).call_api(
-                    "set_group_leave",
-                    **{
-                        "group_id": group_id,
-                    },
+                try:
+                    await get_bot(str(self_id)).call_api(
+                        "set_group_leave",
+                        **{
+                            "group_id": group_id,
+                        },
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "roulette leave group failed bot [{}] group [{}]: {}",
+                        self_id,
+                        group_id,
+                        e,
+                    )
+                    return
+                logger.info(
+                    format_plugin_event(
+                        "fire_roulette",
+                        f"Bot [{self_id}] left group [{group_id}]",
+                    )
                 )
 
             return group_leave
@@ -232,12 +247,28 @@ async def shot(self_id: int, user_id: int, group_id: int) -> Callable[[], Awaita
 
         async def group_kick():
             kicked_users[group_id].add(user_id)
-            await get_bot(str(self_id)).call_api(
-                "set_group_kick",
-                **{
-                    "user_id": user_id,
-                    "group_id": group_id,
-                },
+            try:
+                await get_bot(str(self_id)).call_api(
+                    "set_group_kick",
+                    **{
+                        "user_id": user_id,
+                        "group_id": group_id,
+                    },
+                )
+            except Exception as e:
+                logger.warning(
+                    "roulette kick failed bot [{}] user [{}] group [{}]: {}",
+                    self_id,
+                    user_id,
+                    group_id,
+                    e,
+                )
+                return
+            logger.info(
+                format_plugin_event(
+                    "fire_roulette",
+                    f"Bot [{self_id}] kicked user [{user_id}] in group [{group_id}]",
+                )
             )
 
         return group_kick

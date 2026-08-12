@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from nonebot.log import logger
+
 
 def connected_bot_count() -> int:
     """与 ingress_gate 一致：优先协议/catalog 舰队规模，再与当前 WS 在线数取较大值。"""
@@ -10,8 +12,8 @@ def connected_bot_count() -> int:
         from pallas.core.platform.multi_bot.fleet import get_fleet_bot_ids
 
         count = len(get_fleet_bot_ids())
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug("fleet scale: get_fleet_bot_ids failed: {}", e)
     try:
         from nonebot import get_bots
 

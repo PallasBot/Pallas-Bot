@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nonebot import get_driver
+from nonebot import get_driver, logger
 
 from ..model import Chat
 
@@ -18,5 +18,5 @@ async def startup():
 async def shutdown():
     try:
         await Chat.sync()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("repeater Chat.sync failed on shutdown: {}", e)
