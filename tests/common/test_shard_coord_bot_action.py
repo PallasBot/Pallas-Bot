@@ -8,6 +8,37 @@ import pytest
 from pallas.core.platform.shard.coord import bot_action as mod
 
 
+def test_start_bot_action_redis_listener_starts_when_coord_enabled(fake_coord_redis, monkeypatch):
+    started: list[object] = []
+
+    def fake_create_task(coro):
+        started.append(coro)
+        return object()
+
+    monkeypatch.setattr(mod.asyncio, "create_task", fake_create_task)
+    monkeypatch.setattr(mod, "_listener_started", False)
+    mod.start_bot_action_redis_listener()
+    assert len(started) == 1
+    assert mod._listener_started is True
+
+
+def test_start_bot_action_redis_listener_skips_without_coord(monkeypatch):
+    monkeypatch.setattr(
+        "pallas.core.platform.coord.redis_settings.coord_redis_enabled",
+        lambda: False,
+    )
+    monkeypatch.setattr(mod, "_listener_started", False)
+    started: list[object] = []
+
+    def fake_create_task(coro):
+        started.append(coro)
+        return object()
+
+    monkeypatch.setattr(mod.asyncio, "create_task", fake_create_task)
+    mod.start_bot_action_redis_listener()
+    assert started == []
+
+
 def test_bot_action_request_roundtrip(fake_coord_redis) -> None:
     request_id = mod._publish_request(
         action="set_group_card",

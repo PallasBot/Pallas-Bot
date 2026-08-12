@@ -139,15 +139,15 @@ async def prepare_fire_roulette(
         return lambda: delayed_shots(shot_awaitable_list, let_the_bullets_fly)
 
 
-async def delayed_shot(shot_awaitable: Awaitable[None], delay: Callable[[], Awaitable[None]]) -> None:
+async def delayed_shot(shot_awaitable: Callable[[], Awaitable[None]], delay: Callable[[], Awaitable[None]]) -> None:
     await delay()
-    await shot_awaitable
+    await shot_awaitable()
 
 
 async def delayed_shots(
-    shot_awaitables: list[Awaitable[None]],
+    shot_awaitables: list[Callable[[], Awaitable[None]]],
     delay: Callable[[], Awaitable[None]],
 ) -> None:
     await delay()
     for shot_awaitable in shot_awaitables:
-        await shot_awaitable
+        await shot_awaitable()

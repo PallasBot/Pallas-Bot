@@ -297,6 +297,11 @@ def format_repo_file_log(record: dict[str, Any]) -> str:
     return _compose_repo_log_template(record, console=False)
 
 
+def _dotted_pascal_case(value: str) -> str:
+    """按点分段转紧凑 PascalCase，未匹配别名的 stdlib logger 名兜底展示。"""
+    return _pascal_case(str(value or "").replace(".", "_"))
+
+
 def _stdlib_logger_channel_label(logger_name: str) -> str:
     """把 stdlib logger 名收成简短标签；``.error`` 易被误认为级别，故单独映射。"""
     name = (logger_name or "").strip()
@@ -305,7 +310,7 @@ def _stdlib_logger_channel_label(logger_name: str) -> str:
     for prefix, alias in _CHANNEL_ALIASES:
         if name == prefix.rstrip(".") or name.startswith(prefix):
             return alias
-    return name
+    return _dotted_pascal_case(name)
 
 
 def prefix_business_log_message(logger_name: str, message: str) -> str:

@@ -138,50 +138,52 @@ def start_bot(*, skip_port_sync: bool = False, detach: bool = False) -> int:
         return sync_rc
 
     env = bot_environment(port)
-    if not detach:
-        print(f"unified 前台运行 · port {port}")
-        print(f"控制台 http://127.0.0.1:{port}/pallas/")
-        print("提示：保持当前终端查看实时日志；需后台运行请使用 uv run pallas -d。")
-        print("按 Ctrl+C 停止 Bot 与本次自动启动的辅进程。")
-        if start_aux_services() != 0:
-            return 1
-        write_pid_file(PID_FILE, os.getpid())
-        old_env = {key: os.environ.get(key) for key in env}
-        os.environ.update(env)
-        try:
-            runpy.run_path(str(PROJECT_ROOT / "bot.py"), run_name="__main__")
-        except KeyboardInterrupt:
-            print("\nunified 正在停止…")
-        finally:
-            clear_pid_file(PID_FILE)
-            stop_aux_services()
-            for key, value in old_env.items():
-                if value is None:
-                    os.environ.pop(key, None)
-                else:
-                    os.environ[key] = value
-        return 0
-
-    cleanup_launcher_logs()
-    cmd = uv_run_python_cmd("bot.py")
+    old_env = {key: os.environ.get(key) for key in env}
+    os.environ.update(env)
     try:
-        pid = spawn_detached(cmd, cwd=PROJECT_ROOT, env=env, log_path=launcher_log_path())
-    except OSError as err:
-        print(f"unified 启动失败: {err}", file=sys.stderr)
-        return 1
-    write_pid_file(PID_FILE, pid)
-    time.sleep(2)
-    if is_bot_running():
-        print(f"unified 已转入后台 · pid {read_pid_file(PID_FILE)} · port {port}")
-        print(f"控制台 http://127.0.0.1:{port}/pallas/")
-        print(f"启动器日志 {LOG_DIR}")
-        if start_aux_services() == 0:
+        if not detach:
+            print(f"unified 前台运行 · port {port}")
+            print(f"控制台 http://127.0.0.1:{port}/pallas/")
+            print("提示：保持当前终端查看实时日志；需后台运行请使用 uv run pallas -d。")
+            print("按 Ctrl+C 停止 Bot 与本次自动启动的辅进程。")
+            if start_aux_services() != 0:
+                return 1
+            write_pid_file(PID_FILE, os.getpid())
+            try:
+                runpy.run_path(str(PROJECT_ROOT / "bot.py"), run_name="__main__")
+            except KeyboardInterrupt:
+                print("\nunified 正在停止…")
+            finally:
+                clear_pid_file(PID_FILE)
+                stop_aux_services()
             return 0
-        stop_bot()
+
+        cleanup_launcher_logs()
+        cmd = uv_run_python_cmd("bot.py")
+        try:
+            pid = spawn_detached(cmd, cwd=PROJECT_ROOT, env=env, log_path=launcher_log_path())
+        except OSError as err:
+            print(f"unified 启动失败: {err}", file=sys.stderr)
+            return 1
+        write_pid_file(PID_FILE, pid)
+        time.sleep(2)
+        if is_bot_running():
+            print(f"unified 已转入后台 · pid {read_pid_file(PID_FILE)} · port {port}")
+            print(f"控制台 http://127.0.0.1:{port}/pallas/")
+            print(f"启动器日志 {LOG_DIR}")
+            if start_aux_services() == 0:
+                return 0
+            stop_bot()
+            return 1
+        print(f"unified 启动失败，查看 {LOG_DIR}", file=sys.stderr)
+        clear_pid_file(PID_FILE)
         return 1
-    print(f"unified 启动失败，查看 {LOG_DIR}", file=sys.stderr)
-    clear_pid_file(PID_FILE)
-    return 1
+    finally:
+        for key, value in old_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 def stop_bot() -> int:

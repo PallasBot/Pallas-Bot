@@ -826,3 +826,113 @@ async def test_patched_handle_event_batches_selected_matchers(
     pre_mock.assert_awaited_once()
     post_mock.assert_awaited_once()
     assert max_active <= 2
+
+
+@pytest.mark.asyncio
+async def test_patched_handle_event_degrades_chat_during_cold_start(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeGroupMessageEvent:
+        raw_message = "今天天气不错"
+
+        def get_log_string(self) -> str:
+            return "fake group message"
+
+        def get_plaintext(self) -> str:
+            return "今天天气不错"
+
+    class PassiveMatcher:
+        rule = Rule()
+
+    bot = MagicMock()
+    bot.type = "OneBot V11"
+    bot.self_id = "10001"
+    event = FakeGroupMessageEvent()
+    pre_mock = AsyncMock(return_value=True)
+    post_mock = AsyncMock()
+    degraded = {"n": 0}
+
+    async def fake_check_and_run(*_args, **_kwargs):
+        from pallas.core.platform.ingress import message_load
+
+        assert message_load.is_chat_degraded() is True
+        return MagicMock(acquired=True)
+
+    monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", pre_mock)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_postprocessors", post_mock)
+    monkeypatch.setattr(dispatch.nb_message.TrieRule, "get_value", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dispatch, "mark_activity", lambda: None)
+    monkeypatch.setattr(dispatch, "resolve_route_for_event", lambda _event: None)
+    monkeypatch.setattr(dispatch, "event_command_traffic", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(dispatch, "chat_drop_on_overload_enabled", lambda: False)
+    monkeypatch.setattr(dispatch, "is_overloaded", lambda: False)
+    monkeypatch.setattr(dispatch, "in_cold_start_window", lambda: True)
+    monkeypatch.setattr(dispatch, "stale_message_drop_needed", lambda _event: False)
+
+    def _bump_degraded() -> None:
+        degraded["n"] += 1
+
+    monkeypatch.setattr(dispatch, "record_chatter_overload_degraded", _bump_degraded)
+    monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatch, "select_priority_matchers", lambda pool, **_kwargs: list(pool))
+    monkeypatch.setattr(dispatch, "check_and_run_matcher_with_lane", fake_check_and_run)
+    monkeypatch.setattr(dispatch, "matcher_dispatch_batches", lambda selected: [selected])
+    monkeypatch.setattr(dispatch, "overload_selected_threshold", lambda: 99)
+    monkeypatch.setattr(dispatch, "signal_overload", lambda *_a, **_k: None)
+    monkeypatch.setattr(dispatch, "matchers", {1: [PassiveMatcher]})
+
+    await dispatch.patched_handle_event(bot, event)
+
+    assert degraded["n"] == 1
+    pre_mock.assert_awaited_once()
+    post_mock.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_patched_handle_event_drops_stale_chat_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeGroupMessageEvent:
+        group_id = 100
+        message_id = 200
+        raw_message = "今天天气不错"
+        to_me = False
+
+        def get_log_string(self) -> str:
+            return "fake group message"
+
+        def get_plaintext(self) -> str:
+            return "今天天气不错"
+
+    class PassiveMatcher:
+        rule = Rule()
+
+    bot = MagicMock()
+    bot.type = "OneBot V11"
+    bot.self_id = "10001"
+    event = FakeGroupMessageEvent()
+    pre_mock = AsyncMock(return_value=True)
+    post_mock = AsyncMock()
+    run_matcher = AsyncMock()
+    dropped = {"n": 0}
+
+    def _bump_dropped() -> None:
+        dropped["n"] += 1
+
+    monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", pre_mock)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_postprocessors", post_mock)
+    monkeypatch.setattr("nonebot.message.check_and_run_matcher", run_matcher)
+    monkeypatch.setattr(dispatch.nb_message.TrieRule, "get_value", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dispatch, "mark_activity", lambda: None)
+    monkeypatch.setattr(dispatch, "resolve_route_for_event", lambda _event: None)
+    monkeypatch.setattr(dispatch, "event_command_traffic", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(dispatch, "is_overloaded", lambda: False)
+    monkeypatch.setattr(dispatch, "stale_message_drop_needed", lambda _event: True)
+    monkeypatch.setattr(dispatch, "record_stale_message_dropped", _bump_dropped)
+    monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatch, "matchers", {1: [PassiveMatcher]})
+
+    await dispatch.patched_handle_event(bot, event)
+
+    assert dropped["n"] == 1
+    pre_mock.assert_awaited_once()
+    post_mock.assert_awaited_once()
+    run_matcher.assert_not_awaited()

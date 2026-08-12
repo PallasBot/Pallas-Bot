@@ -143,7 +143,11 @@ def rank_memory_candidates(
         scored.sort(key=_candidate_sort_key, reverse=True)
         return [item for item in scored if int(item.get("score") or 0) > 0]
 
-    from pallas.product.llm.knowledge.embedding_client import embedding_model_name, fetch_embeddings_sync
+    from pallas.product.llm.knowledge.embedding_client import (
+        EMBEDDING_QUERY_TIMEOUT_SEC,
+        embedding_model_name,
+        fetch_embeddings_sync,
+    )
     from pallas.product.llm.knowledge.embedding_score import embedding_relevance_score
 
     expected_model = (embedding_model or embedding_model_name()).strip() or "stub"
@@ -167,7 +171,7 @@ def rank_memory_candidates(
         embed_inputs.append(text)
         pending.append((idx, len(embed_inputs) - 1))
 
-    vectors = fetch_embeddings_sync(embed_inputs)
+    vectors = fetch_embeddings_sync(embed_inputs, timeout_sec=EMBEDDING_QUERY_TIMEOUT_SEC)
     if vectors is None or len(vectors) != len(embed_inputs):
         scored.sort(key=_candidate_sort_key, reverse=True)
         return [item for item in scored if int(item.get("score") or 0) > 0]

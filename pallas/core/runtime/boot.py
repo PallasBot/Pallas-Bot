@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import nonebot
 from nonebot.adapters.onebot.v11 import Adapter as ONEBOT_V11Adapter
 from nonebot.log import logger
@@ -61,19 +63,33 @@ def boot() -> nonebot.Driver:
     @driver.on_startup
     async def startup() -> None:
         logger.info("[初始化] 运行服务初始化中...")
+        from pallas.core.foundation.loop import install_loop_exception_logging
+
+        install_loop_exception_logging()
         await init_db()
         await start_ban_gate_snapshot()
         schedule_ensure_voices()
         from pallas.core.platform.multi_bot.connected_roster import install_shutdown_signal_forwarder
 
         install_shutdown_signal_forwarder()
+        from pallas.core.platform.shard.coord.bot_action import start_bot_action_redis_listener
+
+        start_bot_action_redis_listener()
 
     @driver.on_shutdown
     async def shutdown() -> None:
+        t0 = time.monotonic()
         from pallas.core.platform.multi_bot.connected_roster import mark_process_shutting_down
 
         mark_process_shutting_down()
+        t1 = time.monotonic()
         await stop_ban_gate_snapshot()
+        logger.debug(
+            "[ShutDown] on_shutdown 收尾完成：置位标记耗时 [{:.1f}]s、ban gate 停止耗时 [{:.1f}]s、总计 [{:.1f}]s",
+            t1 - t0,
+            time.monotonic() - t1,
+            time.monotonic() - t0,
+        )
 
     logger.info("[初始化] 模块载入中...")
     load_plugins_for_role()

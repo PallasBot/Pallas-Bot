@@ -72,7 +72,12 @@ def _split_line_at_sentence_endings(text: str) -> list[str]:
     return segments
 
 
-def split_short_reply_segments(text: str) -> list[str]:
+def split_short_reply_segments(
+    text: str,
+    *,
+    split_by_punctuation: bool = True,
+    max_segments: int = 3,
+) -> list[str]:
     plain = str(text or "").strip()
     if not plain:
         return []
@@ -81,11 +86,14 @@ def split_short_reply_segments(text: str) -> list[str]:
         line = line.strip()
         if not line:
             continue
-        segments.extend(_split_line_at_sentence_endings(line))
+        if split_by_punctuation:
+            segments.extend(_split_line_at_sentence_endings(line))
+        else:
+            segments.append(line)
     if len(segments) <= 1:
         return [plain]
-    if len(segments) > 3:
-        return [*segments[:2], "\n".join(segments[2:])]
+    if len(segments) > max_segments:
+        return [*segments[: max_segments - 1], "\n".join(segments[max_segments - 1 :])]
     return segments
 
 

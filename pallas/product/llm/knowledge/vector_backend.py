@@ -99,7 +99,10 @@ def retrieve_chunks_embedding(
     max_chunk_len: int,
     mode: VectorRetrieveMode,
 ) -> list[RetrievedKnowledgeChunk] | None:
-    from pallas.product.llm.knowledge.embedding_client import fetch_embeddings_sync
+    from pallas.product.llm.knowledge.embedding_client import (
+        EMBEDDING_QUERY_TIMEOUT_SEC,
+        fetch_embeddings_sync,
+    )
     from pallas.product.llm.knowledge.embedding_score import embedding_relevance_score
     from pallas.product.llm.knowledge.models import KnowledgeChunkDecl, RetrievedKnowledgeChunk
     from pallas.product.llm.memory.retrieve import memory_relevance_score
@@ -121,7 +124,7 @@ def retrieve_chunks_embedding(
     if not chunk_rows:
         return []
 
-    vectors = fetch_embeddings_sync(embed_inputs)
+    vectors = fetch_embeddings_sync(embed_inputs, timeout_sec=EMBEDDING_QUERY_TIMEOUT_SEC)
     if vectors is None or len(vectors) != len(embed_inputs):
         return None
 

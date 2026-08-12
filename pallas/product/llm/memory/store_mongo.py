@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any
 
@@ -130,11 +131,19 @@ async def save_memory_entry_mongo(
     from pallas.product.llm.knowledge.vector_backend import vector_retrieve_mode
 
     if vector_retrieve_mode(c) != "keyword":
-        from pallas.product.llm.knowledge.embedding_client import embedding_model_name, fetch_embeddings_sync
+        from pallas.product.llm.knowledge.embedding_client import (
+            EMBEDDING_QUERY_TIMEOUT_SEC,
+            embedding_model_name,
+            fetch_embeddings_sync,
+        )
         from pallas.product.llm.memory.retrieve import dump_embedding_json, memory_embedding_text
 
         text = memory_embedding_text(keywords=keywords, content=safe_content)
-        vectors = fetch_embeddings_sync([text]) if text.strip() else None
+        vectors = (
+            await asyncio.to_thread(fetch_embeddings_sync, [text], timeout_sec=EMBEDDING_QUERY_TIMEOUT_SEC)
+            if text.strip()
+            else None
+        )
         if vectors and len(vectors) == 1:
             embedding_json = dump_embedding_json(vectors[0])
             embedding_model = embedding_model_name(c)
@@ -247,7 +256,9 @@ async def retrieve_memory_hits_mongo(
         group_id=group_id,
         now=int(time.time()),
     )
-    scored = rank_memory_candidates(
+    # rank 内会请求 embedding，同步执行会阻塞事件循环，移到线程
+    scored = await asyncio.to_thread(
+        rank_memory_candidates,
         query_text,
         candidates,
         embedding_model=embedding_model_name(c),

@@ -236,15 +236,18 @@ async def invoke_bot_action(
     *,
     timeout_sec: float = _DEFAULT_TIMEOUT,
 ) -> tuple[bool, Any]:
-    """本进程有连接则本地执行；分片且牛在别片则写 coord 请求并等待。"""
+    """本进程有连接则本地执行；否则经协调通道交给持有目标 Bot 的进程。"""
+    from pallas.core.platform.coord.redis_settings import coord_redis_enabled
     from pallas.core.platform.shard.presence import bot_has_cluster_connection, bot_has_local_connection
 
     qq = int(bot_qq)
     if bot_has_local_connection(qq):
         return await _execute_local(action, qq, payload)
-    if not shard_ctx.sharding_active():
+    # 协调通道不可用时无法跨进程投递
+    if not coord_redis_enabled():
         return False, None
-    if not bot_has_cluster_connection(qq):
+    # 分片：presence 明确无目标牛则快速失败；非分片（unified 主进程+辅助进程）交给协调通道，由持有目标 Bot 的进程裁决
+    if shard_ctx.sharding_active() and not bot_has_cluster_connection(qq):
         logger.debug(f"bot_action skip: qq={qq} action={action} not connected in cluster")
         return False, None
 
@@ -468,7 +471,7 @@ def start_bot_action_redis_listener() -> None:
     global _listener_started
     from pallas.core.platform.coord.redis_settings import coord_redis_enabled
 
-    if _listener_started or not shard_ctx.sharding_active() or not coord_redis_enabled():
+    if _listener_started or not coord_redis_enabled():
         return
     _listener_started = True
     asyncio.create_task(bot_action_redis_listen_loop())
