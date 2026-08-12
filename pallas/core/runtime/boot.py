@@ -78,12 +78,19 @@ def boot() -> nonebot.Driver:
 
     @driver.on_shutdown
     async def shutdown() -> None:
-        started = time.monotonic()
+        t0 = time.monotonic()
         from pallas.core.platform.multi_bot.connected_roster import mark_process_shutting_down
 
         mark_process_shutting_down()
+        t1 = time.monotonic()
         await stop_ban_gate_snapshot()
-        logger.info("[ShutDown] on_shutdown 回调完成，耗时 [{:.1f}]s", time.monotonic() - started)
+        t2 = time.monotonic()
+        logger.info(
+            "[ShutDown] on_shutdown: mark=[{:.1f}]s ban_gate=[{:.1f}]s total=[{:.1f}]s",
+            t1 - t0,
+            t2 - t1,
+            t2 - t0,
+        )
 
     logger.info("[初始化] 模块载入中...")
     load_plugins_for_role()
