@@ -110,7 +110,7 @@ def require_pallas_token_configured(
         logger,
         "warning",
         "console.auth.401",
-        "控制台鉴权失败 path [{}] ip [{}]",
+        "控制台鉴权失败，path [{}]、ip [{}]",
         getattr(req, "url", "") or "?",
         ip,
     )

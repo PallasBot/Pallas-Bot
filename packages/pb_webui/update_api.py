@@ -469,7 +469,7 @@ def register_update_router(
                 out = dict(result)
                 out["restart_scheduled"] = scheduled
                 logger.info(
-                    "[WebUI] Bot 更新成功 mode [{}] strategy [{}] tag [{}] restart_scheduled [{}]",
+                    "[WebUI] Bot 更新成功，mode [{}]、strategy [{}]、tag [{}]、restart_scheduled [{}]",
                     apply_mode,
                     apply_strategy,
                     str(out.get("tag") or ""),

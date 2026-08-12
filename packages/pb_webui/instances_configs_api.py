@@ -252,7 +252,7 @@ def register_instances_configs_router(
         except Exception as e:  # noqa: BLE001
             logger.exception("[WebUI] 更新 Bot 配置失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
-        logger.info("[WebUI] 更新 Bot 配置成功 account [{}]", account)
+        logger.info("[WebUI] 更新 Bot 配置成功，account [{}]", account)
         drop_read_cache(("instances", "bot_configs_list", "db_overview", "home-overview"))
         return JSONResponse({"ok": True, "data": data})
 
@@ -375,7 +375,7 @@ def register_instances_configs_router(
         except Exception as e:  # noqa: BLE001
             logger.exception("[WebUI] 更新群配置失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
-        logger.info("[WebUI] 更新群配置成功 group_id [{}]", group_id)
+        logger.info("[WebUI] 更新群配置成功，group_id [{}]", group_id)
         drop_read_cache(("group_configs_list", "db_overview", "group_configs_bot:"))
         return JSONResponse({"ok": True, "data": data})
 
@@ -424,7 +424,7 @@ def register_instances_configs_router(
         except Exception as e:  # noqa: BLE001
             logger.exception("[WebUI] 更新 User 配置失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
-        logger.info("[WebUI] 更新 User 配置成功 user_id [{}]", user_id)
+        logger.info("[WebUI] 更新 User 配置成功，user_id [{}]", user_id)
         drop_read_cache(("db_overview", "user_configs_list"))
         return JSONResponse({"ok": True, "data": data})
 

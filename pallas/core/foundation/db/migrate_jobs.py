@@ -132,7 +132,12 @@ async def _run_migrate_job(job: MigrateJobState) -> None:
     job.status = "running"
     job.started_at = time.time()
     job.phase = "preflight"
-    logger.info("mongo→pg 迁移开始 job [{}] dry_run [{}] tables [{}]", job.job_id, job.dry_run, len(job.tables or []))
+    logger.info(
+        "mongo→pg 迁移开始，job [{}]、dry_run [{}]、tables [{}]",
+        job.job_id,
+        job.dry_run,
+        len(job.tables or []),
+    )
     try:
         mod = _load_migrate_module()
         mod.apply_migrate_env_from_repo()
@@ -181,7 +186,7 @@ async def _run_migrate_job(job: MigrateJobState) -> None:
         job.phase = "done"
         job.status = "completed"
         job.finished_at = time.time()
-        logger.info("mongo→pg 迁移完成 job [{}] switch [{}]", job.job_id, job.switch_backend)
+        logger.info("mongo→pg 迁移完成，job [{}]、switch [{}]", job.job_id, job.switch_backend)
     except Exception as e:  # noqa: BLE001
         logger.exception("mongo→pg migrate job failed")
         job.status = "failed"

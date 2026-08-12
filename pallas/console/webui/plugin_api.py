@@ -376,7 +376,7 @@ def apply_plugin_config_patch(
     try:
         reload_plugin_config(module_name)
     except Exception as e:
-        logger.warning("plugin config save: reload failed plugin [{}]: {}", plugin_name, e)
+        logger.warning("插件配置保存后重载失败，plugin [{}]：{}", plugin_name, e)
     try:
         from pallas.core.plugin_reload.metadata_index import reload_metadata_after_plugin_config_save
 

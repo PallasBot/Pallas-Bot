@@ -181,7 +181,7 @@ async def run_plugin_store_job(
                 result=job.result,
             )
         logger.info(
-            "插件商店任务完成 job [{}] action [{}] target [{}] message [{}]",
+            "插件商店任务完成（job [{}]、action [{}]、target [{}]）：{}",
             job.job_id,
             job.action,
             job.target,
@@ -191,7 +191,7 @@ async def run_plugin_store_job(
         if job.phase != "failed":
             job.push("failed", error=str(exc), progress_percent=job.progress_percent)
         logger.exception(
-            "插件商店任务失败 job [{}] action [{}] target [{}]: {}",
+            "插件商店任务失败（job [{}]、action [{}]、target [{}]）：{}",
             job.job_id,
             job.action,
             job.target,

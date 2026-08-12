@@ -71,9 +71,9 @@ def register_auth_security_router(
         client = getattr(request, "client", None)
         ip = getattr(client, "host", "?") if client is not None else "?"
         if not verify_console_password(body.password):
-            logger.warning("控制台登录失败 ip [{}]", ip)
+            logger.warning("控制台登录失败，来源 ip [{}]", ip)
             raise HTTPException(status_code=401, detail="密码错误")
-        logger.info("控制台登录成功 ip [{}]", ip)
+        logger.info("控制台登录成功，来源 ip [{}]", ip)
         tok = mint_session_token()
         resp = JSONResponse({"ok": True, "data": {"token": tok}})
         resp.set_cookie(

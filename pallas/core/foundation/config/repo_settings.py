@@ -443,7 +443,7 @@ def upsert_repo_settings_items(items: dict[str, str]) -> None:
         for k in items
         if (k or "").strip() and not is_misplaced_ai_env_key((k or "").strip().upper())
     )
-    logger.info("配置落盘 keys [{}]（值已省略）", ",".join(keys))
+    logger.info("配置落盘，keys [{}]（值已省略）", ",".join(keys))
     doc = _load_webui_json_document()
     env = doc.setdefault("env", {})
     if not isinstance(env, dict):
@@ -464,7 +464,7 @@ def upsert_repo_settings_items(items: dict[str, str]) -> None:
         )
         export_webui_inspection_toml(env, doc["sections"])
     except Exception:
-        logger.exception("配置落盘失败 keys [{}]", ",".join(keys))
+        logger.exception("配置落盘失败，keys [{}]", ",".join(keys))
         raise
     clear_merged_repo_settings_cache()
     for k, v in items.items():
