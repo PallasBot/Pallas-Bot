@@ -217,10 +217,10 @@ def _apply_candidate_delta(
                 if not isinstance(aggregate, dict):
                     aggregate = {}
                     total_outcomes[outcome] = aggregate
-                previous = prior_outcomes.get(outcome) if isinstance(prior_outcomes, dict) else None
+                prior_outcome = prior_outcomes.get(outcome) if isinstance(prior_outcomes, dict) else None
                 for key in _OUTCOME_COUNTER_KEYS:
                     value = int(raw_outcome.get(key) or 0)
-                    prior_value = int(previous.get(key) or 0) if isinstance(previous, dict) else 0
+                    prior_value = int(prior_outcome.get(key) or 0) if isinstance(prior_outcome, dict) else 0
                     delta = value - prior_value if value >= prior_value else value
                     aggregate[key] = int(aggregate.get(key) or 0) + delta
                 p95 = raw_outcome.get("ingress_duration_ms_p95")

@@ -186,6 +186,26 @@ def test_route_candidate_history_aggregates_outcome_metrics(tmp_path, monkeypatc
     }
 
 
+def test_route_candidate_history_aggregates_outcomes_for_multiple_routes(tmp_path, monkeypatch) -> None:
+    from packages.pb_webui import ingress_metrics_history as mod
+
+    monkeypatch.setattr(mod, "ingress_metrics_history_path", lambda: tmp_path / "ingress_metrics_history.jsonl")
+    snapshot = {
+        "day_key": "2026-08-10",
+        "route_candidates": [
+            {"route_modules": ["drink"], "messages": 1, "outcomes": {"direct_handled": {"messages": 1}}},
+            {"route_modules": ["help"], "messages": 1, "outcomes": {"direct_fallback": {"messages": 1}}},
+        ],
+    }
+
+    assert mod.append_ingress_metrics_history(snapshot=snapshot, ts=100)
+
+    assert [row["route_modules"] for row in mod.read_route_candidate_history(now=100)["today_totals"]] == [
+        ["drink"],
+        ["help"],
+    ]
+
+
 def test_route_candidates_persist_again_when_day_changes(tmp_path, monkeypatch) -> None:
     from packages.pb_webui import ingress_metrics_history as mod
 
