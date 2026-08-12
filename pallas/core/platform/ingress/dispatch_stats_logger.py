@@ -86,7 +86,8 @@ async def dispatch_stats_log_loop() -> None:
             "lane_busy={} chat_lane={}/{} sched={}/{} active={} ready={} wait_p95={}ms backpressure={} "
             "send_q={}/{} dropped={} "
             "| hotpath route_p95={}ms kw_p95={}ms bundle_p95={}ms "
-            "bundle_cache_hit={} db_find_p95={}ms persona_p95={}ms sql_total_p95={}ms snap_hit={} "
+            "bundle_cache_hit={} db_find_p95={}ms persona_p95={}ms ban_p95={}ms feedback_p95={}ms select_p95={}ms "
+            "sql_total_p95={}ms snap_hit={} "
             "learn={}/{}/{}/{} work={}/{}/{} shed={} llm_retained={} llm_budget_skip={}/{}/{}/{}/{}",
             group_messages,
             int(snap.get("command_traffic") or 0),
@@ -119,6 +120,9 @@ async def dispatch_stats_log_loop() -> None:
             (snap.get("hotpath") or {}).get("bundle_cache_hit_ratio"),
             (snap.get("hotpath") or {}).get("db_find_ms_p95"),
             (snap.get("hotpath") or {}).get("persona_ms_p95"),
+            (snap.get("hotpath") or {}).get("ban_ms_p95"),
+            (snap.get("hotpath") or {}).get("feedback_ms_p95"),
+            (snap.get("hotpath") or {}).get("select_ms_p95"),
             (snap.get("hotpath") or {}).get("sql_total_ms_p95"),
             (snap.get("hotpath") or {}).get("reply_snapshot_hit_ratio"),
             int((snap.get("hotpath") or {}).get("learn_buffered") or 0),
