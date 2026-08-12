@@ -66,6 +66,9 @@ def boot() -> nonebot.Driver:
 
     @driver.on_shutdown
     async def shutdown() -> None:
+        from pallas.core.platform.multi_bot.connected_roster import mark_process_shutting_down
+
+        mark_process_shutting_down()
         await stop_ban_gate_snapshot()
 
     logger.info("[初始化] 模块载入中...")

@@ -19,6 +19,7 @@ from pallas.core.platform.shard.presence_health import clear_health_quarantine
 
 _connected_bots: set[int] = set()
 _hooks_registered = False
+_shutting_down = False
 
 
 async def ensure_bot_runtime_storage(qq: int) -> bool:
@@ -36,6 +37,16 @@ def note_connected_bot(qq: int) -> None:
 
 def note_disconnected_bot(qq: int) -> None:
     _connected_bots.discard(int(qq))
+
+
+def mark_process_shutting_down() -> None:
+    """置位进程正在收尾；断连等事件处理应转为静默。"""
+    global _shutting_down
+    _shutting_down = True
+
+
+def is_process_shutting_down() -> bool:
+    return _shutting_down
 
 
 async def on_bot_connect(bot: Bot) -> None:
@@ -95,7 +106,10 @@ async def on_bot_disconnect(bot: Bot) -> None:
         was_present = qq in _connected_bots
         note_disconnected_bot(qq)
         if was_present:
-            logger.info("[Bot {:>10}] disconnected.", bot.self_id)
+            if _shutting_down:
+                logger.debug("[Bot {:>10}] disconnected.", bot.self_id)
+            else:
+                logger.info("[Bot {:>10}] disconnected.", bot.self_id)
         await clear_protocol_bot_offline(qq)
         if shard_ctx.sharding_active():
             await note_worker_bot_disconnected(qq)

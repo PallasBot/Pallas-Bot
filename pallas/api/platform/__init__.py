@@ -47,7 +47,11 @@ from pallas.core.platform.ingress.send_queue import classify_send_queue_error
 # ── 多 Bot 去重与舰队 ──
 from pallas.core.platform.multi_bot.at_targets import message_at_fleet_bot
 from pallas.core.platform.multi_bot.bot_filter import is_fleet_bot_qq
-from pallas.core.platform.multi_bot.connected_roster import connected_bot_ids
+from pallas.core.platform.multi_bot.connected_roster import (
+    connected_bot_ids,
+    is_process_shutting_down,
+    mark_process_shutting_down,
+)
 from pallas.core.platform.multi_bot.dedup import (
     begin_group_exclusive_activity,
     bind_group_owned_gate,
@@ -155,6 +159,8 @@ __all__ = [
     "claim_group_message_event",
     "classify_send_queue_error",
     "connected_bot_ids",
+    "is_process_shutting_down",
+    "mark_process_shutting_down",
     "get_catalog_bot_ids",
     "get_fleet_bot_ids",
     "get_session_seen_bot_ids",
