@@ -201,13 +201,17 @@ def test_find_semantic_matched_replies_uses_embeddings(monkeypatch, tmp_path) ->
 
     calls: list[list[str]] = []
 
-    def fake_fetch(texts, **kwargs):
+    def fake_remote(texts, **kwargs):
         calls.append(list(texts))
         return [[1.0, 0.0] for _ in texts]
 
     monkeypatch.setattr(
-        "pallas.product.llm.feedback_embedding_cache.fetch_embeddings_sync",
-        fake_fetch,
+        "pallas.product.llm.knowledge.embed_redis.get_cached_vec",
+        lambda _model, _text: None,
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.knowledge.embed_redis.request_embeddings",
+        fake_remote,
     )
     monkeypatch.setattr(
         "pallas.product.llm.knowledge.embedding_score.embedding_relevance_score",

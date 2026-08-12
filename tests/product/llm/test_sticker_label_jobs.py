@@ -194,7 +194,6 @@ async def test_enqueue_candidate_counts_coalesced_when_job_already_pending(
 ) -> None:
     from pallas.product.llm import sticker_label_jobs
     from pallas.product.llm.sticker_label_jobs import StickerLabelSource
-    from pallas.product.llm.sticker_labels import content_hash_for_bytes
 
     content = b"dup-content"
     repository = SimpleNamespace(get=AsyncMock(return_value=None))
@@ -542,12 +541,15 @@ async def test_permanent_label_errors_do_not_retry_worker(
             "pallas.core.shared.utils.media_cache.get_image_by_content_hash", AsyncMock(return_value=b"image")
         )
 
-        async def fail_vision(_content: bytes) -> None:
-            if case == "parse_error":
-                raise ValueError("invalid sticker label JSON")
-            raise RuntimeError("no sticker vision endpoint")
+        def build_fail_vision(mode: str):
+            async def fail_vision(_content: bytes) -> None:
+                if mode == "parse_error":
+                    raise ValueError("invalid sticker label JSON")
+                raise RuntimeError("no sticker vision endpoint")
 
-        monkeypatch.setattr(sticker_label_jobs, "label_sticker_with_vision", fail_vision)
+            return fail_vision
+
+        monkeypatch.setattr(sticker_label_jobs, "label_sticker_with_vision", build_fail_vision(case))
         store = MemoryWorkJobStore()
         await store.enqueue(
             WorkJob.create(

@@ -113,11 +113,9 @@ async def test_choose_sticker_with_vision_skips_without_vision_endpoint(monkeypa
 @pytest.mark.asyncio
 async def test_choose_sticker_with_vision_falls_back_to_none_on_provider_timeout(monkeypatch) -> None:
     from types import SimpleNamespace
-
     from unittest.mock import AsyncMock
 
     from pallas.product.llm import sticker_vision
-    from pallas.product.llm.provider_client import LlmProviderError
 
     endpoint = SimpleNamespace(
         model="gemini-2.5-flash-image",
@@ -188,7 +186,6 @@ async def test_choose_sticker_with_vision_falls_back_to_none_on_provider_error(m
 @pytest.mark.asyncio
 async def test_choose_sticker_with_vision_reports_no_match_on_invalid_json(monkeypatch) -> None:
     from types import SimpleNamespace
-
     from unittest.mock import AsyncMock
 
     from pallas.product.llm import sticker_vision
