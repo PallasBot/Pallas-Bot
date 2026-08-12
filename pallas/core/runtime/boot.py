@@ -8,7 +8,7 @@ from nonebot.log import logger
 
 from pallas.console.web import install_nonebot_log_sink
 from pallas.core.foundation.config.repo_settings import apply_repo_settings_to_environ
-from pallas.core.foundation.db import init_db
+from pallas.core.foundation.db import init_db, install_pg_shutdown_hook
 from pallas.core.foundation.logging import (
     apply_stdlib_logging_channel_prefix,
     configure_quiet_library_loggers,
@@ -56,6 +56,7 @@ def boot() -> nonebot.Driver:
     driver = nonebot.get_driver()
     driver.register_adapter(ONEBOT_V11Adapter)
     register_onebot_v11_custom_events()
+    install_pg_shutdown_hook()
 
     @driver.on_startup
     async def startup() -> None:

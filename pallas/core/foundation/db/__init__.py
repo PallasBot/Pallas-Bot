@@ -401,7 +401,7 @@ async def init_postgresql_db() -> None:
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    from .repository_pg import dispose_pg, init_pg, is_pg_initialized, try_enable_pg_stat_statements
+    from .repository_pg import init_pg, is_pg_initialized, try_enable_pg_stat_statements
 
     if is_pg_initialized():
         return
@@ -492,14 +492,27 @@ async def init_postgresql_db() -> None:
 
         bind_pg_pool_diagnostics()
         start_pg_pool_diagnostics_task()
-        driver = nonebot.get_driver()
-
-        @driver.on_shutdown
-        async def _dispose_pg():
-            await dispose_pg()
-
     except Exception:
         pass
+
+
+def install_pg_shutdown_hook() -> None:
+    """尽早注册 PG 关闭钩子，保证依赖数据库的 on_shutdown 先于其执行。
+
+    NoneBot 逆序执行 on_shutdown（先注册者后执行）：若在 init_db（startup 阶段）
+    才注册，数据库会在其它插件收尾前被先关闭，导致 Chat.sync 等报
+    “PostgreSQL 尚未初始化”。各进程入口须在插件加载前调用本函数。
+    """
+    import nonebot
+
+    from .repository_pg import dispose_pg, is_pg_initialized
+
+    driver = nonebot.get_driver()
+
+    @driver.on_shutdown
+    async def _dispose_pg():
+        if is_pg_initialized():
+            await dispose_pg()
 
 
 # 工厂函数
