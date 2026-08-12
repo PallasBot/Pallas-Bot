@@ -56,7 +56,7 @@ def test_repo_console_log_template_colors_display_and_prefix() -> None:
     assert "{time:MM-DD HH:mm:ss}" in template
     assert "{level:<8}" in template
     assert "{message}\n{exception}" in template
-    assert "WorkAux" in template
+    assert "extra[display_name]:<8" in template
     assert "[WorkAux]" in template
     assert "<g>" in template
     assert "<lvl>" in template
@@ -71,6 +71,7 @@ def test_repo_file_log_template_keeps_plain_text_with_prefix() -> None:
 
     assert "{time:MM-DD HH:mm:ss}" in template
     assert "{message}\n{exception}" in template
+    assert "extra[display_name]:<8" in template
     assert "[WorkAux]" in template
     assert re.search(r"<[a-z]+>", template) is None
 
@@ -154,7 +155,7 @@ def test_repo_console_log_uses_core_display_name_without_rewriting_logger_name()
 
     template = format_repo_console_log(record)
 
-    assert "Core" in template
+    assert "extra[display_name]:<8" in template
     assert record["name"] == "pallas.core"
     assert record["extra"]["display_name"] == "Core"
 

@@ -253,14 +253,14 @@ def _compose_repo_log_template(record: dict[str, Any], *, console: bool) -> str:
     color = _display_name_color(display)
     label = _log_prefix_label(name, str(record.get("message") or ""))
     if console:
-        display_part = f"{color}{display:<8}</>"
+        display_part = color + "{{{extra[display_name]:<8}}}</>"
         prefix_part = f"{color}[{label}]</>" if label else ""
         return (
             "<g>{time:MM-DD HH:mm:ss}</g> [<lvl>{level:<8}</lvl>] "
             f"{display_part} {prefix_part} "
             "{message}\n{exception}"
         )
-    display_part = f"{display:<8}"
+    display_part = "{{{extra[display_name]:<8}}}"
     prefix_part = f"[{label}] " if label else ""
     return f"{{time:MM-DD HH:mm:ss}} [{{level:<8}}] {display_part} {prefix_part}{{message}}\n{{exception}}"
 
