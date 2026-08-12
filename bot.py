@@ -8,6 +8,6 @@ apply_repo_settings()
 boot()
 
 if __name__ == "__main__":
-    import nonebot
+    from pallas.core.foundation.asgi_runner import run_asgi_server
 
-    nonebot.run()
+    run_asgi_server()

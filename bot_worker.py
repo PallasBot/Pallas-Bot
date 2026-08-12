@@ -141,4 +141,6 @@ async def emit_startup_summary_on_startup():
 
 if __name__ == "__main__":
     install_uvloop()
-    nonebot.run()
+    from pallas.core.foundation.asgi_runner import run_asgi_server
+
+    run_asgi_server()
