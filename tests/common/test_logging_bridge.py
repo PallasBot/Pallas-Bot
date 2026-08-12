@@ -76,6 +76,27 @@ def test_repo_file_log_template_keeps_plain_text_with_prefix() -> None:
     assert re.search(r"<[a-z]+>", template) is None
 
 
+def test_repo_console_log_template_colors_leading_message_tag() -> None:
+    record = {"name": "packages.pb_webui.extended_api", "extra": {}, "message": "[Ready] pb_webui 就绪"}
+
+    template = format_repo_console_log(record)
+
+    assert "[Ready]" in template
+    assert re.search(r"<[a-z]+>\[Ready\]</>", template) is not None
+    assert record["message"] == "pb_webui 就绪"
+    assert record["extra"]["raw_message"] == "[Ready] pb_webui 就绪"
+
+
+def test_repo_console_log_template_keeps_bot_bracket_untouched() -> None:
+    record = {"name": "packages.repeater.fanout", "extra": {}, "message": "[Bot 1001] [群 20002] 普通消息正文"}
+
+    template = format_repo_console_log(record)
+
+    assert "[Bot 1001]" not in template
+    assert "{message}\n{exception}" in template
+    assert record["message"] == "[Bot 1001] [群 20002] 普通消息正文"
+
+
 def test_display_name_color_is_stable_and_bound() -> None:
     assert _display_name_color("WorkAux") == _display_name_color("WorkAux")
     assert _display_name_color("Core") == _display_name_color("Core")
@@ -124,6 +145,9 @@ def test_repo_console_log_renders_colors_in_terminal_and_plain_elsewhere() -> No
     def emit():
         patched = logger.patch(lambda record: record.update(name="pallas.core.platform.work_jobs.worker"))
         patched.warning("work aux: some event happened")
+        patched.info("[Ready] pb_webui 就绪")
+        patched.info("[初始化] 插件载入中")
+        patched.info("[Bot 1001] [群 20002] 普通消息正文")
 
     colored = io.StringIO()
     handler_id = logger.add(colored, level=0, colorize=True, format=format_repo_console_log)

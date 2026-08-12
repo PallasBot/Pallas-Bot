@@ -245,24 +245,46 @@ def _log_prefix_label(logger_name: str, message: str) -> str:
     return ""
 
 
+_RAW_MESSAGE_EXTRA_KEY = "raw_message"
+
+# 消息行首业务标签：仅字母/中文（不含空格数字），避免误拆 ``[Bot 1111]`` 等正文
+_LEADING_TAG_RE = re.compile(r"^\[(?P<tag>[A-Za-z\u4e00-\u9fff]+)\]\s?(?P<body>[\s\S]*)$")
+
+
+def _leading_business_tag(message: str) -> tuple[str, str]:
+    """拆出消息行首业务标签（如 ``[Ready]``/``[初始化]``），返回 (tag, body)。"""
+    m = _LEADING_TAG_RE.match(str(message or ""))
+    if not m:
+        return "", str(message or "")
+    return m.group("tag"), m.group("body")
+
+
 def _compose_repo_log_template(record: dict[str, Any], *, console: bool) -> str:
     """动态拼接日志模板：模块名与业务前缀按来源稳定配色。"""
     name = record_source_module_name(record)
     display = display_log_name(name)
     record["extra"]["display_name"] = display
     color = _display_name_color(display)
-    label = _log_prefix_label(name, str(record.get("message") or ""))
+    raw = record["extra"].get(_RAW_MESSAGE_EXTRA_KEY)
+    if raw is None:
+        raw = str(record.get("message") or "")
+        record["extra"][_RAW_MESSAGE_EXTRA_KEY] = raw
+    tag, body = _leading_business_tag(raw)
+    if tag:
+        record["message"] = body
+        prefix = f"{color}[{tag}]</> " if console else f"[{tag}] "
+    else:
+        label = _log_prefix_label(name, raw)
+        prefix = f"{color}[{label}]</> " if console and label else f"[{label}] " if label else ""
     if console:
         display_part = color + "{{{extra[display_name]:<8}}}</>"
-        prefix_part = f"{color}[{label}]</>" if label else ""
         return (
             "<g>{time:MM-DD HH:mm:ss}</g> [<lvl>{level:<8}</lvl>] "
-            f"{display_part} {prefix_part} "
+            f"{display_part} {prefix}"
             "{message}\n{exception}"
         )
     display_part = "{{{extra[display_name]:<8}}}"
-    prefix_part = f"[{label}] " if label else ""
-    return f"{{time:MM-DD HH:mm:ss}} [{{level:<8}}] {display_part} {prefix_part}{{message}}\n{{exception}}"
+    return f"{{time:MM-DD HH:mm:ss}} [{{level:<8}}] {display_part} {prefix}{{message}}\n{{exception}}"
 
 
 def format_repo_console_log(record: dict[str, Any]) -> str:
