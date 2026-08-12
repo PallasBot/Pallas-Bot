@@ -203,7 +203,7 @@ def report_process_stop(name: str, pid: int, elapsed_s: float) -> None:
         from nonebot import logger
 
         logger.info(
-            "[ShutDown] 辅进程 [{}]（pid {}）{}，耗时 [{:.1f}]s",
+            "[ShutDown] 辅进程 [{}] 进程号 [{}] {}，耗时 [{:.1f}]s",
             name,
             pid,
             outcome,

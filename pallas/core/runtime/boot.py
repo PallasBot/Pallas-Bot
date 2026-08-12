@@ -86,7 +86,7 @@ def boot() -> nonebot.Driver:
         await stop_ban_gate_snapshot()
         t2 = time.monotonic()
         logger.info(
-            "[ShutDown] on_shutdown: mark=[{:.1f}]s ban_gate=[{:.1f}]s total=[{:.1f}]s",
+            "[ShutDown] on_shutdown 收尾完成：置位标记耗时 [{:.1f}]s、ban gate 停止耗时 [{:.1f}]s、总计 [{:.1f}]s",
             t1 - t0,
             t2 - t1,
             t2 - t0,
