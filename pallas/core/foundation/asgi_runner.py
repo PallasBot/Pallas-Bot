@@ -15,6 +15,7 @@ from typing import Any
 from nonebot import logger
 
 _EXECUTOR_TIMEOUT = 5.0
+_GRACEFUL_SHUTDOWN_TIMEOUT = 8.0
 
 
 def _uvicorn_log_config() -> dict[str, Any]:
@@ -99,6 +100,8 @@ def run_asgi_server(
         host=host or str(driver.config.host),
         port=port or driver.config.port,
         log_config=_uvicorn_log_config(),
+        # NoneBot on_shutdown / 存量连接可能拖住 shutdown，限时让 serve() 返回后走受控收尾
+        timeout_graceful_shutdown=_GRACEFUL_SHUTDOWN_TIMEOUT,
         **kwargs,
     )
     server = uvicorn.Server(config)

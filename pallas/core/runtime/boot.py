@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 import nonebot
 from nonebot.adapters.onebot.v11 import Adapter as ONEBOT_V11Adapter
 from nonebot.log import logger
@@ -76,10 +78,12 @@ def boot() -> nonebot.Driver:
 
     @driver.on_shutdown
     async def shutdown() -> None:
+        started = time.monotonic()
         from pallas.core.platform.multi_bot.connected_roster import mark_process_shutting_down
 
         mark_process_shutting_down()
         await stop_ban_gate_snapshot()
+        logger.info("[ShutDown] on_shutdown 回调完成，耗时 [{:.1f}]s", time.monotonic() - started)
 
     logger.info("[初始化] 模块载入中...")
     load_plugins_for_role()
