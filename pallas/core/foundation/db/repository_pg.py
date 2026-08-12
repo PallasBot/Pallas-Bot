@@ -92,7 +92,7 @@ class ContextAnswerRow(Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    context_id: Mapped[int] = mapped_column(ForeignKey("context.id", ondelete="CASCADE"), nullable=False, index=True)
+    context_id: Mapped[int] = mapped_column(ForeignKey("context.id", ondelete="CASCADE"), nullable=False)
     keywords: Mapped[str] = mapped_column(Text, nullable=False)
     keywords_hash: Mapped[str] = mapped_column(Text, nullable=False)
     group_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -716,6 +716,7 @@ def _ensure_pg_context_answer_reply_index(connection) -> None:
     insp = inspect(connection)
     if not insp.has_table("context_answer"):
         return
+    connection.execute(text("DROP INDEX IF EXISTS ix_context_answer_context_id"))
     connection.execute(
         text("CREATE INDEX IF NOT EXISTS ix_context_answer_ctx_count_time ON context_answer (context_id, count, time)")
     )

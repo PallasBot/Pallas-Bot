@@ -277,6 +277,7 @@ def test_context_answer_rows_have_reply_indexes():
     answer_index_names = {idx.name for idx in ContextAnswerRow.__table__.indexes}
     message_index_names = {idx.name for idx in ContextAnswerMessageRow.__table__.indexes}
 
+    assert "ix_context_answer_context_id" not in answer_index_names
     assert "ix_context_answer_ctx_count_time" in answer_index_names
     assert "ix_context_answer_message_answer_id_id" in message_index_names
 
@@ -507,6 +508,7 @@ def test_ensure_pg_context_answer_reply_indexes_create_missing_indexes(monkeypat
     mod._ensure_pg_context_answer_message_reply_index(connection)
 
     assert executed == [
+        "DROP INDEX IF EXISTS ix_context_answer_context_id",
         "CREATE INDEX IF NOT EXISTS ix_context_answer_ctx_count_time ON context_answer (context_id, count, time)",
         "CREATE INDEX IF NOT EXISTS ix_context_answer_message_answer_id_id ON context_answer_message (answer_id, id)",
     ]
