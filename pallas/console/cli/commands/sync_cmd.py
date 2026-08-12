@@ -16,8 +16,8 @@ def register(sub: argparse._SubParsersAction) -> None:
         help="pyproject optional-extra，可重复；deploy-full / deploy-all 仅保留迁移提示",
     )
     parser.add_argument("--dev", action="store_true", help="包含 dev 依赖组（默认 --no-dev）")
-    parser.add_argument("--deploy-full", action="store_true", help="提示改用 pallas ext 安装官方扩展")
-    parser.add_argument("--deploy-all", action="store_true", help="提示改用 pallas ext 安装官方扩展")
+    parser.add_argument("--deploy-full", action="store_true", help="提示改用 pallas ext 安装官方插件")
+    parser.add_argument("--deploy-all", action="store_true", help="提示改用 pallas ext 安装官方插件")
     parser.set_defaults(handler=run)
 
 

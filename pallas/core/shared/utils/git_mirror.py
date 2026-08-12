@@ -663,7 +663,7 @@ def apply_mirror_to_official_extension(package: str, mirror: MirrorSpec | None =
 
     pkg = (package or "").strip()
     if pkg not in OFFICIAL_EXTENSION_REPOS:
-        return {"id": pkg, "success": False, "message": "非官方扩展包"}
+        return {"id": pkg, "success": False, "message": "非官方插件包"}
 
     mirror = mirror or resolve_mirror_for_official_package(pkg)
     local_git = _find_local_git_for_official_repo(pkg)

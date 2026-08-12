@@ -1,4 +1,4 @@
-"""官方扩展安装与可选重启。"""
+"""官方插件安装与可选重启。"""
 
 from __future__ import annotations
 

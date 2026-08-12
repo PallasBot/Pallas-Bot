@@ -22,10 +22,10 @@ def register(sub: argparse._SubParsersAction) -> None:
     parser = sub.add_parser("ext", help="官方插件安装与管理")
     ext_sub = parser.add_subparsers(dest="ext_command", required=True)
 
-    list_parser = ext_sub.add_parser("list", help="列出官方扩展与安装状态")
+    list_parser = ext_sub.add_parser("list", help="列出官方插件与安装状态")
     list_parser.set_defaults(handler=run_list)
 
-    install_parser = ext_sub.add_parser("install", help="安装官方扩展")
+    install_parser = ext_sub.add_parser("install", help="安装官方插件")
     install_parser.add_argument("package", help="pip 包名，如 pallas-plugin-duel")
     install_parser.add_argument(
         "--upgrade",
@@ -35,7 +35,7 @@ def register(sub: argparse._SubParsersAction) -> None:
     install_parser.add_argument("--restart", action="store_true", help="完成后重启 Bot")
     install_parser.set_defaults(handler=run_install)
 
-    uninstall_parser = ext_sub.add_parser("uninstall", help="卸载官方扩展")
+    uninstall_parser = ext_sub.add_parser("uninstall", help="卸载官方插件")
     uninstall_parser.add_argument("package", help="pip 包名")
     uninstall_parser.add_argument("--restart", action="store_true", help="完成后重启 Bot")
     uninstall_parser.set_defaults(handler=run_uninstall)

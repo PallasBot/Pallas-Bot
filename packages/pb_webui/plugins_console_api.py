@@ -612,7 +612,7 @@ def register_plugins_console_router(
         except ExtensionInstallError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("[WebUI] 安装官方扩展失败")
+            logger.exception("[WebUI] 安装官方插件失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.post(f"{x}/plugins/official-extensions/install-async", include_in_schema=True)
@@ -787,7 +787,7 @@ def register_plugins_console_router(
         except ExtensionInstallError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("[WebUI] 卸载官方扩展失败")
+            logger.exception("[WebUI] 卸载官方插件失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.post(f"{x}/plugins/official-extensions/update", include_in_schema=True)
@@ -813,7 +813,7 @@ def register_plugins_console_router(
         except ExtensionInstallError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("[WebUI] 更新官方扩展失败")
+            logger.exception("[WebUI] 更新官方插件失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.get(f"{x}/plugins/community-store", include_in_schema=True)

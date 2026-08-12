@@ -1,4 +1,4 @@
-"""插件「有无新版本」快照：社区插件比对 git commit，官方扩展比对 PyPI 版本。
+"""插件「有无新版本」快照：社区插件比对 git commit，官方插件比对 PyPI 版本。
 
 商店行（plugin_registry / community_plugin_registry）读取本快照得到精确的
 ``has_update`` 语义，而不是「能否执行更新动作」。快照由用户手动触发或每天 4 点
@@ -62,7 +62,7 @@ def community_update_entry(plugin_id: str) -> dict[str, Any] | None:
 
 
 def official_update_entry(package: str) -> dict[str, Any] | None:
-    """取某官方扩展包的更新判定；无快照返回 None。"""
+    """取某官方插件包的更新判定；无快照返回 None。"""
     snap = load_snapshot()
     entry = (snap.get("official") or {}).get(package)
     return entry if isinstance(entry, dict) else None

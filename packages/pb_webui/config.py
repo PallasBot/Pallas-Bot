@@ -162,7 +162,7 @@ class Config(BaseModel):
         default=False,
         description=field_help(
             "是否自动更新已安装插件",
-            "对有新版本的官方扩展与社区插件执行更新，完成后尝试安排重启",
+            "对有新版本的官方插件与社区插件执行更新，完成后尝试安排重启",
             "推荐在「更新」页统一配置",
         ),
         json_schema_extra=_ui("自动更新", 14),

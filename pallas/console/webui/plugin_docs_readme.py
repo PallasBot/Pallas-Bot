@@ -53,7 +53,7 @@ def bundled_plugin_readme_relative_path(plugin_id: str) -> str | None:
 
 
 def resolve_bundled_readme_hero_image_url(plugin_id: str, plugin_root: Path | None = None) -> str | None:
-    """bundled README 顶图：优先包内 cover，官方扩展再回退扩展仓 brand-avatar。"""
+    """bundled README 顶图：优先包内 cover，官方插件再回退扩展仓 brand-avatar。"""
     from pallas.console.webui.plugin_package_assets import (
         plugin_roots_for_id,
         resolve_plugin_package_visual_urls,
@@ -81,7 +81,7 @@ def resolve_bundled_readme_hero_image_url(plugin_id: str, plugin_root: Path | No
 
 
 def normalize_bundled_plugin_readme_markdown(plugin_id: str, markdown: str) -> str:
-    """改写 bundled README 资源路径；包内 cover 或官方扩展顶图替换 brand-avatar 占位。"""
+    """改写 bundled README 资源路径；包内 cover 或官方插件顶图替换 brand-avatar 占位。"""
     pid = canonical_plugin_id(plugin_id)
     out = (markdown or "").replace("../assets/", "/pallas/assets/").replace("docs/assets/", "/pallas/assets/")
     if not pid:
