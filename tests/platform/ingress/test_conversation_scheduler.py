@@ -172,6 +172,18 @@ async def test_scheduler_snapshot_reports_llm_budget() -> None:
     await scheduler.stop()
 
 
+def test_explicit_at_trigger_is_not_a_serial_command() -> None:
+    from types import SimpleNamespace
+
+    event = SimpleNamespace(
+        to_me=False,
+        _pallas_llm_at_trigger=True,
+        get_plaintext=lambda: "你好",
+    )
+
+    assert event._pallas_llm_at_trigger is True
+
+
 @pytest.mark.asyncio
 async def test_hot_conversation_cannot_fill_all_pending_capacity() -> None:
     scheduler = ConversationScheduler(concurrency=1, max_pending=4, per_key_pending=2)

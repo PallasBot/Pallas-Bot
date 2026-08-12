@@ -387,10 +387,16 @@ async def submit_conversation_event(bot: Bot, event: Event, work: Work) -> None:
     from pallas.core.platform.ingress.matcher_activation import legacy_command_traffic
 
     plain = str(getattr(event, "get_plaintext", lambda: "")() or "").strip()
+    is_command = legacy_command_traffic(plain, group_only=True) or plain in {"牛牛", "帕拉斯"}
     mode = (
         "llm"
-        if getattr(event, "to_me", False) or getattr(event, "_pallas_llm_alias_hard_trigger", False)
-        else ("serial" if legacy_command_traffic(plain, group_only=True) or plain in {"牛牛", "帕拉斯"} else "chat")
+        if not is_command
+        and (
+            getattr(event, "to_me", False)
+            or getattr(event, "_pallas_llm_alias_hard_trigger", False)
+            or getattr(event, "_pallas_llm_at_trigger", False)
+        )
+        else ("serial" if is_command else "chat")
     )
     await scheduler.submit(key, work, reservation=reservation, mode=mode)
 
