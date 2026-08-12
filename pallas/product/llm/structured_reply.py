@@ -162,6 +162,8 @@ def validate_reply_chars(text: str) -> tuple[bool, str]:
             continue
         if 0xFF00 <= code <= 0xFFEF:
             continue
+        if code == 0x2026:  # 中文省略号 …
+            continue
         if ch in _ALLOWED_ASCII_PUNCT:
             continue
         if code < 0x80 and ch.isalnum():
