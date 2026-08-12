@@ -29,6 +29,8 @@ _ROUTE_CANDIDATE_COUNTER_KEYS = (
     "direct_visible_actions",
     "direct_effect_actions",
 )
+_OUTCOME_KEYS = ("direct_handled", "direct_fallback", "direct_error", "matcher_only")
+_OUTCOME_COUNTER_KEYS = ("messages", "matchers_considered", "matchers_selected", "matchers_run")
 _HISTORY_LOCK = threading.Lock()
 _last_prune_at = 0
 _ROUTE_HISTORY_CACHE: dict[str, Any] = {
@@ -92,6 +94,25 @@ def _sanitize_route_candidates(raw: Any) -> list[dict[str, Any]]:
             row["ingress_duration_ms_p95"] = max(0.0, float(p95))
         if isinstance(item.get("eligible"), bool):
             row["eligible"] = item["eligible"]
+        outcomes = item.get("outcomes")
+        if isinstance(outcomes, dict):
+            sanitized_outcomes: dict[str, dict[str, int | float]] = {}
+            for outcome in _OUTCOME_KEYS:
+                raw_outcome = outcomes.get(outcome)
+                if not isinstance(raw_outcome, dict):
+                    continue
+                sanitized: dict[str, int | float] = {}
+                for key in _OUTCOME_COUNTER_KEYS:
+                    value = raw_outcome.get(key)
+                    if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value)):
+                        sanitized[key] = max(0, int(value))
+                p95 = raw_outcome.get("ingress_duration_ms_p95")
+                if isinstance(p95, (int, float)) and not isinstance(p95, bool) and math.isfinite(float(p95)):
+                    sanitized["ingress_duration_ms_p95"] = max(0.0, float(p95))
+                if sanitized:
+                    sanitized_outcomes[outcome] = sanitized
+            if sanitized_outcomes:
+                row["outcomes"] = sanitized_outcomes
         candidates.append(row)
     candidates.sort(key=lambda row: tuple(row["route_modules"]))
     return candidates
@@ -182,6 +203,32 @@ def _apply_candidate_delta(
                 float(total.get("ingress_duration_ms_p95") or 0.0),
                 float(p95),
             )
+        outcomes = row.get("outcomes")
+        prior_outcomes = prior.get("outcomes") if prior is not None else None
+        if isinstance(outcomes, dict):
+            total_outcomes = total.setdefault("outcomes", {})
+            if not isinstance(total_outcomes, dict):
+                total_outcomes = {}
+                total["outcomes"] = total_outcomes
+            for outcome, raw_outcome in outcomes.items():
+                if not isinstance(raw_outcome, dict):
+                    continue
+                aggregate = total_outcomes.setdefault(outcome, {})
+                if not isinstance(aggregate, dict):
+                    aggregate = {}
+                    total_outcomes[outcome] = aggregate
+                previous = prior_outcomes.get(outcome) if isinstance(prior_outcomes, dict) else None
+                for key in _OUTCOME_COUNTER_KEYS:
+                    value = int(raw_outcome.get(key) or 0)
+                    prior_value = int(previous.get(key) or 0) if isinstance(previous, dict) else 0
+                    delta = value - prior_value if value >= prior_value else value
+                    aggregate[key] = int(aggregate.get(key) or 0) + delta
+                p95 = raw_outcome.get("ingress_duration_ms_p95")
+                if isinstance(p95, (int, float)):
+                    aggregate["ingress_duration_ms_p95"] = max(
+                        float(aggregate.get("ingress_duration_ms_p95") or 0.0),
+                        float(p95),
+                    )
     return current
 
 

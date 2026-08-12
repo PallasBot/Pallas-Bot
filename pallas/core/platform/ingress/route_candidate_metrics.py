@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 _MAX_NAMED_ROUTES = 64
 _OTHER_ROUTE: tuple[str, ...] = ()
 _DIRECT_OUTCOMES = ("direct_handled", "direct_fallback", "direct_error")
+_OUTCOMES = (*_DIRECT_OUTCOMES, "matcher_only")
 
 
 @dataclass(slots=True)
@@ -23,6 +24,16 @@ class RouteCandidateMetrics:
     matcher_handled: int = 0
     direct_visible_actions: int = 0
     direct_effect_actions: int = 0
+    durations_ms: deque[float] = field(default_factory=lambda: deque(maxlen=256))
+    outcomes: dict[str, RouteOutcomeMetrics] = field(default_factory=dict)
+
+
+@dataclass(slots=True)
+class RouteOutcomeMetrics:
+    messages: int = 0
+    matchers_considered: int = 0
+    matchers_selected: int = 0
+    matchers_run: int = 0
     durations_ms: deque[float] = field(default_factory=lambda: deque(maxlen=256))
 
 
@@ -83,6 +94,14 @@ def record_route_candidate(
     row.matchers_run += max(0, matchers_run)
     if direct_outcome in _DIRECT_OUTCOMES:
         setattr(row, direct_outcome, getattr(row, direct_outcome) + 1)
+    outcome = direct_outcome if direct_outcome in _DIRECT_OUTCOMES else "matcher_only"
+    outcome_metrics = row.outcomes.setdefault(outcome, RouteOutcomeMetrics())
+    outcome_metrics.messages += 1
+    outcome_metrics.matchers_considered += max(0, matchers_considered)
+    outcome_metrics.matchers_selected += max(0, matchers_selected)
+    outcome_metrics.matchers_run += max(0, matchers_run)
+    if duration_ms >= 0:
+        outcome_metrics.durations_ms.append(float(duration_ms))
     row.matcher_handled += int(matcher_handled)
     if direct_visible_actions is not None:
         row.direct_visible_actions += max(0, direct_visible_actions)
@@ -119,6 +138,16 @@ def route_candidate_metrics_snapshot() -> list[dict[str, object]]:
             "matcher_handled": metrics.matcher_handled,
             "direct_visible_actions": metrics.direct_visible_actions,
             "direct_effect_actions": metrics.direct_effect_actions,
+            "outcomes": {
+                outcome: {
+                    "messages": outcome_metrics.messages,
+                    "matchers_considered": outcome_metrics.matchers_considered,
+                    "matchers_selected": outcome_metrics.matchers_selected,
+                    "matchers_run": outcome_metrics.matchers_run,
+                    "ingress_duration_ms_p95": duration_p95(outcome_metrics.durations_ms),
+                }
+                for outcome, outcome_metrics in metrics.outcomes.items()
+            },
             "ingress_duration_ms_p95": p95,
             "eligible": (
                 len(route) == 1

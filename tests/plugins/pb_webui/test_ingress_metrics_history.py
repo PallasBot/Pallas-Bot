@@ -122,6 +122,70 @@ def test_route_candidates_are_sanitized_and_only_written_when_changed(tmp_path, 
     assert history["latest"][0]["messages"] == 4
 
 
+def test_route_candidate_history_aggregates_outcome_metrics(tmp_path, monkeypatch) -> None:
+    from packages.pb_webui import ingress_metrics_history as mod
+
+    monkeypatch.setattr(mod, "ingress_metrics_history_path", lambda: tmp_path / "ingress_metrics_history.jsonl")
+    first = {
+        "route_modules": ["drink"],
+        "messages": 2,
+        "outcomes": {
+            "direct_handled": {
+                "messages": 1,
+                "matchers_selected": 0,
+                "matchers_run": 0,
+                "ingress_duration_ms_p95": 12.0,
+            },
+            "direct_fallback": {
+                "messages": 1,
+                "matchers_selected": 4,
+                "matchers_run": 4,
+                "ingress_duration_ms_p95": 45.0,
+            },
+        },
+    }
+    second = {
+        "route_modules": ["drink"],
+        "messages": 4,
+        "outcomes": {
+            "direct_handled": {
+                "messages": 3,
+                "matchers_selected": 0,
+                "matchers_run": 0,
+                "ingress_duration_ms_p95": 20.0,
+            },
+            "direct_fallback": {
+                "messages": 1,
+                "matchers_selected": 4,
+                "matchers_run": 4,
+                "ingress_duration_ms_p95": 45.0,
+            },
+        },
+    }
+
+    assert mod.append_ingress_metrics_history(snapshot={"day_key": "2026-08-10", "route_candidates": [first]}, ts=100)
+    assert mod.append_ingress_metrics_history(snapshot={"day_key": "2026-08-10", "route_candidates": [second]}, ts=115)
+
+    history = mod.read_route_candidate_history(now=115)
+
+    assert history["today_totals"][0]["outcomes"] == {
+        "direct_handled": {
+            "messages": 3,
+            "matchers_considered": 0,
+            "matchers_selected": 0,
+            "matchers_run": 0,
+            "ingress_duration_ms_p95": 20.0,
+        },
+        "direct_fallback": {
+            "messages": 1,
+            "matchers_considered": 0,
+            "matchers_selected": 4,
+            "matchers_run": 4,
+            "ingress_duration_ms_p95": 45.0,
+        },
+    }
+
+
 def test_route_candidates_persist_again_when_day_changes(tmp_path, monkeypatch) -> None:
     from packages.pb_webui import ingress_metrics_history as mod
 

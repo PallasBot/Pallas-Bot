@@ -38,6 +38,24 @@ def normalized_modules(value: object) -> tuple[str, ...]:
     return tuple(sorted({str(module).strip() for module in value if str(module).strip()}))
 
 
+def normalized_outcomes(value: object) -> dict[str, dict[str, int | float | None]]:
+    if not isinstance(value, Mapping):
+        return {}
+    outcomes: dict[str, dict[str, int | float | None]] = {}
+    for name in ("direct_handled", "direct_fallback", "direct_error", "matcher_only"):
+        raw = value.get(name)
+        if not isinstance(raw, Mapping):
+            continue
+        outcomes[name] = {
+            "messages": integer(raw.get("messages")),
+            "matchers_considered": integer(raw.get("matchers_considered")),
+            "matchers_selected": integer(raw.get("matchers_selected")),
+            "matchers_run": integer(raw.get("matchers_run")),
+            "ingress_duration_ms_p95": number(raw.get("ingress_duration_ms_p95")) or None,
+        }
+    return outcomes
+
+
 def plugin_stats_by_module(rows: Sequence[Mapping[str, object]]) -> dict[str, dict[str, float | int]]:
     result: dict[str, dict[str, float | int]] = {}
     for row in rows:
@@ -153,6 +171,7 @@ def rank_message_runtime_candidates(
             "direct_fallback": direct_fallback,
             "direct_error": direct_error,
             "matcher_handled": matcher_handled,
+            "outcomes": normalized_outcomes(raw.get("outcomes")),
             "average_matchers_selected_per_route_message": average_selected,
             "ingress_duration_ms_p95": number(raw.get("ingress_duration_ms_p95")) or None,
             "estimated_matchers_avoided_today": estimate,

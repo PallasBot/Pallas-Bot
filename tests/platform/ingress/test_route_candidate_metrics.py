@@ -56,6 +56,22 @@ def test_aggregates_normalized_route_and_exact_counters() -> None:
         "matcher_handled": 1,
         "direct_visible_actions": 2,
         "direct_effect_actions": 5,
+        "outcomes": {
+            "direct_handled": {
+                "messages": 1,
+                "matchers_considered": 8,
+                "matchers_selected": 2,
+                "matchers_run": 1,
+                "ingress_duration_ms_p95": 20.0,
+            },
+            "matcher_only": {
+                "messages": 1,
+                "matchers_considered": 10,
+                "matchers_selected": 4,
+                "matchers_run": 3,
+                "ingress_duration_ms_p95": 10.0,
+            },
+        },
         "ingress_duration_ms_p95": 20.0,
         "eligible": False,
     }
@@ -106,6 +122,7 @@ def test_snapshot_has_privacy_allowlisted_fields_only() -> None:
         "matcher_handled",
         "direct_visible_actions",
         "direct_effect_actions",
+        "outcomes",
         "ingress_duration_ms_p95",
         "eligible",
     }
