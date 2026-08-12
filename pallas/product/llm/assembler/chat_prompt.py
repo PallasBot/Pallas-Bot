@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 class ResolvedGroupExpression:
     style_anchor: str = ""
     matched_examples: list[tuple[str, str]] = field(default_factory=list)
+    baseline_note: str = ""
+    behavior_strategies: list[tuple[str, str, str]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -48,6 +50,7 @@ class ChatPromptAssembler:
             self._turn_policy_block(turn_policy),
             *context.blocks(),
             self._group_expression_block(group_expression),
+            self._group_behavior_reference_block(group_expression),
             self._tool_context_block(tool_context),
             self._reply_shape_block(reply_shape),
         ]
@@ -94,7 +97,31 @@ class ChatPromptAssembler:
             if safe_reply:
                 prefix = f"触发「{safe_trigger}」时" if safe_trigger else "可借鉴"
                 lines.append(f"- {prefix}：{safe_reply}")
+        baseline = sanitize_prompt_block(expression.baseline_note, max_len=120)
+        if baseline:
+            lines.append(f"- {baseline}")
         return "\n".join(lines) if len(lines) > 2 else ""
+
+    @staticmethod
+    def _group_behavior_reference_block(expression: ResolvedGroupExpression | None) -> str:
+        if expression is None:
+            return ""
+        safe_strategies: list[tuple[str, str, str]] = []
+        for scene, action, outcome in expression.behavior_strategies[:2]:
+            safe_scene = sanitize_prompt_block(scene, max_len=80)
+            safe_action = sanitize_prompt_block(action, max_len=120)
+            if safe_scene and safe_action:
+                safe_strategies.append((safe_scene, safe_action, sanitize_prompt_block(outcome, max_len=80)))
+        if not safe_strategies:
+            return ""
+        lines = [
+            "【真人接话参考】",
+            "- 以下来自本群真人互动的节奏与接话结构，只借鉴什么时候说短/长、怎么接，不要复刻原话。",
+        ]
+        for scene, action, outcome in safe_strategies:
+            tail = f"，结果{outcome}" if outcome else ""
+            lines.append(f"- 类似「{scene}」时，真人会{action}{tail}。")
+        return "\n".join(lines)
 
     @staticmethod
     def _reply_shape_block(policy: ReplyShapePolicy) -> str:

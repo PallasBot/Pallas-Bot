@@ -65,6 +65,48 @@ def test_chat_prompt_assembler_uses_fixed_order_without_aliases_or_duplicates() 
     assert "六点？" in prompt
 
 
+def test_chat_prompt_assembler_renders_behavior_strategy_reference_and_baseline() -> None:
+    prompt = ChatPromptAssembler().assemble(
+        core_persona="【核心人格】\n有主见的小姑娘。",
+        self_identity="【自称】\n牛牛指自己，使用第一人称。",
+        turn_policy=TurnPolicy(
+            reply_target="answer",
+            seriousness="casual",
+            social_action="ANSWER",
+            allow_teasing=True,
+            allow_affection=True,
+            needs_tool=False,
+            needs_grounding=False,
+        ),
+        context=ChatContextBundle(),
+        group_expression=ResolvedGroupExpression(
+            style_anchor="短句接梗，别抢戏。",
+            matched_examples=[("你又来了", "我一直都在呀")],
+            baseline_note="本群真人单条短气泡为主（占比约 83%），单段中位约 6 字。",
+            behavior_strategies=[
+                ("对方吐槽工作压力", "先短句接住情绪，再问一句具体的事", "对方愿意多讲"),
+                ("群里问吃什么", "直接给具体建议", ""),
+            ],
+        ),
+        reply_shape=ReplyShapePolicy(
+            preferred_bubbles=1,
+            max_bubbles=3,
+            target_chars_min=4,
+            target_chars_max=18,
+            total_length_band="short",
+            rhythm="single",
+            max_output_tokens=80,
+        ),
+    )
+
+    assert "【真人接话参考】" in prompt
+    assert "只借鉴什么时候说短/长、怎么接，不要复刻原话" in prompt
+    assert "类似「对方吐槽工作压力」时，真人会先短句接住情绪，再问一句具体的事，结果对方愿意多讲。" in prompt
+    assert "类似「群里问吃什么」时，真人会直接给具体建议。" in prompt
+    assert "本群真人单条短气泡为主" in prompt
+    assert prompt.index("【群表达指导】") < prompt.index("【真人接话参考】") < prompt.index("【回复形状与输出契约】")
+
+
 def test_chat_prompt_assembler_keeps_quote_replies_within_casual_shape() -> None:
     prompt = ChatPromptAssembler().assemble(
         core_persona="核心",

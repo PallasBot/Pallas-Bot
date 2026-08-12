@@ -146,7 +146,7 @@ async def test_semantic_style_backfill_handler_skips_expired_and_retries_label_t
     from pallas.product.llm import repeater_semantic_style as mod
 
     label = parse_semantic_style_label({"reuse": "rewrite"})
-    worker = AsyncMock(side_effect=[RuntimeError("temporary"), RuntimeError("temporary"), label])
+    worker = AsyncMock(side_effect=[RuntimeError("temporary"), RuntimeError("temporary"), (label, None)])
     persist = Mock()
     monkeypatch.setattr(mod, "label_semantic_style_with_llm", worker)
     monkeypatch.setattr(mod, "persist_semantic_style_example", persist)
@@ -243,7 +243,7 @@ async def test_semantic_style_label_uses_deterministic_short_options(monkeypatch
 
     await mod.label_semantic_style_with_llm(trigger_text="前句", reply_text="接话")
 
-    assert complete.await_args.kwargs["options"] == {"temperature": 0, "max_tokens": 96}
+    assert complete.await_args.kwargs["options"] == {"temperature": 0, "max_tokens": 240}
 
 
 @pytest.mark.asyncio
@@ -1223,7 +1223,7 @@ async def test_delivery_receipt_feedback_reply_promotes_exact_semantic_source(tm
 async def test_semantic_style_worker_labels_and_persists_relation(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     label = parse_semantic_style_label({"reuse": "rewrite", "style_anchor": "短句接梗。"})
-    worker = AsyncMock(return_value=label)
+    worker = AsyncMock(return_value=(label, None))
     monkeypatch.setattr("pallas.product.llm.repeater_semantic_style.label_semantic_style_with_llm", worker)
     from pallas.product.llm.repeater_semantic_style import handle_repeater_semantic_style
 
@@ -1296,7 +1296,7 @@ async def test_realtime_image_relation_uses_cached_image_and_never_persists_byte
         "text": "absent",
     })
     persist = Mock()
-    monkeypatch.setattr(mod, "label_semantic_style_with_llm", AsyncMock(return_value=text_label))
+    monkeypatch.setattr(mod, "label_semantic_style_with_llm", AsyncMock(return_value=(text_label, None)))
     monkeypatch.setattr(mod, "label_semantic_style_visual_with_cached_image", AsyncMock(return_value=visual_label))
     monkeypatch.setattr(mod, "persist_semantic_style_example", persist)
 
@@ -1312,3 +1312,153 @@ async def test_realtime_image_relation_uses_cached_image_and_never_persists_byte
     persisted = persist.call_args.args[0]
     assert persisted.label.visual == visual_label
     assert "cache.image" not in persisted.model_dump_json()
+
+
+def test_parse_label_extracts_behavior_strategy() -> None:
+    from pallas.product.llm.repeater_semantic_style import _parse_label_response
+
+    label, strategy = _parse_label_response(
+        '{"interaction_actions":["tease"],"intensity":"soft","behavior_strategy":{'
+        '"scene":"对方吐槽工作压力","action":"先短句接住情绪，再问一句具体的事",'
+        '"outcome":"对方愿意多讲","learning_type":"observed"}}'
+    )
+
+    assert label.intensity == "soft"
+    assert label.interaction_actions == ["tease"]
+    assert strategy is not None
+    assert strategy.scene == "对方吐槽工作压力"
+    assert strategy.action == "先短句接住情绪，再问一句具体的事"
+    assert strategy.outcome == "对方愿意多讲"
+    assert strategy.learning_type == "observed"
+
+
+def test_parse_label_response_skips_missing_strategy() -> None:
+    from pallas.product.llm.repeater_semantic_style import _parse_label_response
+
+    label, strategy = _parse_label_response('{"intensity":"neutral"}')
+    assert label.intensity == "neutral"
+    assert strategy is None
+
+    label, strategy = _parse_label_response("not json")
+    assert strategy is None
+
+
+def test_behavior_strategy_pooling_with_self_reflection(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod.clear_semantic_style_cache_for_tests()
+    strategy = mod.BehaviorStrategy(
+        scene="对方吐槽工作压力",
+        action="先短句接住情绪，再问一句具体的事",
+        outcome="对方愿意多讲",
+    )
+    example = mod.SemanticStyleExample(
+        example_id="strategy:1",
+        created_at=100,
+        bot_id=100,
+        group_id=42,
+        scene="group_chat",
+        trigger_text="好烦，又要加班",
+        reply_text="怎么了，说来听听",
+        label=mod.parse_semantic_style_label({"intensity": "soft"}),
+        behavior_strategy=strategy,
+    )
+    profile = mod._build_profile(example, None, now=100)
+
+    assert len(profile.behavior_strategies) == 1
+    assert profile.behavior_strategies[0].trigger == "好烦，又要加班"
+    assert profile.behavior_strategies[0].learning_type == "observed"
+
+    positive = example.model_copy(update={"example_id": "strategy:2", "bot_style_positive": True})
+    merged = mod._build_profile(positive, profile, now=100)
+
+    assert [item.learning_type for item in merged.behavior_strategies] == ["observed", "self_reflection"]
+    assert [item.count for item in merged.behavior_strategies] == [1, 1]
+
+
+def test_rhythm_baseline_note_requires_enough_samples(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    thin = mod.SemanticStyleProfile(
+        bot_id=100,
+        group_id=42,
+        scene="group_chat",
+        sample_count=5,
+        bubble_counts=[1],
+        segment_char_lengths=[6],
+        rhythm_counts={"single": 5},
+    )
+    assert mod.build_rhythm_baseline_note(thin) == ""
+
+    rich = thin.model_copy(
+        update={
+            "sample_count": 30,
+            "bubble_counts": [1] * 25 + [2] * 5,
+            "segment_char_lengths": [5, 6, 7] * 10,
+            "rhythm_counts": {"single": 25, "multi": 5},
+            "visual_sample_count": 6,
+        }
+    )
+    note = mod.build_rhythm_baseline_note(rich)
+    assert "单条短气泡为主（占比约 83%）" in note
+    assert "单段中位约 6 字" in note
+    assert "约 20% 的回复带图" in note
+
+    low_visual = rich.model_copy(update={"visual_sample_count": 0})
+    assert "带图" not in mod.build_rhythm_baseline_note(low_visual)
+
+
+def test_behavior_strategy_retrieval_ranks_by_trigger_similarity() -> None:
+    from pallas.product.llm.repeater_semantic_style import BehaviorStrategy, select_behavior_strategies
+
+    strategies = [
+        BehaviorStrategy(scene="群友问晚饭吃什么", action="直接给具体建议", trigger="晚饭吃啥好"),
+        BehaviorStrategy(scene="对方吐槽工作压力", action="先短句接住情绪，再问一句具体的事", trigger="好烦，又要加班"),
+        BehaviorStrategy(scene="纯寒暄打招呼", action="简单应一声", trigger="早"),
+    ]
+    hits = select_behavior_strategies(strategies, query_text="好烦啊，天天加班")
+
+    assert [item.action for item in hits] == ["先短句接住情绪，再问一句具体的事"]
+    assert select_behavior_strategies(strategies, query_text="今天吃什么")[0].action == "直接给具体建议"
+
+
+def test_cached_semantic_style_resolution_injects_strategy_and_baseline(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    clear_semantic_style_cache_for_tests()
+    mod._write_profiles({
+        (99, 42, "group_chat"): mod.SemanticStyleProfile(
+            bot_id=99,
+            group_id=42,
+            scene="group_chat",
+            sample_count=30,
+            bubble_counts=[1] * 25 + [2] * 5,
+            segment_char_lengths=[5, 6, 7] * 10,
+            rhythm_counts={"single": 25, "multi": 5},
+            behavior_strategies=[
+                mod.BehaviorStrategy(
+                    scene="对方吐槽工作压力",
+                    action="先短句接住情绪，再问一句具体的事",
+                    outcome="对方愿意多讲",
+                    trigger="好烦，又要加班",
+                )
+            ],
+        )
+    })
+    request_id = next(
+        item for item in (f"request-{index}" for index in range(100)) if mod.semantic_style_injection_enabled(item)
+    )
+    resolution = mod.resolve_cached_semantic_style(
+        99,
+        42,
+        "group_chat",
+        request_id=request_id,
+        query_text="好烦啊，天天加班",
+    )
+
+    assert resolution.baseline_note.startswith("本群真人单条短气泡为主")
+    assert len(resolution.behavior_strategies) == 1
+    assert resolution.behavior_strategies[0].action == "先短句接住情绪，再问一句具体的事"

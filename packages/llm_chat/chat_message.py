@@ -796,6 +796,12 @@ async def prepare_and_submit_llm_chat_turn(
                 for item in semantic_examples
                 if isinstance(item, (list, tuple)) and len(item) == 2
             ],
+            baseline_note=str(getattr(semantic_style, "baseline_note", "") or ""),
+            behavior_strategies=[
+                (str(item.scene or ""), str(item.action or ""), str(item.outcome or ""))
+                for item in (getattr(semantic_style, "behavior_strategies", None) or [])[:2]
+                if str(item.scene or "").strip() and str(item.action or "").strip()
+            ],
         )
         core_persona = system_prompt
         if persona_bundle is not None:
