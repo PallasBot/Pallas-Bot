@@ -136,6 +136,43 @@ async def test_serial_work_preempts_queued_chat_for_same_conversation() -> None:
 
 
 @pytest.mark.asyncio
+async def test_llm_reservation_keeps_global_slots_for_llm_work() -> None:
+    scheduler = ConversationScheduler(concurrency=2, max_pending=8, llm_reserved=1)
+    started: list[str] = []
+    release = asyncio.Event()
+
+    async def work(value: str) -> None:
+        started.append(value)
+        await release.wait()
+
+    llm = asyncio.create_task(scheduler.submit(("10001", 1), lambda: work("llm"), mode="llm"))
+    ordinary = [
+        asyncio.create_task(scheduler.submit(("10001", index), lambda value=f"chat-{index}": work(value), mode="chat"))
+        for index in (2, 3, 4)
+    ]
+    await scheduler.wait_for_pending_at_least(4)
+    await asyncio.sleep(0)
+
+    assert started == ["llm", "chat-2"]
+    release.set()
+    await asyncio.gather(*ordinary, llm)
+    assert "llm" in started
+    await scheduler.stop()
+
+
+@pytest.mark.asyncio
+async def test_scheduler_snapshot_reports_llm_budget() -> None:
+    scheduler = ConversationScheduler(concurrency=4, max_pending=8, llm_reserved=2)
+
+    snapshot = scheduler.snapshot()
+
+    assert snapshot["llm_reserved"] == 2
+    assert snapshot["llm_waiting"] == 0
+    assert snapshot["llm_active"] == 0
+    await scheduler.stop()
+
+
+@pytest.mark.asyncio
 async def test_hot_conversation_cannot_fill_all_pending_capacity() -> None:
     scheduler = ConversationScheduler(concurrency=1, max_pending=4, per_key_pending=2)
     started = asyncio.Event()

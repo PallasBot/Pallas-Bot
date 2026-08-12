@@ -177,6 +177,16 @@ class IngressDispatchRuntimeConfig(BaseModel):
             "变更后需重启 Bot 才生效",
         ),
     )
+    conversation_scheduler_llm_reserved: int = Field(
+        default=6,
+        ge=0,
+        le=32,
+        description=field_help(
+            "高峰期为 LLM 对话保留的调度槽位，不限制 LLM 自身并发",
+            "填正整数；默认 6，普通闲聊会为 LLM 让出这些槽位",
+            "变更后需重启 Bot 才生效",
+        ),
+    )
     lane_acquire_timeout_sec: float = Field(
         default=1.0,
         ge=0.0,
