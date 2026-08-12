@@ -121,6 +121,16 @@ local/plugins/你的插件名/__init__.py
 
 配置好 `extra_plugin_dirs` 后重启 Bot。
 
+若插件通过 PyPI 发布，先将依赖安装到已激活的虚拟环境，再仅将插件本体安装到本地目录：
+
+```bash
+source .venv/bin/activate
+python -m pip install nonebot_plugin_example
+python -m pip install --no-deps -t local/plugins nonebot_plugin_example
+```
+
+第一条会将插件运行依赖安装到 `.venv`；第二条的 `--no-deps` 不可省略，否则 pip 会将依赖也平铺到 `local/plugins/`，Bot 会把其中带有 `__init__.py` 的依赖目录误识别为插件。需要指定镜像时，在两条 `pip install` 命令后都追加相同的 `-i` 与 `--trusted-host` 参数。
+
 ## 卸载
 
 可在控制台商店点 **卸载**，也可使用命令行：
