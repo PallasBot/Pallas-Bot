@@ -151,8 +151,8 @@ def test_load_plugin_module_records_failure_when_nonebot_swallows_import_error(m
     assert failures == ["packages.broken"]
     assert records == [
         (
-            "启动：{} 加载 {} 失败",
-            ("worker", "packages.broken"),
+            "加载 {} 失败",
+            ("packages.broken",),
         )
     ]
 
