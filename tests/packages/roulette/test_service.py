@@ -78,3 +78,20 @@ async def test_join_active_roulette_records_player() -> None:
     await service.join_active_roulette(event)
 
     assert game.roulette_player.get_user_ids(100) == [2]
+
+
+@pytest.mark.asyncio
+async def test_fire_roulette_schedules_penalty_after_announcing_hit(monkeypatch: pytest.MonkeyPatch) -> None:
+    event = Event(self_id=1, group_id=100, user_id=2, time=123, plain_text="牛牛开枪")
+    send = AsyncMock()
+    penalty = AsyncMock()
+    game.roulette_status[100] = 1
+    game.roulette_count[100] = 0
+    monkeypatch.setattr(service.BotConfig, "drunkenness", AsyncMock(return_value=0))
+    monkeypatch.setattr(service.game, "shot", AsyncMock(return_value=penalty))
+    penalty_task = await service.prepare_fire_roulette(event, send)
+
+    send.assert_awaited_once()
+    assert penalty_task is not None
+    penalty.assert_not_awaited()
+    penalty_task().close()

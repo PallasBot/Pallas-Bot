@@ -38,10 +38,14 @@ async def fire(context: DirectCommandContext) -> DirectCommandResult:
     if not await bot_is_group_admin(context.bot, context.event):
         return matcher_fallback("bot_not_group_admin")
 
-    async def run() -> None:
-        await service.fire_roulette(context.event, lambda message: context.bot.send(context.event, message))
+    penalty = await service.prepare_fire_roulette(
+        context.event,
+        lambda message: context.bot.send(context.event, message),
+    )
+    if penalty is None:
+        return DirectCommandResult()
 
-    return DirectCommandResult(effects=(completion_effect("roulette.shot", run),))
+    return DirectCommandResult(effects=(completion_effect("roulette.shot", penalty, wait_for_completion=False),))
 
 
 async def join_drink(context: DirectCommandContext) -> DirectCommandResult:

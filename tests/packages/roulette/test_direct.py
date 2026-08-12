@@ -54,3 +54,16 @@ async def test_drink_falls_back_when_no_game_is_active() -> None:
 
     assert result.fallback_to_matcher is True
     assert result.effects == ()
+
+
+@pytest.mark.asyncio
+async def test_fire_defers_only_the_roulette_penalty(monkeypatch: pytest.MonkeyPatch) -> None:
+    game.roulette_status[100] = 1
+    penalty = AsyncMock()
+    monkeypatch.setattr(direct, "bot_is_group_admin", AsyncMock(return_value=True))
+    monkeypatch.setattr(direct.service, "prepare_fire_roulette", AsyncMock(return_value=penalty))
+
+    result = await direct.fire(context("牛牛开枪"))
+
+    assert result.effects[0].wait_for_completion is False
+    penalty.assert_not_awaited()

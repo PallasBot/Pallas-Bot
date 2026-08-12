@@ -76,6 +76,15 @@ async def join_active_roulette(event: GroupMessageEvent) -> None:
 
 
 async def fire_roulette(event: GroupMessageEvent, send: SendMessage) -> None:
+    penalty = await prepare_fire_roulette(event, send)
+    if penalty is not None:
+        await penalty()
+
+
+async def prepare_fire_roulette(
+    event: GroupMessageEvent,
+    send: SendMessage,
+) -> Callable[[], Awaitable[None]] | None:
     async with game.shot_lock:
         game.roulette_status[event.group_id] -= 1
         game.roulette_count[event.group_id] += 1
@@ -102,16 +111,14 @@ async def fire_roulette(event: GroupMessageEvent, send: SendMessage) -> None:
             shot_awaitable = await game.shot(event.self_id, event.user_id, event.group_id)
             if not shot_awaitable:
                 await send("听啊，悲鸣停止了。这是幸福的和平到来前的宁静。")
-                return
+                return None
             reply_msg = (
                 MessageSegment.text(SHOT_CFG.hit_msg.split("{at}")[0])
                 + MessageSegment.at(event.user_id)
                 + MessageSegment.text(SHOT_CFG.hit_msg.split("{at}")[1])
             )
             await send(reply_msg)
-            await let_the_bullets_fly()
-            await shot_awaitable()
-            return
+            return lambda: delayed_shot(shot_awaitable, let_the_bullets_fly)
 
         player_ids = game.roulette_player.get_user_ids(event.group_id)
         rand_list = player_ids[-random.randint(1, min(len(player_ids), 6)) :][::-1]
@@ -128,7 +135,19 @@ async def fire_roulette(event: GroupMessageEvent, send: SendMessage) -> None:
             )
             await send(reply_msg)
         if not shot_awaitable_list:
-            return
-        await let_the_bullets_fly()
-        for shot_awaitable in shot_awaitable_list:
-            await shot_awaitable()
+            return None
+        return lambda: delayed_shots(shot_awaitable_list, let_the_bullets_fly)
+
+
+async def delayed_shot(shot_awaitable: Awaitable[None], delay: Callable[[], Awaitable[None]]) -> None:
+    await delay()
+    await shot_awaitable
+
+
+async def delayed_shots(
+    shot_awaitables: list[Awaitable[None]],
+    delay: Callable[[], Awaitable[None]],
+) -> None:
+    await delay()
+    for shot_awaitable in shot_awaitables:
+        await shot_awaitable
