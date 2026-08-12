@@ -20,6 +20,7 @@ def record(**overrides) -> None:
         "direct_visible_actions": None,
         "direct_effect_actions": None,
         "duration_ms": 10.0,
+        "runtime_stages_ms": (),
     }
     values.update(overrides)
     metrics.record_route_candidate(**values)
@@ -39,6 +40,7 @@ def test_aggregates_normalized_route_and_exact_counters() -> None:
         direct_visible_actions=2,
         direct_effect_actions=5,
         duration_ms=20.0,
+        runtime_stages_ms=(("handler", 20.0), ("commit", 2.0)),
     )
 
     row = metrics.route_candidate_metrics_snapshot()[0]
@@ -71,6 +73,10 @@ def test_aggregates_normalized_route_and_exact_counters() -> None:
                 "matchers_run": 3,
                 "ingress_duration_ms_p95": 10.0,
             },
+        },
+        "runtime_stages": {
+            "handler": {"samples": 1, "p95_ms": 20.0},
+            "commit": {"samples": 1, "p95_ms": 2.0},
         },
         "ingress_duration_ms_p95": 20.0,
         "eligible": False,
@@ -123,6 +129,7 @@ def test_snapshot_has_privacy_allowlisted_fields_only() -> None:
         "direct_visible_actions",
         "direct_effect_actions",
         "outcomes",
+        "runtime_stages",
         "ingress_duration_ms_p95",
         "eligible",
     }

@@ -8,6 +8,7 @@ _MAX_NAMED_ROUTES = 64
 _OTHER_ROUTE: tuple[str, ...] = ()
 _DIRECT_OUTCOMES = ("direct_handled", "direct_fallback", "direct_error")
 _OUTCOMES = (*_DIRECT_OUTCOMES, "matcher_only")
+_RUNTIME_STAGE_NAMES = ("handler", "send", "deferred_wait", "deferred_submit", "commit")
 
 
 @dataclass(slots=True)
@@ -26,6 +27,9 @@ class RouteCandidateMetrics:
     direct_effect_actions: int = 0
     durations_ms: deque[float] = field(default_factory=lambda: deque(maxlen=256))
     outcomes: dict[str, RouteOutcomeMetrics] = field(default_factory=dict)
+    runtime_stages_ms: dict[str, deque[float]] = field(
+        default_factory=lambda: {name: deque(maxlen=256) for name in _RUNTIME_STAGE_NAMES}
+    )
 
 
 @dataclass(slots=True)
@@ -82,6 +86,7 @@ def record_route_candidate(
     direct_visible_actions: int | None,
     direct_effect_actions: int | None,
     duration_ms: float,
+    runtime_stages_ms: tuple[tuple[str, float], ...] = (),
 ) -> None:
     rollover_if_needed()
     route = normalized_route_key(route_modules)
@@ -109,6 +114,10 @@ def record_route_candidate(
         row.direct_effect_actions += max(0, direct_effect_actions)
     if duration_ms >= 0:
         row.durations_ms.append(float(duration_ms))
+    for name, stage_ms in runtime_stages_ms:
+        samples = row.runtime_stages_ms.get(name)
+        if samples is not None and stage_ms >= 0:
+            samples.append(float(stage_ms))
 
 
 def duration_p95(samples: deque[float]) -> float | None:
@@ -138,6 +147,11 @@ def route_candidate_metrics_snapshot() -> list[dict[str, object]]:
             "matcher_handled": metrics.matcher_handled,
             "direct_visible_actions": metrics.direct_visible_actions,
             "direct_effect_actions": metrics.direct_effect_actions,
+            "runtime_stages": {
+                name: {"samples": len(samples), "p95_ms": duration_p95(samples)}
+                for name, samples in metrics.runtime_stages_ms.items()
+                if samples
+            },
             "outcomes": {
                 outcome: {
                     "messages": outcome_metrics.messages,

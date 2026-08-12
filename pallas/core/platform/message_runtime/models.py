@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -83,6 +83,7 @@ class HandlingOutcome:
     continue_matcher: bool = False
     matcher_exclude_modules: frozenset[str] = frozenset()
     error_class: str | None = None
+    runtime_stages_ms: tuple[tuple[str, float], ...] = field(default=(), compare=False)
 
     def __post_init__(self) -> None:
         if self.handler_id is not None and not self.handler_id:
