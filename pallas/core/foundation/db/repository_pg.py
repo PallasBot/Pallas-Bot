@@ -170,6 +170,7 @@ class BackgroundJobRow(Base):
     __table_args__ = (
         UniqueConstraint("idempotency_key", name="uq_background_job_idempotency"),
         Index("ix_background_job_claim", "status", "available_at", "leased_until", "id"),
+        Index("ix_background_job_delivery_claim", "kind", "status", "finished_at"),
     )
 
     id: Mapped[str] = mapped_column(Text, primary_key=True)
@@ -735,6 +736,18 @@ def _ensure_pg_context_answer_message_reply_index(connection) -> None:
     )
 
 
+def _ensure_pg_background_job_delivery_claim_index(connection) -> None:
+    """background_job 表补已完成视觉投递领取索引。"""
+    insp = inspect(connection)
+    if not insp.has_table("background_job"):
+        return
+    connection.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_background_job_delivery_claim ON background_job (kind, status, finished_at)"
+        )
+    )
+
+
 def _ensure_pg_stat_statements_extension(connection) -> None:
     """启用 pg_stat_statements（仅应在独立 autocommit 连接中调用）。
 
@@ -840,6 +853,7 @@ PG_SCHEMA_ENSURE_STEPS: list[tuple[str, Any]] = [
     ("ddl.message_timeline_metadata", _ensure_pg_message_timeline_metadata),
     ("ddl.context_answer_reply_index", _ensure_pg_context_answer_reply_index),
     ("ddl.context_answer_message_reply_index", _ensure_pg_context_answer_message_reply_index),
+    ("ddl.background_job_delivery_claim_index", _ensure_pg_background_job_delivery_claim_index),
 ]
 
 
