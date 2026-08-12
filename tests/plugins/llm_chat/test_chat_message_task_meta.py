@@ -536,7 +536,8 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     assert "短句轻怼。" not in submit_request.system_prompt
     assert "没救了" in submit_request.system_prompt
     assert "【回复形状与输出契约】" in submit_request.system_prompt
-    assert '"reply_segments"' in submit_request.system_prompt
+    assert '"reply_segments"' not in submit_request.system_prompt
+    assert "直接输出一条或多条可见对白" in submit_request.system_prompt
     assert "引用只决定回复哪条消息" in submit_request.system_prompt
     assert "不要因引用把话一次说完" in submit_request.system_prompt
     assert "「行啊」「好呀」" in submit_request.system_prompt

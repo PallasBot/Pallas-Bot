@@ -121,6 +121,16 @@ def parse_structured_reply(raw: str) -> StructuredChatReply:
             sticker_intent=sticker_intent,
             from_json=True,
         )
+    if isinstance(data, list):
+        raw_items = [str(item).strip() for item in data if isinstance(item, str)]
+        if raw_items and len(raw_items) == len(data):
+            segments = tuple(item for item in raw_items if item and not _is_pass_reply(item))
+            if all(validate_reply_chars(item)[0] for item in segments):
+                if not segments:
+                    return StructuredChatReply()
+                if len(segments) <= 3:
+                    return StructuredChatReply(reply_segments=segments)
+                return StructuredChatReply(reply_segments=(*segments[:2], "\n".join(segments[2:])))
     if "{" in s:
         return StructuredChatReply()
     plain = str(raw).strip()
