@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import APIRouter, Body, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
+from nonebot.log import logger
 from pydantic import BaseModel, ConfigDict, Field
 
 from packages.pb_webui.console_openapi_models import _ApiOkResponse
@@ -67,8 +68,12 @@ def register_auth_security_router(
         request: Request,
         body: Annotated[_AuthLoginBody, Body()],
     ) -> JSONResponse:
+        client = getattr(request, "client", None)
+        ip = getattr(client, "host", "?") if client is not None else "?"
         if not verify_console_password(body.password):
+            logger.warning("控制台登录失败 ip [{}]", ip)
             raise HTTPException(status_code=401, detail="密码错误")
+        logger.info("控制台登录成功 ip [{}]", ip)
         tok = mint_session_token()
         resp = JSONResponse({"ok": True, "data": {"token": tok}})
         resp.set_cookie(
@@ -112,4 +117,5 @@ def register_auth_security_router(
             set_shared_console_login_token(body.new_password)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
+        logger.info("控制台密钥已修改")
         return {"ok": True, "data": {"message": "已保存"}}

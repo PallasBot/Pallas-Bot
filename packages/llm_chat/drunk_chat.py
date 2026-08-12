@@ -166,10 +166,23 @@ async def handle_drunk_chat(bot: Bot, event: GroupMessageEvent):
         return
 
     if not result or not getattr(result, "ok", False):
+        logger.warning(
+            format_plugin_event(
+                "queue_generate",
+                f"Bot [{bot.self_id}] drunk chat submit failed for user [{event.user_id}] in group [{event.group_id}]",
+            )
+        )
         await TaskManager.remove_task(request_id)
         return
     task_id = str(getattr(result, "task_id", "") or "")
     if not task_id:
+        logger.warning(
+            format_plugin_event(
+                "queue_generate",
+                f"Bot [{bot.self_id}] drunk chat submit returned empty task_id for user [{event.user_id}] "
+                f"in group [{event.group_id}]",
+            )
+        )
         await TaskManager.remove_task(request_id)
         return
     logger.info(

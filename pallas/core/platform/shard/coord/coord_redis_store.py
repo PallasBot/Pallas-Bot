@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from pallas.core.platform.coord.redis_claim import log_coord_redis_failure
+
 
 def safe_key_part(raw: str | int) -> str:
     s = str(raw)
@@ -31,7 +33,8 @@ def read_json_sync(key: str) -> dict[str, Any] | None:
         return None
     try:
         raw = client.get(key)
-    except Exception:
+    except Exception as e:
+        log_coord_redis_failure("read_json", e)
         return None
     if raw is None:
         return None
@@ -53,7 +56,8 @@ def setex_json_sync(key: str, data: dict[str, Any], ttl_sec: int) -> bool:
     try:
         client.setex(key, ttl, body)
         return True
-    except Exception:
+    except Exception as e:
+        log_coord_redis_failure("setex_json", e)
         return False
 
 
@@ -78,7 +82,8 @@ def store_json_sync(
             pipe.publish(wake_channel, wake)
         pipe.execute()
         return True
-    except Exception:
+    except Exception as e:
+        log_coord_redis_failure("store_json", e)
         return False
 
 
@@ -123,7 +128,8 @@ def mutate_json_sync(
                 return data
         except WatchError:
             continue
-        except Exception:
+        except Exception as e:
+            log_coord_redis_failure("mutate_json", e)
             return None
     return None
 
@@ -135,7 +141,8 @@ def delete_key_sync(key: str) -> bool:
     try:
         client.delete(key)
         return True
-    except Exception:
+    except Exception as e:
+        log_coord_redis_failure("delete_key", e)
         return False
 
 
@@ -154,6 +161,7 @@ def scan_keys_sync(prefix: str) -> list[str]:
                 out.append(str(key))
             if cursor == 0:
                 break
-    except Exception:
+    except Exception as e:
+        log_coord_redis_failure("scan_keys", e)
         return out
     return out

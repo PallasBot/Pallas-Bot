@@ -8,6 +8,8 @@ import os
 import tomllib
 from typing import TYPE_CHECKING, Any
 
+from nonebot.log import logger
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -436,6 +438,12 @@ def upsert_repo_settings_items(items: dict[str, str]) -> None:
     from .ai_service_env import is_misplaced_ai_env_key
     from .webui_export_toml import export_webui_inspection_toml, rebuild_webui_json_sections
 
+    keys = sorted(
+        (k or "").strip().upper()
+        for k in items
+        if (k or "").strip() and not is_misplaced_ai_env_key((k or "").strip().upper())
+    )
+    logger.info("配置落盘 keys [{}]（值已省略）", ",".join(keys))
     doc = _load_webui_json_document()
     env = doc.setdefault("env", {})
     if not isinstance(env, dict):
@@ -449,11 +457,15 @@ def upsert_repo_settings_items(items: dict[str, str]) -> None:
             continue
         env[key] = v
     doc["sections"] = rebuild_webui_json_sections(env)
-    _atomic_write_text(
-        repo_webui_settings_path(),
-        json.dumps(doc, ensure_ascii=False, indent=2) + "\n",
-    )
-    export_webui_inspection_toml(env, doc["sections"])
+    try:
+        _atomic_write_text(
+            repo_webui_settings_path(),
+            json.dumps(doc, ensure_ascii=False, indent=2) + "\n",
+        )
+        export_webui_inspection_toml(env, doc["sections"])
+    except Exception:
+        logger.exception("配置落盘失败 keys [{}]", ",".join(keys))
+        raise
     clear_merged_repo_settings_cache()
     for k, v in items.items():
         key = (k or "").strip().upper()

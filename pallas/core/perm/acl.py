@@ -19,6 +19,10 @@ import os
 import time
 from typing import Any, NamedTuple
 
+from nonebot.log import logger
+
+from pallas.core.foundation.logging.throttle import log_rate_limited
+
 ACL_ROLES = frozenset({"用户", "群", "管理员", "所有"})
 
 # target 约定：写规则与 evaluate 必须一致。
@@ -116,11 +120,13 @@ async def _load_admin_member_user_ids(bot_id: int | None) -> set[int]:
         from pallas.core.foundation.db import make_admin_repository
 
         repo = make_admin_repository()
-    except Exception:
+    except Exception as e:
+        log_rate_limited(logger, "warning", "acl.admin_repo_init", "ACL admin repo init failed: {}", e)
         return set()
     try:
         uids = await repo.list_admin_user_ids(bot_id=bot_id)
-    except Exception:
+    except Exception as e:
+        log_rate_limited(logger, "warning", "acl.admin_user_ids", "ACL admin user ids load failed: {}", e)
         return set()
     out = set(uids)
     if len(_ADMIN_BOT_ID_CACHE) >= 64:
@@ -148,11 +154,13 @@ async def _load_rules_for(action: str, target: str | None) -> list[Any]:
         from pallas.core.foundation.db import make_acl_repository
 
         repo = make_acl_repository()
-    except Exception:
+    except Exception as e:
+        log_rate_limited(logger, "warning", "acl.repo_init", "ACL repo init failed: {}", e)
         return []
     try:
         rules = list(await repo.list_matching_rules(action=action, target=target))
-    except Exception:
+    except Exception as e:
+        log_rate_limited(logger, "warning", "acl.rules_load", "ACL rules load failed for action [{}]: {}", action, e)
         return []
     # 缓存写回
     if len(_RULES_CACHE) >= _RULES_CACHE_MAX:

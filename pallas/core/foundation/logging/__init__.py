@@ -12,6 +12,7 @@ from .bridge import (
     resolve_repo_log_level,
 )
 from .event_log import compact_group_message_log, compact_inbound_event_log, inbound_event_log_as_debug
+from .throttle import log_rate_limited
 
 __all__ = [
     "apply_stdlib_logging_channel_prefix",
@@ -25,5 +26,6 @@ __all__ = [
     "REPO_FILE_LOG_FORMAT",
     "install_startup_log_noise_patcher",
     "is_matcher_lifecycle_noise",
+    "log_rate_limited",
     "resolve_repo_log_level",
 ]

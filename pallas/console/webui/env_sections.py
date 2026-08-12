@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
+from nonebot.log import logger
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
@@ -588,22 +589,22 @@ def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dic
             from pallas.product.message_scrub import reload_message_scrub_caches
 
             reload_message_scrub_caches()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("配置保存后 message_scrub 缓存刷新失败: {}", e)
     if section_id == "ingress_fanout":
         try:
             from pallas.core.platform.ingress.config import clear_ingress_fanout_config_cache
 
             clear_ingress_fanout_config_cache()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("配置保存后 ingress_fanout 缓存刷新失败: {}", e)
     elif section_id == "command_start":
         try:
             from pallas.core.foundation.command_start_config import clear_command_start_config_cache
 
             clear_command_start_config_cache()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("配置保存后 command_start 缓存刷新失败: {}", e)
     elif section_id == "ingress_dispatch":
         try:
             from pallas.core.platform.ingress.dispatch_lanes import clear_dispatch_lanes_cache
@@ -613,15 +614,15 @@ def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dic
             clear_ingress_dispatch_runtime_config_cache()
             clear_dispatch_lanes_cache()
             clear_route_index_cache()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("配置保存后 ingress_dispatch 缓存刷新失败: {}", e)
     elif section_id == "llm":
         try:
             from pallas.product.llm.config import clear_llm_config_cache
 
             clear_llm_config_cache()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("配置保存后 llm 缓存刷新失败: {}", e)
         if "mcp_servers" in patch or "llm_mcp_http_allowlist" in patch:
             old_mcp = {
                 "mcp_servers": current.get("mcp_servers") or [],
@@ -636,8 +637,8 @@ def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dic
                     from pallas.product.llm.tools.bootstrap import ensure_llm_tools_bootstrapped
 
                     ensure_llm_tools_bootstrapped(force=True)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning("配置保存后 LLM 工具重载失败: {}", e)
         if "ai_server_host" in patch or "ai_server_port" in patch:
             try:
                 from pallas.console.webui.ai_install_writeback import (
@@ -648,8 +649,8 @@ def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dic
                     str(validated.get("ai_server_host") or ""),
                     validated.get("ai_server_port") or "",
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("配置保存后 AI server 回写失败: {}", e)
     else:
         plugin_module = s.module_label if s.module_label.startswith(("pallas.", "packages.")) else ""
         if plugin_module:
@@ -657,8 +658,8 @@ def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dic
                 from .registry import reload_plugin_config
 
                 reload_plugin_config(plugin_module)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("配置保存后插件配置重载失败 plugin [{}]: {}", plugin_module, e)
     return webui_env_section_payload(section_id, current_values=validated)
 
 

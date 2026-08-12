@@ -375,8 +375,8 @@ def apply_plugin_config_patch(
     upsert_repo_settings_items(env_items)
     try:
         reload_plugin_config(module_name)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("plugin config save: reload failed plugin [{}]: {}", plugin_name, e)
     try:
         from pallas.core.plugin_reload.metadata_index import reload_metadata_after_plugin_config_save
 
