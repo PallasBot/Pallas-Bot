@@ -262,9 +262,6 @@ def filter_command_matchers(
     matched = resolution.matched_modules
     selected: list[type[Matcher]] = []
     for matcher in priority_matchers:
-        if getattr(matcher, "block", False):
-            selected.append(matcher)
-            continue
         if matcher_always_runs(matcher, index):
             selected.append(matcher)
             continue
