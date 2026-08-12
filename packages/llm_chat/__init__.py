@@ -19,6 +19,7 @@ from . import chat_message as _chat_message  # noqa: F401
 from . import commands as _commands  # noqa: F401
 from . import drunk_chat as _drunk_chat  # noqa: F401
 from . import status_commands as _status_commands  # noqa: F401
+from . import style_commands as _style_commands  # noqa: F401
 
 bind_sticker_vision_delivery_dispatcher()
 bind_outgoing_sticker_followup()
@@ -30,6 +31,7 @@ __plugin_meta__ = PluginMetadata(
         usage_line("群内 @牛牛 + 消息", "和牛牛多轮聊天"),
         usage_line("醉酒时 @牛牛 / 牛牛 + 文本", "酒后搭话"),
         usage_line("@牛牛 clear", "清空本轮聊天记忆"),
+        usage_line("@牛牛 重置表达", "清空本牛在本群的表达风格记录"),
     ),
     type="application",
     homepage=PLUGIN_HOMEPAGE,
@@ -44,6 +46,7 @@ __plugin_meta__ = PluginMetadata(
         "command_permissions": command_perm_list(
             command_perm_row("llm_chat.chat", "智能对话", "everyone"),
             command_perm_row("llm_chat.clear", "清空会话", "everyone"),
+            command_perm_row("llm_chat.reset_style", "重置表达风格", "group_moderator"),
             command_perm_row("llm_chat.switch_model", "换模型", "superuser"),
             command_perm_row("llm_chat.unload_model", "卸模型", "superuser"),
             command_perm_row("llm_chat.status", "LLM 状态", "superuser"),
@@ -52,6 +55,7 @@ __plugin_meta__ = PluginMetadata(
         "command_limits": command_limit_list(
             command_limit_row("llm_chat.chat", 3),
             command_limit_row("llm_chat.clear", 2),
+            command_limit_row("llm_chat.reset_style", 10),
             command_limit_row("llm_chat.status", 5),
             command_limit_row("llm_chat.switch_model", 10),
             command_limit_row("llm_chat.unload_model", 10),
@@ -103,6 +107,14 @@ __plugin_meta__ = PluginMetadata(
                         ),
                         "keywords": "工具,命令,清空,帮助",
                     },
+                    {
+                        "title": "重置表达风格",
+                        "content": (
+                            "发送 @牛牛 重置表达 可清空当前这只牛在本群学到的表达风格记录，之后重新学习；"
+                            "只影响当前牛与本群，不会改动其他牛或其他群的风格。"
+                        ),
+                        "keywords": "重置,表达,风格,清空,学习",
+                    },
                 ],
             ),
         ],
@@ -137,6 +149,18 @@ __plugin_meta__ = PluginMetadata(
                 "command_permission": "llm_chat.clear",
                 "brief_des": "清空这轮聊天记忆。",
                 "detail_des": "让牛牛忘掉这轮刚聊过的话，不会改掉它平时的说话风格。也可在对话里明确说让它忘记。",
+            },
+            {
+                "func": "重置表达风格",
+                "trigger_method": "on_cmd",
+                "trigger_scene": SCENE_GROUP,
+                "trigger_condition": "@牛牛 重置表达",
+                "command_permission": "llm_chat.reset_style",
+                "brief_des": "清空本牛在本群的表达风格记录。",
+                "detail_des": (
+                    "只影响当前这只牛、当前这个群：清掉从群消息里学到的表达风格锚点与例句，"
+                    "之后会重新学习；同群其他牛与本牛在其他群的风格不受影响。"
+                ),
             },
             {
                 "func": "LLM 状态",
