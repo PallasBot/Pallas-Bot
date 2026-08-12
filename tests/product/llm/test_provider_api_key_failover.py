@@ -128,3 +128,62 @@ async def test_chat_does_not_failover_key_on_400(monkeypatch: pytest.MonkeyPatch
         )
     assert exc_info.value.status == 400
     assert calls == ["sk-1"]
+
+
+@pytest.mark.asyncio
+async def test_post_provider_chat_fills_provider_effort_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import provider_client as pc
+
+    captured: dict = {}
+
+    async def fake_post_chat(*_args, **_kwargs):
+        captured["options"] = _kwargs.get("options") or {}
+        return {"choices": [{"message": {"role": "assistant", "content": "ok"}}]}
+
+    monkeypatch.setattr(pc, "_post_chat_completions", fake_post_chat)
+    monkeypatch.setattr(
+        "pallas.product.llm.providers_store.find_provider",
+        lambda pid: {"id": pid, "model_effort": "disable"} if pid == "aliyun" else None,
+    )
+
+    await pc._post_provider_chat(
+        [{"role": "user", "content": "hi"}],
+        base_url="https://example.com/v1",
+        api_key="sk",
+        model="qwen3.7-max",
+        options={},
+        tools=[],
+        timeout_sec=10.0,
+        request_method="chat_completions",
+        task="llm_chat",
+        provider_id="aliyun",
+    )
+    assert captured["options"]["model_effort"] == "disable"
+
+
+@pytest.mark.asyncio
+async def test_post_provider_chat_keeps_explicit_effort(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import provider_client as pc
+
+    captured: dict = {}
+
+    async def fake_post_chat(*_args, **_kwargs):
+        captured["options"] = _kwargs.get("options") or {}
+        return {"choices": [{"message": {"role": "assistant", "content": "ok"}}]}
+
+    monkeypatch.setattr(pc, "_post_chat_completions", fake_post_chat)
+    monkeypatch.setattr("pallas.product.llm.providers_store.find_provider", lambda pid: None)
+
+    await pc._post_provider_chat(
+        [{"role": "user", "content": "hi"}],
+        base_url="https://example.com/v1",
+        api_key="sk",
+        model="qwen3.7-max",
+        options={"model_effort": "high"},
+        tools=[],
+        timeout_sec=10.0,
+        request_method="chat_completions",
+        task="llm_chat",
+        provider_id="aliyun",
+    )
+    assert captured["options"]["model_effort"] == "high"

@@ -838,6 +838,19 @@ async def _post_provider_chat(
         return traced
 
     use_options = dict(options)
+    # 调用方未显式指定思考档位时，沿用 Provider 配置的 model_effort，使「关闭思考」等设置全局生效
+    if not (
+        str(use_options.get("model_effort") or "").strip() or str(use_options.get("reasoning_effort") or "").strip()
+    ):
+        from pallas.product.llm.providers_store import find_provider, provider_model_effort
+
+        try:
+            row = find_provider(provider_id)
+            effort = provider_model_effort(row) if row else ""
+        except Exception:
+            effort = ""
+        if effort:
+            use_options["model_effort"] = effort
     cache_key = _tool_choice_compatibility_key(provider_id, base_url, model)
     requested_tool_choice = str(use_options.get("tool_choice") or "auto").strip().lower()
     if tools and requested_tool_choice == "required" and cache_key in _required_tool_choice_incompatible:
