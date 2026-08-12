@@ -272,12 +272,14 @@ async def start_ban_gate_snapshot() -> None:
 async def stop_ban_gate_snapshot() -> None:
     global _refresh_task
     if _refresh_task is not None:
-        _refresh_task.cancel()
-        try:
-            await _refresh_task
-        except asyncio.CancelledError:
-            pass
+        task = _refresh_task
         _refresh_task = None
+        task.cancel()
+        try:
+            # cancel 后 asyncpg/连接池可能不立即中断，限时等待避免拖住进程关闭
+            await asyncio.wait_for(task, timeout=3.0)
+        except (asyncio.CancelledError, TimeoutError):
+            pass
 
 
 async def reset_ban_gate_snapshot_for_tests() -> None:
