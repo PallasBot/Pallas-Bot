@@ -61,6 +61,9 @@ def boot() -> nonebot.Driver:
     @driver.on_startup
     async def startup() -> None:
         logger.info("[初始化] 运行服务初始化中...")
+        from pallas.core.foundation.loop import install_loop_exception_logging
+
+        install_loop_exception_logging()
         await init_db()
         await start_ban_gate_snapshot()
         schedule_ensure_voices()
