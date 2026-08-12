@@ -468,6 +468,13 @@ def register_update_router(
                     scheduled = schedule_bot_restart(delay_s=3.0)
                 out = dict(result)
                 out["restart_scheduled"] = scheduled
+                logger.info(
+                    "[WebUI] Bot 更新成功 mode [{}] strategy [{}] tag [{}] restart_scheduled [{}]",
+                    apply_mode,
+                    apply_strategy,
+                    str(out.get("tag") or ""),
+                    scheduled,
+                )
                 if restart:
                     base = str(out.get("message") or "").rstrip()
                     note = "已安排 Bot 重启。" if scheduled else "未能安排自动重启，请手动重启 Bot。"
@@ -477,6 +484,7 @@ def register_update_router(
                 j.message = str(out.get("message") or "完成")
                 on_progress(100, j.message)
             except BotGitUpdateError as e:
+                logger.warning("[WebUI] Bot 更新业务失败: {}", e.detail)
                 j.push("failed", error=e.detail, progress_percent=j.progress_percent)
             except Exception as e:  # noqa: BLE001
                 logger.exception("[WebUI] Bot git 定向更新失败")

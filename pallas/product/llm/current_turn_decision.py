@@ -7,8 +7,10 @@ from collections.abc import Mapping
 from enum import StrEnum
 from typing import Any, Literal
 
+from nonebot.log import logger
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from pallas.core.foundation.logging.throttle import log_rate_limited
 from pallas.product.llm.inference_params import task_token_budget
 from pallas.product.llm.reply_necessity import has_reply_obligation, is_low_value_social_turn, is_short_vent
 
@@ -379,7 +381,14 @@ async def decide_current_turn_with_model(
             options={"temperature": 0, "max_tokens": task_token_budget("turn_decision")},
             task="turn_decision",
         )
-    except Exception:
+    except Exception as e:
+        log_rate_limited(
+            logger,
+            "warning",
+            "turn_decision.model_failed",
+            "current turn decision model request failed, fallback to REPLY: {}",
+            e,
+        )
         return _decision(CurrentTurnAction.REPLY, source="fallback", reason="model_request_failed")
     content = str(message.get("content") or "") if isinstance(message, dict) else ""
     return decide_current_turn(turn, model_enabled=True, model_response=content)

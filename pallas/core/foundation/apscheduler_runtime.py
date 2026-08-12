@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from nonebot import get_driver
+from nonebot import get_driver, logger
 from nonebot.plugin import get_plugin
 
 from pallas.core.foundation.startup_report import register_startup_fact
@@ -19,7 +19,12 @@ def ensure_apscheduler_running() -> None:
         return
     if scheduler.running:
         return
-    scheduler.start()
+    try:
+        scheduler.start()
+    except Exception:
+        logger.exception("APScheduler 启动失败")
+        raise
+    logger.info("APScheduler 已启动")
     register_startup_fact("scheduler", "ready")
 
 

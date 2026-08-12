@@ -9,6 +9,7 @@ from typing import Any
 from nonebot.log import logger
 
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value
+from pallas.core.foundation.logging.throttle import log_rate_limited
 
 _ORIGINAL_CALL_API = None
 _PATCHED = False
@@ -234,6 +235,15 @@ async def _execute_queue_item(item: SendQueueItem) -> None:
     except Exception as exc:
         _STATS["errors"] += 1
         record_send_queue_error(item.api, exc)
+        log_rate_limited(
+            logger,
+            "warning",
+            f"send_queue.error.{item.api}",
+            "send_queue [{}] failed bot [{}]: {}",
+            item.api,
+            getattr(item.bot, "self_id", "?"),
+            exc,
+        )
         if not item.future.done():
             item.future.set_exception(exc)
     finally:
@@ -263,10 +273,28 @@ async def enqueue_call_api(adapter: Any, bot: Any, api: str, **data: Any) -> Any
     depth = _STATS["depth"]
     if is_droppable_api(api) and depth >= max(1, max_depth // 2):
         _STATS["dropped"] += 1
+        log_rate_limited(
+            logger,
+            "warning",
+            "send_queue.drop.half",
+            "send_queue 丢弃 {}（深度 {} ≥ {}/2），消息未发送",
+            api,
+            depth,
+            max_depth,
+        )
         return None
 
     if depth >= max_depth and api not in _HIGH_PRIORITY_APIS:
         _STATS["dropped"] += 1
+        log_rate_limited(
+            logger,
+            "warning",
+            "send_queue.drop.full",
+            "send_queue 已满，丢弃 {}（深度 {} ≥ {}），消息未发送",
+            api,
+            depth,
+            max_depth,
+        )
         return None
 
     loop = asyncio.get_running_loop()
