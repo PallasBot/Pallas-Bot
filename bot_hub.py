@@ -37,6 +37,7 @@ from pallas.core.foundation.logging import (
     apply_stdlib_logging_channel_prefix,
     install_startup_log_noise_patcher,
 )
+from pallas.core.foundation.loop import install_uvloop
 from pallas.core.foundation.startup_report import emit_startup_summary
 from pallas.core.platform.bot_runtime import load_plugins_for_role
 from pallas.core.platform.shard.logs.process import install_shard_process_logging
@@ -106,4 +107,5 @@ async def emit_startup_summary_on_startup():
 
 
 if __name__ == "__main__":
+    install_uvloop()
     nonebot.run()

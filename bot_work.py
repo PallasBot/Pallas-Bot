@@ -13,6 +13,7 @@ from pallas.core.foundation.logging import (
     install_repo_console_log_format,
     install_startup_log_noise_patcher,
 )
+from pallas.core.foundation.loop import install_uvloop
 from pallas.core.platform.work_jobs.service import run_work_service
 
 
@@ -70,6 +71,7 @@ def load_work_handlers():
 
 def main() -> None:
     apply_repo_settings_to_environ()
+    install_uvloop()
     asyncio.run(run_work_service(load_work_handlers()))
 
 

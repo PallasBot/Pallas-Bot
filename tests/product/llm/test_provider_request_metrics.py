@@ -26,16 +26,13 @@ async def test_complete_chat_message_returns_sanitized_provider_trace(monkeypatc
         def __init__(self, *args, **kwargs) -> None:
             pass
 
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_args) -> None:
-            return None
-
-        async def post(self, *_args, **_kwargs):
+        async def post(self, *_args, timeout=None, **_kwargs):
             return FakeResponse()
 
-    monkeypatch.setattr("pallas.product.llm.provider_client.httpx.AsyncClient", FakeClient)
+    async def fake_client():
+        return FakeClient()
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.get_llm_shared_httpx_client", fake_client)
     result = await complete_chat_message(
         [{"role": "user", "content": "hi"}],
         model="demo",

@@ -105,19 +105,16 @@ async def test_list_openai_compatible_models(monkeypatch: pytest.MonkeyPatch) ->
         def __init__(self, *args, **kwargs) -> None:
             pass
 
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *args) -> None:
-            return None
-
-        async def get(self, url: str, headers: dict | None = None):
+        async def get(self, url: str, headers: dict | None = None, timeout=None):
             assert url.endswith("/models")
             assert headers is not None
             assert "Authorization" in headers
             return FakeResponse()
 
-    monkeypatch.setattr("pallas.product.llm.provider_client.httpx.AsyncClient", FakeClient)
+    async def fake_client():
+        return FakeClient()
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.get_llm_shared_httpx_client", fake_client)
     models = await list_openai_compatible_models("https://api.example.com/v1", "sk-test")
     assert models == ["deepseek-chat"]
 
@@ -281,19 +278,16 @@ async def test_complete_chat_message_parses_openai_response(monkeypatch: pytest.
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        async def __aenter__(self) -> FakeClient:
-            return self
-
-        async def __aexit__(self, *args: Any) -> None:
-            return None
-
-        async def post(self, url: str, json: dict[str, Any] | None = None, headers: dict | None = None) -> FakeResponse:
+        async def post(self, url: str, json: dict[str, Any] | None = None, headers: dict | None = None, timeout=None) -> FakeResponse:
             assert url.endswith("/chat/completions")
             assert json is not None
             assert json["model"] == "demo"
             return FakeResponse()
 
-    monkeypatch.setattr("pallas.product.llm.provider_client.httpx.AsyncClient", FakeClient)
+    async def fake_client():
+        return FakeClient()
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.get_llm_shared_httpx_client", fake_client)
     cfg = LlmConfig(
         llm_runtime="bot_kernel",
         llm_base_url="http://example.test/v1",
@@ -337,18 +331,15 @@ async def test_complete_chat_message_downgrades_incompatible_required_tool_choic
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        async def __aenter__(self) -> FakeClient:
-            return self
-
-        async def __aexit__(self, *args: Any) -> None:
-            return None
-
-        async def post(self, url: str, json: dict[str, Any] | None = None, headers: dict | None = None) -> FakeResponse:
+        async def post(self, url: str, json: dict[str, Any] | None = None, headers: dict | None = None, timeout=None) -> FakeResponse:
             assert json is not None
             payloads.append(json)
             return FakeResponse(400 if len(payloads) == 1 else 200)
 
-    monkeypatch.setattr("pallas.product.llm.provider_client.httpx.AsyncClient", FakeClient)
+    async def fake_client():
+        return FakeClient()
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.get_llm_shared_httpx_client", fake_client)
     cfg = LlmConfig(llm_runtime="bot_kernel", chat_timeout_sec=5.0)
     tools = [{"type": "function", "function": {"name": "demo", "parameters": {"type": "object"}}}]
 
@@ -427,13 +418,7 @@ async def test_complete_chat_message_falls_back_to_next_provider(
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        async def __aenter__(self) -> FakeClient:
-            return self
-
-        async def __aexit__(self, *args: Any) -> None:
-            return None
-
-        async def post(self, url: str, json: dict[str, Any] | None = None, headers: dict | None = None):
+        async def post(self, url: str, json: dict[str, Any] | None = None, headers: dict | None = None, timeout=None):
             seen_urls.append(url)
             if "primary.example" in url:
                 return FailThenOkResponse(ok=False)
@@ -441,7 +426,10 @@ async def test_complete_chat_message_falls_back_to_next_provider(
             assert json["model"] == "model-b"
             return FailThenOkResponse(ok=True)
 
-    monkeypatch.setattr("pallas.product.llm.provider_client.httpx.AsyncClient", FakeClient)
+    async def fake_client():
+        return FakeClient()
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.get_llm_shared_httpx_client", fake_client)
     message = await complete_chat_message(
         [{"role": "user", "content": "hi"}],
         model="",

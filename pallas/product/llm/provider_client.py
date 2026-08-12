@@ -10,6 +10,7 @@ import httpx
 from nonebot import logger
 
 from pallas.product.llm.config import LlmConfig, get_llm_config
+from pallas.product.llm.shared_httpx import get_llm_shared_httpx_client
 
 ANTHROPIC_VERSION = "2023-06-01"
 ANTHROPIC_DEFAULT_MAX_TOKENS = 8192
@@ -950,8 +951,8 @@ async def _post_anthropic_messages(
     payload = messages_to_anthropic_payload(messages, model=model_name, options=options, tools=tools)
     timeout = httpx.Timeout(float(timeout_sec))
     headers = anthropic_auth_headers(api_key)
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        response = await client.post(url, json=payload, headers=headers)
+    client = await get_llm_shared_httpx_client()
+    response = await client.post(url, json=payload, headers=headers, timeout=timeout)
     if response.status_code != 200:
         logger.error(
             "llm anthropic messages failed: status={} body={}",
@@ -988,8 +989,8 @@ async def _post_responses(
     payload = messages_to_responses_payload(messages, model=model_name, options=options, tools=tools)
     timeout = httpx.Timeout(float(timeout_sec))
     headers = auth_headers(api_key)
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        response = await client.post(url, json=payload, headers=headers)
+    client = await get_llm_shared_httpx_client()
+    response = await client.post(url, json=payload, headers=headers, timeout=timeout)
     if response.status_code != 200:
         logger.error(
             "llm responses failed: status={} body={}",
@@ -1046,8 +1047,8 @@ async def _post_chat_completions(
 
     timeout = httpx.Timeout(float(timeout_sec))
     headers = auth_headers(api_key)
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        response = await client.post(url, json=payload, headers=headers)
+    client = await get_llm_shared_httpx_client()
+    response = await client.post(url, json=payload, headers=headers, timeout=timeout)
     if response.status_code != 200:
         logger.error(
             "llm provider failed: status={} body={}",
@@ -1115,8 +1116,8 @@ async def list_openai_compatible_models(
     url = models_url(base_url)
     headers = auth_headers(api_key)
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_sec)) as client:
-            response = await client.get(url, headers=headers)
+        client = await get_llm_shared_httpx_client()
+        response = await client.get(url, headers=headers, timeout=httpx.Timeout(timeout_sec))
     except Exception as exc:
         raise LlmProviderError(format_provider_transport_error(exc, url=url)) from exc
     if response.status_code != 200:
@@ -1137,8 +1138,8 @@ async def list_anthropic_models(
     url = anthropic_models_url(base_url)
     headers = anthropic_auth_headers(api_key)
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_sec)) as client:
-            response = await client.get(url, headers=headers)
+        client = await get_llm_shared_httpx_client()
+        response = await client.get(url, headers=headers, timeout=httpx.Timeout(timeout_sec))
     except Exception as exc:
         raise LlmProviderError(format_provider_transport_error(exc, url=url)) from exc
     if response.status_code != 200:
@@ -1157,8 +1158,8 @@ async def list_ollama_tag_models(
 ) -> list[str]:
     url = ollama_tags_url(base_url)
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_sec)) as client:
-            response = await client.get(url)
+        client = await get_llm_shared_httpx_client()
+        response = await client.get(url, timeout=httpx.Timeout(timeout_sec))
     except Exception as exc:
         raise LlmProviderError(format_provider_transport_error(exc, url=url)) from exc
     if response.status_code != 200:
@@ -1187,8 +1188,8 @@ async def probe_provider_models(*, timeout_sec: float = 3.0, cfg: LlmConfig | No
         return {"ok": False, "url": "", "error": str(exc)}
     headers = auth_headers(key)
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_sec)) as client:
-            response = await client.get(url, headers=headers)
+        client = await get_llm_shared_httpx_client()
+        response = await client.get(url, headers=headers, timeout=httpx.Timeout(timeout_sec))
     except Exception as exc:
         return {"ok": False, "url": url, "error": str(exc)}
     ok = response.status_code == 200
