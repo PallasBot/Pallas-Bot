@@ -85,6 +85,8 @@ pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 覆盖 `pallas/`
 
 - 项目常用 **loguru 风格**的 `logger`（如 NoneBot 提供的 logger）。
 - 占位符优先使用 **`{}`** 或整条 **f-string**，避免沿用标准库 `logging` 的 `logger.debug("msg %s", x)` 写法，以免消息中仍出现字面量 `%s`。
+- 日志文案避免裸 `key=value`：英文用「词 [值]」（如 `Bot [{id}] in group [{gid}]`），中文用「词 [值]、词 [值]」或顿号连接；只有键名等需脱敏场景保留「词 [值]」。
+- 每消息/每请求的高频路径（Redis、发送、审查、ACL 等）用 **`log_rate_limited`**（`pallas.core.foundation.logging`）限频，按 key 周期输出一次，避免故障刷屏。
 
 ### 语言与协作文档
 

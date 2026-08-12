@@ -36,7 +36,7 @@ extra_plugin_dirs = ["local/plugins"]
 - **README**：仓库根目录 `README.md`
 - **更新日志**：优先 `CHANGELOG.md`；没有则按 git 提交标题兜底
 
-官方与社区卡片详情形态相同（示意：官方扩展 MAA）：
+官方与社区卡片详情形态相同（示意：官方插件 MAA）：
 
 ![插件商店 · 卡片详情（README）](/assets/plugin-store-detail.png)
 
