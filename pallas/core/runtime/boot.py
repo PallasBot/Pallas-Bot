@@ -84,12 +84,11 @@ def boot() -> nonebot.Driver:
         mark_process_shutting_down()
         t1 = time.monotonic()
         await stop_ban_gate_snapshot()
-        t2 = time.monotonic()
-        logger.info(
+        logger.debug(
             "[ShutDown] on_shutdown 收尾完成：置位标记耗时 [{:.1f}]s、ban gate 停止耗时 [{:.1f}]s、总计 [{:.1f}]s",
             t1 - t0,
-            t2 - t1,
-            t2 - t0,
+            time.monotonic() - t1,
+            time.monotonic() - t0,
         )
 
     logger.info("[初始化] 模块载入中...")
