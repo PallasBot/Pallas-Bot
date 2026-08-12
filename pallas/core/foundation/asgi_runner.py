@@ -65,17 +65,17 @@ def _shutdown_loop(loop: asyncio.AbstractEventLoop, *, executor_timeout: float) 
         for task in pending:
             task.cancel()
         loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-    logger.info("bot shutdown: cancelled [{}] pending task(s)", len(pending))
+    logger.info("[ShutDown] 已取消 [{}] 个残留任务", len(pending))
     loop.run_until_complete(loop.shutdown_asyncgens())
-    logger.info("bot shutdown: async generators closed, draining executor with timeout [{}]s", executor_timeout)
+    logger.info("[ShutDown] 异步生成器已关闭，开始限时 [{}]s 排干线程池", executor_timeout)
     timed_out = _drain_executor(loop, executor_timeout=executor_timeout)
     if timed_out:
         logger.warning(
-            "bot shutdown: executor busy beyond [{}]s, exiting without waiting for residual threads",
+            "[ShutDown] 线程池超过 [{}]s 未排干，直接退出不等待残留线程",
             executor_timeout,
         )
     else:
-        logger.info("bot shutdown: executor drained in [{:.1f}]s", time.monotonic() - start)
+        logger.info("[ShutDown] 线程池排干完成，耗时 [{:.1f}]s", time.monotonic() - start)
     return timed_out
 
 
@@ -109,9 +109,9 @@ def run_asgi_server(
     try:
         loop.run_until_complete(server.serve())
     except KeyboardInterrupt:
-        logger.info("bot shutdown: interrupted by user")
+        logger.info("[ShutDown] 收到用户中断")
     except BaseException:
-        logger.exception("bot shutdown: server run failed")
+        logger.exception("[ShutDown] 服务运行异常")
         exit_code = 1
     finally:
         timed_out = _shutdown_loop(loop, executor_timeout=executor_timeout)
