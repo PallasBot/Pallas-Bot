@@ -10,6 +10,12 @@ superusers = ["你的QQ号"]
 # 新装默认 PostgreSQL；从 3.x MongoDB 升级请改为 mongodb 并改用 [bootstrap.mongo]
 db_backend = "postgresql"
 
+# ── 按需取消注释（以下键均属 [bootstrap] 段，勿写到 postgres/mongo 子表）────
+# log_level = "INFO"
+# access_token = ""              # 公网暴露 HTTP 时建议设置
+# extra_plugin_dirs = ["local/plugins"]   # 未配置时，local/plugins 有有效插件包会自动纳入
+# load_bundled_extra_plugins = "auto"      # true | false | auto（默认 auto：pip 未装时用仓库内副本）
+
 [bootstrap.postgres]
 host = "127.0.0.1"   # Docker 编排内一般为 postgres
 port = 5432
@@ -23,12 +29,6 @@ db = "PallasBot"
 # port = 27017
 # db = "PallasBot"
 # user / password / auth_source 有认证时再填
-
-# ── 按需取消注释 ────────────────────────────────────────────────────
-# log_level = "INFO"
-# access_token = ""              # 公网暴露 HTTP 时建议设置
-# extra_plugin_dirs = ["local/plugins"]   # 未配置时，local/plugins 有有效插件包会自动纳入
-# load_bundled_extra_plugins = "auto"      # true | false | auto（默认 auto：pip 未装时用仓库内副本）
 
 [env]
 # 命令前缀：含空串则中文命令无需加 /；仅 ["/"] 时须写 /牛牛…。也可在 WebUI「牛牛核心 → 命令前缀」改（须重启）。
