@@ -63,6 +63,9 @@ def boot() -> nonebot.Driver:
         await init_db()
         await start_ban_gate_snapshot()
         schedule_ensure_voices()
+        from pallas.core.platform.multi_bot.connected_roster import install_shutdown_signal_forwarder
+
+        install_shutdown_signal_forwarder()
 
     @driver.on_shutdown
     async def shutdown() -> None:

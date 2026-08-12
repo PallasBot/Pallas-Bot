@@ -49,6 +49,39 @@ def is_process_shutting_down() -> bool:
     return _shutting_down
 
 
+def install_shutdown_signal_forwarder() -> None:
+    """在 uvicorn 接管 SIGINT/SIGTERM 后，先置位收尾标记再转发给原处理器。
+
+    uvicorn 先关闭 WebSocket 连接（触发断连钩子）、后跑 on_shutdown，若等到
+    on_shutdown 才置位，断连钩子仍会在收尾时刷屏。须在 startup 阶段调用：
+    此时信号处理器已是 ``Server.handle_exit``，转发前先置位即可让钩子静默。
+    """
+    import signal
+
+    loop = asyncio.get_running_loop()
+
+    def _forward(sig: int, prev_handler):
+        def _on_signal() -> None:
+            mark_process_shutting_down()
+            if prev_handler is None or prev_handler in (signal.SIG_DFL, signal.SIG_IGN):
+                return
+            try:
+                prev_handler(sig, None)
+            except Exception:
+                pass
+
+        return _on_signal
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        prev_handler = signal.getsignal(sig)
+        if prev_handler in (signal.SIG_DFL, signal.SIG_IGN, None):
+            continue
+        try:
+            loop.add_signal_handler(sig, _forward(sig, prev_handler))
+        except (NotImplementedError, RuntimeError):
+            continue
+
+
 async def on_bot_connect(bot: Bot) -> None:
     if bot.self_id.isnumeric() and bot.type == "OneBot V11":
         logger.debug("[Bot {:>10}] connected.", bot.self_id)
