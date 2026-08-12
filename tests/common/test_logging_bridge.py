@@ -16,6 +16,7 @@ from pallas.core.foundation.logging.bridge import (
     is_matcher_lifecycle_noise,
     is_websocket_connection_noise,
     prefix_business_log_message,
+    record_source_module_name,
 )
 from pallas.core.foundation.logging.event_log import (
     compact_inbound_event_log,
@@ -82,6 +83,25 @@ def test_repo_file_log_formatter_ends_each_record_with_a_newline() -> None:
     assert format_repo_file_log(record).endswith("\n")
 
 
+def test_record_source_module_name_prefers_patcher_stash() -> None:
+    stashed = {"name": "pallas", "extra": {"module_name": "pallas.core.platform.ai_callback.runner"}}
+    assert record_source_module_name(stashed) == "pallas.core.platform.ai_callback.runner"
+    assert record_source_module_name({"name": "pallas", "extra": {}}) == "pallas"
+
+
+def test_format_uses_stashed_module_for_display_name() -> None:
+    record = {"name": "pallas", "extra": {"module_name": "pallas.product.llm.delivery"}}
+
+    format_repo_console_log(record)
+
+    assert record["extra"]["display_name"] == "LLMChat"
+
+
+def test_display_log_name_maps_product_llm_to_llm_chat() -> None:
+    assert display_log_name("pallas.product.llm.delivery") == "LLMChat"
+    assert display_log_name("pallas.product.persona.expression_learn") == "Persona"
+
+
 def test_business_log_messages_get_module_labels_without_duplicates() -> None:
     assert prefix_business_log_message("packages.repeater.learn_queue", "queued batch") == "[Learn] queued batch"
     assert prefix_business_log_message("packages.repeater.fanout_reply", "[Reply] sent") == "[Reply] sent"
@@ -95,6 +115,10 @@ def test_business_log_messages_get_module_labels_without_duplicates() -> None:
     assert prefix_business_log_message("pallas_plugin_protocol.runtime", "started") == "[Protocol] started"
     assert prefix_business_log_message("nonebot_plugin_apscheduler", "job added") == "[Apscheduler] job added"
     assert prefix_business_log_message("pallas.product.llm.client", "request failed") == "[LLM] request failed"
+    assert prefix_business_log_message("packages.pb_webui.api", "started") == "[WebUI] started"
+    assert prefix_business_log_message("pallas.console.webui.console_login", "auth ok") == "[WebUI] auth ok"
+    assert prefix_business_log_message("pallas.core.foundation.db.repository_pg", "connected") == "[DB] connected"
+    assert prefix_business_log_message("pallas.product.message_scrub.filter", "skipped") == "[Scrub] skipped"
     assert prefix_business_log_message("third_party.client", "unchanged") == "unchanged"
 
 

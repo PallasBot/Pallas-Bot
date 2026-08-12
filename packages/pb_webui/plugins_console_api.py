@@ -87,7 +87,7 @@ async def _scheduled_refresh_plugin_update_snapshot() -> None:
         await refresh_plugin_update_snapshot()
         drop_read_cache(("plugins-community-store", "plugins-official-extensions"))
     except Exception:  # noqa: BLE001
-        logger.exception("[控制台] 定时刷新插件更新快照失败")
+        logger.exception("[WebUI] 定时刷新插件更新快照失败")
 
 
 async def _scheduled_refresh_plugin_store_assets() -> None:
@@ -97,7 +97,7 @@ async def _scheduled_refresh_plugin_store_assets() -> None:
         await refresh_store_asset_snapshot()
         drop_read_cache(("plugins-community-store", "plugins-official-extensions"))
     except Exception:  # noqa: BLE001
-        logger.exception("[控制台] 定时刷新插件商店资源快照失败")
+        logger.exception("[WebUI] 定时刷新插件商店资源快照失败")
 
 
 class _HelpMenuVisibilityBody(BaseModel):
@@ -612,7 +612,7 @@ def register_plugins_console_router(
         except ExtensionInstallError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 安装官方扩展失败")
+            logger.exception("[WebUI] 安装官方扩展失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.post(f"{x}/plugins/official-extensions/install-async", include_in_schema=True)
@@ -787,7 +787,7 @@ def register_plugins_console_router(
         except ExtensionInstallError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 卸载官方扩展失败")
+            logger.exception("[WebUI] 卸载官方扩展失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.post(f"{x}/plugins/official-extensions/update", include_in_schema=True)
@@ -813,7 +813,7 @@ def register_plugins_console_router(
         except ExtensionInstallError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 更新官方扩展失败")
+            logger.exception("[WebUI] 更新官方扩展失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.get(f"{x}/plugins/community-store", include_in_schema=True)
@@ -875,7 +875,7 @@ def register_plugins_console_router(
                 },
             })
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 刷新插件商店聚合数据失败")
+            logger.exception("[WebUI] 刷新插件商店聚合数据失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.post(f"{x}/plugins/update-snapshot/refresh", include_in_schema=True)
@@ -900,7 +900,7 @@ def register_plugins_console_router(
                 },
             })
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 刷新插件更新快照失败")
+            logger.exception("[WebUI] 刷新插件更新快照失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.post(f"{x}/plugins/store-assets/refresh", include_in_schema=True)
@@ -924,7 +924,7 @@ def register_plugins_console_router(
                 },
             })
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 刷新插件商店资源快照失败")
+            logger.exception("[WebUI] 刷新插件商店资源快照失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.post(f"{x}/plugins/community-plugins/install", include_in_schema=True)
@@ -953,7 +953,7 @@ def register_plugins_console_router(
         except CommunityPluginInstallError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 安装社区插件失败")
+            logger.exception("[WebUI] 安装社区插件失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.post(f"{x}/plugins/community-plugins/install-async", include_in_schema=True)
@@ -1092,7 +1092,7 @@ def register_plugins_console_router(
         except CommunityPluginInstallError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 卸载社区插件失败")
+            logger.exception("[WebUI] 卸载社区插件失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.post(f"{x}/plugins/community-plugins/update", include_in_schema=True)
@@ -1127,7 +1127,7 @@ def register_plugins_console_router(
         except CommunityPluginInstallError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 更新社区插件失败")
+            logger.exception("[WebUI] 更新社区插件失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     from pallas.console.webui.git_mirror_api import register_git_mirror_router

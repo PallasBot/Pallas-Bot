@@ -74,14 +74,14 @@ async def resolve_github_release_asset_urls(
                 except Exception as e:
                     # API 失败仍会追加 releases/download 直链候选，默认不打 WARNING 以免刷屏
                     logger.debug(
-                        "[控制台] GitHub Release API 请求异常（将尝试直链）api={} err={}",
+                        "[WebUI] GitHub Release API 请求异常（将尝试直链）api={} err={}",
                         api,
                         format_exception_for_log(e),
                     )
                     continue
                 if resp.status_code != 200:
                     logger.debug(
-                        "[控制台] GitHub Release API 非 200（将尝试直链）status={} api={}",
+                        "[WebUI] GitHub Release API 非 200（将尝试直链）status={} api={}",
                         resp.status_code,
                         api,
                     )
@@ -215,9 +215,9 @@ async def extract_bundled_webui_dist(
     try:
         await asyncio.to_thread(_sync_extract_dist_zip_file, archive_path, public_dir)
     except Exception as e:  # noqa: BLE001
-        logger.warning("[控制台] 内置 WebUI dist 解压失败：{}", format_exception_for_log(e))
+        logger.warning("[WebUI] 内置 WebUI dist 解压失败：{}", format_exception_for_log(e))
         return False
-    logger.info("[控制台] 已从内置 dist 初始化静态资源")
+    logger.info("[WebUI] 已从内置 dist 初始化静态资源")
     return True
 
 
@@ -238,26 +238,26 @@ def _unlink_ignore_missing(path: Path) -> None:
 def _webui_download_progress_log(ev: StreamDownloadProgress) -> None:
     if ev["event"] == "percent":
         logger.info(
-            "[控制台] WebUI dist 下载进度 {}%（{}/{}）",
+            "[WebUI] WebUI dist 下载进度 {}%（{}/{}）",
             ev["milestone_percent"],
             format_download_byte_size(ev["received"]),
             format_download_byte_size(ev["total"]),
         )
     elif ev["event"] == "unknown_step":
         logger.info(
-            "[控制台] WebUI dist 已下载 {}（服务器未提供文件大小）",
+            "[WebUI] WebUI dist 已下载 {}（服务器未提供文件大小）",
             format_download_byte_size(ev["received"]),
         )
     elif ev["event"] == "complete":
         if ev["total"] is not None:
             logger.info(
-                "[控制台] WebUI dist 下载完成 {} / {}",
+                "[WebUI] WebUI dist 下载完成 {} / {}",
                 format_download_byte_size(ev["received"]),
                 format_download_byte_size(ev["total"]),
             )
         elif ev["received"] > 0:
             logger.info(
-                "[控制台] WebUI dist 下载完成 {}",
+                "[WebUI] WebUI dist 下载完成 {}",
                 format_download_byte_size(ev["received"]),
             )
 
@@ -338,7 +338,7 @@ def _sync_download_webui_zip(
     for i, (mirror_id, attempt_url) in enumerate(attempts, start=1):
         preview = attempt_url if len(attempt_url) <= 200 else attempt_url[:197] + "..."
         logger.info(
-            "[控制台] WebUI dist 尝试下载 {}/{} mirror={} {}",
+            "[WebUI] WebUI dist 尝试下载 {}/{} mirror={} {}",
             i,
             len(attempts),
             mirror_id,
@@ -353,12 +353,12 @@ def _sync_download_webui_zip(
                 progress_percent_step=5,
                 on_progress=progress,
             )
-            logger.info("[控制台] WebUI dist 已通过 mirror={} 下载完成", mirror_id)
+            logger.info("[WebUI] WebUI dist 已通过 mirror={} 下载完成", mirror_id)
             return
         except Exception as e:  # noqa: BLE001
             last_exc = e
             logger.warning(
-                "[控制台] WebUI dist mirror={} 失败：{}",
+                "[WebUI] WebUI dist mirror={} 失败：{}",
                 mirror_id,
                 format_exception_for_log(e),
             )
@@ -382,7 +382,7 @@ async def download_and_extract_dist_zip(
     preferred = resolve_mirror_for_scope("webui")
     preview = url if len(url) <= 200 else url[:197] + "..."
     logger.info(
-        "[控制台] 正在下载 WebUI dist（首选镜像 {}，将按 failover 改写）{}",
+        "[WebUI] 正在下载 WebUI dist（首选镜像 {}，将按 failover 改写）{}",
         preferred.id,
         preview,
     )
@@ -404,7 +404,7 @@ async def download_and_extract_dist_zip(
         if on_stage is not None:
             on_stage(85, "正在解压 WebUI dist…")
         await asyncio.to_thread(_sync_extract_dist_zip_file, zip_path, public_dir)
-        logger.info("[控制台] 已解压 dist 到 {}", public_dir)
+        logger.info("[WebUI] 已解压 dist 到 {}", public_dir)
         if on_stage is not None:
             on_stage(92, "解压完成")
     finally:
@@ -738,7 +738,7 @@ async def fetch_bot_origin_refs(*, on_progress: ProgressReporter | None = None) 
             return
         last_err = err or f"exit={code}"
         logger.warning(
-            "[控制台] Bot git fetch mirror={} 失败：{}",
+            "[WebUI] Bot git fetch mirror={} 失败：{}",
             mirror.id,
             last_err[:300],
         )
@@ -859,7 +859,7 @@ async def apply_bot_repository_update(
     update_track = normalize_bot_update_track(track)
     mode = "commit" if update_track == "branch" else "release"
     logger.info(
-        "[控制台] Bot 仓库更新开始 repo={} track={} preferred_branch={}",
+        "[WebUI] Bot 仓库更新开始 repo={} track={} preferred_branch={}",
         repo,
         update_track,
         (preferred_branch or "").strip() or "(auto)",
@@ -894,7 +894,7 @@ async def fetch_latest_bot_release(repo: str = "PallasBot/Pallas-Bot", *, token:
                 mirror_scope="bot",
             )
             logger.debug(
-                "[控制台] GitHub Release API 不可用，已用 github.com/releases/latest 兜底（Bot）tag={}",
+                "[WebUI] GitHub Release API 不可用，已用 github.com/releases/latest 兜底（Bot）tag={}",
                 fb["tag"],
             )
             return {"tag": fb["tag"], "html_url": fb["html_url"], "body": ""}
@@ -924,7 +924,7 @@ async def fetch_latest_webui_release(repo: str, *, token: str = "", asset_name: 
             tag_fb = fb["tag"]
             asset_url_fb = github_release_asset_url(repo, asset_clean, tag_fb)
             logger.debug(
-                "[控制台] GitHub Release API 不可用，已用 github.com/releases/latest 兜底（WebUI）tag={}",
+                "[WebUI] GitHub Release API 不可用，已用 github.com/releases/latest 兜底（WebUI）tag={}",
                 tag_fb,
             )
             return {"tag": tag_fb, "html_url": fb["html_url"], "asset_url": asset_url_fb, "body": ""}

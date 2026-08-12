@@ -261,16 +261,16 @@ def _parse_group_list_raw(
                 groups_raw = v
                 break
         if not groups_raw:
-            logger.warning("[控制台] get_group_list 返回 dict 但未找到列表字段, keys={}", list(raw.keys()))
+            logger.warning("[WebUI] get_group_list 返回 dict 但未找到列表字段, keys={}", list(raw.keys()))
     else:
-        logger.warning("[控制台] get_group_list 返回意外类型 {}", type(raw).__name__)
+        logger.warning("[WebUI] get_group_list 返回意外类型 {}", type(raw).__name__)
         groups_raw = []
     out: list[dict[str, Any]] = []
     for it in groups_raw:
         try:
             row = _normalize_group_list_item(it)
         except Exception as e:  # noqa: BLE001
-            logger.warning("[控制台] 群列表条目解析失败 item={} err={}", repr(it), e)
+            logger.warning("[WebUI] 群列表条目解析失败 item={} err={}", repr(it), e)
             continue
         if row:
             out.append(row)
@@ -322,7 +322,7 @@ async def _call_get_group_list(
     try:
         raw = await bot.call_api("get_group_list")  # type: ignore[union-attr]
     except Exception as e:  # noqa: BLE001
-        logger.warning("[控制台] get_group_list 调用失败: {}", e)
+        logger.warning("[WebUI] get_group_list 调用失败: {}", e)
         return [], str(e), False
     return _parse_group_list_raw(raw, limit=limit)
 
@@ -353,7 +353,7 @@ async def _fetch_group_list_for_self_id(
     except HTTPException:
         raise
     except Exception as e:  # noqa: BLE001
-        logger.warning("[控制台] get_group_list 调用失败 self_id={}: {}", self_id, e)
+        logger.warning("[WebUI] get_group_list 调用失败 self_id={}: {}", self_id, e)
         return [], str(e), False
     return _parse_group_list_raw(raw, limit=limit)
 
@@ -377,13 +377,13 @@ async def _get_doubt_friends_for_self_id(self_id: int) -> list[dict[str, Any]]:
         raw = await _onebot_v11_api_call(int(self_id), "get_doubt_friends_add_request", count=50)
     except HTTPException as e:
         logger.debug(
-            "[控制台] get_doubt_friends_add_request 不可用 self_id={}: {}",
+            "[WebUI] get_doubt_friends_add_request 不可用 self_id={}: {}",
             self_id,
             getattr(e, "detail", e),
         )
         return []
     except Exception as e:  # noqa: BLE001
-        logger.debug("[控制台] get_doubt_friends_add_request 失败 self_id={}: {}", self_id, e)
+        logger.debug("[WebUI] get_doubt_friends_add_request 失败 self_id={}: {}", self_id, e)
         return []
     return _rows_from_doubt_friends_api(raw)
 
@@ -796,7 +796,7 @@ async def _collect_online_bot_profiles(
         try:
             raw = await bot.call_api("get_login_info")  # type: ignore[union-attr]
         except Exception:  # noqa: BLE001
-            logger.debug("[控制台] get_login_info 失败 key={} self_id={}", key, self_id)
+            logger.debug("[WebUI] get_login_info 失败 key={} self_id={}", key, self_id)
             nick = resolve_cached_login_nickname(int(self_id)) if self_id.isdigit() else ""
             if nick:
                 out[self_id] = {
@@ -828,7 +828,7 @@ async def _doubt_friends_for_self_id_safe(self_id: int) -> list[dict[str, Any]]:
     try:
         return await _get_doubt_friends_for_self_id(self_id)
     except Exception as e:  # noqa: BLE001
-        logger.debug("[控制台] 拉取可疑好友申请失败 self_id={}: {}", self_id, e)
+        logger.debug("[WebUI] 拉取可疑好友申请失败 self_id={}: {}", self_id, e)
         return []
 
 
@@ -1075,7 +1075,7 @@ def register_social_router(
                 stale_sec=12.0,
             )
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 读取好友申请概览失败")
+            logger.exception("[WebUI] 读取好友申请概览失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
@@ -1106,7 +1106,7 @@ def register_social_router(
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 拉取好友列表失败")
+            logger.exception("[WebUI] 拉取好友列表失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": payload})
 
@@ -1137,7 +1137,7 @@ def register_social_router(
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 拉取群列表失败")
+            logger.exception("[WebUI] 拉取群列表失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": payload})
 
@@ -1194,7 +1194,7 @@ def register_social_router(
         try:
             data = await cached_read(key=cache_key, loader=_load, ttl_sec=1.2, stale_sec=15.0)
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 读取审批总览失败")
+            logger.exception("[WebUI] 读取审批总览失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 

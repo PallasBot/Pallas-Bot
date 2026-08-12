@@ -52,7 +52,7 @@ if not is_sharded_worker() and plugin_config.pallas_webui_enabled and plugin_con
     _cors_origins = [str(o).strip() for o in (plugin_config.pallas_webui_allowed_origins or []) if str(o).strip()]
     if not _cors_origins:
         logger.warning(
-            "[控制台] CORS 已启用但 allowed_origins 为空",
+            "[WebUI] CORS 已启用但 allowed_origins 为空",
         )
     else:
         from fastapi.middleware.cors import CORSMiddleware
@@ -60,7 +60,7 @@ if not is_sharded_worker() and plugin_config.pallas_webui_enabled and plugin_con
         _has_wildcard = "*" in _cors_origins
         if _has_wildcard:
             logger.warning(
-                "[控制台] allowed_origins 含 '*'，已关闭 allow_credentials",
+                "[WebUI] allowed_origins 含 '*'，已关闭 allow_credentials",
             )
         app.add_middleware(
             CORSMiddleware,
@@ -92,8 +92,8 @@ if not is_sharded_worker():
         frontend = webui_frontend_stack()
         webui_version = get_webui_dist_version() or get_installed_webui_version().get("tag", "")
         if plugin_config.pallas_webui_dev_mode:
-            logger.warning("[控制台] 当前为开发模式，登录鉴权已关闭")
-        logger.info("[控制台] 前端栈={} static_root={}", frontend, public)
+            logger.warning("[WebUI] 当前为开发模式，登录鉴权已关闭")
+        logger.info("[WebUI] 前端栈={} static_root={}", frontend, public)
         set_console_meta({
             "static_root": str(public),
             "http_base": base,
@@ -124,13 +124,13 @@ if not is_sharded_worker():
         async def bootstrap_webui_dist() -> None:
             if check_webui_exists(public):
                 return
-            logger.info("[控制台] 首次部署，正在初始化静态资源")
+            logger.info("[WebUI] 首次部署，正在初始化静态资源")
             if await extract_bundled_webui_dist(public):
                 webui_ver = get_webui_dist_version()
                 set_console_meta({"static_root": str(public), "http_base": base, "version": webui_ver})
-                logger.info("[控制台] 静态资源就绪，请刷新页面")
+                logger.info("[WebUI] 静态资源就绪，请刷新页面")
                 return
-            logger.info("[控制台] 未找到可用内置 dist，后台拉取静态资源")
+            logger.info("[WebUI] 未找到可用内置 dist，后台拉取静态资源")
             tok = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
             url = (plugin_config.pallas_webui_dist_zip_url or "").strip()
             url_candidates: list[str] = []
@@ -154,9 +154,9 @@ if not is_sharded_worker():
                 url_candidates = [url]
             if not url:
                 if resolve_err:
-                    logger.error("[控制台] 无法解析 WebUI 下载地址 ({})", resolve_err)
+                    logger.error("[WebUI] 无法解析 WebUI 下载地址 ({})", resolve_err)
                 else:
-                    logger.error("[控制台] 无法解析 WebUI 下载地址")
+                    logger.error("[WebUI] 无法解析 WebUI 下载地址")
                 return
             errors: list[str] = []
             succeeded_url = ""
@@ -170,7 +170,7 @@ if not is_sharded_worker():
                     err_msg = format_exception_for_log(e)
                     errors.append(f"{candidate} -> {err_msg}")
             if errors:
-                logger.error("[控制台] dist 下载/解压失败: {}", " | ".join(errors))
+                logger.error("[WebUI] dist 下载/解压失败: {}", " | ".join(errors))
                 register_startup_warning("console", "dist-bootstrap-failed")
             elif succeeded_url:
                 try:
@@ -186,7 +186,7 @@ if not is_sharded_worker():
                     save_installed_webui_version(tag, succeeded_url)
                 except Exception:
                     pass
-                logger.info("[控制台] 静态资源就绪，请刷新页面")
+                logger.info("[WebUI] 静态资源就绪，请刷新页面")
             webui_ver = get_webui_dist_version() or get_installed_webui_version().get("tag", "")
             set_console_meta({"static_root": str(public), "http_base": base, "version": webui_ver})
 
@@ -202,19 +202,19 @@ if not is_sharded_worker():
                 if webui_has_release_update(latest_tag=latest_tag, current_tag=current_tag):
                     release_url = str(latest_info.get("html_url", "") or "").strip()
                     logger.info(
-                        "[控制台] WebUI update available {} (current {}){}",
+                        "[WebUI] WebUI update available {} (current {}){}",
                         latest_tag,
                         current_tag or "-",
                         f" → {release_url}" if release_url else "",
                     )
                 else:
                     logger.debug(
-                        "[控制台] WebUI up to date or incomparable tag={} latest={}",
+                        "[WebUI] WebUI up to date or incomparable tag={} latest={}",
                         current_tag or "-",
                         latest_tag or "-",
                     )
             except Exception as e:
-                logger.debug("[控制台] WebUI update check failed: {}", format_exception_for_log(e))
+                logger.debug("[WebUI] WebUI update check failed: {}", format_exception_for_log(e))
             try:
                 bot_current = get_bot_current_version()
                 bot_current_tag = bot_current.get("tag", "")
@@ -228,7 +228,7 @@ if not is_sharded_worker():
                 ):
                     bot_release_url = str(bot_latest_info.get("html_url", "") or "").strip()
                     logger.info(
-                        "[控制台] Bot update available {} (current {}){}",
+                        "[WebUI] Bot update available {} (current {}){}",
                         bot_latest_tag,
                         bot_current_tag or bot_current_commit or "-",
                         f" → {bot_release_url}" if bot_release_url else "",
@@ -239,22 +239,22 @@ if not is_sharded_worker():
                     current_commit=str(bot_current_commit or ""),
                 ):
                     logger.debug(
-                        "[控制台] Bot dev build ahead of release {} commit={}",
+                        "[WebUI] Bot dev build ahead of release {} commit={}",
                         bot_latest_tag,
                         bot_current_commit or "-",
                     )
                 elif bot_current_tag:
-                    logger.debug("[控制台] Bot up to date tag={}", bot_current_tag)
+                    logger.debug("[WebUI] Bot up to date tag={}", bot_current_tag)
                 else:
-                    logger.debug("[控制台] Bot commit={}", bot_current_commit or "-")
+                    logger.debug("[WebUI] Bot commit={}", bot_current_commit or "-")
             except Exception as e:
-                logger.debug("[控制台] Bot update check failed: {}", format_exception_for_log(e))
+                logger.debug("[WebUI] Bot update check failed: {}", format_exception_for_log(e))
 
         async def guarded(name: str, fn):
             try:
                 await fn()
             except Exception as e:
-                logger.error("[控制台] 后台任务 {} 异常: {}", name, format_exception_for_log(e))
+                logger.error("[WebUI] 后台任务 {} 异常: {}", name, format_exception_for_log(e))
 
         async def warm_plugin_store_assets() -> None:
             from pallas.console.webui.plugin_store_assets import refresh_store_asset_snapshot

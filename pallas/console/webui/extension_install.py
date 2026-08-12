@@ -116,7 +116,7 @@ async def install_official_extension(
             "already_installed": True,
             "message": "扩展包已在当前环境中。",
         }
-    logger.info("[控制台] 安装官方扩展 package={}", pkg)
+    logger.info("[WebUI] 安装官方扩展 package={}", pkg)
     _report(on_progress, 20, "执行 uv pip install…")
     code, out, err = await run_uv_command(
         INSTALL_TIMEOUT_S,
@@ -154,7 +154,7 @@ async def update_official_extension(
     _report(on_progress, 5, "准备更新…")
     if not pip_package_installed(pkg):
         raise ExtensionInstallError("扩展未安装，请先安装后再更新")
-    logger.info("[控制台] 更新官方扩展 package={}", pkg)
+    logger.info("[WebUI] 更新官方扩展 package={}", pkg)
     _report(on_progress, 20, "执行 uv pip install --upgrade…")
     code, out, err = await run_uv_command(
         INSTALL_TIMEOUT_S,
@@ -198,7 +198,7 @@ async def uninstall_official_extension(
             "already_removed": True,
             "message": "扩展包未通过 pip 安装，无需卸载。",
         }
-    logger.info("[控制台] 卸载官方扩展 package={}", pkg)
+    logger.info("[WebUI] 卸载官方扩展 package={}", pkg)
     _report(on_progress, 25, "执行 uv pip uninstall…")
     code, out, err = await run_uv_command(
         UNINSTALL_TIMEOUT_S,

@@ -203,7 +203,7 @@ def register_instances_configs_router(
                 stale_sec=20.0,
             )
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 加载实例视图失败")
+            logger.exception("[WebUI] 加载实例视图失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": payload})
 
@@ -250,7 +250,7 @@ def register_instances_configs_router(
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 更新 Bot 配置失败")
+            logger.exception("[WebUI] 更新 Bot 配置失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         drop_read_cache(("instances", "bot_configs_list", "db_overview", "home-overview"))
         return JSONResponse({"ok": True, "data": data})
@@ -325,7 +325,7 @@ def register_instances_configs_router(
             except HTTPException:
                 raise
             except Exception as e:  # noqa: BLE001
-                logger.exception("[控制台] 群配置（按 Bot）加载失败")
+                logger.exception("[WebUI] 群配置（按 Bot）加载失败")
                 raise HTTPException(status_code=500, detail=str(e)) from e
 
             return JSONResponse({
@@ -372,7 +372,7 @@ def register_instances_configs_router(
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 更新群配置失败")
+            logger.exception("[WebUI] 更新群配置失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         drop_read_cache(("group_configs_list", "db_overview", "group_configs_bot:"))
         return JSONResponse({"ok": True, "data": data})
@@ -420,7 +420,7 @@ def register_instances_configs_router(
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 更新 User 配置失败")
+            logger.exception("[WebUI] 更新 User 配置失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
         drop_read_cache(("db_overview", "user_configs_list"))
         return JSONResponse({"ok": True, "data": data})

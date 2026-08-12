@@ -276,7 +276,7 @@ async def _run_webui_target(*, config: Any | None = None, force: bool = False) -
         check = await _load_webui_check(cfg)
     except Exception as e:  # noqa: BLE001
         err = format_exception_for_log(e)
-        logger.warning("[控制台] WebUI 自动更新检查失败 err={}", err)
+        logger.warning("[WebUI] WebUI 自动更新检查失败 err={}", err)
         _patch_target("webui", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
 
@@ -309,7 +309,7 @@ async def _run_webui_target(*, config: Any | None = None, force: bool = False) -
     asset = str(getattr(cfg, "pallas_webui_dist_zip_asset", "") or "dist.zip")
     tag = str(getattr(cfg, "pallas_webui_dist_zip_tag", "") or "").strip() or latest_tag
     logger.info(
-        "[控制台] WebUI 自动更新开始 current={} target={}",
+        "[WebUI] WebUI 自动更新开始 current={} target={}",
         current_tag or "(unknown)",
         tag,
     )
@@ -322,12 +322,12 @@ async def _run_webui_target(*, config: Any | None = None, force: bool = False) -
         )
     except WebuiUpdateError as e:
         err = e.detail
-        logger.warning("[控制台] WebUI 自动更新失败 err={}", err)
+        logger.warning("[WebUI] WebUI 自动更新失败 err={}", err)
         _patch_target("webui", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
     except Exception as e:  # noqa: BLE001
         err = format_exception_for_log(e)
-        logger.exception("[控制台] WebUI 自动更新异常")
+        logger.exception("[WebUI] WebUI 自动更新异常")
         _patch_target("webui", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
 
@@ -357,7 +357,7 @@ async def _run_webui_target(*, config: Any | None = None, force: bool = False) -
         drop_read_cache(("update_check_webui:",))
     except Exception:  # noqa: BLE001
         pass
-    logger.info("[控制台] WebUI 自动更新完成 tag={}", applied_tag)
+    logger.info("[WebUI] WebUI 自动更新完成 tag={}", applied_tag)
     return {
         "result": "applied",
         "tag": applied_tag,
@@ -412,7 +412,7 @@ async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> 
         check = await _load_bot_check(cfg)
     except Exception as e:  # noqa: BLE001
         err = format_exception_for_log(e)
-        logger.warning("[控制台] Bot 自动更新检查失败 err={}", err)
+        logger.warning("[WebUI] Bot 自动更新检查失败 err={}", err)
         _patch_target("bot", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
 
@@ -442,7 +442,7 @@ async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> 
         return out
 
     logger.info(
-        "[控制台] Bot 自动更新开始 track={} current={} target={}",
+        "[WebUI] Bot 自动更新开始 track={} current={} target={}",
         update_track,
         current_tag or "(unknown)",
         target_label or "(unknown)",
@@ -451,12 +451,12 @@ async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> 
         data = await apply_bot_update(restart=True)
     except BotGitUpdateError as e:
         err = e.detail
-        logger.warning("[控制台] Bot 自动更新失败 err={}", err)
+        logger.warning("[WebUI] Bot 自动更新失败 err={}", err)
         _patch_target("bot", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
     except Exception as e:  # noqa: BLE001
         err = format_exception_for_log(e)
-        logger.exception("[控制台] Bot 自动更新异常")
+        logger.exception("[WebUI] Bot 自动更新异常")
         _patch_target("bot", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
 
@@ -486,7 +486,7 @@ async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> 
         drop_read_cache(("update_check_bot:",))
     except Exception:  # noqa: BLE001
         pass
-    logger.info("[控制台] Bot 自动更新完成 tag={}", applied_tag)
+    logger.info("[WebUI] Bot 自动更新完成 tag={}", applied_tag)
     return {
         "result": "applied",
         "tag": applied_tag,
@@ -523,7 +523,7 @@ async def _run_plugins_target(*, config: Any | None = None, force: bool = False)
         snap = await refresh_plugin_update_snapshot()
     except Exception as e:  # noqa: BLE001
         err = format_exception_for_log(e)
-        logger.warning("[控制台] 插件自动更新快照失败 err={}", err)
+        logger.warning("[WebUI] 插件自动更新快照失败 err={}", err)
         _patch_target("plugins", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
 
@@ -622,7 +622,7 @@ async def _run_plugins_target(*, config: Any | None = None, force: bool = False)
             if bot_lifecycle_available():
                 restart_scheduled = bool(schedule_bot_restart(delay_s=3.0))
         except Exception:  # noqa: BLE001
-            logger.warning("[控制台] 插件自动更新后安排重启失败")
+            logger.warning("[WebUI] 插件自动更新后安排重启失败")
         _append_pending_item({
             "kind": "plugins",
             "tag": f"{len(updated)} 个插件",
@@ -734,7 +734,7 @@ async def run_auto_update_tick(
         try:
             await notify_superusers_auto_update(notice_items, config=cfg)
         except Exception:  # noqa: BLE001
-            logger.exception("[控制台] 自动更新私聊超管汇报失败")
+            logger.exception("[WebUI] 自动更新私聊超管汇报失败")
     return {"result": overall, "targets": results}
 
 
@@ -817,7 +817,7 @@ async def notify_superusers_auto_update(
 
     bots = get_bots()
     if not bots:
-        logger.warning("[控制台] 自动更新汇报时无在线 Bot")
+        logger.warning("[WebUI] 自动更新汇报时无在线 Bot")
         return {"sent": False, "reason": "no_bot"}
 
     prefer = int(getattr(cfg, "pallas_auto_update_notify_bot_id", 0) or 0)
@@ -831,7 +831,7 @@ async def notify_superusers_auto_update(
             except (TypeError, ValueError):
                 continue
         if bot is None:
-            logger.warning("[控制台] 汇报 Bot {} 不在线，跳过私聊", prefer)
+            logger.warning("[WebUI] 汇报 Bot {} 不在线，跳过私聊", prefer)
             return {"sent": False, "reason": "bot_offline", "bot_id": prefer}
     else:
         bot = next(iter(bots.values()))
@@ -853,7 +853,7 @@ async def notify_superusers_auto_update(
             delivered += 1
         except Exception as exc:  # noqa: BLE001
             logger.warning(
-                "[控制台] 自动更新私聊失败 bot={} user={} err={}",
+                "[WebUI] 自动更新私聊失败 bot={} user={} err={}",
                 getattr(bot, "self_id", "?"),
                 uid,
                 exc,
@@ -875,7 +875,7 @@ def reschedule_webui_auto_update_job(config: Any | None = None) -> None:
     try:
         from nonebot_plugin_apscheduler import scheduler
     except ImportError:
-        logger.warning("[控制台] 未安装 nonebot_plugin_apscheduler，跳过自动更新调度")
+        logger.warning("[WebUI] 未安装 nonebot_plugin_apscheduler，跳过自动更新调度")
         return
 
     cfg = config if config is not None else get_pallas_webui_config()
@@ -883,7 +883,7 @@ def reschedule_webui_auto_update_job(config: Any | None = None) -> None:
         scheduler.remove_job(AUTO_UPDATE_JOB_ID)
 
     if not _any_auto_enabled(cfg):
-        logger.info("[控制台] 自动更新已全部关闭（未注册调度）")
+        logger.info("[WebUI] 自动更新已全部关闭（未注册调度）")
         return
 
     mode = str(getattr(cfg, "pallas_webui_auto_update_schedule_mode", "interval") or "interval").strip().lower()
@@ -894,7 +894,7 @@ def reschedule_webui_auto_update_job(config: Any | None = None) -> None:
         try:
             await run_auto_update_tick()
         except Exception:  # noqa: BLE001
-            logger.exception("[控制台] 自动更新调度执行失败")
+            logger.exception("[WebUI] 自动更新调度执行失败")
 
     if mode == "cron":
         hour = max(0, min(23, int(getattr(cfg, "pallas_webui_auto_update_cron_hour", 4) or 0)))
@@ -910,7 +910,7 @@ def reschedule_webui_auto_update_job(config: Any | None = None) -> None:
             max_instances=1,
             misfire_grace_time=3600,
         )
-        logger.info("[控制台] 自动更新已调度 cron={:02d}:{:02d}", hour, minute)
+        logger.info("[WebUI] 自动更新已调度 cron={:02d}:{:02d}", hour, minute)
         return
 
     hours = int(getattr(cfg, "pallas_webui_auto_update_interval_hours", 6) or 6)
@@ -925,4 +925,4 @@ def reschedule_webui_auto_update_job(config: Any | None = None) -> None:
         max_instances=1,
         misfire_grace_time=3600,
     )
-    logger.info("[控制台] 自动更新已调度 interval={}h", hours)
+    logger.info("[WebUI] 自动更新已调度 interval={}h", hours)

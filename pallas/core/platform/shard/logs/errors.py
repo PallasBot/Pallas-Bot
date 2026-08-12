@@ -8,6 +8,7 @@ import time
 import traceback
 from typing import Any
 
+from pallas.core.foundation.logging.bridge import record_source_module_name
 from pallas.core.platform.shard.logs.view import _exc_type_and_message_from_traceback, shard_logs_dir
 
 _ERRORS_DIR_NAME = "errors"
@@ -106,10 +107,7 @@ def _tb_and_exc_type_from_log_record(record: Any) -> tuple[str, str, str]:
 
 
 def _plugin_label_for_record(stem: str, record: Any) -> str:
-    try:
-        full_name = str(record["name"] or "")
-    except Exception:
-        full_name = ""
+    full_name = record_source_module_name(record)
     short = _dotted_module_short_name(full_name)
     if stem.startswith("worker-"):
         return f"{stem}/{short}" if short else stem

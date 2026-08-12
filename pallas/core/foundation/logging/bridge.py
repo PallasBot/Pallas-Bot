@@ -59,7 +59,7 @@ _BUSINESS_LOG_LABELS = (
     ("packages.repeater", "Repeater"),
     ("packages.llm_chat.drunk_chat", "Drink"),
     ("packages.llm_chat", "Chat"),
-    ("packages.pb_webui", "控制台"),
+    ("packages.pb_webui", "WebUI"),
     ("packages.pb_core", "Core"),
     ("packages.pb_stats", "Stats"),
     ("packages.help", "Help"),
@@ -70,14 +70,14 @@ _BUSINESS_LOG_LABELS = (
     ("pallas.product.llm", "LLM"),
     ("pallas.product.persona", "Persona"),
     ("pallas.product.corpus", "Corpus"),
-    ("pallas.product.message_scrub", "消息过滤"),
+    ("pallas.product.message_scrub", "Scrub"),
     ("pallas.product", "Product"),
     ("pallas.core.platform.ai_callback", "AICallback"),
-    ("pallas.core.foundation.db", "数据库"),
+    ("pallas.core.foundation.db", "DB"),
     ("pallas.core.platform", "Platform"),
     ("pallas.core", "Core"),
     ("pallas.console.cli", "CLI"),
-    ("pallas.console", "控制台"),
+    ("pallas.console", "WebUI"),
     ("pallas.extensions", "Extension"),
     ("pallas", "Pallas"),
 )
@@ -173,12 +173,25 @@ def display_log_name(logger_name: str) -> str:
         if name.startswith(prefix):
             return _pascal_case(name.removeprefix(prefix).split(".", 1)[0])
     if name.startswith("pallas.product."):
+        if name == "pallas.product.llm" or name.startswith("pallas.product.llm."):
+            return "LLMChat"
         return _pascal_case(name.split(".", 3)[2])
     if name.startswith("pallas.console."):
         return "Console"
     if name.startswith("pallas.extensions."):
         return "Extension"
     return _pascal_case(name.split(".", 1)[0]) if name else ""
+
+
+_SOURCE_MODULE_EXTRA_KEY = "module_name"
+
+
+def record_source_module_name(record: dict[str, Any]) -> str:
+    """返回日志真实来源模块名；优先用 patcher 暂存值，绕过 NoneBot 的插件名折叠。"""
+    stashed = record.get("extra", {}).get(_SOURCE_MODULE_EXTRA_KEY)
+    if stashed:
+        return str(stashed)
+    return str(record.get("name", ""))
 
 
 _PASCAL_CASE_ACRONYMS = {"llm": "LLM", "tts": "TTS"}
@@ -198,7 +211,7 @@ def _pascal_case(value: str) -> str:
 
 
 def _format_repo_log(record: dict[str, Any], template: str) -> str:
-    record["extra"]["display_name"] = display_log_name(str(record.get("name", "")))
+    record["extra"]["display_name"] = display_log_name(record_source_module_name(record))
     return template
 
 
@@ -432,13 +445,14 @@ def install_startup_log_noise_patcher() -> None:
     debug_no = logger.level("DEBUG").no
 
     def patcher(record: dict[str, Any]) -> None:
+        record["extra"][_SOURCE_MODULE_EXTRA_KEY] = str(record.get("name", ""))
         _log_patcher(record)
         message = str(record.get("message", ""))
         plain = _COLOR_TAG_RE.sub("", message)
         if _PLUGIN_LOAD_SUCCESS_RE.search(plain) or is_matcher_lifecycle_noise(plain):
             record["level"].name = "DEBUG"
             record["level"].no = debug_no
-        record["message"] = prefix_business_log_message(str(record.get("name", "")), message)
+        record["message"] = prefix_business_log_message(record_source_module_name(record), message)
 
     logger.configure(patcher=patcher)
 

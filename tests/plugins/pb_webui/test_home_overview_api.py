@@ -130,7 +130,7 @@ def test_home_overview_slice_logs_read_timeout_detail(monkeypatch) -> None:
 
     assert warnings == [
         (
-            "[控制台] home/overview {} 失败: {}",
+            "[WebUI] home/overview {} 失败: {}",
             (
                 "community_stats",
                 "ReadTimeout url=https://stats.pallasbot.top/v1/stats: ReadTimeout('')",

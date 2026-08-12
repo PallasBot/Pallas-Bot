@@ -52,8 +52,8 @@ def format_cache_fallback_warning(*, key: str, stale_sec: float, err: Exception)
             token_hint = "；已配置 GitHub token"
         else:
             token_hint = ""
-        return f"[控制台] 更新检查请求失败，已使用{window}内的缓存结果{token_hint}（key={key}）err={err}"
-    return f"[控制台] 读取失败，已使用{window}内的缓存结果（key={key}）err={err}"
+        return f"[WebUI] 更新检查请求失败，已使用{window}内的缓存结果{token_hint}（key={key}）err={err}"
+    return f"[WebUI] 读取失败，已使用{window}内的缓存结果（key={key}）err={err}"
 
 
 async def cached_read(
