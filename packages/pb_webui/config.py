@@ -162,7 +162,7 @@ class Config(BaseModel):
         default=False,
         description=field_help(
             "是否自动更新已安装插件",
-            "对有新版本的官方扩展与社区插件执行更新，完成后尝试安排重启",
+            "对有新版本的官方插件与社区插件执行更新，完成后尝试安排重启",
             "推荐在「更新」页统一配置",
         ),
         json_schema_extra=_ui("自动更新", 14),
@@ -241,11 +241,11 @@ def on_pallas_webui_config_reload(cfg: Config) -> None:
         frontend = "react"
     patch_console_meta(pallas_webui_dev_mode=dev_mode, frontend=frontend)
     if dev_mode:
-        logger.warning("[控制台] 已关闭 API 与静态页鉴权（仅限本机开发）")
+        logger.warning("[WebUI] 已关闭 API 与静态页鉴权（仅限本机开发）")
     else:
-        logger.info("[控制台] 已恢复控制台 API 与静态页鉴权")
+        logger.info("[WebUI] 已恢复控制台 API 与静态页鉴权")
     logger.info(
-        "[控制台] frontend={}（静态目录在启动时绑定，切换栈请重启）",
+        "[WebUI] frontend={}（静态目录在启动时绑定，切换栈请重启）",
         frontend,
     )
     try:
@@ -253,7 +253,7 @@ def on_pallas_webui_config_reload(cfg: Config) -> None:
 
         reschedule_webui_auto_update_job(cfg)
     except Exception:  # noqa: BLE001
-        logger.exception("[控制台] 重载 WebUI 自动更新调度失败")
+        logger.exception("[WebUI] 重载 WebUI 自动更新调度失败")
 
 
 plugin_webui = install_hot_reload_config(

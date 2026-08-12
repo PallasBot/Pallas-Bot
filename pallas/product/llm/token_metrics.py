@@ -7,6 +7,8 @@ import threading
 import time
 from typing import Any
 
+from nonebot.log import logger
+
 from pallas.core.foundation.paths import plugin_data_dir
 
 _STORE_VER = 1
@@ -115,8 +117,8 @@ def _hydrate_from_disk_locked() -> None:
             return
         if not allow_shared_stats_file_hydrate():
             return
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("token metrics hydrate failed: {}", e)
 
     raw = load_stats_file()
     if not isinstance(raw, dict) or not raw.get("day_key"):
@@ -131,8 +133,8 @@ def _hydrate_from_disk_locked() -> None:
                 "ai",
                 {"tokens": {**raw, "day_key": file_day, "source": "bot"}, "day_key": file_day, "source": "bot"},
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("token metrics day-side write failed: {}", e)
         return
     apply_raw(raw)
 
@@ -149,8 +151,8 @@ def rollover_if_needed() -> None:
             old = _snapshot_locked(day_override=_day_key)
             # 写入当日 AI 侧 tokens 槽（控制台以 ai.tokens 展示）
             write_day_side(_day_key, "ai", {"tokens": old, "day_key": _day_key, "source": "bot"})
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("token metrics rollover day-side write failed: {}", e)
         _prompt_tokens = 0
         _completion_tokens = 0
         _cache_read_tokens = 0
@@ -291,8 +293,8 @@ def record_llm_token_usage(
             pricing_rule=pricing_rule,
             day_key=day_for_ledger,
         )
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("token ledger append failed: {}", e)
 
 
 def _row_with_total(values: dict[str, Any]) -> dict[str, Any]:
@@ -440,8 +442,8 @@ def cluster_llm_token_metrics_snapshot(*, max_stale_sec: float = 300.0) -> dict[
                 ):
                     continue
                 rows.append(llm)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("token metrics cluster snapshot read failed: {}", e)
     if len(rows) <= 1:
         out = rows[0]
         if isinstance(out, dict):

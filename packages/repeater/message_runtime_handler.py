@@ -134,7 +134,12 @@ class RepeaterDirectHandler:
             )
         capture_action = build_repeater_capture_and_learn_action(event, chat)
         if prepared.bundle is None:
-            return HandlingOutcome(handled=True, deferred_actions=(capture_action,))
+            return HandlingOutcome(
+                handled=True,
+                deferred_actions=(capture_action,),
+                continue_matcher=True,
+                matcher_exclude_modules=frozenset({"repeater"}),
+            )
         if prepared.fanout_gate is not None and prepared.fanout_gate.won:
             fanout_outcome = build_repeater_fanout_outcome(event, prepared.fanout_gate.bot_ids, prepared.bundle)
             return replace(
@@ -144,7 +149,12 @@ class RepeaterDirectHandler:
 
         answers = await chat.answer_from_bundle(prepared.bundle)
         if answers is None:
-            return HandlingOutcome(handled=True, deferred_actions=(capture_action,))
+            return HandlingOutcome(
+                handled=True,
+                deferred_actions=(capture_action,),
+                continue_matcher=True,
+                matcher_exclude_modules=frozenset({"repeater"}),
+            )
 
         from pallas.core.foundation.config import BotConfig
         from pallas.core.platform.ingress.hotpath_metrics import record_reply_local_dispatched

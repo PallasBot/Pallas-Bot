@@ -40,7 +40,7 @@ def test_expression_bank_api_lists_group_entries_with_status(monkeypatch) -> Non
         assert limit == 20
         return [_entry()]
 
-    monkeypatch.setattr(mod, "list_group_expressions", fake_list_group_expressions, raising=False)
+    monkeypatch.setattr("packages.pb_webui.llm_product_api.list_group_expressions", fake_list_group_expressions)
 
     response = _build_client(monkeypatch).get(
         "/pallas/api/llm/expression-bank",
@@ -61,7 +61,7 @@ def test_expression_bank_resolve_api_approves_entry(monkeypatch) -> None:
         assert reason == ""
         return _entry(status="active")
 
-    monkeypatch.setattr(mod, "resolve_expression", fake_resolve_expression, raising=False)
+    monkeypatch.setattr("packages.pb_webui.llm_product_api.resolve_expression", fake_resolve_expression)
 
     response = _build_client(monkeypatch).post(
         "/pallas/api/llm/expression-bank/resolve",

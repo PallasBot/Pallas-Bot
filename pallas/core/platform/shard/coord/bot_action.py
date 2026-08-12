@@ -13,6 +13,7 @@ from nonebot import logger
 from nonebot.adapters.onebot.v11 import Message, MessageSegment
 from nonebot.adapters.onebot.v11.exception import ActionFailed
 
+from pallas.core.foundation.logging.throttle import log_rate_limited
 from pallas.core.platform.shard import context as shard_ctx
 from pallas.core.platform.shard.coord.coord_redis_store import (
     coord_key,
@@ -204,10 +205,26 @@ async def _execute_local(action: str, bot_qq: int, payload: dict[str, Any]) -> t
             result = await inst.call_api(api, **params)
             return True, result
     except ActionFailed as err:
-        logger.debug(f"bot_action local {action} qq={bot_qq}: {err}")
+        log_rate_limited(
+            logger,
+            "warning",
+            f"bot_action.{action}",
+            "bot_action local [{}] qq [{}] failed: {}",
+            action,
+            bot_qq,
+            err,
+        )
         return False, None
     except Exception as err:
-        logger.debug(f"bot_action local {action} qq={bot_qq}: {err}")
+        log_rate_limited(
+            logger,
+            "warning",
+            f"bot_action.{action}",
+            "bot_action local [{}] qq [{}] error: {}",
+            action,
+            bot_qq,
+            err,
+        )
         return False, None
     return False, None
 

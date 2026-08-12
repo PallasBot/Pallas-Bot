@@ -32,11 +32,12 @@ import nonebot
 from nonebot.adapters.onebot.v11 import Adapter as ONEBOT_V11Adapter
 
 from pallas.console.web import install_nonebot_log_sink
-from pallas.core.foundation.db import init_db
+from pallas.core.foundation.db import init_db, install_pg_shutdown_hook
 from pallas.core.foundation.logging import (
     apply_stdlib_logging_channel_prefix,
     install_startup_log_noise_patcher,
 )
+from pallas.core.foundation.loop import install_uvloop
 from pallas.core.foundation.startup_report import emit_startup_summary
 from pallas.core.platform.bot_runtime import load_plugins_for_role
 from pallas.core.platform.shard.logs.process import install_shard_process_logging
@@ -58,6 +59,7 @@ install_nonebot_log_sink()
 driver = nonebot.get_driver()
 driver.register_adapter(ONEBOT_V11Adapter)
 register_onebot_v11_custom_events()
+install_pg_shutdown_hook()
 
 
 @driver.on_startup
@@ -105,4 +107,5 @@ async def emit_startup_summary_on_startup():
 
 
 if __name__ == "__main__":
+    install_uvloop()
     nonebot.run()

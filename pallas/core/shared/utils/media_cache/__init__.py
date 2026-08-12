@@ -11,6 +11,7 @@ from nonebot.adapters.onebot.v11 import MessageSegment
 from pallas.core.foundation.db import ImageCache, make_image_cache_repository
 from pallas.core.foundation.db.repository import ImageCachePrunePolicy, ImageCachePruneResult
 from pallas.core.foundation.db.runtime import is_postgresql_backend
+from pallas.core.foundation.logging.throttle import log_rate_limited
 from pallas.core.platform.work_jobs.models import WorkJob
 from pallas.core.platform.work_jobs.runtime import build_work_job_store
 from pallas.core.shared.utils import HTTPXClient
@@ -65,9 +66,17 @@ async def handle_image_cache_capture(payload: dict[str, object]) -> None:
         raise ValueError("image cache capture url must use a valid http or https URL")
     cache = await image_cache_repo.find_by_cq_code(cq_code)
     if cache is None:
-        rsp = await HTTPXClient.get(url)
+        rsp = await HTTPXClient.get(url, raise_for_status=False)
         if not rsp or rsp.status_code != httpx.codes.OK:
-            raise RuntimeError(f"image cache download failed status={getattr(rsp, 'status_code', None)}")
+            status = getattr(rsp, "status_code", None)
+            log_rate_limited(
+                logger,
+                "warning",
+                f"image_cache.download.{status or 'unknown'}",
+                "image cache download skipped after HTTP failure status [{}]",
+                status or "unknown",
+            )
+            return
         values = {
             "cq_code": cq_code,
             "content_hash": hashlib.sha256(rsp.content).hexdigest(),

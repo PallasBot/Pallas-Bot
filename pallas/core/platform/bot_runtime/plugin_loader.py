@@ -314,7 +314,12 @@ def _load_plugin_module(
         return False
     try:
         started_at = time.perf_counter()
-        nonebot.load_plugin(module_path)
+        plugin = nonebot.load_plugin(module_path)
+        if plugin is None:
+            # NoneBot 吞掉导入异常，仅打 Failed to import；此处据返回记为失败
+            record_startup_plugin_load_failure(module_path)
+            logger.warning("加载 {} 失败", module_path)
+            return False
         load_bundled_plugin_entry_submodules(module_path)
         record_startup_plugin_load_success(module_path, elapsed_sec=time.perf_counter() - started_at)
         loaded_short.add(slot)
@@ -322,7 +327,7 @@ def _load_plugin_module(
     except Exception as e:
         record_startup_plugin_load_failure(module_path)
         log = logger.error if _short_name(module_path) == _APSCHEDULER_MODULE else logger.warning
-        log("启动：{} 加载 {} 失败: {}", role_label, module_path, e)
+        log("加载 {} 失败: {}", module_path, e)
         return False
 
 
@@ -405,8 +410,7 @@ def _load_toml_extra_plugin_dirs(
             except Exception as e:
                 record_startup_plugin_load_failure(sub_rel)
                 logger.warning(
-                    "启动：{} 加载 {} 失败: {}",
-                    role_label,
+                    "加载 {} 失败: {}",
                     sub_rel,
                     e,
                 )

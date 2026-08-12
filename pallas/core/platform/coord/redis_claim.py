@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
+from pallas.core.platform.coord.redis_logging import log_coord_redis_failure
 from pallas.core.platform.coord.redis_settings import (
     coord_redis_claim_ttl_sec,
     coord_redis_enabled,
@@ -43,7 +44,8 @@ def read_claim_owner_redis_sync(plugin: str, group_id: int, message_id: int) -> 
     key = claim_redis_key(plugin, group_id, message_id)
     try:
         raw = client.get(key)
-    except Exception:
+    except Exception as e:
+        log_coord_redis_failure("read_claim_owner", e)
         return None
     if raw is None:
         return None
@@ -66,7 +68,8 @@ def take_claim_message_redis_sync(plugin: str, group_id: int, message_id: int, b
     try:
         client.set(key, owner, ex=ttl)
         return True
-    except Exception:
+    except Exception as e:
+        log_coord_redis_failure("take_claim", e)
         return None
 
 
@@ -89,5 +92,6 @@ def try_claim_message_redis_sync(plugin: str, group_id: int, message_id: int, bo
         if existing is None:
             return False
         return existing == int(bot_id)
-    except Exception:
+    except Exception as e:
+        log_coord_redis_failure("try_claim", e)
         return None

@@ -1,4 +1,4 @@
-"""插件「有无新版本」快照：社区插件比对 git commit，官方扩展比对 PyPI 版本。
+"""插件「有无新版本」快照：社区插件比对 git commit，官方插件比对 PyPI 版本。
 
 商店行（plugin_registry / community_plugin_registry）读取本快照得到精确的
 ``has_update`` 语义，而不是「能否执行更新动作」。快照由用户手动触发或每天 4 点
@@ -39,7 +39,7 @@ def load_snapshot() -> dict[str, Any]:
     try:
         data = json.loads(raw)
     except (ValueError, TypeError):
-        logger.warning("[控制台] 插件更新快照损坏，忽略 path={}", path)
+        logger.warning("[WebUI] 插件更新快照损坏，忽略 path={}", path)
         return {}
     return data if isinstance(data, dict) else {}
 
@@ -51,7 +51,7 @@ def _save_snapshot(data: dict[str, Any]) -> None:
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(path)
     except OSError as exc:
-        logger.warning("[控制台] 插件更新快照写盘失败 err={}", exc)
+        logger.warning("[WebUI] 插件更新快照写盘失败 err={}", exc)
 
 
 def community_update_entry(plugin_id: str) -> dict[str, Any] | None:
@@ -62,7 +62,7 @@ def community_update_entry(plugin_id: str) -> dict[str, Any] | None:
 
 
 def official_update_entry(package: str) -> dict[str, Any] | None:
-    """取某官方扩展包的更新判定；无快照返回 None。"""
+    """取某官方插件包的更新判定；无快照返回 None。"""
     snap = load_snapshot()
     entry = (snap.get("official") or {}).get(package)
     return entry if isinstance(entry, dict) else None
@@ -216,7 +216,7 @@ async def _gather_limited(coros: list) -> list:
             try:
                 return await coro
             except Exception as exc:  # noqa: BLE001
-                logger.warning("[控制台] 插件更新检查异常 err={}", exc)
+                logger.warning("[WebUI] 插件更新检查异常 err={}", exc)
                 return None
 
     return await asyncio.gather(*[_run(c) for c in coros])
@@ -257,7 +257,7 @@ async def refresh_plugin_update_snapshot() -> dict[str, Any]:
     }
     _save_snapshot(snapshot)
     logger.info(
-        "[控制台] 插件更新快照已刷新 community={} official={}",
+        "[WebUI] 插件更新快照已刷新 community={} official={}",
         len(community),
         len(official),
     )

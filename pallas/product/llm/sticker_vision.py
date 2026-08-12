@@ -436,7 +436,7 @@ async def claim_sticker_vision_delivery(bot_ids: set[int]) -> dict[str, object] 
     from pallas.core.foundation.db.runtime import is_postgresql_backend
 
     if is_postgresql_backend():
-        from sqlalchemy import select
+        from sqlalchemy import String, cast, select
 
         from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
 
@@ -444,7 +444,14 @@ async def claim_sticker_vision_delivery(bot_ids: set[int]) -> dict[str, object] 
             rows = (
                 await session.execute(
                     select(BackgroundJobRow)
-                    .where(BackgroundJobRow.kind == "sticker_vision.select", BackgroundJobRow.status == "done")
+                    .where(
+                        BackgroundJobRow.kind == "sticker_vision.select",
+                        BackgroundJobRow.status == "done",
+                        BackgroundJobRow.payload["delivery"]["state"].astext == "pending",
+                        cast(BackgroundJobRow.payload["delivery"]["bot_id"].astext, String).in_([
+                            str(bot_id) for bot_id in bot_ids
+                        ]),
+                    )
                     .order_by(BackgroundJobRow.finished_at)
                     .limit(32)
                     .with_for_update(skip_locked=True)

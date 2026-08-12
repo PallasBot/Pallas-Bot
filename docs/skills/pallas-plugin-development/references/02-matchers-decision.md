@@ -21,7 +21,7 @@
 
 | Matcher | 典型场景 | 仓库示例 | cmd_perm |
 | --- | --- | --- | --- |
-| `on_command` | 用户主动命令 | `greeting`、`help`；官方扩展如 `duel`（pip） | matcher `permission=` |
+| `on_command` | 用户主动命令 | `greeting`、`help`；官方插件如 `duel`（pip） | matcher `permission=` |
 | `on_message` | 被动接话、关键词、`@` LLM 对话 | `repeater`、`llm_chat` | handler 内或无需 |
 | `on_notice` | 撤回、成员变动 | `repeater` | 通常无命令 ID |
 | `on_request` | 加群/好友申请 | `request_handler` | 按业务 |

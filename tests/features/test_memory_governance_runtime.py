@@ -65,14 +65,16 @@ async def test_enrich_memory_context_returns_trace(monkeypatch: pytest.MonkeyPat
 
 @pytest.mark.asyncio
 async def test_enrich_relationship_context_returns_trace(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm.memory.relationship_store import RelationshipProfile
+
     cfg = LlmConfig(llm_chat_enabled=True, llm_relationship_notes_enabled=True)
     monkeypatch.setattr(
         "pallas.product.llm.memory.inject.can_read_persistent_memory",
         lambda _cfg=None: True,
     )
     monkeypatch.setattr(
-        "pallas.product.llm.memory.inject.retrieve_relationship_note",
-        AsyncMock(return_value="这个人喜欢嘴硬"),
+        "pallas.product.llm.memory.inject.retrieve_relationship_profile",
+        AsyncMock(return_value=RelationshipProfile(content="这个人喜欢嘴硬")),
     )
     result = await enrich_system_with_relationship_context("base", bot_id=1, group_id=2, user_id=3, cfg=cfg)
     assert "关系备注" in result.system_prompt

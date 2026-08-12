@@ -36,7 +36,7 @@
 | --- | --- | --- |
 | … | … | … |
 
-字段以 [`packages/{包名}/config.py`](../../../packages/{包名}/config.py) 为准（**无 `config.py` 则删表**，改为说明配置入口）。官方扩展写扩展仓路径。本模板假定正文位于 `docs/plugins/<name>/README.md`。
+字段以 [`packages/{包名}/config.py`](../../../packages/{包名}/config.py) 为准（**无 `config.py` 则删表**，改为说明配置入口）。官方插件写扩展仓路径。本模板假定正文位于 `docs/plugins/<name>/README.md`。
 
 ## 排障
 
@@ -49,7 +49,7 @@
 ## 源码
 
 - 主仓：[`packages/{包名}/`](../../../packages/{包名}/)
-- 官方扩展：扩展仓对应目录，例如 `src/pallas_plugin_xxx/`
+- 官方插件：扩展仓对应目录，例如 `src/pallas_plugin_xxx/`
 
 按需列出关键文件与 2～4 条实现边界；不要堆大段实现细节。
 

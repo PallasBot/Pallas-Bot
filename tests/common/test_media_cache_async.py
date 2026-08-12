@@ -85,6 +85,24 @@ async def test_image_capture_work_handler_rejects_malformed_http_url() -> None:
 
 
 @pytest.mark.asyncio
+async def test_image_capture_work_handler_does_not_retry_http_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.shared.utils import media_cache as mod
+
+    repo = SimpleNamespace(find_by_cq_code=AsyncMock(return_value=None), insert=AsyncMock())
+    monkeypatch.setattr(mod, "image_cache_repo", repo)
+    get = AsyncMock(return_value=SimpleNamespace(status_code=400))
+    monkeypatch.setattr(mod.HTTPXClient, "get", get)
+
+    await mod.handle_image_cache_capture({
+        "cq_code": "[CQ:image,file=expired.image]",
+        "url": "https://multimedia.nt.qq.com.cn/download?file=expired",
+    })
+
+    repo.insert.assert_not_awaited()
+    get.assert_awaited_once_with("https://multimedia.nt.qq.com.cn/download?file=expired", raise_for_status=False)
+
+
+@pytest.mark.asyncio
 async def test_insert_image_io_uses_detached_model_for_postgresql(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.core.shared.utils import media_cache as mod
 
@@ -97,7 +115,7 @@ async def test_insert_image_io_uses_detached_model_for_postgresql(monkeypatch: p
         async def insert(self, cache):
             inserted.append(cache)
 
-    async def fake_get(_url):
+    async def fake_get(_url, **_kwargs):
         return SimpleNamespace(status_code=200, content=b"image")
 
     monkeypatch.setattr(mod, "image_cache_repo", FakeRepository())

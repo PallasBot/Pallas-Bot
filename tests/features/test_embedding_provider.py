@@ -92,6 +92,9 @@ def test_capability_trace_includes_provider(monkeypatch) -> None:
 
 
 def test_openai_provider_with_stub_model_uses_default_and_needs_endpoint(monkeypatch) -> None:
+    from pallas.product.llm.knowledge import embedding_client
+
+    embedding_client._last_embedding_error = ""
     clear_embedding_provider_cache()
     monkeypatch.setattr(
         "pallas.product.llm.providers_store.resolve_endpoint_for_task",

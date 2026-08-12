@@ -17,10 +17,22 @@ _PROMPT_LEAK_RE = re.compile(
     r"(?:ignore|忽略).{0,24}(?:previous|以上|先前).{0,12}(?:instructions|指令)",
     re.IGNORECASE,
 )
-_STAGE_DIRECTION_RE = re.compile(
-    r"[（(][^）)]{0,12}(?:叹气|轻笑|大笑|苦笑|冷笑|偷笑|沉默|思考|点头|摇头|耸肩|"
-    r"小声|轻声|低声|嘟囔|无奈|尴尬|脸红)[^）)]{0,12}[）)]"
+_STAGE_DIRECTION_KEYWORDS = (
+    "叹气|轻叹|长叹|叹息|轻笑|轻笑一声|大笑|苦笑|冷笑|偷笑|微笑|干笑|傻笑|笑出声|笑了|笑|"
+    "愣住|愣了一下|愣|懵|沉默片刻|沉默|顿了一下|停顿|"
+    "装傻|思考|想了想|沉思|思索|点头|摇头|耸肩|摊手|摊了摊手|"
+    "白眼|翻白眼|翻了个白眼|抬头|低头|歪头|侧头|扭头|转头|回头|"
+    "挑眉|皱眉|撇嘴|撅嘴|眨眨眼|眨眼|捂脸|捂嘴|扶额|挠头|"
+    "举手|挥手|摆手|小声|轻声|低声|嘟囔|嘀咕|自言自语|"
+    "无奈|尴尬|脸红|不好意思|害羞|引用|备注|补充|纠正|清了清嗓子|咳"
 )
+_STAGE_DIRECTION_RE = re.compile(
+    r"[（(][^）)]{0,12}"
+    rf"(?:{_STAGE_DIRECTION_KEYWORDS})"
+    r"[^）)]{0,12}[）)]"
+)
+# 兜底：行首整段旁白/插科打诨（如「这谁点的歌啊」）
+_STAGE_DIRECTION_LEADING_RE = re.compile(r"^[（(][^（）()]{1,24}[）)]")
 _MODEL_IDENTITY_RE = re.compile(
     r"(?:我是|我叫|作为)\s*(?:an?\s+)?(?:chatgpt|gpt-?\d*|openai|"
     r"(?:人工智能|ai|语言模型|大语言模型|智能助手))",
@@ -180,7 +192,7 @@ def inspect_persona_output(
     )
     if _PROMPT_LEAK_RE.search(plain):
         rule_ids.append("system_prompt_leak")
-    if _STAGE_DIRECTION_RE.search(plain):
+    if _STAGE_DIRECTION_RE.search(plain) or _STAGE_DIRECTION_LEADING_RE.search(plain):
         rule_ids.append("roleplay_stage_direction")
     if _MODEL_IDENTITY_RE.search(plain):
         rule_ids.append("self_identity_conflict")

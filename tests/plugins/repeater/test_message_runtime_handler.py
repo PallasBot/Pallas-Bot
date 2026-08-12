@@ -276,6 +276,8 @@ async def test_repeater_native_handler_handles_no_reply_bundle_after_capture_and
 
     assert outcome.handled is True
     assert outcome.fallback_to_matcher is False
+    assert outcome.continue_matcher is True
+    assert outcome.matcher_exclude_modules == frozenset({"repeater"})
     assert [action.name for action in outcome.deferred_actions] == ["repeater_capture_learn_10_2_3"]
     assert calls == []
 
@@ -420,6 +422,8 @@ async def test_repeater_native_handler_keeps_learning_when_local_reply_has_no_an
 
     assert outcome.handled is True
     assert [action.name for action in outcome.deferred_actions] == ["repeater_capture_learn_10_2_3"]
+    assert outcome.continue_matcher is True
+    assert outcome.matcher_exclude_modules == frozenset({"repeater"})
     learn.assert_not_awaited()
 
     await outcome.deferred_actions[0].run()

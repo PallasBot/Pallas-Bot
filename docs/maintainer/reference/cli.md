@@ -59,6 +59,7 @@ uv run pallas run shard            # 可选进阶：已验证瓶颈或强隔离�
 ```bash
 uv run pallas ext list
 uv run pallas ext install pallas-plugin-duel --restart
+uv run pallas ext update pallas-plugin-duel --restart
 uv run pallas ext uninstall pallas-plugin-duel --restart
 ```
 
@@ -94,7 +95,7 @@ uv run pallas doctor
 | --- | --- |
 | 初次 clone、SSH 升级 Bot / WebUI | CLI |
 | `maintenance run` 拉齐本体与 dist | CLI |
-| 装 / 卸 / **更新**官方插件 | **WebUI 插件商店** |
+| 装 / 卸 / **更新**官方插件 | **WebUI 插件商店**；无 UI / 脚本化时 `pallas ext update` |
 | 改插件配置、命令权限、治理 | **WebUI** |
 | 看运行态、分片聚合 | **WebUI** |
 | 无 `uv`、无 SSH，只有浏览器 | **WebUI** |
@@ -104,10 +105,10 @@ uv run pallas doctor
 
 | 缺口 | 现状 | 说明 |
 | --- | --- | --- |
-| 官方插件更新 | 商店已有「更新」 | 缺省留给 WebUI |
+| 官方插件更新 | `pallas ext update` / 商店「更新」 | CLI 与商店均可 |
 | AI 仓 git 对齐 | `pallas ai setup` | 升级时 AI 仓手动 `git pull` 或待 `pallas update ai` |
 | `.env` 迁移 | 独立脚本 | 待 `pallas config migrate` |
-| 全栈一键升级 | `maintenance` + 控制台 | Bot 侧 CLI，插件侧 WebUI |
+| 全栈一键升级 | `maintenance` + 控制台 | Bot 侧 CLI，插件侧 WebUI / `ext update` |
 
 维护者清单：[升级](/maintainer/deploy/upgrade)、[4.0 迁移指南](/guide/4.0-migration)。
 

@@ -121,6 +121,42 @@ def test_load_plugin_module_logs_neutral_message_when_module_missing(monkeypatch
     assert "uv sync" not in records[0][0]
 
 
+def test_load_plugin_module_records_failure_when_nonebot_swallows_import_error(monkeypatch):
+    records: list[tuple[str, tuple[object, ...]]] = []
+    failures: list[str] = []
+
+    monkeypatch.setattr(
+        "pallas.core.platform.bot_runtime.plugin_loader.importlib.util.find_spec",
+        lambda _module_path: SimpleNamespace(),
+    )
+    monkeypatch.setattr(plugin_loader.nonebot, "load_plugin", lambda _path: None)
+    monkeypatch.setattr(
+        plugin_loader,
+        "logger",
+        SimpleNamespace(warning=lambda message, *args: records.append((message, args))),
+    )
+    monkeypatch.setattr(
+        plugin_loader,
+        "record_startup_plugin_load_failure",
+        lambda module_path: failures.append(module_path),
+    )
+
+    loaded = plugin_loader._load_plugin_module(
+        "packages.broken",
+        role_label="worker",
+        loaded_short=set(),
+    )
+
+    assert loaded is False
+    assert failures == ["packages.broken"]
+    assert records == [
+        (
+            "加载 {} 失败",
+            ("packages.broken",),
+        )
+    ]
+
+
 def test_plugin_load_diagnostics_keeps_failures_and_slow_plugins() -> None:
     plugin_loader.reset_startup_plugin_load_diagnostics()
     plugin_loader.record_startup_plugin_load_failure("packages.weather")

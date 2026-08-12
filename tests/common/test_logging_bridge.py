@@ -1,13 +1,15 @@
 import ast
+import io
 import logging
+import re
 from pathlib import Path
 
 from pallas.api.logging import format_plugin_event
 from pallas.core.foundation.logging import event_log
 from pallas.core.foundation.logging.bridge import (
-    REPO_CONSOLE_LOG_FORMAT,
-    REPO_FILE_LOG_FORMAT,
     ChannelLoguruHandler,
+    _display_name_color,
+    _log_prefix_label,
     _stdlib_logger_channel_label,
     display_log_name,
     format_business_event,
@@ -16,6 +18,7 @@ from pallas.core.foundation.logging.bridge import (
     is_matcher_lifecycle_noise,
     is_websocket_connection_noise,
     prefix_business_log_message,
+    record_source_module_name,
 )
 from pallas.core.foundation.logging.event_log import (
     compact_inbound_event_log,
@@ -45,17 +48,138 @@ def test_stdlib_logger_channel_label_uses_repo_aliases() -> None:
     assert _stdlib_logger_channel_label("uvicorn.error") == "HTTP 服务"
 
 
-def test_repo_console_log_format_aligns_level_and_source() -> None:
-    assert "{level:<8}" in REPO_CONSOLE_LOG_FORMAT
-    assert "{{{extra[display_name]:<8}}}" in REPO_CONSOLE_LOG_FORMAT
-    assert "{level:<8}" in REPO_FILE_LOG_FORMAT
-    assert "{{{extra[display_name]:<8}}}" in REPO_FILE_LOG_FORMAT
+def test_repo_console_log_template_colors_display_and_prefix() -> None:
+    record = {"name": "pallas.core.platform.work_jobs.worker", "extra": {}, "message": "work aux: started"}
+
+    template = format_repo_console_log(record)
+
+    assert "{time:MM-DD HH:mm:ss}" in template
+    assert "{level:<8}" in template
+    assert "{message}\n{exception}" in template
+    assert "extra[display_name]:<8" in template
+    assert "[WorkAux]" in template
+    assert "<g>" in template
+    assert "<lvl>" in template
+    assert record["name"] == "pallas.core.platform.work_jobs.worker"
+    assert record["extra"]["display_name"] == "WorkAux"
+
+
+def test_repo_file_log_template_keeps_plain_text_with_prefix() -> None:
+    record = {"name": "pallas.core.platform.work_jobs.worker", "extra": {}, "message": "work aux: started"}
+
+    template = format_repo_file_log(record)
+
+    assert "{time:MM-DD HH:mm:ss}" in template
+    assert "{message}\n{exception}" in template
+    assert "extra[display_name]:<8" in template
+    assert "[WorkAux]" in template
+    assert re.search(r"<[a-z]+>", template) is None
+
+
+def test_repo_console_log_template_colors_leading_message_tag() -> None:
+    record = {"name": "packages.pb_webui.extended_api", "extra": {}, "message": "[Ready] pb_webui 就绪"}
+
+    template = format_repo_console_log(record)
+
+    assert "[Ready]" in template
+    assert re.search(r"<[a-z]+>\[Ready\]</>", template) is not None
+    assert record["message"] == "pb_webui 就绪"
+    assert record["extra"]["raw_message"] == "[Ready] pb_webui 就绪"
+
+
+def test_repo_console_log_template_keeps_bot_bracket_untouched() -> None:
+    record = {"name": "packages.repeater.fanout", "extra": {}, "message": "[Bot 1001] [群 20002] 普通消息正文"}
+
+    template = format_repo_console_log(record)
+
+    assert "[Bot 1001]" not in template
+    assert "{message}\n{exception}" in template
+    assert record["message"] == "[Bot 1001] [群 20002] 普通消息正文"
+
+
+def test_display_name_color_is_stable_and_bound() -> None:
+    assert _display_name_color("WorkAux") == _display_name_color("WorkAux")
+    assert _display_name_color("Core") == _display_name_color("Core")
+    assert _display_name_color("WorkAux") in {
+        "<le>",
+        "<ly>",
+        "<lm>",
+        "<lr>",
+        "<lc>",
+        "<lg>",
+        "<lw>",
+        "<m>",
+    }
+
+
+def test_log_prefix_label_skips_when_message_already_tagged() -> None:
+    assert _log_prefix_label("pallas.core.platform.work_jobs.worker", "work aux: started") == "WorkAux"
+    assert _log_prefix_label("pallas.core.foundation.db.repository_pg", "connected") == "DB"
+    assert _log_prefix_label("pallas.core.platform.work_jobs.worker", "[Reply] already tagged") == ""
+    assert _log_prefix_label("third_party.client", "unchanged") == ""
+
+
+def test_repo_file_log_format_renders_exception_traceback() -> None:
+    from loguru import logger
+
+    buf = io.StringIO()
+    handler_id = logger.add(buf, level=0, colorize=False, format=format_repo_file_log)
+    try:
+        try:
+            raise ValueError("secret root cause")
+        except ValueError:
+            logger.opt(exception=True).error("boom")
+    finally:
+        logger.remove(handler_id)
+
+    out = buf.getvalue()
+    assert "boom" in out
+    assert "secret root cause" in out
+    assert "ValueError" in out
+    assert "test_repo_file_log_format_renders_exception_traceback" in out
+
+
+def test_repo_console_log_renders_colors_in_terminal_and_plain_elsewhere() -> None:
+    from loguru import logger
+
+    def emit():
+        patched = logger.patch(lambda record: record.update(name="pallas.core.platform.work_jobs.worker"))
+        patched.warning("work aux: some event happened")
+        patched.info("[Ready] pb_webui 就绪")
+        patched.info("[初始化] 插件载入中")
+        patched.info("[Bot 1001] [群 20002] 普通消息正文")
+
+    colored = io.StringIO()
+    handler_id = logger.add(colored, level=0, colorize=True, format=format_repo_console_log)
+    try:
+        emit()
+    finally:
+        logger.remove(handler_id)
+    out = colored.getvalue()
+    assert "\x1b[" in out
+    assert "[WorkAux]" in out
+    assert "<le>" not in out
+    assert "<c>" not in out
+
+    plain = io.StringIO()
+    handler_id = logger.add(plain, level=0, colorize=False, format=format_repo_console_log)
+    try:
+        emit()
+    finally:
+        logger.remove(handler_id)
+    out = plain.getvalue()
+    assert "\x1b[" not in out
+    assert "[WorkAux]" in out
+    assert "<le>" not in out
+    assert "<c>" not in out
 
 
 def test_repo_console_log_uses_core_display_name_without_rewriting_logger_name() -> None:
     record = {"name": "pallas.core", "extra": {}}
 
-    assert format_repo_console_log(record) == REPO_CONSOLE_LOG_FORMAT
+    template = format_repo_console_log(record)
+
+    assert "extra[display_name]:<8" in template
     assert record["name"] == "pallas.core"
     assert record["extra"]["display_name"] == "Core"
 
@@ -74,12 +198,34 @@ def test_display_log_name_normalizes_builtin_and_external_plugin_packages() -> N
     assert display_log_name("packages.llm_chat.drunk_chat") == "Drink"
     assert display_log_name("pallas_plugin_protocol.runtime") == "Protocol"
     assert display_log_name("nonebot_plugin_apscheduler") == "Apscheduler"
+    assert display_log_name("pallas.core.platform.work_jobs.worker") == "WorkAux"
+    assert display_log_name("pallas.core.platform.work_jobs.result_committer") == "WorkAux"
 
 
 def test_repo_file_log_formatter_ends_each_record_with_a_newline() -> None:
     record = {"name": "pallas", "extra": {}}
 
-    assert format_repo_file_log(record).endswith("\n")
+    assert format_repo_file_log(record).endswith("\n{exception}")
+    assert "{message}\n{exception}" in format_repo_file_log(record)
+
+
+def test_record_source_module_name_prefers_patcher_stash() -> None:
+    stashed = {"name": "pallas", "extra": {"module_name": "pallas.core.platform.ai_callback.runner"}}
+    assert record_source_module_name(stashed) == "pallas.core.platform.ai_callback.runner"
+    assert record_source_module_name({"name": "pallas", "extra": {}}) == "pallas"
+
+
+def test_format_uses_stashed_module_for_display_name() -> None:
+    record = {"name": "pallas", "extra": {"module_name": "pallas.product.llm.delivery"}}
+
+    format_repo_console_log(record)
+
+    assert record["extra"]["display_name"] == "LLMChat"
+
+
+def test_display_log_name_maps_product_llm_to_llm_chat() -> None:
+    assert display_log_name("pallas.product.llm.delivery") == "LLMChat"
+    assert display_log_name("pallas.product.persona.expression_learn") == "Persona"
 
 
 def test_business_log_messages_get_module_labels_without_duplicates() -> None:
@@ -95,6 +241,17 @@ def test_business_log_messages_get_module_labels_without_duplicates() -> None:
     assert prefix_business_log_message("pallas_plugin_protocol.runtime", "started") == "[Protocol] started"
     assert prefix_business_log_message("nonebot_plugin_apscheduler", "job added") == "[Apscheduler] job added"
     assert prefix_business_log_message("pallas.product.llm.client", "request failed") == "[LLM] request failed"
+    assert prefix_business_log_message("packages.pb_webui.api", "started") == "[WebUI] started"
+    assert prefix_business_log_message("pallas.console.webui.console_login", "auth ok") == "[WebUI] auth ok"
+    assert (
+        prefix_business_log_message(
+            "pallas.core.platform.work_jobs.worker",
+            "work aux: claimed [3] jobs of kinds [repeater.learn] by owner [host:1:0]",
+        )
+        == "[WorkAux] work aux: claimed [3] jobs of kinds [repeater.learn] by owner [host:1:0]"
+    )
+    assert prefix_business_log_message("pallas.core.foundation.db.repository_pg", "connected") == "[DB] connected"
+    assert prefix_business_log_message("pallas.product.message_scrub.filter", "skipped") == "[Scrub] skipped"
     assert prefix_business_log_message("third_party.client", "unchanged") == "unchanged"
 
 
@@ -135,6 +292,12 @@ def test_format_business_event_writes_action_tagged_narratives() -> None:
     ) == (
         "[Reaction] Bot [10001] skipped auto reaction for message [99] in group [20002]: "
         "pending [64] reached limit [64]."
+    )
+    assert (
+        format_business_event(
+            "发送队列", "失败", bot=10001, api="set_msg_emoji_like", error="ActionFailed(already set)"
+        )
+        == "[SendQueue] Bot [10001] failed set_msg_emoji_like: ActionFailed(already set)"
     )
     assert format_business_event("语料回填批次", "已跳过", reason=None) == "Corpus backfill batch skipped"
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
@@ -60,8 +61,13 @@ class MessageRuntime:
                     fallback_reason="plugin_disabled",
                 )
         try:
+            started = time.perf_counter()
             outcome = await handler.handle(context, bot=bot, event=event)
-            return replace(outcome, handler_id=handler.handler_id)
+            return replace(
+                outcome,
+                handler_id=handler.handler_id,
+                runtime_stages_ms=(("handler", (time.perf_counter() - started) * 1000.0),),
+            )
         except Exception as exc:
             error_class = type(exc).__name__
             logger.warning(
@@ -81,9 +87,21 @@ class MessageRuntime:
     async def execute_and_commit(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome:
         outcome = await self.execute(context, bot=bot, event=event)
         if outcome.handled and not outcome.fallback_to_matcher:
+            stages = list(outcome.runtime_stages_ms)
+
+            def record_stage(name: str, duration_ms: float) -> None:
+                stages.append((name, duration_ms))
+
+            started = time.perf_counter()
             try:
-                await self._action_committer.commit(outcome, bot=bot, event=event)
+                await self._action_committer.commit(outcome, bot=bot, event=event, record_stage=record_stage)
             except SideEffectCommitError as exc:
                 logger.warning("MessageRuntime direct side effect failed error_class={}", type(exc).__name__)
-                return replace(outcome, error_class=type(exc).__name__)
+                return replace(
+                    outcome,
+                    error_class=type(exc).__name__,
+                    runtime_stages_ms=tuple(stages + [("commit", (time.perf_counter() - started) * 1000.0)]),
+                )
+            stages.append(("commit", (time.perf_counter() - started) * 1000.0))
+            return replace(outcome, runtime_stages_ms=tuple(stages))
         return outcome

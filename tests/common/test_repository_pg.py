@@ -215,7 +215,7 @@ async def test_find_by_keywords_for_reply_keeps_bans(pg_engine):
 
 
 @pytest.mark.asyncio
-async def test_find_by_keywords_for_reply_uses_one_read_round_trip(pg_engine):
+async def test_find_by_keywords_for_reply_uses_two_indexed_read_round_trips(pg_engine):
     from sqlalchemy import event
 
     from pallas.core.foundation.db.modules import Ban, Context
@@ -249,7 +249,7 @@ async def test_find_by_keywords_for_reply_uses_one_read_round_trip(pg_engine):
     assert found is not None
     assert found.answers[0].messages == ["reply"]
     assert [ban.keywords for ban in found.ban] == ["forbidden"]
-    assert len(statements) == 1
+    assert len(statements) == 2
 
 
 def test_reply_message_query_limits_to_selected_answer_ids():
@@ -277,6 +277,7 @@ def test_context_answer_rows_have_reply_indexes():
     answer_index_names = {idx.name for idx in ContextAnswerRow.__table__.indexes}
     message_index_names = {idx.name for idx in ContextAnswerMessageRow.__table__.indexes}
 
+    assert "ix_context_answer_context_id" not in answer_index_names
     assert "ix_context_answer_ctx_count_time" in answer_index_names
     assert "ix_context_answer_message_answer_id_id" in message_index_names
 
@@ -507,8 +508,40 @@ def test_ensure_pg_context_answer_reply_indexes_create_missing_indexes(monkeypat
     mod._ensure_pg_context_answer_message_reply_index(connection)
 
     assert executed == [
+        "DROP INDEX IF EXISTS ix_context_answer_context_id",
         "CREATE INDEX IF NOT EXISTS ix_context_answer_ctx_count_time ON context_answer (context_id, count, time)",
         "CREATE INDEX IF NOT EXISTS ix_context_answer_message_answer_id_id ON context_answer_message (answer_id, id)",
+    ]
+
+
+def test_background_job_rows_have_delivery_claim_index():
+    from pallas.core.foundation.db.repository_pg import BackgroundJobRow
+
+    index_names = {idx.name for idx in BackgroundJobRow.__table__.indexes}
+
+    assert "ix_background_job_delivery_claim" in index_names
+
+
+def test_ensure_pg_background_job_delivery_claim_index(monkeypatch):
+    from pallas.core.foundation.db import repository_pg as mod
+
+    executed: list[str] = []
+
+    class FakeInspector:
+        def has_table(self, name: str) -> bool:
+            return name == "background_job"
+
+    class FakeConnection:
+        def execute(self, statement) -> None:
+            executed.append(str(statement))
+
+    monkeypatch.setattr(mod, "inspect", lambda _connection: FakeInspector())
+
+    mod._ensure_pg_background_job_delivery_claim_index(FakeConnection())
+
+    assert executed == [
+        "CREATE INDEX IF NOT EXISTS ix_background_job_delivery_claim "
+        "ON background_job (kind, status, finished_at)"
     ]
 
 
@@ -972,6 +1005,33 @@ async def test_blacklist_answers_and_reserve_do_not_clobber(pg_engine):
     assert len(rows) == 1
     assert rows[0].answers == ["a2"]
     assert rows[0].answers_reserve == ["only_reserve"]
+
+
+@pytest.mark.asyncio
+async def test_blacklist_upsert_many(pg_engine):
+    """批量 upsert 多群黑名单：一次写多群，answers 与 answers_reserve 同时落库。"""
+    from pallas.core.foundation.db.modules import BlackList
+    from pallas.core.foundation.db.repository_pg import PgBlackListRepository
+
+    repo = PgBlackListRepository()
+    await repo.upsert_many_blacklist([
+        BlackList.model_construct(group_id=1, answers=["a", "b"], answers_reserve=["r1"]),
+        BlackList.model_construct(group_id=2, answers=["c"], answers_reserve=[]),
+    ])
+    rows = {r.group_id: r for r in await repo.find_all()}
+    assert sorted(rows[1].answers) == ["a", "b"]
+    assert rows[1].answers_reserve == ["r1"]
+    assert rows[2].answers == ["c"]
+    assert rows[2].answers_reserve == []
+
+    # 再次批量 upsert：覆盖两列，不新增行
+    await repo.upsert_many_blacklist([
+        BlackList.model_construct(group_id=1, answers=["b", "c"], answers_reserve=["r2"])
+    ])
+    rows = {r.group_id: r for r in await repo.find_all()}
+    assert sorted(rows[1].answers) == ["b", "c"]
+    assert rows[1].answers_reserve == ["r2"]
+    assert len(rows) == 2
 
 
 @pytest.mark.asyncio

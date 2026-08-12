@@ -53,6 +53,15 @@ def test_public_result_helpers_only_create_supported_effects() -> None:
     assert matcher_fallback("inactive").fallback_to_matcher is True
 
 
+def test_completion_effect_can_defer_execution_without_waiting() -> None:
+    async def run() -> None:
+        await asyncio.sleep(0)
+
+    effect = completion_effect("roulette.penalty", run, wait_for_completion=False)
+
+    assert effect.wait_for_completion is False
+
+
 @pytest.mark.parametrize("field", ["handler_id", "module", "command_id"])
 def test_registration_rejects_empty_identifiers(field: str) -> None:
     values = {

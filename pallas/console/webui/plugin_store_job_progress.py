@@ -14,11 +14,13 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
+from nonebot.log import logger
+
 if TYPE_CHECKING:
     from pallas.core.shared.utils.stream_download import StreamDownloadProgress
 
 JobPhase = Literal["queued", "running", "done", "failed"]
-StoreKind = Literal["official", "community"]
+StoreKind = Literal["official", "community", "local"]
 StoreAction = Literal["install", "update", "uninstall"]
 ProgressReporter = Callable[[int, str], None]
 
@@ -178,9 +180,23 @@ async def run_plugin_store_job(
                 progress_percent=100,
                 result=job.result,
             )
+        logger.info(
+            "插件商店任务完成（job [{}]、action [{}]、target [{}]）：{}",
+            job.job_id,
+            job.action,
+            job.target,
+            job.message or "",
+        )
     except Exception as exc:  # noqa: BLE001
         if job.phase != "failed":
             job.push("failed", error=str(exc), progress_percent=job.progress_percent)
+        logger.exception(
+            "插件商店任务失败（job [{}]、action [{}]、target [{}]）：{}",
+            job.job_id,
+            job.action,
+            job.target,
+            exc,
+        )
 
 
 async def iter_plugin_store_job_sse(job_id: str) -> AsyncIterator[str]:

@@ -29,18 +29,33 @@ _ORPHAN_LEADING_PARTICLE_RE = re.compile(
     r"^([吧呢啊嗯哦嘛呀哈呵欸唉呃额]+)([。．\.，,、！!？?\s～~]*)+",
 )
 
-# 舞台指示括号（叹气/笑/装傻等）；保留「（维尼修斯）」类人名注解
+# 舞台指示括号（叹气/翻白眼/引用等）；保留「（维尼修斯）」类人名注解
+_STAGE_DIRECTION_KEYWORDS = (
+    "叹气|轻叹|长叹|叹息|呼出一口气|"
+    "轻笑|轻笑一声|大笑|苦笑|冷笑|偷笑|微笑|干笑|傻笑|笑出声|噗嗤|笑了|笑|"
+    "愣住|愣了一下|愣|懵|呆住|"
+    "沉默片刻|沉默|顿了一下|停顿|"
+    "装傻|思考|想了想|沉思|思索|琢磨|"
+    "点头|摇头|耸肩|摊手|摊了摊手|"
+    "白眼|翻白眼|翻了个白眼|"
+    "抬头|低头|歪头|侧头|扭头|转头|回头|"
+    "挑眉|皱眉|撇嘴|撅嘴|眨眨眼|眨眼|"
+    "捂脸|捂嘴|扶额|挠头|揉揉太阳穴|"
+    "举手|挥手|摆手|"
+    "小声|轻声|低声|嘟囔|嘀咕|咕哝|自言自语|"
+    "无奈|尴尬|脸红|不好意思|害羞|"
+    "引用|备注|补一句|补充|纠正|"
+    "清了清嗓子|咳"
+)
 _STAGE_DIRECTION_PAREN_RE = re.compile(
     r"[（(]"
+    r"[^）)]{0,12}"
+    rf"(?:{_STAGE_DIRECTION_KEYWORDS})"
     r"[^）)]{0,10}"
-    r"(?:叹气|轻笑|大笑|苦笑|冷笑|偷笑|微笑|干笑|傻笑|笑|"
-    r"愣住|愣了一下|愣|"
-    r"沉默片刻|沉默|"
-    r"装傻|思考|沉思|点头|摇头|耸肩|"
-    r"小声|轻声|低声|嘟囔|无奈|尴尬|脸红)"
-    r"[^）)]{0,8}"
     r"[）)]"
 )
+# 兜底：行首整段旁白/插科打诨（含未列入关键词的「这谁点的歌啊」等）
+_STAGE_DIRECTION_LEADING_RE = re.compile(r"^[（(][^（）()]{1,24}[）)]")
 
 _TRUNCATED_TAIL_RE = re.compile(r"(?:把别的|打成|以及|还有|然后|接着|或者|但是|不过|因为|所以|如果|要是)$")
 _TRUNCATED_CONNECTOR_RE = re.compile(r"(?:把|被|跟|和|与|给|让|用|从|向|往)[\u4e00-\u9fff]{0,2}$")
@@ -120,14 +135,19 @@ def strip_orphan_leading_particles(text: str) -> str:
 
 
 def strip_stage_direction_parens(text: str) -> str:
-    """去掉（叹气）（笑）等舞台指示括号，保留普通人名注解。"""
+    """去掉（叹气）（翻个白眼）等舞台指示括号，保留普通人名注解。"""
     plain = str(text or "").strip()
     if not plain:
         return ""
     cleaned = _STAGE_DIRECTION_PAREN_RE.sub("", plain)
+    for _ in range(3):
+        next_cleaned = _STAGE_DIRECTION_LEADING_RE.sub("", cleaned, count=1).strip()
+        if next_cleaned == cleaned:
+            break
+        cleaned = next_cleaned
     cleaned = re.sub(r"[ \t]{2,}", " ", cleaned)
     cleaned = re.sub(r"[，,]{2,}", "，", cleaned)
-    return cleaned.strip(" ，,")
+    return cleaned.strip(" \t\r\n，,")
 
 
 def looks_like_truncated_reply(text: str) -> bool:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pallas.product.persona.auto import derive_persona_from_bot_id
-from pallas.product.persona.scorer import message_weight_multiplier
 from pallas.product.persona.seed import (
     apply_seed_prefs,
     derive_auto_seed_prefs,
@@ -14,7 +13,8 @@ from pallas.product.persona.seed import (
 
 
 def test_normalize_seed_prefs_caps_and_filters() -> None:
-    assert normalize_seed_prefs(["short", "chaotic", "nope", "warm"]) == ["short", "chaotic"]
+    assert normalize_seed_prefs(["short", "chaotic", "nope", "warm"]) == ["chaotic", "warm"]
+    assert normalize_seed_prefs(["warm", "restrained", "chaotic"]) == ["warm", "restrained"]
 
 
 def test_derive_auto_seed_prefs_differs_by_archetype() -> None:
@@ -36,14 +36,17 @@ def test_manual_override_beats_auto_seed() -> None:
     assert prefs == ["restrained"]
 
 
-def test_apply_seed_prefs_changes_message_weights() -> None:
+def test_apply_seed_prefs_changes_persona_axes() -> None:
     base = derive_persona_from_bot_id(42, archetype_enabled=False)
-    short_persona = apply_seed_prefs(base, ["short"])
-    long_persona = apply_seed_prefs(base, ["long"])
-    short_text = "草"
-    long_text = "今天这件事其实挺复杂的，我觉得还是再想想比较好吧。"
-    assert message_weight_multiplier(short_text, short_persona) > message_weight_multiplier(short_text, long_persona)
-    assert message_weight_multiplier(long_text, long_persona) > message_weight_multiplier(long_text, short_persona)
+    chaotic = apply_seed_prefs(base, ["chaotic"])
+    warm = apply_seed_prefs(base, ["warm"])
+    restrained = apply_seed_prefs(base, ["restrained"])
+
+    assert chaotic.chaos_bias > base.chaos_bias
+    assert chaotic.assertiveness > base.assertiveness
+    assert warm.warmth > base.warmth
+    assert restrained.warmth < base.warmth
+    assert restrained.chaos_bias <= base.chaos_bias
 
 
 def test_merge_persona_with_seed_patch_preserves_cross_group() -> None:
@@ -60,7 +63,7 @@ def test_merge_persona_with_seed_patch_preserves_cross_group() -> None:
     )
     assert merged["source"] == "cross_group"
     assert merged["derived"]["chaos_bias"] == 0.1
-    assert merged["seed_override"]["prefs"] == ["chaotic", "short"]
+    assert merged["seed_override"]["prefs"] == ["chaotic"]
     assert merged["seed_override"]["source"] == "manual"
 
 

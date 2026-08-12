@@ -103,14 +103,14 @@ def install_message_scrub_startup_log() -> None:
                 local_bits.append("lexicon_file")
             else:
                 local_bits.append("lexicon_path_invalid")
-                logger.warning("[消息过滤] 词表不可读 {}", cfg.scrub_lexicon_path)
+                logger.warning("[Scrub] 词表不可读 {}", cfg.scrub_lexicon_path)
         if cfg.scrub_lexicon_extra:
             local_bits.append("extra_substrings")
 
         if cfg.scrub_baidu_api_key and not cfg.scrub_baidu_secret_key:
-            logger.warning("[消息过滤] 百度密钥不完整，已跳过")
+            logger.warning("[Scrub] 百度密钥不完整，已跳过")
         if cfg.scrub_baidu_secret_key and not cfg.scrub_baidu_api_key:
-            logger.warning("[消息过滤] 百度密钥不完整，已跳过")
+            logger.warning("[Scrub] 百度密钥不完整，已跳过")
 
         providers = build_review_providers()
         chain_ids = [p.id for p in providers]
@@ -125,7 +125,7 @@ def install_message_scrub_startup_log() -> None:
         fail_behavior = format_api_fail_behavior(cfg.inbound_filter_api_fail_open)
 
         logger.debug(
-            "[消息过滤] {} | 本地={} | 远程={}/{} | 超时={}s | 失败{}",
+            "[Scrub] {} | 本地={} | 远程={}/{} | 超时={}s | 失败{}",
             "已启用" if intercept_on else "未启用（无本地规则且无远程审查）",
             local_desc,
             remote_mode,

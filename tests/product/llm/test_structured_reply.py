@@ -66,6 +66,15 @@ def test_parse_structured_reply_pass_has_no_segments() -> None:
     assert parse_structured_reply('{"reply_segments":["PASS"]}').reply_segments == ()
 
 
+def test_parse_structured_reply_accepts_bare_json_array_as_segments() -> None:
+    reply = parse_structured_reply('["早呀", "今天也来得挺早"]')
+
+    assert reply.reply_segments == ("早呀", "今天也来得挺早")
+
+    assert parse_structured_reply('["PASS"]').reply_segments == ()
+    assert parse_structured_reply('["一", "二", "三", "四"]').reply_segments == ("一", "二", "三\n四")
+
+
 def test_output_filter_removes_empty_segments_after_stage_cleanup() -> None:
     task = {"task_type": "llm_chat"}
     reply = StructuredChatReply(reply_segments=("（笑）", "在的，咋了"))
@@ -132,6 +141,11 @@ def test_validate_reply_chars_allows_normal_zh() -> None:
 
 def test_validate_reply_chars_allows_standalone_question_mark() -> None:
     ok, _reason = validate_reply_chars("？")
+    assert ok is True
+
+
+def test_validate_reply_chars_allows_cjk_ellipsis() -> None:
+    ok, _reason = validate_reply_chars("我看看……快十点了？")
     assert ok is True
 
 

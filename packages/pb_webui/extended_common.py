@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import HTTPException
 from fastapi.openapi.utils import get_openapi
+from nonebot.log import logger
 from pydantic import BaseModel
 from pydantic_core import PydanticUndefined
 
@@ -16,6 +17,7 @@ from pallas.console.webui.console_login import (
     is_console_auth_configured,
 )
 from pallas.core.foundation.bot_version import get_pallas_bot_version_for_health
+from pallas.core.foundation.logging.throttle import log_rate_limited
 from pallas.core.platform.shard import context as shard_ctx
 
 
@@ -102,6 +104,16 @@ def require_pallas_token_configured(
             status_code=503,
             detail="统一控制台鉴权未初始化，请检查 data/pallas_console/",
         )
+    client = getattr(req, "client", None)
+    ip = getattr(client, "host", "?") if client is not None else "?"
+    log_rate_limited(
+        logger,
+        "warning",
+        "console.auth.401",
+        "控制台鉴权失败，path [{}]、ip [{}]",
+        getattr(req, "url", "") or "?",
+        ip,
+    )
     raise HTTPException(status_code=401, detail="Invalid token")
 
 

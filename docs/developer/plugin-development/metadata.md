@@ -26,7 +26,7 @@
 
 MUST NOT：在 `usage` 或 `trigger_condition` 写死权限角色。细则：[cmd_perm](/common/cmd_perm)。
 
-帮助「谁能看见」用 `help_audience`（插件级或 `menu_data` 条目级），与「谁能执行」的 `command_permissions` 分开；普通 / 超管私聊双视图见 [牛牛帮助](/plugins/help.md#普通菜单与超管菜单)。
+帮助「谁能看见」用 `help_audience`（插件级或 `menu_data` 条目级），与「谁能执行」的 `command_permissions` 分开；普通 / 超管私聊双视图见 [牛牛帮助](/plugins/help/#普通菜单与超管菜单)。
 
 ## `command_permissions`
 
@@ -87,7 +87,7 @@ extra={
 - **`always_run: true`**：极少用；几乎每条群消息都激活，热群代价高。
 - **`lane`**：调度档位（与是否 passive 正交），如 `storage` / `remote`。
 
-用户向说明（含对照表）见 [语料联邦 · 热闹群与入站设计](/common/corpus#热闹群与入站设计行为说明)。
+用户向说明（含对照表）见 [语料联邦 · 热闹群与入站设计](/common/corpus/#热闹群与入站设计行为说明)。
 
 ## `reload_policy`
 

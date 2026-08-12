@@ -1,4 +1,4 @@
-"""官方扩展安装后的生效策略。"""
+"""官方插件安装后的生效策略。"""
 
 from __future__ import annotations
 

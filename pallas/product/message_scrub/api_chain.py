@@ -4,6 +4,8 @@ from typing import TYPE_CHECKING
 
 from nonebot import logger
 
+from pallas.core.foundation.logging.throttle import log_rate_limited
+
 from .config import get_message_scrub_config
 from .providers.baidu import BaiduTextReviewProvider, clear_baidu_token_cache
 from .providers.json_http import JsonHttpReviewProvider
@@ -68,7 +70,15 @@ async def run_review_chain(*, plain_text: str, raw_message: str) -> bool:
             if await p.is_blocked(plain_text=plain_text, raw_message=raw_message):
                 return True
         except Exception as e:
-            logger.debug("review provider [{}] failed: {}", p.id, e)
+            log_rate_limited(
+                logger,
+                "warning",
+                f"message_scrub.provider.{p.id}",
+                "review provider [{}] failed (fail_open [{}]): {}",
+                p.id,
+                fail_open,
+                e,
+            )
             if not fail_open:
                 return True
     return False

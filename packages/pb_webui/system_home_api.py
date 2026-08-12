@@ -223,7 +223,7 @@ def _gpu_metrics() -> dict[str, Any]:
 
 def _home_overview_slice(result: Any, label: str) -> Any:
     if isinstance(result, BaseException):
-        logger.warning("[控制台] home/overview {} 失败: {}", label, format_exception_for_log(result))
+        logger.warning("[WebUI] home/overview {} 失败: {}", label, format_exception_for_log(result))
         return None
     return result
 
@@ -444,7 +444,7 @@ def _runtime_metrics() -> dict[str, Any]:
 
         boot_time = float(_psutil_boot.boot_time())
     except Exception as e:  # noqa: BLE001
-        logger.debug("[控制台] psutil.boot_time 不可用，将尝试其它方式 err={}", e)
+        logger.debug("[WebUI] psutil.boot_time 不可用，将尝试其它方式 err={}", e)
 
     if boot_time is None and sys.platform == "win32":
         try:
@@ -453,7 +453,7 @@ def _runtime_metrics() -> dict[str, Any]:
             ms = int(ctypes.windll.kernel32.GetTickCount64())
             boot_time = float(time.time() - ms / 1000.0)
         except Exception as e:  # noqa: BLE001
-            logger.debug("[控制台] Windows GetTickCount64 推算启动时间失败 err={}", e)
+            logger.debug("[WebUI] Windows GetTickCount64 推算启动时间失败 err={}", e)
 
     return {
         "platform": platform.platform(),
@@ -564,7 +564,7 @@ def register_system_home_router(
 
         mode_label = "workers-restart" if workers_only else "full-restart"
         logger.info(
-            "[控制台] 已调度 Bot 重启 mode={} workers_only={}",
+            "[WebUI] 已调度 Bot 重启 mode={} workers_only={}",
             mode_label,
             workers_only,
         )

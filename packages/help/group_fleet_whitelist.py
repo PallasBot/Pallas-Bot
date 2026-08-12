@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 import time
 
+from nonebot.log import logger
+
+from pallas.core.foundation.logging.throttle import log_rate_limited
 from pallas.core.foundation.paths import plugin_data_dir
 
 from .global_disable import GLOBAL_DISABLE_PROTECTED_PLUGINS
@@ -78,8 +81,14 @@ def bump_group_fleet_whitelist_remote_generation() -> None:
         client = get_coord_redis_client()
         if client is not None:
             client.incr(_REDIS_GEN_KEY)
-    except Exception:
-        pass
+    except Exception as e:
+        log_rate_limited(
+            logger,
+            "warning",
+            "coord_gen.group_fleet_whitelist",
+            "bump group-fleet-whitelist redis generation failed: {}",
+            e,
+        )
 
 
 def sync_group_fleet_whitelist_remote_generation() -> bool:

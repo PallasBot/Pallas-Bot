@@ -256,9 +256,9 @@ async def init_mongodb_db() -> None:
     else:
         connection_string = f"mongodb://{host}:{port}"
         if user or password:
-            logger.warning("[数据库] MONGO 用户名与密码须同时配置，将尝试无认证连接")
+            logger.warning("[DB] MONGO 用户名与密码须同时配置，将尝试无认证连接")
 
-    logger.info("[数据库] 连接 MongoDB {}:{} db={}", host, port, db_name)
+    logger.info("[DB] 连接 MongoDB {}:{} db={}", host, port, db_name)
     mongo_client = AsyncMongoClient(
         connection_string,
         unicode_decode_error_handler="ignore",
@@ -300,7 +300,7 @@ async def init_mongodb_db() -> None:
         ],
     )
     _mongodb_initialized = True
-    logger.info("[数据库] MongoDB {} 已连接", db_name)
+    logger.info("[DB] MongoDB {} 已连接", db_name)
 
 
 def make_pg_context() -> ContextRepository:
@@ -401,7 +401,7 @@ async def init_postgresql_db() -> None:
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    from .repository_pg import dispose_pg, init_pg, is_pg_initialized, try_enable_pg_stat_statements
+    from .repository_pg import init_pg, is_pg_initialized, try_enable_pg_stat_statements
 
     if is_pg_initialized():
         return
@@ -412,7 +412,7 @@ async def init_postgresql_db() -> None:
     else:
         host = _cfg("MONGO_HOST", "127.0.0.1")
         if host != "127.0.0.1":
-            logger.warning("[数据库] PG_HOST 未设置，回退 MONGO_HOST={}", host)
+            logger.warning("[DB] PG_HOST 未设置，回退 MONGO_HOST={}", host)
     port = int(_cfg("PG_PORT", "5432"))
     user = _cfg("PG_USER", "")
     password = _cfg("PG_PASSWORD", "")
@@ -426,7 +426,7 @@ async def init_postgresql_db() -> None:
     max_overflow = int(_cfg("PG_MAX_OVERFLOW", "20"))
     pool_recycle = int(_cfg("PG_POOL_RECYCLE", "1800"))
 
-    logger.info("[数据库] 连接 PostgreSQL {}:{} db={}", host, port, db_name)
+    logger.info("[DB] 连接 PostgreSQL {}:{} db={}", host, port, db_name)
 
     if _cfg_bool("PG_AUTO_CREATE_DB", default=False):
         admin_engine = create_async_engine(f"{base_url}/postgres", isolation_level="AUTOCOMMIT")
@@ -434,10 +434,10 @@ async def init_postgresql_db() -> None:
             async with admin_engine.connect() as conn:
                 result = await conn.execute(text("SELECT 1 FROM pg_database WHERE datname = :db"), {"db": db_name})
                 if result.scalar() is None:
-                    logger.info("[数据库] PostgreSQL {} 不存在，正在创建（PG_AUTO_CREATE_DB）", db_name)
+                    logger.info("[DB] PostgreSQL {} 不存在，正在创建（PG_AUTO_CREATE_DB）", db_name)
                     # PG 不支持给 identifier 绑占位符；db_name 已由上方正则约束。
                     await conn.execute(text(f'CREATE DATABASE "{db_name}"'))  # noqa: S608
-                    logger.info("[数据库] PostgreSQL {} 已创建", db_name)
+                    logger.info("[DB] PostgreSQL {} 已创建", db_name)
         finally:
             await admin_engine.dispose()
 
@@ -455,24 +455,24 @@ async def init_postgresql_db() -> None:
         await engine.dispose()
         if _pg_init_failure_looks_like_dropped_connection(exc):
             logger.error(
-                "[数据库] 初始化 PostgreSQL 库 {!r} 时连接中断（常见：idle_in_transaction 超时或对端断开）。"
+                "[DB] 初始化 PostgreSQL 库 {!r} 时连接中断（常见：idle_in_transaction 超时或对端断开）。"
                 "请查 PG 日志与当时事件循环负载；默认 idle_in_transaction_session_timeout=15s。详情: {}",
                 db_name,
                 exc,
             )
         elif _pg_init_failure_looks_like_missing_db(exc):
             logger.error(
-                "[数据库] 无法初始化 PostgreSQL 库 {!r}。请确认库已存在，或设置 PG_AUTO_CREATE_DB=true "
+                "[DB] 无法初始化 PostgreSQL 库 {!r}。请确认库已存在，或设置 PG_AUTO_CREATE_DB=true "
                 "（需 CREATEDB）。托管 PG 请先手动建库，见 deploy/pg/README.md",
                 db_name,
             )
         else:
-            logger.error("[数据库] 初始化 PostgreSQL 库 {!r} 失败: {}", db_name, exc)
+            logger.error("[DB] 初始化 PostgreSQL 库 {!r} 失败: {}", db_name, exc)
         raise
     if _cfg_bool("PG_STAT_STATEMENTS_ENABLED"):
         await try_enable_pg_stat_statements(engine)
     logger.info(
-        "[数据库] PostgreSQL {} 已连接 pool={}+{} recycle={}s",
+        "[DB] PostgreSQL {} 已连接 pool={}+{} recycle={}s",
         db_name,
         pool_size,
         max_overflow,
@@ -492,14 +492,27 @@ async def init_postgresql_db() -> None:
 
         bind_pg_pool_diagnostics()
         start_pg_pool_diagnostics_task()
-        driver = nonebot.get_driver()
-
-        @driver.on_shutdown
-        async def _dispose_pg():
-            await dispose_pg()
-
     except Exception:
         pass
+
+
+def install_pg_shutdown_hook() -> None:
+    """尽早注册 PG 关闭钩子，保证依赖数据库的 on_shutdown 先于其执行。
+
+    NoneBot 逆序执行 on_shutdown（先注册者后执行）：若在 init_db（startup 阶段）
+    才注册，数据库会在其它插件收尾前被先关闭，导致 Chat.sync 等报
+    “PostgreSQL 尚未初始化”。各进程入口须在插件加载前调用本函数。
+    """
+    import nonebot
+
+    from .repository_pg import dispose_pg, is_pg_initialized
+
+    driver = nonebot.get_driver()
+
+    @driver.on_shutdown
+    async def _dispose_pg():
+        if is_pg_initialized():
+            await dispose_pg()
 
 
 # 工厂函数

@@ -102,6 +102,23 @@ def test_llm_chat_rule_accepts_federated_alias_winner(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.asyncio
+async def test_resolve_speak_aliases_caches_bot_persona(monkeypatch: pytest.MonkeyPatch) -> None:
+    from packages.llm_chat import chat_message as mod
+
+    repo = SimpleNamespace(get=AsyncMock(return_value=SimpleNamespace(persona={"self_aliases": ["牛牛"]})))
+    monkeypatch.setattr("pallas.core.foundation.db.make_bot_config_repository", lambda: repo)
+    monkeypatch.setattr(mod, "resolve_login_nickname", AsyncMock(return_value=""))
+    monkeypatch.setattr(mod, "resolve_cached_login_nickname", lambda _bot_id: "")
+    monkeypatch.setattr(mod, "resolve_managed_display_name", lambda _bot_id: "")
+    mod.clear_speak_alias_cache_for_tests()
+
+    assert await mod._resolve_speak_aliases(10001) == ["牛牛"]
+    assert await mod._resolve_speak_aliases(10001) == ["牛牛"]
+
+    repo.get.assert_awaited_once_with(10001)
+
+
+@pytest.mark.asyncio
 async def test_handle_llm_chat_skips_empty_to_me_without_reply(monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.llm_chat import chat_message as mod
 
@@ -458,8 +475,9 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     monkeypatch.setattr(mod, "latest_llm_assistant_reply", AsyncMock(return_value="上一句"))
     semantic_style_mock = Mock(
         return_value=SimpleNamespace(
-            style_anchor="短句轻怼。",
             prompt_block="【本群表达校准】\n保持：短句轻怼。",
+            matched_examples=[("又炸了", "没救了")],
+            baseline_note="本群真人单条短气泡为主（占比约 100%）。",
             direct_candidate="没救了",
             source_example_id="semantic:source:1",
         )
@@ -511,13 +529,15 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     assert "【语料收尾参考】" not in submit_request.system_prompt
     assert "【本群表达校准】" not in submit_request.system_prompt
     assert "【群表达指导】" in submit_request.system_prompt
-    assert "【刚才的群聊】" in submit_request.system_prompt
+    assert "刚才的群聊" in submit_request.system_prompt
     assert "兔兔：还是笨蛋欸" in submit_request.system_prompt
     assert "【同伴牛牛】" in submit_request.system_prompt
     assert "你不是其他牛牛。" in submit_request.system_prompt
-    assert "短句轻怼。" in submit_request.system_prompt
+    assert "短句轻怼。" not in submit_request.system_prompt
+    assert "没救了" in submit_request.system_prompt
     assert "【回复形状与输出契约】" in submit_request.system_prompt
-    assert '"reply_segments"' in submit_request.system_prompt
+    assert '"reply_segments"' not in submit_request.system_prompt
+    assert "直接输出一条或多条可见对白" in submit_request.system_prompt
     assert "引用只决定回复哪条消息" in submit_request.system_prompt
     assert "不要因引用把话一次说完" in submit_request.system_prompt
     assert "「行啊」「好呀」" in submit_request.system_prompt

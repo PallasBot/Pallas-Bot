@@ -22,10 +22,10 @@ def register(sub: argparse._SubParsersAction) -> None:
     parser = sub.add_parser("ext", help="官方插件安装与管理")
     ext_sub = parser.add_subparsers(dest="ext_command", required=True)
 
-    list_parser = ext_sub.add_parser("list", help="列出官方扩展与安装状态")
+    list_parser = ext_sub.add_parser("list", help="列出官方插件与安装状态")
     list_parser.set_defaults(handler=run_list)
 
-    install_parser = ext_sub.add_parser("install", help="安装官方扩展")
+    install_parser = ext_sub.add_parser("install", help="安装官方插件")
     install_parser.add_argument("package", help="pip 包名，如 pallas-plugin-duel")
     install_parser.add_argument(
         "--upgrade",
@@ -35,7 +35,12 @@ def register(sub: argparse._SubParsersAction) -> None:
     install_parser.add_argument("--restart", action="store_true", help="完成后重启 Bot")
     install_parser.set_defaults(handler=run_install)
 
-    uninstall_parser = ext_sub.add_parser("uninstall", help="卸载官方扩展")
+    update_parser = ext_sub.add_parser("update", help="更新官方插件到最新版")
+    update_parser.add_argument("package", help="pip 包名，如 pallas-plugin-duel")
+    update_parser.add_argument("--restart", action="store_true", help="完成后重启 Bot")
+    update_parser.set_defaults(handler=run_update)
+
+    uninstall_parser = ext_sub.add_parser("uninstall", help="卸载官方插件")
     uninstall_parser.add_argument("package", help="pip 包名")
     uninstall_parser.add_argument("--restart", action="store_true", help="完成后重启 Bot")
     uninstall_parser.set_defaults(handler=run_uninstall)
@@ -71,6 +76,10 @@ def run_install(args: argparse.Namespace) -> int:
     )
 
 
+def run_update(args: argparse.Namespace) -> int:
+    return asyncio.run(run_update_async(args.package, restart=bool(args.restart)))
+
+
 def run_uninstall(args: argparse.Namespace) -> int:
     return asyncio.run(run_uninstall_async(args.package, restart=bool(args.restart)))
 
@@ -83,6 +92,16 @@ async def run_install_async(package: str, *, restart: bool, upgrade: bool = Fals
         print(e.detail, file=sys.stderr)
         return 1
     print(result.get("message") or "安装完成。")
+    return 0
+
+
+async def run_update_async(package: str, *, restart: bool) -> int:
+    try:
+        result = await update_official_extension_with_options(package, restart=restart)
+    except ExtensionInstallError as e:
+        print(e.detail, file=sys.stderr)
+        return 1
+    print(result.get("message") or "更新完成。")
     return 0
 
 

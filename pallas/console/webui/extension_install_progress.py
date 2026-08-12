@@ -1,4 +1,4 @@
-"""官方扩展安装进度（兼容层 → plugin_store_job_progress）。"""
+"""官方插件安装进度（兼容层 → plugin_store_job_progress）。"""
 
 from __future__ import annotations
 

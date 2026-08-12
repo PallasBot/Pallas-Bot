@@ -18,16 +18,19 @@ from .model import ResolvedPersona
 
 _CACHE_TTL_SEC = 60.0
 _cache: dict[tuple[int, int | None], tuple[float, ResolvedPersona]] = {}
+_base_cache: dict[int, tuple[float, ResolvedPersona, dict | None, bool]] = {}
 
 
 def invalidate_persona_cache(bot_id: int | None = None) -> None:
     if bot_id is None:
         _cache.clear()
+        _base_cache.clear()
         return
     bid = int(bot_id)
     stale_keys = [key for key in _cache if key[0] == bid]
     for key in stale_keys:
         _cache.pop(key, None)
+    _base_cache.pop(bid, None)
 
 
 async def load_affect_triggers(group_id: int) -> list[dict]:
@@ -126,15 +129,25 @@ async def resolve_persona(bot_id: int, group_id: int | None = None) -> ResolvedP
     if cached is not None and now - cached[0] < _CACHE_TTL_SEC:
         return cached[1]
 
-    resolved = derive_persona_from_bot_id(bid, archetype_enabled=persona_archetype_enabled())
-    bot_repo = make_bot_config_repository()
-    bot_config = await bot_repo.get(bid)
-    persona_dict = getattr(bot_config, "persona", None) if bot_config is not None else None
-    if bot_config is not None:
-        resolved = _apply_cross_group_persona(resolved, persona_dict)
-        group_style_enabled = bool(getattr(bot_config, "group_style_enabled", True))
+    base_cached = _base_cache.get(bid)
+    if base_cached is not None and now - base_cached[0] < _CACHE_TTL_SEC:
+        _, resolved, persona_dict, group_style_enabled = base_cached
     else:
-        group_style_enabled = True
+        resolved = derive_persona_from_bot_id(bid, archetype_enabled=persona_archetype_enabled())
+        bot_repo = make_bot_config_repository()
+        bot_config = await bot_repo.get(bid)
+        persona_dict = getattr(bot_config, "persona", None) if bot_config is not None else None
+        if bot_config is not None:
+            resolved = _apply_cross_group_persona(resolved, persona_dict)
+            group_style_enabled = bool(getattr(bot_config, "group_style_enabled", True))
+        else:
+            group_style_enabled = True
+        _base_cache[bid] = (
+            now,
+            resolved,
+            persona_dict if isinstance(persona_dict, dict) else None,
+            group_style_enabled,
+        )
 
     if gid is not None and group_style_enabled:
         repo = make_group_config_repository()

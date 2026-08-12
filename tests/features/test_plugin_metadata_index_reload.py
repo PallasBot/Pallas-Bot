@@ -30,7 +30,7 @@ def test_reload_plugin_metadata_index_clears_caches():
 
 
 def test_reload_metadata_after_plugin_config_save_skips_config_only():
-    with patch("pallas.product.plugin_reload.metadata_index.reload_plugin_metadata_index") as reload_index:
+    with patch("pallas.core.plugin_reload.metadata_index.reload_plugin_metadata_index") as reload_index:
         assert reload_metadata_after_plugin_config_save("missing_plugin") is False
     reload_index.assert_not_called()
 
@@ -43,8 +43,8 @@ def test_reload_metadata_after_plugin_config_save_runs_for_metadata_policy():
         metadata = meta
 
     with (
-        patch("pallas.product.plugin_reload.metadata_index.get_loaded_plugins", return_value=[FakePlugin()]),
-        patch("pallas.product.plugin_reload.metadata_index.reload_plugin_metadata_index") as reload_index,
+        patch("pallas.core.plugin_reload.metadata_index.get_loaded_plugins", return_value=[FakePlugin()]),
+        patch("pallas.core.plugin_reload.metadata_index.reload_plugin_metadata_index") as reload_index,
     ):
         assert reload_metadata_after_plugin_config_save("help") is True
     reload_index.assert_called_once()
@@ -57,5 +57,5 @@ def test_reload_policy_for_plugin_name_resolves_legacy_alias():
         name = "pb_webui"
         metadata = meta
 
-    with patch("pallas.product.plugin_reload.metadata_index.get_loaded_plugins", return_value=[FakePlugin()]):
+    with patch("pallas.core.plugin_reload.metadata_index.get_loaded_plugins", return_value=[FakePlugin()]):
         assert reload_policy_for_plugin_name("pallas_webui") == "metadata"

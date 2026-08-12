@@ -1160,14 +1160,33 @@ async def fetch_llm_task_stats(
             pass
 
     try:
+        from pallas.product.llm.sticker_label_observability import fetch_sticker_label_job_stats
+
+        sticker_label = await fetch_sticker_label_job_stats()
+    except Exception:
+        sticker_label = {}
+    if isinstance(sticker_label, dict):
+        ai_body = payload.get("ai") if isinstance(payload.get("ai"), dict) else {}
+        day = str(ai_body.get("day_key") or bot_snap.get("day_key") or today_key())
+        merged_ai = {
+            **ai_body,
+            "day_key": day,
+            "source": ai_body.get("source") or "bot",
+            "sticker_label": sticker_label,
+        }
+        payload["ai"] = _normalize_ai_task_stats_snapshot(merged_ai)
+        try:
+            write_llm_daily_stats_side(day, "ai", {**payload["ai"], "reachable": True})
+        except Exception:
+            pass
+
+    try:
         from pallas.product.llm.sticker_vision import fetch_sticker_vision_stats
 
         sticker_vision = await fetch_sticker_vision_stats()
     except Exception:
         sticker_vision = {}
-    if isinstance(sticker_vision, dict) and (
-        int(sticker_vision.get("requests") or 0) > 0 or sticker_vision.get("recent")
-    ):
+    if isinstance(sticker_vision, dict):
         ai_body = payload.get("ai") if isinstance(payload.get("ai"), dict) else {}
         day = str(ai_body.get("day_key") or bot_snap.get("day_key") or today_key())
         merged_ai = {

@@ -19,8 +19,7 @@ def _build_client(monkeypatch) -> TestClient:
 
 def test_llm_behavior_patterns_get_filters_by_group_and_scene(monkeypatch) -> None:
     monkeypatch.setattr(
-        mod,
-        "list_behavior_patterns",
+        "packages.pb_webui.common_config_api.ensure_default_behavior_patterns",
         lambda: [
             BehaviorPattern(
                 pattern_id="global-1",

@@ -44,7 +44,7 @@ def test_list_shard_log_sources_skips_orphan_worker_log(tmp_path, monkeypatch):
         assignments={"111": 0},
     )
     monkeypatch.setattr("pallas.core.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
-    monkeypatch.setattr("pallas.core.platform.shard.registry.config.is_sharding_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.shard.registry.store.get_shard_registry", lambda: reg)
 
     sources = list_shard_log_sources()
@@ -74,7 +74,7 @@ def test_list_shard_log_sources_includes_test_shard_with_bots(tmp_path, monkeypa
         test=TestShardConfig(enabled=True, shard_id=99, port=8199),
     )
     monkeypatch.setattr("pallas.core.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
-    monkeypatch.setattr("pallas.core.platform.shard.registry.config.is_sharding_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.shard.registry.store.get_shard_registry", lambda: reg)
 
     sources = list_shard_log_sources()
@@ -95,7 +95,7 @@ def test_list_shard_log_sources_skips_test_shard_without_bots(tmp_path, monkeypa
         test=TestShardConfig(enabled=True, shard_id=99, port=8199),
     )
     monkeypatch.setattr("pallas.core.platform.shard.logs.view.shard_logs_dir", lambda: log_dir)
-    monkeypatch.setattr("pallas.core.platform.shard.registry.config.is_sharding_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.shard.registry.store.get_shard_registry", lambda: reg)
 
     assert list_shard_log_sources() == ["hub"]

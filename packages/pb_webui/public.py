@@ -134,7 +134,7 @@ def register_routes(
         if idx.is_file():
             return _spa_file_response(idx)
         logger.warning(
-            "[控制台] 未找到 {}，可设置 pallas_webui_dist_zip_url 或手动放置构建产物。",
+            "[WebUI] 未找到 {}，可设置 pallas_webui_dist_zip_url 或手动放置构建产物。",
             public_dir / "index.html",
         )
         return HTMLResponse(
@@ -190,7 +190,7 @@ def register_routes(
                 _refresh_page_cookie(response, request, got)
             return response
         logger.warning(
-            "[控制台] 未找到 {}，可设置 pallas_webui_dist_zip_url 或手动放置构建产物。",
+            "[WebUI] 未找到 {}，可设置 pallas_webui_dist_zip_url 或手动放置构建产物。",
             public_dir / "index.html",
         )
         return HTMLResponse(

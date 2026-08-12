@@ -42,6 +42,7 @@
 ```bash
 uv run pallas ext list
 uv run pallas ext install pallas-plugin-duel --restart
+uv run pallas ext update pallas-plugin-duel --restart
 uv run pallas ext uninstall pallas-plugin-duel --restart
 ```
 

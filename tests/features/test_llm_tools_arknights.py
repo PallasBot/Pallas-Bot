@@ -7,10 +7,10 @@ from pallas.product.llm.tools.registry import execute_tool, tool_metadata_for_ch
 def test_arknights_tool_schemas_registered() -> None:
     schemas = tool_openai_schemas(domains=frozenset({"arknights"}))
     names = {item["function"]["name"] for item in schemas}
-    assert "arknights.operator.get" in names
-    assert "arknights.skill.get" in names
-    assert "arknights.enemy.get" in names
-    assert "arknights.enemy.search" in names
+    assert "arknights__operator__get" in names
+    assert "arknights__skill__get" in names
+    assert "arknights__enemy__get" in names
+    assert "arknights__enemy__search" in names
 
 
 def test_execute_operator_get(monkeypatch) -> None:
@@ -60,7 +60,7 @@ def test_tool_metadata_for_operator_lookup_question() -> None:
     meta = tool_metadata_for_chat(task="llm_chat", user_text="你知道谁是银灰吗")
     assert meta.get("tools_enabled") is True
     names = {item["function"]["name"] for item in meta["tool_schemas"]}
-    assert "arknights.operator.get" in names
+    assert "arknights__operator__get" in names
 
 
 def test_tool_metadata_skips_casual_llm_chat_when_selective() -> None:

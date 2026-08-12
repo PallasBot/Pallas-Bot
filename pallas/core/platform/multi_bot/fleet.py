@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import threading
 
+from nonebot.log import logger
+
 from pallas.core.platform.shard import context as shard_ctx
 
 _lock = threading.RLock()
@@ -104,8 +106,8 @@ def _load_fleet_bot_ids() -> set[int]:
             for shard in reg.shards:
                 for bid in shard.bot_ids:
                     merge_reg_qq(str(bid))
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug("fleet: cluster fleet ids load failed: {}", e)
         with _lock:
             ids.update(_session_connected)
     return ids

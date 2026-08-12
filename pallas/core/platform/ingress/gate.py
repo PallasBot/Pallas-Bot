@@ -176,6 +176,8 @@ async def ingress_group_message_gate(bot, event) -> None:
             raise IgnoredException("federate group owner mismatch")
 
         at_fleet = message_at_fleet_bot(event)
+        if at_fleet and self_id in pallas_ats:
+            event._pallas_llm_at_trigger = True
         ingress_claim_done = False
 
         if pallas_ats and self_id not in pallas_ats:

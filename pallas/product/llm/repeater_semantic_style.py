@@ -77,6 +77,11 @@ FORM_VOCABULARY = frozenset({"call_response", "emoji", "fragment", "question", "
 _MAX_LABEL_ITEMS = 8
 _MAX_STYLE_ANCHOR_LEN = 80
 _MAX_SEED_LEN = 80
+_BEHAVIOR_STRATEGY_LIMIT = 8
+_BASELINE_MIN_SAMPLE = 20
+_BEHAVIOR_STRATEGY_MIN_SIMILARITY = 0.3
+_BEHAVIOR_STRATEGY_MAX_HITS = 2
+_MATCHED_EXAMPLE_LIMIT = 2
 _PROFILE_REFRESH_SEC = 20.0
 _JSON_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _VISUAL_SUBJECT_VALUES = frozenset({
@@ -126,6 +131,19 @@ class SemanticStyleLabel(BaseModel):
     visual: SemanticStyleVisualLabel | None = None
 
 
+class BehaviorStrategy(BaseModel):
+    """可复用的真人接话策略：场景→行为→结果，不摘抄原话。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    scene: str = ""
+    action: str = ""
+    outcome: str = ""
+    trigger: str = ""
+    learning_type: Literal["observed", "self_reflection"] = "observed"
+    count: int = 1
+
+
 class SemanticStyleExample(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
@@ -142,6 +160,7 @@ class SemanticStyleExample(BaseModel):
     legacy_reuse: Literal["direct", "rewrite", "style", ""] = ""
     legacy_style_anchor: str = ""
     legacy_persona_affinities: list[str] = Field(default_factory=list)
+    behavior_strategy: BehaviorStrategy | None = None
 
 
 class SemanticStyleDirectPair(BaseModel):
@@ -173,6 +192,8 @@ class SemanticStyleProfile(BaseModel):
     bot_style_sample_count: int = 0
     recent_bot_style_sample_count: int = 0
     bot_style_promoted: bool = False
+    visual_sample_count: int = 0
+    behavior_strategies: list[BehaviorStrategy] = Field(default_factory=list)
     updated_at: int = 0
 
 
@@ -182,6 +203,8 @@ class SemanticStyleResolution(BaseModel):
     matched_examples: list[tuple[str, str]] = Field(default_factory=list)
     direct_candidate: str = ""
     source_example_id: str = ""
+    baseline_note: str = ""
+    behavior_strategies: list[BehaviorStrategy] = Field(default_factory=list)
 
 
 class SemanticStyleOverride(BaseModel):
@@ -592,6 +615,21 @@ def parse_semantic_style_label(value: object) -> SemanticStyleLabel:
     )
 
 
+def parse_behavior_strategy(value: object) -> BehaviorStrategy | None:
+    raw = value if isinstance(value, dict) else {}
+    scene = _short_text(raw.get("scene"), _MAX_SEED_LEN)
+    action = _short_text(raw.get("action"), _MAX_SEED_LEN)
+    if not scene or not action:
+        return None
+    learning_type = str(raw.get("learning_type") or "").strip().lower()
+    return BehaviorStrategy(
+        scene=scene,
+        action=action,
+        outcome=_short_text(raw.get("outcome"), _MAX_SEED_LEN),
+        learning_type="self_reflection" if learning_type == "self_reflection" else "observed",
+    )
+
+
 def semantic_style_base_dir() -> Path:
     env_dir = str(os.environ.get("PALLAS_DATA_DIR") or "").strip()
     root = Path(env_dir) if env_dir else plugin_data_dir("pb_webui", create=True)
@@ -982,6 +1020,22 @@ def _build_profile(
     form_counts = dict(existing.form_counts) if existing else {}
     for form in label.forms:
         form_counts[form] = int(form_counts.get(form) or 0) + 1
+    strategies = list(existing.behavior_strategies) if existing else []
+    if example.behavior_strategy is not None and example.behavior_strategy.action:
+        strategy = example.behavior_strategy
+        if not strategy.trigger:
+            strategy = strategy.model_copy(update={"trigger": _short_text(example.trigger_text, _MAX_SEED_LEN)})
+        if example.bot_style_positive:
+            strategy = strategy.model_copy(update={"learning_type": "self_reflection"})
+        merged = False
+        for index, prior in enumerate(strategies):
+            if prior.learning_type == strategy.learning_type and prior.action == strategy.action:
+                strategies[index] = prior.model_copy(update={"count": prior.count + 1})
+                merged = True
+                break
+        if not merged:
+            strategies.append(strategy)
+        strategies = strategies[-_BEHAVIOR_STRATEGY_LIMIT:]
     return SemanticStyleProfile(
         bot_id=example.bot_id,
         group_id=example.group_id,
@@ -1004,6 +1058,8 @@ def _build_profile(
         bot_style_sample_count=bot_style_sample_count,
         recent_bot_style_sample_count=recent_bot_style_sample_count,
         bot_style_promoted=bot_style_promoted,
+        visual_sample_count=(existing.visual_sample_count if existing else 0) + int(label.visual is not None),
+        behavior_strategies=strategies,
         updated_at=example.created_at,
     )
 
@@ -1283,23 +1339,40 @@ def resolve_cached_semantic_style(
         query_text=query_text,
         recent_assistant_replies=recent_assistant_replies,
     )
-    safe_examples = [
+    safe_matched = [
         pair
-        for pair in profile.direct_pairs[-2:]
+        for pair in select_semantic_style_matched_pairs(
+            profile.direct_pairs,
+            query_text=query_text,
+            recent_assistant_replies=recent_assistant_replies,
+            limit=_MATCHED_EXAMPLE_LIMIT,
+        )
         if prompt_safe_expression_sample(pair.trigger_text) and prompt_safe_expression_sample(pair.reply_text)
+    ]
+    matched_examples = [
+        (_short_text(pair.trigger_text, _MAX_SEED_LEN), _short_text(pair.reply_text, _MAX_SEED_LEN))
+        for pair in safe_matched
     ]
     safe_anchor = prompt_safe_expression_sample(profile.style_anchor)
     safe_seed = prompt_safe_expression_sample(rewrite_seed)
     safe_direct_candidate = prompt_safe_expression_sample(direct_pair.reply_text) if direct_pair is not None else ""
+    behavior_strategies = (
+        []
+        if matched_examples
+        else [
+            strategy
+            for strategy in select_behavior_strategies(profile.behavior_strategies, query_text=query_text)
+            if prompt_safe_expression_sample(strategy.scene) and prompt_safe_expression_sample(strategy.action)
+        ]
+    )
     return SemanticStyleResolution(
         style_anchor=safe_anchor,
         prompt_block=append_cached_semantic_style_block("", safe_anchor, safe_seed),
-        matched_examples=[
-            (_short_text(pair.trigger_text, _MAX_SEED_LEN), _short_text(pair.reply_text, _MAX_SEED_LEN))
-            for pair in safe_examples
-        ],
+        matched_examples=matched_examples,
         direct_candidate=safe_direct_candidate,
         source_example_id=direct_pair.source_example_id if direct_pair is not None else "",
+        baseline_note=build_rhythm_baseline_note(profile),
+        behavior_strategies=behavior_strategies[:_BEHAVIOR_STRATEGY_MAX_HITS],
     )
 
 
@@ -1348,6 +1421,88 @@ def select_semantic_style_direct_candidate(
         recent_assistant_replies=recent_assistant_replies,
     )
     return _short_text(pair.reply_text, _MAX_SEED_LEN) if pair is not None else ""
+
+
+def select_behavior_strategies(
+    strategies: Iterable[BehaviorStrategy],
+    *,
+    query_text: str,
+) -> list[BehaviorStrategy]:
+    """按当前触发句对策略池打分召回，场景/动作相似且次数更高者优先。"""
+    ranked = sorted(
+        (
+            (
+                max(
+                    semantic_style_text_similarity(query_text, strategy.trigger),
+                    semantic_style_text_similarity(query_text, strategy.scene),
+                ),
+                index,
+                strategy,
+            )
+            for index, strategy in enumerate(strategies)
+            if strategy.scene and strategy.action
+        ),
+        reverse=True,
+    )
+    hits: list[BehaviorStrategy] = []
+    for score, _index, strategy in ranked:
+        if score < _BEHAVIOR_STRATEGY_MIN_SIMILARITY:
+            break
+        hits.append(strategy)
+        if len(hits) >= _BEHAVIOR_STRATEGY_MAX_HITS:
+            break
+    return hits
+
+
+def build_rhythm_baseline_note(profile: SemanticStyleProfile | None) -> str:
+    """渲染一行本群真人接话节奏基线；样本不足时返回空串。"""
+    if profile is None or profile.sample_count < _BASELINE_MIN_SAMPLE:
+        return ""
+    bubble_counts = sorted(int(value) for value in profile.bubble_counts if int(value) > 0)
+    segment_lengths = sorted(int(value) for value in profile.segment_char_lengths if int(value) > 0)
+    rhythm_counts = {str(key): max(0, int(value)) for key, value in profile.rhythm_counts.items()}
+    rhythm_total = sum(rhythm_counts.values())
+    if not bubble_counts or not segment_lengths or not rhythm_total:
+        return ""
+    single_ratio = round(int(rhythm_counts.get("single") or 0) / rhythm_total * 100)
+    median_segment = segment_lengths[round((len(segment_lengths) - 1) * 0.5)]
+    parts = [f"本群真人单条短气泡为主（占比约 {single_ratio}%），单段中位约 {median_segment} 字"]
+    visual_ratio = round(profile.visual_sample_count / profile.sample_count * 100)
+    if visual_ratio >= 5:
+        parts.append(f"约 {visual_ratio}% 的回复带图")
+    return "；".join(parts) + "。"
+
+
+def select_semantic_style_matched_pairs(
+    pairs: Iterable[SemanticStyleDirectPair],
+    *,
+    query_text: str,
+    recent_assistant_replies: Iterable[str] = (),
+    limit: int = _MATCHED_EXAMPLE_LIMIT,
+) -> list[SemanticStyleDirectPair]:
+    """按当前触发句相似度召回具体真人接话对，作为可见回复的参考示例。"""
+    recent = [reply for reply in recent_assistant_replies if normalize_semantic_style_match_text(reply)]
+    ranked = sorted(
+        (
+            (semantic_style_text_similarity(query_text, pair.trigger_text), index, pair)
+            for index, pair in enumerate(pairs)
+            if pair.trigger_text and pair.reply_text
+        ),
+        reverse=True,
+    )
+    hits: list[SemanticStyleDirectPair] = []
+    for score, _index, pair in ranked:
+        if score < _DIRECT_TRIGGER_SIMILARITY:
+            break
+        if any(
+            semantic_style_text_similarity(pair.reply_text, previous) >= _DIRECT_REPLY_DEDUP_SIMILARITY
+            for previous in recent
+        ):
+            continue
+        hits.append(pair)
+        if len(hits) >= max(1, min(2, int(limit))):
+            break
+    return hits
 
 
 def select_semantic_style_direct_pair(
@@ -1416,24 +1571,35 @@ def append_cached_semantic_style_block(system_prompt: str, style_anchor: str, re
     return f"{base}\n\n{block}".strip() if base and block else (block or base)
 
 
-def _parse_label_response(content: str) -> SemanticStyleLabel:
+def _parse_label_response(content: str) -> tuple[SemanticStyleLabel, BehaviorStrategy | None]:
     text = _JSON_FENCE_RE.sub("", str(content or "").strip()).strip()
     try:
         raw = json.loads(text)
     except json.JSONDecodeError:
-        return parse_semantic_style_label({})
-    return parse_semantic_style_label(raw)
+        return parse_semantic_style_label({}), None
+    if not isinstance(raw, dict):
+        return parse_semantic_style_label({}), None
+    return parse_semantic_style_label(raw), parse_behavior_strategy(raw.get("behavior_strategy"))
 
 
-async def label_semantic_style_with_llm(*, trigger_text: str, reply_text: str) -> SemanticStyleLabel:
+async def label_semantic_style_with_llm(
+    *, trigger_text: str, reply_text: str
+) -> tuple[SemanticStyleLabel, BehaviorStrategy | None]:
     from pallas.product.llm.config import get_llm_config
     from pallas.product.llm.provider_client import complete_chat_message
 
     cfg = get_llm_config()
     prompt = (
-        "分析一组真实群聊接话，输出严格 JSON。保留无意义附和、攻击性和胡话等表达特征，"
-        "不要做价值判断。字段只能是 interaction_actions、semantic_relations、intensity、forms。"
-        "intensity 只能 quiet/soft/neutral/sharp/strong；其余字段使用受控词表。\n"
+        "分析一组真实群聊接话，输出严格 JSON，不要做价值判断。字段只能是 interaction_actions、"
+        "semantic_relations、intensity、forms、behavior_strategy。"
+        "intensity 只能 quiet/soft/neutral/sharp/strong；其余文本字段使用受控词表。\n"
+        "behavior_strategy 是这条接话里可复用的接话策略对象，格式："
+        '{"scene":"触发场景的简短概括","action":"真人在这条里实际采用的接话动作","outcome":"对话中可观察的结果",'
+        '"learning_type":"observed"}。scene 要抽象到相似场景还能用，不绑定具体对象、人名或临时梗；'
+        "action 如实概括这条接话实际的做法，无论是共情追问、打哈哈带过、转移话题、怼回去还是无视，"
+        "都照实抽象成行为结构，不要美化或套用模板式安慰；不要摘抄原话；"
+        "outcome 写可观察的互动变化（例如“对方愿意补充细节”“话题被带过”“对方不再追问”）。"
+        "真人接话默认 learning_type=observed，抽不出可复用策略时 behavior_strategy 输出 null。\n"
         f"前句：{_short_text(trigger_text, 160)}\n接话：{_short_text(reply_text, 160)}"
     )
     response = await complete_chat_message(
@@ -1516,7 +1682,9 @@ async def maybe_label_semantic_style_visual(payload: dict[str, Any]) -> Semantic
     return label
 
 
-async def label_semantic_style_with_retry(*, trigger_text: str, reply_text: str) -> SemanticStyleLabel | None:
+async def label_semantic_style_with_retry(
+    *, trigger_text: str, reply_text: str
+) -> tuple[SemanticStyleLabel, BehaviorStrategy | None] | None:
     for retry_index in range(SEMANTIC_STYLE_LABEL_MAX_RETRIES + 1):
         try:
             return await label_semantic_style_with_llm(trigger_text=trigger_text, reply_text=reply_text)
@@ -1543,7 +1711,7 @@ async def handle_repeater_semantic_style(payload: dict[str, Any]) -> None:
         example_id=str(payload.get("example_id") or f"{group_id}:{payload.get('message_id')}:{bot_id}"),
     ):
         return
-    label = await label_semantic_style_with_llm(trigger_text=trigger, reply_text=reply)
+    label, behavior_strategy = await label_semantic_style_with_llm(trigger_text=trigger, reply_text=reply)
     visual = await maybe_label_semantic_style_visual(payload)
     if visual is not None:
         label = label.model_copy(update={"visual": visual})
@@ -1556,6 +1724,7 @@ async def handle_repeater_semantic_style(payload: dict[str, Any]) -> None:
         trigger_text=_short_text(trigger, 240),
         reply_text=_short_text(reply, 240),
         label=label,
+        behavior_strategy=behavior_strategy,
     )
     persist_semantic_style_example(example)
 
@@ -1578,9 +1747,10 @@ async def handle_repeater_semantic_style_backfill(payload: dict[str, Any], *, no
     reply = str(payload.get("reply_text") or "").strip()
     if not trigger or not reply:
         return
-    label = await label_semantic_style_with_retry(trigger_text=trigger, reply_text=reply)
-    if label is None:
+    label_result = await label_semantic_style_with_retry(trigger_text=trigger, reply_text=reply)
+    if label_result is None:
         return
+    label, behavior_strategy = label_result
     example = SemanticStyleExample(
         example_id=str(payload.get("example_id") or f"{payload.get('group_id')}:{payload.get('message_id')}"),
         created_at=int(payload.get("created_at") or current_time),
@@ -1590,6 +1760,7 @@ async def handle_repeater_semantic_style_backfill(payload: dict[str, Any], *, no
         trigger_text=_short_text(trigger, 240),
         reply_text=_short_text(reply, 240),
         label=label,
+        behavior_strategy=behavior_strategy,
     )
     persist_semantic_style_example(example)
 

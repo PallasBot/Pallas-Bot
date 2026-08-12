@@ -41,8 +41,8 @@ def test_reply_gate_uses_persona_min_chars() -> None:
     cfg = LlmConfig(llm_reply_gate_enabled=True, llm_reply_gate_min_chars=2)
     cold = ResolvedPersona(warmth=-0.35, assertiveness=-0.1)
     warm = ResolvedPersona(warmth=0.35, assertiveness=0.1)
-    assert evaluate_llm_reply_gate("好", cfg=cfg, persona=cold) == "skip"
-    assert evaluate_llm_reply_gate("好", cfg=cfg, persona=warm) == "proceed"
+    assert evaluate_llm_reply_gate("在", cfg=cfg, persona=cold) == "skip"
+    assert evaluate_llm_reply_gate("在", cfg=cfg, persona=warm) == "proceed"
 
 
 def test_classify_activity_level() -> None:

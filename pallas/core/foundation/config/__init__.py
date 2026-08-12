@@ -3,6 +3,8 @@ import asyncio
 import time
 from typing import Any
 
+from nonebot.log import logger
+
 from pallas.core.foundation.db import (
     SingProgress,
     make_bot_config_repository,
@@ -10,6 +12,7 @@ from pallas.core.foundation.db import (
     make_user_config_repository,
 )
 from pallas.core.foundation.db.repository import ConfigRepository
+from pallas.core.foundation.logging.throttle import log_rate_limited
 
 KEY_JOINER = "."
 
@@ -275,8 +278,8 @@ async def get_bot_admins(bot_id: int) -> list[int]:
         members = await make_admin_repository().list_members(scope="bot", bot_id=int(bot_id))
         if members:
             return sorted({int(m.user_id) for m in members})
-    except Exception:
-        pass
+    except Exception as e:
+        log_rate_limited(logger, "warning", "config.bot_admins_fallback", "bot admins fallback load failed: {}", e)
     return primary
 
 
@@ -298,14 +301,15 @@ async def user_is_admin_of_any_bot(user_id: int) -> bool:
 
         if await make_admin_repository().has_user(int(user_id)):
             return True
-    except Exception:
-        pass
+    except Exception as e:
+        log_rate_limited(logger, "warning", "config.admin_any_bot", "admin member check failed: {}", e)
     # bootstrap 回退到现有的跨 bot 缓存（BotConfig.admins）
     from .bot_admins_cache import any_bot_admin_user_ids_cached
 
     try:
         return user_id in await any_bot_admin_user_ids_cached()
-    except Exception:
+    except Exception as e:
+        log_rate_limited(logger, "warning", "config.admin_any_bot_cache", "admin cache check failed: {}", e)
         return False
 
 

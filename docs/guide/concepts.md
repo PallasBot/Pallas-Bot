@@ -17,7 +17,7 @@
 
 - 协议端与 Pallas-Bot 通过 **OneBot WebSocket** 通信。
 - Web 控制台与协议端管理页由 **同一 Bot 进程** 提供，无需另起服务。
-- 日常改插件配置：控制台保存即可；装 / 卸官方扩展需重启 Bot。
+- 日常改插件配置：控制台保存即可；装 / 卸官方插件需重启 Bot。
 - 端口、超管、数据库连接写在 `config/pallas.toml`；插件项写入 `data/pallas_config/webui.json`。
 
 ## 运行方式

@@ -1,5 +1,7 @@
+from pallas.core.foundation.loop import install_uvloop
 from pallas.core.runtime import apply_repo_settings, boot
 
+install_uvloop()
 apply_repo_settings()
 
 # ruff: noqa: E402

@@ -46,7 +46,7 @@ from pallas.core.platform.observability import slow_path_threshold_ms
 from pallas.product.llm.corpus_contamination import reject_corpus_learn_message
 
 if TYPE_CHECKING:
-    from pallas.core.foundation.db.modules import Answer, Ban, Context, ImageCache, Message
+    from pallas.core.foundation.db.modules import Answer, Ban, BlackList, Context, ImageCache, Message
     from pallas.core.foundation.db.repository import ImageCachePrunePolicy, ImageCachePruneResult
 
 _JsonB = JSONB().with_variant(JSON(), "sqlite")
@@ -92,7 +92,7 @@ class ContextAnswerRow(Base):
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    context_id: Mapped[int] = mapped_column(ForeignKey("context.id", ondelete="CASCADE"), nullable=False, index=True)
+    context_id: Mapped[int] = mapped_column(ForeignKey("context.id", ondelete="CASCADE"), nullable=False)
     keywords: Mapped[str] = mapped_column(Text, nullable=False)
     keywords_hash: Mapped[str] = mapped_column(Text, nullable=False)
     group_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -170,6 +170,7 @@ class BackgroundJobRow(Base):
     __table_args__ = (
         UniqueConstraint("idempotency_key", name="uq_background_job_idempotency"),
         Index("ix_background_job_claim", "status", "available_at", "leased_until", "id"),
+        Index("ix_background_job_delivery_claim", "kind", "status", "finished_at"),
     )
 
     id: Mapped[str] = mapped_column(Text, primary_key=True)
@@ -716,6 +717,7 @@ def _ensure_pg_context_answer_reply_index(connection) -> None:
     insp = inspect(connection)
     if not insp.has_table("context_answer"):
         return
+    connection.execute(text("DROP INDEX IF EXISTS ix_context_answer_context_id"))
     connection.execute(
         text("CREATE INDEX IF NOT EXISTS ix_context_answer_ctx_count_time ON context_answer (context_id, count, time)")
     )
@@ -730,6 +732,18 @@ def _ensure_pg_context_answer_message_reply_index(connection) -> None:
         text(
             "CREATE INDEX IF NOT EXISTS ix_context_answer_message_answer_id_id "
             "ON context_answer_message (answer_id, id)"
+        )
+    )
+
+
+def _ensure_pg_background_job_delivery_claim_index(connection) -> None:
+    """background_job 表补已完成视觉投递领取索引。"""
+    insp = inspect(connection)
+    if not insp.has_table("background_job"):
+        return
+    connection.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_background_job_delivery_claim ON background_job (kind, status, finished_at)"
         )
     )
 
@@ -839,6 +853,7 @@ PG_SCHEMA_ENSURE_STEPS: list[tuple[str, Any]] = [
     ("ddl.message_timeline_metadata", _ensure_pg_message_timeline_metadata),
     ("ddl.context_answer_reply_index", _ensure_pg_context_answer_reply_index),
     ("ddl.context_answer_message_reply_index", _ensure_pg_context_answer_message_reply_index),
+    ("ddl.background_job_delivery_claim_index", _ensure_pg_background_job_delivery_claim_index),
 ]
 
 
@@ -1207,51 +1222,63 @@ class PgContextRepository:
         msg_cap, ans_cap = reply_query_caps(keywords)
         t_start = time.monotonic()
         async with get_session(read_only=True) as session:
-            row = (
+            context_row = (
                 (
                     await session.execute(
                         text(
                             """
-                        WITH ctx AS (
-                            SELECT id, keywords, time, trigger_count, clear_time
-                            FROM context WHERE keywords_hash = :khash
-                        ), answers AS (
-                            SELECT a.id, a.keywords, a.group_id, a.count, a.time
-                            FROM context_answer a JOIN ctx ON a.context_id = ctx.id
-                            ORDER BY a.count DESC, a.time DESC LIMIT :ans_cap
-                        ), ranked_messages AS (
-                            SELECT m.answer_id, m.message, m.id,
-                                   row_number() OVER (PARTITION BY m.answer_id ORDER BY m.id DESC) AS rn
-                            FROM context_answer_message m JOIN answers a ON a.id = m.answer_id
-                        ), messages AS (
-                            SELECT answer_id, jsonb_agg(message ORDER BY id) AS values
-                            FROM ranked_messages WHERE rn <= :msg_cap GROUP BY answer_id
-                        )
-                        SELECT ctx.keywords, ctx.time, ctx.trigger_count, ctx.clear_time,
+                        SELECT c.id, c.keywords, c.time, c.trigger_count, c.clear_time,
                             COALESCE((
                                 SELECT jsonb_agg(jsonb_build_object(
                                     'keywords', b.keywords, 'group_id', b.group_id,
                                     'reason', b.reason, 'time', b.time
                                 ) ORDER BY b.id)
-                                FROM context_ban b WHERE b.context_id = ctx.id
-                            ), '[]'::jsonb) AS bans,
-                            COALESCE((
-                                SELECT jsonb_agg(jsonb_build_object(
-                                    'keywords', a.keywords, 'group_id', a.group_id,
-                                    'count', a.count, 'time', a.time,
-                                    'messages', COALESCE(m.values, '[]'::jsonb)
-                                ) ORDER BY a.count DESC, a.time DESC)
-                                FROM answers a LEFT JOIN messages m ON m.answer_id = a.id
-                            ), '[]'::jsonb) AS answers
-                        FROM ctx
+                                FROM context_ban b WHERE b.context_id = c.id
+                            ), '[]'::jsonb) AS bans
+                        FROM context c WHERE c.keywords_hash = :khash
                         """
                         ),
-                        {"khash": khash, "ans_cap": ans_cap, "msg_cap": msg_cap},
+                        {"khash": khash},
                     )
                 )
                 .mappings()
                 .one_or_none()
             )
+            row = None
+            if context_row is not None:
+                answer_row = (
+                    (
+                        await session.execute(
+                            text(
+                                """
+                            WITH answers AS (
+                                SELECT a.id, a.keywords, a.group_id, a.count, a.time
+                                FROM context_answer a
+                                WHERE a.context_id = :context_id
+                                ORDER BY a.count DESC, a.time DESC LIMIT :ans_cap
+                            ), ranked_messages AS (
+                                SELECT m.answer_id, m.message, m.id,
+                                       row_number() OVER (PARTITION BY m.answer_id ORDER BY m.id DESC) AS rn
+                                FROM context_answer_message m JOIN answers a ON a.id = m.answer_id
+                            ), messages AS (
+                                SELECT answer_id, jsonb_agg(message ORDER BY id) AS values
+                                FROM ranked_messages WHERE rn <= :msg_cap GROUP BY answer_id
+                            )
+                            SELECT COALESCE(jsonb_agg(jsonb_build_object(
+                                'keywords', a.keywords, 'group_id', a.group_id,
+                                'count', a.count, 'time', a.time,
+                                'messages', COALESCE(m.values, '[]'::jsonb)
+                            ) ORDER BY a.count DESC, a.time DESC), '[]'::jsonb) AS answers
+                            FROM answers a LEFT JOIN messages m ON m.answer_id = a.id
+                            """
+                            ),
+                            {"context_id": context_row["id"], "ans_cap": ans_cap, "msg_cap": msg_cap},
+                        )
+                    )
+                    .mappings()
+                    .one()
+                )
+                row = {**context_row, "answers": answer_row["answers"]}
         elapsed_ms = (time.monotonic() - t_start) * 1000.0
         if row is None:
             self._log_reply_query_slow(
@@ -1820,6 +1847,26 @@ class PgBlackListRepository:
                 index_elements=["group_id"],
                 set_={"answers_reserve": stmt.excluded.answers_reserve},
             )
+            await session.execute(stmt)
+            await session.commit()
+
+    async def upsert_many_blacklist(self, entries: list[BlackList]) -> None:
+        """单事务批量 upsert 多群黑名单，避免 shutdown 收尾时逐群串行 commit。"""
+        if not entries:
+            return
+        stmt = pg_insert(BlackListRow).values([
+            {
+                "group_id": e.group_id,
+                "answers": _strip_null_deep(list(e.answers)),
+                "answers_reserve": _strip_null_deep(list(e.answers_reserve)),
+            }
+            for e in entries
+        ])
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["group_id"],
+            set_={"answers": stmt.excluded.answers, "answers_reserve": stmt.excluded.answers_reserve},
+        )
+        async with get_session() as session:
             await session.execute(stmt)
             await session.commit()
 

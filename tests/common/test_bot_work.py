@@ -59,6 +59,8 @@ def test_external_work_handler_provider_is_loaded_atomically() -> None:
 
 def test_load_work_handlers_keeps_builtins_when_extension_uses_same_kind(monkeypatch) -> None:
     monkeypatch.setattr(bot_work.nonebot, "init", lambda: None)
+    monkeypatch.setattr(bot_work, "install_repo_console_log_format", lambda: None)
+    monkeypatch.setattr(bot_work, "install_startup_log_noise_patcher", lambda: None)
     monkeypatch.setattr(bot_work, "repeater_work_handlers", lambda: {"repeater.learn": first_handler})
     monkeypatch.setattr(
         bot_work,

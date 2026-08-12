@@ -51,6 +51,12 @@ class WorkJobWorker:
         jobs = await self.store.claim_many(owner=self.owner, lease_sec=self.lease_sec, limit=self.batch_size)
         if not jobs:
             return False
+        logger.debug(
+            "work aux: claimed [{}] jobs of kinds [{}] by owner [{}]",
+            len(jobs),
+            ",".join(sorted({job.kind for job in jobs})),
+            self.owner,
+        )
         tasks = {asyncio.create_task(self._run_job(job)): job for job in jobs}
         refill_slots = True
         try:
@@ -64,6 +70,12 @@ class WorkJobWorker:
                     refill_slots = False
                 if completed_jobs:
                     self.metrics.record_completed(await self.store.complete_many(jobs=completed_jobs, owner=self.owner))
+                    logger.debug(
+                        "work aux: completed [{}] jobs of kinds [{}] by owner [{}]",
+                        len(completed_jobs),
+                        ",".join(sorted({job.kind for job in completed_jobs})),
+                        self.owner,
+                    )
                 available_slots = self.batch_size - len(tasks)
                 if refill_slots and available_slots > 0:
                     next_jobs = await self.store.claim_many(
@@ -95,7 +107,11 @@ class WorkJobWorker:
             if handler_task in done:
                 result = await handler_task
                 if result is not None:
-                    await self.result_committer.commit(result)
+                    await self.result_committer.commit(
+                        result,
+                        job_kind=job.kind,
+                        job_id=job.id,
+                    )
             elif lease_task in done:
                 handler_task.cancel()
                 await asyncio.gather(handler_task, return_exceptions=True)

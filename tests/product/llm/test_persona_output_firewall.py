@@ -34,6 +34,19 @@ def test_detects_roleplay_stage_direction() -> None:
     assert result.rule_ids == ("roleplay_stage_direction",)
 
 
+def test_detects_roleplay_stage_direction_broadened() -> None:
+    for text in (
+        "（翻个白眼）我走了，你继续喵吧。",
+        "（抬头看看）这得先定义什么叫正常",
+        "（引用）你这话说的，啥意思啊",
+        "（这谁点的歌啊）\nStan？ 还是Eminem的Stan？",
+    ):
+        result = inspect_persona_output(text, self_aliases=["帕拉斯"])
+        assert result.rule_ids == ("roleplay_stage_direction",), text
+    # 句中人名注解仍放行
+    assert inspect_persona_output("小熊（维尼修斯）也猛", self_aliases=["帕拉斯"]).rule_ids == ()
+
+
 def test_detects_disallowed_model_identity_but_allows_known_alias() -> None:
     conflict = inspect_persona_output("我是 ChatGPT，不能这么做。", self_aliases=["帕拉斯"])
     allowed = inspect_persona_output("我是帕拉斯，先看看。", self_aliases=["帕拉斯"])

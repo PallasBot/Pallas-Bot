@@ -621,17 +621,34 @@ def log_incompatible_federate_command_capability_peers() -> None:
         )
 
 
+def _federate_peer_shares_present_group(deployment_id: str) -> bool:
+    """对端与本机是否在至少一个共同群里（均有号在场）。"""
+    peer_groups = get_federate_peer_present_groups(deployment_id)
+    if not peer_groups:
+        return False
+    local_groups = frozenset(collect_local_present_group_ids())
+    return bool(peer_groups & local_groups)
+
+
+def _federate_peer_display_label(deployment_id: str) -> str:
+    roster = get_federate_peer_bot_roster(deployment_id)
+    name = (roster.deployment_name if roster else "") or ""
+    if name:
+        return f"{name} ({deployment_id})"
+    return deployment_id
+
+
 def log_incompatible_federate_ingress_peers() -> None:
     global _last_incompatible_ingress_peers
-    peers = get_incompatible_federate_ingress_peers()
+    peers = tuple(dep for dep in get_incompatible_federate_ingress_peers() if _federate_peer_shares_present_group(dep))
     if peers == _last_incompatible_ingress_peers:
         return
     _last_incompatible_ingress_peers = peers
     if peers:
         logger.warning(
-            "[联邦] 对端 {} 未支持统一 ingress 协议 v{}；定向候选将隔离旧入口，"
-            "普通消息仍走旧入口，请升级并重启这些部署",
-            ", ".join(peers),
+            "[联邦] 对端 {} 未支持统一 ingress 协议 v{}，且与本机在共同群；"
+            "其定向命令/消息不再跨机协调，普通消息仍正常协调，请升级并重启这些部署",
+            ", ".join(_federate_peer_display_label(dep) for dep in peers),
             INGRESS_PROTOCOL_VERSION,
         )
 

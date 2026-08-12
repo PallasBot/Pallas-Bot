@@ -19,6 +19,7 @@ from pallas.core.platform.shard.presence_health import clear_health_quarantine
 
 _connected_bots: set[int] = set()
 _hooks_registered = False
+_shutting_down = False
 
 
 async def ensure_bot_runtime_storage(qq: int) -> bool:
@@ -36,6 +37,49 @@ def note_connected_bot(qq: int) -> None:
 
 def note_disconnected_bot(qq: int) -> None:
     _connected_bots.discard(int(qq))
+
+
+def mark_process_shutting_down() -> None:
+    """置位进程正在收尾；断连等事件处理应转为静默。"""
+    global _shutting_down
+    _shutting_down = True
+
+
+def is_process_shutting_down() -> bool:
+    return _shutting_down
+
+
+def install_shutdown_signal_forwarder() -> None:
+    """在 uvicorn 接管 SIGINT/SIGTERM 后，先置位收尾标记再转发给原处理器。
+
+    uvicorn 先关闭 WebSocket 连接（触发断连钩子）、后跑 on_shutdown，若等到
+    on_shutdown 才置位，断连钩子仍会在收尾时刷屏。须在 startup 阶段调用：
+    此时信号处理器已是 ``Server.handle_exit``，转发前先置位即可让钩子静默。
+    """
+    import signal
+
+    loop = asyncio.get_running_loop()
+
+    def _forward(sig: int, prev_handler):
+        def _on_signal() -> None:
+            mark_process_shutting_down()
+            if prev_handler is None or prev_handler in (signal.SIG_DFL, signal.SIG_IGN):
+                return
+            try:
+                prev_handler(sig, None)
+            except Exception:
+                pass
+
+        return _on_signal
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        prev_handler = signal.getsignal(sig)
+        if prev_handler in (signal.SIG_DFL, signal.SIG_IGN, None):
+            continue
+        try:
+            loop.add_signal_handler(sig, _forward(sig, prev_handler))
+        except (NotImplementedError, RuntimeError):
+            continue
 
 
 async def on_bot_connect(bot: Bot) -> None:
@@ -95,7 +139,10 @@ async def on_bot_disconnect(bot: Bot) -> None:
         was_present = qq in _connected_bots
         note_disconnected_bot(qq)
         if was_present:
-            logger.info("[Bot {:>10}] disconnected.", bot.self_id)
+            if _shutting_down:
+                logger.debug("[Bot {:>10}] disconnected.", bot.self_id)
+            else:
+                logger.info("[Bot {:>10}] disconnected.", bot.self_id)
         await clear_protocol_bot_offline(qq)
         if shard_ctx.sharding_active():
             await note_worker_bot_disconnected(qq)

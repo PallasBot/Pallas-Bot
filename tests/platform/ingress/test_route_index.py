@@ -323,7 +323,7 @@ def test_select_priority_matchers_filters_chatter_by_index(monkeypatch: pytest.M
     assert _DuelMatcher not in selected
 
 
-def test_select_priority_matchers_keeps_block_and_passive_on_command(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_select_priority_matchers_skips_unrelated_block_matchers_on_command(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(activation, "route_index_enabled", lambda: True)
 
     snapshot = route_index.RouteIndexSnapshot(
@@ -344,7 +344,7 @@ def test_select_priority_matchers_keeps_block_and_passive_on_command(monkeypatch
     )
 
     assert _PassiveMatcher in selected
-    assert _BlockMatcher in selected
+    assert _BlockMatcher not in selected
     assert _HelpMatcher in selected
     assert _DuelMatcher not in selected
 

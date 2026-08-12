@@ -154,10 +154,41 @@ jobs:
           if [ -z "${PREVIOUS}" ]; then
             PREVIOUS=$(git tag -l 'v*' --sort=-version:refname | grep -Fxv "${VERSION}" | head -n1 || true)
           fi
-          CHANGELOG=$(./tools/generate_release_changelog.sh "${PREVIOUS}" "${VERSION}" "${REPOSITORY}")
+          GIT_LOG=$(./tools/generate_release_changelog.sh "${PREVIOUS}" "${VERSION}" "${REPOSITORY}")
+          ANNOUNCE=$(python3 - "${VERSION}" <<'PY'
+          import re
+          import sys
+
+          version = sys.argv[1].lstrip("v")
+          text = open("CHANGELOG.md", encoding="utf-8").read()
+          pattern = re.compile(
+              rf"^##\s+\[{re.escape(version)}\][^\n]*\n(.*?)(?=^##\s+|\Z)",
+              re.MULTILINE | re.DOTALL,
+          )
+          match = pattern.search(text)
+          if not match:
+              sys.exit(0)
+          announce = re.search(
+              r"^###\s+更新公告[^\n]*\n(.*?)(?=^###\s+|\Z)",
+              match.group(1),
+              re.MULTILINE | re.DOTALL,
+          )
+          if announce:
+              print(announce.group(1).strip())
+          PY
+          )
+          if [ -n "${ANNOUNCE}" ]; then
+            CHANGELOG="${ANNOUNCE}
+
+          ### 提交明细
+
+          ${GIT_LOG}"
+          else
+            CHANGELOG="${GIT_LOG}"
+          fi
           {
             echo 'changelog<<EOF'
-            echo "${CHANGELOG}"
+            printf '%s\n' "${CHANGELOG}"
             echo EOF
           } >> "$GITHUB_OUTPUT"
 

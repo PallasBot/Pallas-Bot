@@ -13,10 +13,16 @@ if TYPE_CHECKING:
     from logging import LogRecord
     from typing import Any
 
-REPO_CONSOLE_LOG_FORMAT = (
-    "<g>{time:MM-DD HH:mm:ss}</g> [<lvl>{level:<8}</lvl>] <c><u>{{{extra[display_name]:<8}}}</u></c> {message}\n"
+_DISPLAY_NAME_COLORS = (
+    "<le>",
+    "<ly>",
+    "<lm>",
+    "<lr>",
+    "<lc>",
+    "<lg>",
+    "<lw>",
+    "<m>",
 )
-REPO_FILE_LOG_FORMAT = "{time:MM-DD HH:mm:ss} [{level:<8}] {{{extra[display_name]:<8}}} {message}\n"
 
 _TRANSIENT_UVICORN_MESSAGES = (
     "keepalive ping failed",
@@ -52,6 +58,7 @@ _CHANNEL_ALIASES = (
 )
 
 _BUSINESS_LOG_LABELS = (
+    ("pallas.core.platform.work_jobs", "WorkAux"),
     ("packages.repeater.learn_queue", "Learn"),
     ("packages.repeater.learner", "Learn"),
     ("packages.repeater.fanout", "Reply"),
@@ -59,7 +66,7 @@ _BUSINESS_LOG_LABELS = (
     ("packages.repeater", "Repeater"),
     ("packages.llm_chat.drunk_chat", "Drink"),
     ("packages.llm_chat", "Chat"),
-    ("packages.pb_webui", "控制台"),
+    ("packages.pb_webui", "WebUI"),
     ("packages.pb_core", "Core"),
     ("packages.pb_stats", "Stats"),
     ("packages.help", "Help"),
@@ -70,14 +77,14 @@ _BUSINESS_LOG_LABELS = (
     ("pallas.product.llm", "LLM"),
     ("pallas.product.persona", "Persona"),
     ("pallas.product.corpus", "Corpus"),
-    ("pallas.product.message_scrub", "消息过滤"),
+    ("pallas.product.message_scrub", "Scrub"),
     ("pallas.product", "Product"),
     ("pallas.core.platform.ai_callback", "AICallback"),
-    ("pallas.core.foundation.db", "数据库"),
+    ("pallas.core.foundation.db", "DB"),
     ("pallas.core.platform", "Platform"),
     ("pallas.core", "Core"),
     ("pallas.console.cli", "CLI"),
-    ("pallas.console", "控制台"),
+    ("pallas.console", "WebUI"),
     ("pallas.extensions", "Extension"),
     ("pallas", "Pallas"),
 )
@@ -161,6 +168,8 @@ _QUIET_LIBRARY_LOGGER_NAMES = (
 def display_log_name(logger_name: str) -> str:
     """返回日志中展示的短名称，不改动原始 logger name。"""
     name = (logger_name or "").strip()
+    if name.startswith("pallas.core.platform.work_jobs."):
+        return "WorkAux"
     if name in {"pallas", "pallas.core"} or name.startswith("pallas.core."):
         return "Core"
     if name == "packages.llm_chat.drunk_chat" or name.startswith("packages.llm_chat.drunk_chat."):
@@ -173,12 +182,25 @@ def display_log_name(logger_name: str) -> str:
         if name.startswith(prefix):
             return _pascal_case(name.removeprefix(prefix).split(".", 1)[0])
     if name.startswith("pallas.product."):
+        if name == "pallas.product.llm" or name.startswith("pallas.product.llm."):
+            return "LLMChat"
         return _pascal_case(name.split(".", 3)[2])
     if name.startswith("pallas.console."):
         return "Console"
     if name.startswith("pallas.extensions."):
         return "Extension"
     return _pascal_case(name.split(".", 1)[0]) if name else ""
+
+
+_SOURCE_MODULE_EXTRA_KEY = "module_name"
+
+
+def record_source_module_name(record: dict[str, Any]) -> str:
+    """返回日志真实来源模块名；优先用 patcher 暂存值，绕过 NoneBot 的插件名折叠。"""
+    stashed = record.get("extra", {}).get(_SOURCE_MODULE_EXTRA_KEY)
+    if stashed:
+        return str(stashed)
+    return str(record.get("name", ""))
 
 
 _PASCAL_CASE_ACRONYMS = {"llm": "LLM", "tts": "TTS"}
@@ -197,17 +219,82 @@ def _pascal_case(value: str) -> str:
     return "".join(parts)
 
 
-def _format_repo_log(record: dict[str, Any], template: str) -> str:
-    record["extra"]["display_name"] = display_log_name(str(record.get("name", "")))
-    return template
+def _stable_hash(text: str) -> int:
+    h = 0
+    for ch in text:
+        h = (h * 31 + ord(ch)) & 0x7FFFFFFF
+    return h
+
+
+def _display_name_color(display_name: str) -> str:
+    """按显示名稳定映射一个 loguru 颜色标记，同名同色。"""
+    return _DISPLAY_NAME_COLORS[_stable_hash(display_name) % len(_DISPLAY_NAME_COLORS)]
+
+
+def _log_prefix_label(logger_name: str, message: str) -> str:
+    """返回业务前缀标签（不含方括号）；调用方消息已有 ``[`` 前缀则不重复加。"""
+    text = str(message or "").lstrip()
+    if not text or text.startswith("["):
+        return ""
+    name = (logger_name or "").strip()
+    for prefix, label in _BUSINESS_LOG_LABELS:
+        if name == prefix or name.startswith(f"{prefix}.") or (prefix.endswith("_") and name.startswith(prefix)):
+            return label
+    if name.startswith(_DISPLAY_LOG_NAME_PREFIXES):
+        return display_log_name(name)
+    return ""
+
+
+_RAW_MESSAGE_EXTRA_KEY = "raw_message"
+
+# 消息行首业务标签：字母/中文/连字符/点/下划线，词间允许单空格；不含数字，
+# 避免误拆 ``[Bot 1111]``/``[群 123]``/``[用户发送了 3 张图片]`` 等正文
+_TAG_WORD = r"[A-Za-z\u4e00-\u9fff][A-Za-z\u4e00-\u9fff.\-_]*"
+_LEADING_TAG_RE = re.compile(rf"^\[(?P<tag>{_TAG_WORD}(?: {_TAG_WORD})*)\]\s?(?P<body>[\s\S]*)$")
+
+
+def _leading_business_tag(message: str) -> tuple[str, str]:
+    """拆出消息行首业务标签（如 ``[Ready]``/``[初始化]``），返回 (tag, body)。"""
+    m = _LEADING_TAG_RE.match(str(message or ""))
+    if not m:
+        return "", str(message or "")
+    return m.group("tag"), m.group("body")
+
+
+def _compose_repo_log_template(record: dict[str, Any], *, console: bool) -> str:
+    """动态拼接日志模板：模块名与业务前缀按来源稳定配色。"""
+    name = record_source_module_name(record)
+    display = display_log_name(name)
+    record["extra"]["display_name"] = display
+    color = _display_name_color(display)
+    raw = record["extra"].get(_RAW_MESSAGE_EXTRA_KEY)
+    if raw is None:
+        raw = str(record.get("message") or "")
+        record["extra"][_RAW_MESSAGE_EXTRA_KEY] = raw
+    tag, body = _leading_business_tag(raw)
+    if tag:
+        record["message"] = body
+        prefix = f"{color}[{tag}]</> " if console else f"[{tag}] "
+    else:
+        label = _log_prefix_label(name, raw)
+        prefix = f"{color}[{label}]</> " if console and label else f"[{label}] " if label else ""
+    if console:
+        display_part = color + "{{{extra[display_name]:<8}}}</>"
+        return (
+            "<g>{time:MM-DD HH:mm:ss}</g> [<lvl>{level:<8}</lvl>] "
+            f"{display_part} {prefix}"
+            "{message}\n{exception}"
+        )
+    display_part = "{{{extra[display_name]:<8}}}"
+    return f"{{time:MM-DD HH:mm:ss}} [{{level:<8}}] {display_part} {prefix}{{message}}\n{{exception}}"
 
 
 def format_repo_console_log(record: dict[str, Any]) -> str:
-    return _format_repo_log(record, REPO_CONSOLE_LOG_FORMAT)
+    return _compose_repo_log_template(record, console=True)
 
 
 def format_repo_file_log(record: dict[str, Any]) -> str:
-    return _format_repo_log(record, REPO_FILE_LOG_FORMAT)
+    return _compose_repo_log_template(record, console=False)
 
 
 def _stdlib_logger_channel_label(logger_name: str) -> str:
@@ -223,17 +310,10 @@ def _stdlib_logger_channel_label(logger_name: str) -> str:
 
 def prefix_business_log_message(logger_name: str, message: str) -> str:
     """为主仓业务日志补充稳定类别标签，保留调用方已有标签。"""
-    text = str(message or "")
-    stripped = text.lstrip()
-    if not stripped or stripped.startswith("["):
-        return text
-    name = (logger_name or "").strip()
-    for prefix, label in _BUSINESS_LOG_LABELS:
-        if name == prefix or name.startswith(f"{prefix}.") or (prefix.endswith("_") and name.startswith(prefix)):
-            return f"[{label}] {stripped}"
-    if name.startswith(_DISPLAY_LOG_NAME_PREFIXES):
-        return f"[{display_log_name(name)}] {stripped}"
-    return text
+    label = _log_prefix_label(logger_name, message)
+    if not label:
+        return str(message)
+    return f"[{label}] {str(message).lstrip()}"
 
 
 def format_business_event(action: str, result: str, /, **fields: object) -> str:
@@ -282,6 +362,8 @@ def format_business_event(action: str, result: str, /, **fields: object) -> str:
             f"in group [{fields.get('group')}]: pending [{fields.get('pending')}] "
             f"reached limit [{fields.get('limit')}]."
         )
+    if action == "发送队列" and result == "失败":
+        return f"[SendQueue] Bot [{fields.get('bot')}] failed {fields.get('api')}: {fields.get('error')}"
 
     subject = _BUSINESS_EVENT_ACTIONS.get(action, action)
     outcome = _BUSINESS_EVENT_RESULTS.get(result, result)
@@ -432,13 +514,13 @@ def install_startup_log_noise_patcher() -> None:
     debug_no = logger.level("DEBUG").no
 
     def patcher(record: dict[str, Any]) -> None:
+        record["extra"][_SOURCE_MODULE_EXTRA_KEY] = str(record.get("name", ""))
         _log_patcher(record)
         message = str(record.get("message", ""))
         plain = _COLOR_TAG_RE.sub("", message)
         if _PLUGIN_LOAD_SUCCESS_RE.search(plain) or is_matcher_lifecycle_noise(plain):
             record["level"].name = "DEBUG"
             record["level"].no = debug_no
-        record["message"] = prefix_business_log_message(str(record.get("name", "")), message)
 
     logger.configure(patcher=patcher)
 

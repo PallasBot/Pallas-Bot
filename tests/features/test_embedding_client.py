@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.knowledge.embedding_client import (
     embedding_capability_trace,
@@ -7,6 +9,14 @@ from pallas.product.llm.knowledge.embedding_client import (
     parse_embeddings_response,
 )
 from pallas.product.llm.knowledge.vector_backend import effective_vector_retrieve_mode
+
+
+@pytest.fixture(autouse=True)
+def _reset_embedding_error() -> None:
+    yield
+    from pallas.product.llm.knowledge import embedding_client
+
+    embedding_client._last_embedding_error = ""
 
 
 def test_parse_embeddings_response_sorts_by_index() -> None:

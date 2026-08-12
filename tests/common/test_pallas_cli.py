@@ -41,6 +41,14 @@ def test_parse_ext_install_upgrade_compatibility_flag():
     assert args.upgrade is True
 
 
+def test_parse_ext_update_command():
+    parser = build_parser()
+    args = parser.parse_args(["ext", "update", "pallas-plugin-protocol", "--restart"])
+    assert args.ext_command == "update"
+    assert args.package == "pallas-plugin-protocol"
+    assert args.restart is True
+
+
 @pytest.mark.asyncio
 async def test_run_install_async_upgrade_uses_update_operation(monkeypatch):
     from pallas.console.cli.commands import ext_cmd
@@ -49,6 +57,17 @@ async def test_run_install_async_upgrade_uses_update_operation(monkeypatch):
     monkeypatch.setattr(ext_cmd, "update_official_extension_with_options", update)
 
     assert await ext_cmd.run_install_async("pallas-plugin-protocol", restart=False, upgrade=True) == 0
+    update.assert_awaited_once_with("pallas-plugin-protocol", restart=False)
+
+
+@pytest.mark.asyncio
+async def test_run_update_async_uses_update_operation(monkeypatch):
+    from pallas.console.cli.commands import ext_cmd
+
+    update = AsyncMock(return_value={"message": "更新完成。"})
+    monkeypatch.setattr(ext_cmd, "update_official_extension_with_options", update)
+
+    assert await ext_cmd.run_update_async("pallas-plugin-protocol", restart=False) == 0
     update.assert_awaited_once_with("pallas-plugin-protocol", restart=False)
 
 

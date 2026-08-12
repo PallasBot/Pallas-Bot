@@ -10,6 +10,8 @@ from operator import itemgetter
 from pathlib import Path
 from typing import Any, Literal
 
+from nonebot.log import logger
+
 from pallas.core.foundation.db.backup import (
     BackupResult,
     backup_info,
@@ -149,6 +151,7 @@ def run_backup_job_sync(job_id: str) -> None:
     if job is None:
         return
 
+    logger.info("数据库备份开始，job [{}]、label [{}]、scope [{}]", job_id, job.label, job.scope)
     with _lock:
         job.status = "running"
         job.started_at = time.time()
@@ -174,11 +177,13 @@ def run_backup_job_sync(job_id: str) -> None:
             job.result = result
             job.status = "completed"
             job.finished_at = time.time()
+        logger.info("数据库备份完成，job [{}]、输出到 [{}]", job_id, run_dir)
     except Exception as e:  # noqa: BLE001
         with _lock:
             job.status = "failed"
             job.error = str(e)
             job.finished_at = time.time()
+        logger.exception("数据库备份失败（job [{}]、label [{}]）：{}", job_id, job.label, e)
     finally:
         prune_backup_jobs()
 
@@ -215,6 +220,7 @@ def run_restore_job_sync(job_id: str) -> None:
     if job is None or job.job_kind != "restore":
         return
 
+    logger.info("数据库复原开始，job [{}]、路径 [{}]", job_id, job.restore_path)
     with _lock:
         job.status = "running"
         job.started_at = time.time()
@@ -228,10 +234,12 @@ def run_restore_job_sync(job_id: str) -> None:
             job.result = result
             job.status = "completed"
             job.finished_at = time.time()
+        logger.info("数据库复原完成，job [{}]", job_id)
     except Exception as e:  # noqa: BLE001
         with _lock:
             job.status = "failed"
             job.error = str(e)
             job.finished_at = time.time()
+        logger.exception("数据库复原失败（job [{}]、路径 [{}]）：{}", job_id, job.restore_path, e)
     finally:
         prune_backup_jobs()

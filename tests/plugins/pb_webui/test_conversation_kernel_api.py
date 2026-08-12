@@ -32,10 +32,8 @@ def test_conversation_kernel_status_api_returns_rollout_flags(monkeypatch) -> No
         }
 
     monkeypatch.setattr(
-        mod,
-        "build_conversation_kernel_status",
+        "packages.pb_webui.llm_product_api.build_conversation_kernel_status",
         fake_status,
-        raising=False,
     )
 
     client = _build_client(monkeypatch)
@@ -64,10 +62,8 @@ def test_conversation_kernel_traces_api_filters_decision_rows(monkeypatch) -> No
         ]
 
     monkeypatch.setattr(
-        mod,
-        "list_recent_conversation_traces",
+        "packages.pb_webui.llm_product_api.list_recent_conversation_traces",
         fake_traces,
-        raising=False,
     )
 
     client = _build_client(monkeypatch)
@@ -91,7 +87,7 @@ def test_conversation_kernel_memory_api_returns_entries(monkeypatch) -> None:
         assert limit == 20
         return [{"id": 1, "bot_id": 10001, "group_id": 123, "content": "银灰是我推", "source": "teach"}]
 
-    monkeypatch.setattr(mod, "list_memory_entries", fake_list_memory_entries, raising=False)
+    monkeypatch.setattr("packages.pb_webui.llm_product_api.list_memory_entries", fake_list_memory_entries)
 
     client = _build_client(monkeypatch)
     response = client.get(
@@ -116,8 +112,7 @@ def test_conversation_kernel_knowledge_sources_api_returns_items(monkeypatch) ->
         chunks = [1, 2]
 
     monkeypatch.setattr(
-        mod,
-        "list_active_knowledge_sources",
+        "packages.pb_webui.llm_product_api.list_active_knowledge_sources",
         lambda: [
             SimpleNamespace(
                 source_id="pallas.bot_faq",
@@ -127,7 +122,6 @@ def test_conversation_kernel_knowledge_sources_api_returns_items(monkeypatch) ->
                 plugin_title="Pallas",
             )
         ],
-        raising=False,
     )
 
     client = _build_client(monkeypatch)

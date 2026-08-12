@@ -1,4 +1,4 @@
-"""WebUI 官方扩展安装与卸载。"""
+"""WebUI 官方插件安装与卸载。"""
 
 from __future__ import annotations
 
@@ -57,7 +57,7 @@ def resolve_official_extension_package(package: str) -> str:
     if not name:
         raise ExtensionInstallError("缺少 package")
     if name not in official_extension_packages():
-        raise ExtensionInstallError(f"非官方扩展包：{name}")
+        raise ExtensionInstallError(f"非官方插件包：{name}")
     return name
 
 
@@ -116,7 +116,7 @@ async def install_official_extension(
             "already_installed": True,
             "message": "扩展包已在当前环境中。",
         }
-    logger.info("[控制台] 安装官方扩展 package={}", pkg)
+    logger.info("[WebUI] 安装官方插件，package [{}]", pkg)
     _report(on_progress, 20, "执行 uv pip install…")
     code, out, err = await run_uv_command(
         INSTALL_TIMEOUT_S,
@@ -135,6 +135,7 @@ async def install_official_extension(
             status_code=502,
         )
     _report(on_progress, 95, "安装完成")
+    logger.info("[WebUI] 官方插件安装完成，package [{}]", pkg)
     return {
         "package": pkg,
         "pip_installed": True,
@@ -154,7 +155,7 @@ async def update_official_extension(
     _report(on_progress, 5, "准备更新…")
     if not pip_package_installed(pkg):
         raise ExtensionInstallError("扩展未安装，请先安装后再更新")
-    logger.info("[控制台] 更新官方扩展 package={}", pkg)
+    logger.info("[WebUI] 更新官方插件，package [{}]", pkg)
     _report(on_progress, 20, "执行 uv pip install --upgrade…")
     code, out, err = await run_uv_command(
         INSTALL_TIMEOUT_S,
@@ -173,6 +174,7 @@ async def update_official_extension(
             status_code=502,
         )
     _report(on_progress, 95, "更新完成")
+    logger.info("[WebUI] 官方插件更新完成，package [{}]", pkg)
     return {
         "package": pkg,
         "pip_installed": True,
@@ -198,7 +200,7 @@ async def uninstall_official_extension(
             "already_removed": True,
             "message": "扩展包未通过 pip 安装，无需卸载。",
         }
-    logger.info("[控制台] 卸载官方扩展 package={}", pkg)
+    logger.info("[WebUI] 卸载官方插件，package [{}]", pkg)
     _report(on_progress, 25, "执行 uv pip uninstall…")
     code, out, err = await run_uv_command(
         UNINSTALL_TIMEOUT_S,
@@ -210,6 +212,7 @@ async def uninstall_official_extension(
         detail = err or out or "(无输出)"
         raise ExtensionInstallError(f"uv pip uninstall 失败：{tail_output(detail)}", status_code=502)
     _report(on_progress, 95, "卸载完成")
+    logger.info("[WebUI] 官方插件卸载完成，package [{}]", pkg)
     return {
         "package": pkg,
         "pip_installed": False,

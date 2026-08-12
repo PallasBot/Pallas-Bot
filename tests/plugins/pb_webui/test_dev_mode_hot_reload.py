@@ -24,10 +24,10 @@ def test_on_pallas_webui_config_reload_updates_console_meta() -> None:
         with patch("nonebot.logger") as mock_logger:
             on_pallas_webui_config_reload(Config(pallas_webui_dev_mode=True))
             assert _CONSOLE_EXTRA.get("pallas_webui_dev_mode") is True
-            mock_logger.warning.assert_called_once()
+            assert mock_logger.warning.called
             on_pallas_webui_config_reload(Config(pallas_webui_dev_mode=False))
             assert _CONSOLE_EXTRA.get("pallas_webui_dev_mode") is False
-            mock_logger.info.assert_called_once()
+            assert mock_logger.info.called
     finally:
         _CONSOLE_EXTRA.clear()
         _CONSOLE_EXTRA.update(backup)

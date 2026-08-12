@@ -226,9 +226,9 @@ def prime_shared_console_login() -> None:
     plain, rnd = _materialize_auth_state()
     auth_path = str(auth_state_path().resolve())
     if plain is not None and rnd:
-        logger.info("[控制台] 鉴权已初始化 {}", auth_state_path())
+        logger.info("[WebUI] 鉴权已初始化 {}", auth_state_path())
         # 只走 logger（stdout sink），避免再写 stderr 造成双打
-        logger.success("[控制台] 默认密钥: {}", plain)
+        logger.success("[WebUI] 默认密钥: {}", plain)
         _announced_default_password_auth_path = auth_path
     else:
         boot = _read_default_login_password_plain()
@@ -236,7 +236,7 @@ def prime_shared_console_login() -> None:
             _unlink_default_login_password_plain()
         elif boot:
             if _announced_default_password_auth_path != auth_path:
-                logger.success("[控制台] 默认密钥: {}", boot)
+                logger.success("[WebUI] 默认密钥: {}", boot)
             _announced_default_password_auth_path = auth_path
 
 
@@ -278,7 +278,7 @@ def invalidate_console_sessions() -> None:
         try:
             hook()
         except Exception:  # noqa: BLE001
-            logger.exception("[控制台] 会话轮换附加步骤失败")
+            logger.exception("[WebUI] 会话轮换附加步骤失败")
 
 
 def mint_session_token() -> str:

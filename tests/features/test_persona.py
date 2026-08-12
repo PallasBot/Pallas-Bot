@@ -221,6 +221,27 @@ async def test_resolve_persona_skips_group_style_when_disabled(monkeypatch: pyte
 
 
 @pytest.mark.asyncio
+async def test_resolve_persona_reuses_bot_base_across_groups(monkeypatch: pytest.MonkeyPatch) -> None:
+    from unittest.mock import AsyncMock
+
+    from pallas.product.persona.loader import invalidate_persona_cache, resolve_persona
+
+    bot_repo = type(
+        "BotRepo", (), {"get": AsyncMock(return_value=type("BotCfg", (), {"group_style_enabled": True})())}
+    )()
+    group_repo = type("GroupRepo", (), {"get": AsyncMock(return_value=None)})()
+    monkeypatch.setattr("pallas.product.persona.loader.make_bot_config_repository", lambda: bot_repo)
+    monkeypatch.setattr("pallas.product.persona.loader.make_group_config_repository", lambda: group_repo)
+    invalidate_persona_cache()
+
+    await resolve_persona(10001, 20001)
+    await resolve_persona(10001, 20002)
+
+    bot_repo.get.assert_awaited_once_with(10001)
+    assert group_repo.get.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_speaker_uses_group_aware_persona(monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.repeater.speaker import Speaker
 

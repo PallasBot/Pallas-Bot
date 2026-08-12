@@ -18,6 +18,8 @@ from nonebot.adapters import Bot as BaseBot  # noqa: TC002
 from nonebot.adapters import Event  # noqa: TC002
 from nonebot.matcher import Matcher  # noqa: TC002
 
+from pallas.core.foundation.logging.bridge import record_source_module_name
+
 from .console_read_cache import drop_read_cache
 from .data_dir import pb_webui_data_dir
 from .extended_common import shard_hub_console, shard_worker_console
@@ -147,7 +149,7 @@ def _ensure_log_sink() -> None:
     if _INIT_LOG_SINK:
         return
     _INIT_LOG_SINK = True
-    logger.info("[控制台] 日志环已接入 /pallas/api/logs")
+    logger.info("[WebUI] 日志环已接入 /pallas/api/logs")
 
 
 def _gpu_metrics() -> dict[str, Any]:
@@ -1942,7 +1944,7 @@ def _append_log_error_from_sink(text: str, record: Any) -> None:
 
     exc_type, msg, tb = parse_log_error_from_record(text, record)
     try:
-        full_name = str(record["name"] or "")
+        full_name = record_source_module_name(record)
     except Exception:  # noqa: BLE001
         full_name = ""
     plugin = _dotted_module_short_name(full_name)
@@ -2112,7 +2114,7 @@ def _cleanup_log_error_archives_sync() -> None:
             if path.exists():
                 path.unlink()
         except OSError as e:
-            logger.warning("[控制台] 删除 log_errors.jsonl 失败: {}", str(e))
+            logger.warning("[WebUI] 删除 log_errors.jsonl 失败: {}", str(e))
         _LOG_ERROR_BUFFER.clear()
     _invalidate_log_error_public_cache()
 
@@ -2143,7 +2145,7 @@ async def _scheduled_cleanup_matcher_error_logs() -> None:
             if err_path.exists():
                 err_path.unlink()
         except OSError as e:
-            logger.warning("[控制台] 删除 matcher_errors.jsonl 失败: {}", str(e))
+            logger.warning("[WebUI] 删除 matcher_errors.jsonl 失败: {}", str(e))
         for rec in _PLUGIN_RUN_STATS.values():
             if isinstance(rec, dict):
                 rec["matcher_error_log"] = []
@@ -2152,7 +2154,7 @@ async def _scheduled_cleanup_matcher_error_logs() -> None:
             if dur_path.exists():
                 dur_path.unlink()
         except OSError as e:
-            logger.warning("[控制台] 删除 matcher_durations.jsonl 失败: {}", str(e))
+            logger.warning("[WebUI] 删除 matcher_durations.jsonl 失败: {}", str(e))
         for rec in _PLUGIN_RUN_STATS.values():
             if isinstance(rec, dict):
                 rec["matcher_duration_log"] = []
@@ -2172,7 +2174,7 @@ async def _scheduled_cleanup_matcher_error_logs() -> None:
         pass
     drop_read_cache(("plugin-run-stats:", "log-errors:", "home-overview"))
     logger.info(
-        "[控制台] 控制台异常记录已按计划清理（每日 4:00，"
+        "[WebUI] 控制台异常记录已按计划清理（每日 4:00，"
         "matcher_errors.jsonl、matcher_durations.jsonl、log_errors.jsonl、分片 errors/*.jsonl 与进程内缓冲）"
     )
 
@@ -2773,7 +2775,7 @@ async def _scheduled_refresh_plugin_update_snapshot() -> None:
         await refresh_plugin_update_snapshot()
         drop_read_cache(("plugins-community-store", "plugins-official-extensions"))
     except Exception:  # noqa: BLE001
-        logger.exception("[控制台] 定时刷新插件更新快照失败")
+        logger.exception("[WebUI] 定时刷新插件更新快照失败")
 
 
 async def _scheduled_refresh_plugin_store_assets() -> None:
@@ -2783,4 +2785,4 @@ async def _scheduled_refresh_plugin_store_assets() -> None:
         await refresh_store_asset_snapshot()
         drop_read_cache(("plugins-community-store", "plugins-official-extensions"))
     except Exception:  # noqa: BLE001
-        logger.exception("[控制台] 定时刷新插件商店资源快照失败")
+        logger.exception("[WebUI] 定时刷新插件商店资源快照失败")

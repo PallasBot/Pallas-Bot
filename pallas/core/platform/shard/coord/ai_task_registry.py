@@ -7,6 +7,7 @@ import os
 import time
 from typing import Any
 
+from pallas.core.platform.coord.redis_logging import log_coord_redis_failure
 from pallas.core.platform.shard import context as shard_ctx
 from pallas.core.platform.shard.registry import get_shard_registry, worker_port_for_shard
 from pallas.core.platform.shard.registry.config import get_shard_registry_settings
@@ -47,7 +48,8 @@ def write_ai_task_redis_sync(rec: dict[str, Any], *, ttl_sec: int) -> bool:
         body = json.dumps(rec, ensure_ascii=False, separators=(",", ":"))
         client.set(ai_task_redis_key(task_id), body, ex=max(60, int(ttl_sec)))
         return True
-    except Exception:
+    except Exception as e:
+        log_coord_redis_failure("write_ai_task", e)
         return False
 
 
@@ -62,7 +64,8 @@ def read_ai_task_redis_sync(task_id: str) -> dict[str, Any] | None:
         return None
     try:
         raw = client.get(ai_task_redis_key(task_id))
-    except Exception:
+    except Exception as e:
+        log_coord_redis_failure("read_ai_task", e)
         return None
     if raw is None:
         return None
@@ -86,8 +89,8 @@ def remove_ai_task_redis_sync(task_id: str) -> None:
         return
     try:
         client.delete(ai_task_redis_key(task_id))
-    except Exception:
-        return
+    except Exception as e:
+        log_coord_redis_failure("remove_ai_task", e)
 
 
 def claim_ai_task_redis_sync(task_id: str) -> dict[str, Any] | None:
@@ -109,7 +112,8 @@ def claim_ai_task_redis_sync(task_id: str) -> dict[str, Any] | None:
             raw = client.get(key)
             if raw is not None:
                 client.delete(key)
-    except Exception:
+    except Exception as e:
+        log_coord_redis_failure("claim_ai_task", e)
         return None
     if raw is None:
         return None

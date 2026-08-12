@@ -154,5 +154,5 @@ WebUI 保存后写入 `data/pallas_config/webui.json`，会覆盖同名项。使
 ## 相关说明
 
 - [在线统计与社区主站](/common/community_stats)（主站、上报、投稿墙）
-- [热闹群与入站设计](/common/corpus#热闹群与入站设计行为说明)
+- [热闹群与入站设计](/common/corpus/#热闹群与入站设计行为说明)
 - 控制台接口见 [WebUI API · 仪表盘与统计](/common/webui/api/04-stats-dashboard)

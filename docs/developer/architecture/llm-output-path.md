@@ -20,6 +20,33 @@
 
 工具循环会在模型提出 tool call 后执行工具、将结果追加回上下文并继续补全。默认工具集会按场景选择；延迟公开的工具可由 `tools.find` 发现，并在后续轮次加入可调用集合。延迟完成的外部工具只派发任务；任务结果由其自身通道回传，不阻塞当前 LLM 回复。
 
+## LLM 输出管线
+
+![LLM 输出管线与表达数据粒度](/assets/llm-output-path.svg)
+
+`@` 对话在 Bot 进程内完成：Provider 返回文本后，从生成到发进群依次经过：
+
+| 步骤 | 位置 | 说明 |
+| --- | --- | --- |
+| 表达语料直投 | `kernel_runner.py` | 表达库 `direct_candidate` 通过去重与配额时直接投递真实语料，跳过 Provider |
+| 生成 + 工具循环 | `complete_with_tool_loop` | 模型提 tool call → 执行工具 → 结果回填上下文继续补全 |
+| 人设输出防火墙 | `pallas/product/llm/persona_output_firewall.py` | 命中规则可带修正指令重试，或回落 fallback |
+| JSON 契约解析 | `structured_reply.py` `parse_structured_reply` | 期望 `reply_segments` 数组逐条成气泡；纯文本退化单段 |
+| 输出过滤 | `output_filter.py` | 语料污染词、续写残片、角色 / 形态守卫 |
+| 短气泡兜底拆分 | `reply_postprocess.py` `split_short_reply_segments` | short 取向但只有单段时，按句末标点 / 换行拆成多气泡 |
+| 轻量后处理 | `apply_reply_postprocess` | 错别字、句尾句号 |
+| 多气泡投递 | `delivery.py` `deliver_llm_callback_success` | 逐条发送，气泡间带短暂间隔 |
+| 学习回写 | 会话 / `behavior_store` / `expression_learn` / `repeater_feedback` / `auto_episode` | 投递成功后写历史、行为与表达 |
+
+## 表达数据粒度
+
+| 数据 | 存储 | 粒度 | 影响 |
+| --- | --- | --- | --- |
+| 表达风格锚点 / 例句 | `repeater_semantic_style.py`（`profiles.json`） | **每 bot × 每群** 独立（key `bot_id:group_id:scene`） | 注入「群表达指导」block；重置命令只清本 bot 本群 |
+| 回复画像（气泡数 / 节奏 / 长度） | group config `style_profile`（`group_profiler.py`） | **群维度共享** | 决定 `reply_shape` 的段数、节奏与长度取向 |
+
+同群不同 bot 的表达指导互不共享；回复画像是群统计，同群所有 bot 共用。WebUI 管理入口见 `packages/pb_webui/llm_product_api.py`。
+
 ## 关键锚点
 
 | 步骤 | 位置 |

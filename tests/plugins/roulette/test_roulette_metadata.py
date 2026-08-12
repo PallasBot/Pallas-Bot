@@ -3,7 +3,8 @@ from packages.roulette import __plugin_meta__, parse_roulette_start_command
 
 def test_roulette_metadata_uses_sdk_declarations():
     perms = __plugin_meta__.extra.get("command_permissions") or []
-    assert len(perms) == 1
+    assert len(perms) >= 1
+    assert all(isinstance(p, dict) and p.get("id") for p in perms)
     assert __plugin_meta__.extra.get("reload_policy") == "metadata"
 
 

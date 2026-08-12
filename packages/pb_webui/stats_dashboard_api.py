@@ -87,7 +87,7 @@ def register_stats_dashboard_router(
         try:
             data = await probe_community_connectivity()
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 社区连通检测失败")
+            logger.exception("[WebUI] 社区连通检测失败")
             raise HTTPException(status_code=500, detail="社区连通检测失败") from e
         return {"ok": True, "data": data}
 
@@ -119,7 +119,7 @@ def register_stats_dashboard_router(
         try:
             data = await list_gallery_posts(limit=limit, mine=mine)
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 社区投稿列表失败")
+            logger.exception("[WebUI] 社区投稿列表失败")
             raise HTTPException(status_code=502, detail=f"社区投稿列表失败: {e}") from e
         return JSONResponse({"ok": True, "data": data})
 
@@ -158,7 +158,7 @@ def register_stats_dashboard_router(
                 image_content_type=image_content_type,
             )
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 社区投稿失败")
+            logger.exception("[WebUI] 社区投稿失败")
             raise HTTPException(status_code=502, detail=f"社区投稿失败: {e}") from e
         return JSONResponse({"ok": True, "data": data})
 
@@ -174,7 +174,7 @@ def register_stats_dashboard_router(
         try:
             data = await delete_gallery_post(post_id)
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 社区投稿撤下失败")
+            logger.exception("[WebUI] 社区投稿撤下失败")
             raise HTTPException(status_code=502, detail=f"社区投稿撤下失败: {e}") from e
         return JSONResponse({"ok": True, "data": data})
 
@@ -222,7 +222,7 @@ def register_stats_dashboard_router(
                 stale_sec=600.0,
             )
         except Exception as e:  # noqa: BLE001
-            logger.warning("[控制台] 拉取联邦入池说明失败 err={}", e)
+            logger.warning("[WebUI] 拉取联邦入池说明失败 err={}", e)
             raise HTTPException(status_code=502, detail="无法从社区中心拉取联邦入池说明") from e
         return JSONResponse({"ok": True, "data": data})
 
@@ -303,9 +303,9 @@ def register_stats_dashboard_router(
         try:
             data = await asyncio.to_thread(_cleanup_log_errors_manual_sync)
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 清理日志报错失败")
+            logger.exception("[WebUI] 清理日志报错失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
-        logger.info("[控制台] 已手动清理日志报错归档")
+        logger.info("[WebUI] 已手动清理日志报错归档")
         return JSONResponse({"ok": True, "data": data})
 
     @router.get(f"{x}/console-daily-stats", include_in_schema=True)

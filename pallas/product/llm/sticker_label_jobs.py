@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import json
+import re
 import time
 from dataclasses import replace
 from enum import StrEnum
@@ -24,17 +25,7 @@ STICKER_LABEL_TIMEOUT_SEC = 15.0
 STICKER_LABEL_CIRCUIT_FAILURES = 3
 STICKER_LABEL_CIRCUIT_COOLDOWN_SEC = 60.0
 _STICKER_LABEL_SEMAPHORE = asyncio.Semaphore(1)
-_REQUIRED_RESPONSE_FIELDS = {
-    "is_sticker",
-    "emotions",
-    "actions",
-    "tones",
-    "intensity",
-    "usage",
-    "avoid",
-    "caption",
-    "confidence",
-}
+_REQUIRED_RESPONSE_FIELDS_MAX_ITEMS = 5
 
 
 class StickerLabelSource(StrEnum):
@@ -84,36 +75,44 @@ def sticker_label_repository():
     return make_sticker_label_repository()
 
 
+def _parse_label_array_field(raw: object) -> tuple[str, ...]:
+    """容忍数组或逗号分隔字符串；过滤空项并截断。"""
+    if isinstance(raw, list):
+        items = [str(item).strip() for item in raw if str(item).strip()]
+    elif isinstance(raw, str):
+        items = [item.strip() for item in re.split(r"[,，、;；]+", raw) if item.strip()]
+    else:
+        items = []
+    return tuple(items)[:_REQUIRED_RESPONSE_FIELDS_MAX_ITEMS]
+
+
 def parse_sticker_visual_label(raw: str) -> dict[str, object] | None:
     try:
         value = json.loads(str(raw or ""))
     except json.JSONDecodeError:
         return None
-    if not isinstance(value, dict) or set(value) != _REQUIRED_RESPONSE_FIELDS:
+    if not isinstance(value, dict):
         return None
-    if not isinstance(value["is_sticker"], bool):
+    if not isinstance(value.get("is_sticker"), bool):
         return None
-    if isinstance(value["intensity"], bool) or not isinstance(value["intensity"], int):
+    confidence = value.get("confidence")
+    if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
         return None
-    if isinstance(value["confidence"], bool) or not isinstance(value["confidence"], (int, float)):
-        return None
-    for name in ("emotions", "actions", "tones", "usage", "avoid"):
-        if not isinstance(value[name], list) or not all(isinstance(item, str) for item in value[name]):
-            return None
-    if not isinstance(value["caption"], str):
-        return None
+    intensity = value.get("intensity")
+    if isinstance(intensity, bool) or not isinstance(intensity, int) or not 0 <= intensity <= 3:
+        intensity = 0
     try:
         label = StickerSemanticLabel(
             content_hash="0" * 64,
             is_sticker=value["is_sticker"],
-            emotions=value["emotions"],
-            actions=value["actions"],
-            tones=value["tones"],
-            intensity=value["intensity"],
-            usage=value["usage"],
-            avoid=value["avoid"],
-            caption=value["caption"],
-            confidence=value["confidence"],
+            emotions=_parse_label_array_field(value.get("emotions")),
+            actions=_parse_label_array_field(value.get("actions")),
+            tones=_parse_label_array_field(value.get("tones")),
+            intensity=intensity,
+            usage=_parse_label_array_field(value.get("usage")),
+            avoid=_parse_label_array_field(value.get("avoid")),
+            caption=str(value.get("caption") or "").strip(),
+            confidence=confidence,
         )
     except Exception:
         return None
@@ -150,8 +149,12 @@ async def enqueue_sticker_label_candidate(*, cache_key: str, content: bytes, sou
         prompt_version=STICKER_LABEL_PROMPT_VERSION,
         min_confidence=STICKER_LABEL_MIN_CONFIDENCE,
     ):
+        from pallas.product.llm.task_metrics import record_bot_llm_task
+
+        record_bot_llm_task("sticker_label", "cache_hit")
         return False
     from pallas.core.shared.utils.media_cache import bind_image_content_hash
+    from pallas.product.llm.task_metrics import record_bot_llm_task
 
     await bind_image_content_hash(cache_key, content)
     job = WorkJob.create(
@@ -168,10 +171,8 @@ async def enqueue_sticker_label_candidate(*, cache_key: str, content: bytes, sou
             "observation": {"state": "queued"},
         },
     )
-    await build_work_job_store().requeue_terminal(job)
-    from pallas.product.llm.task_metrics import record_bot_llm_task
-
-    record_bot_llm_task("sticker_label", "submit_ok")
+    _reactivated_job, reactivated = await build_work_job_store().requeue_terminal(job)
+    record_bot_llm_task("sticker_label", "submit_ok" if reactivated else "background_coalesced")
     return True
 
 
@@ -247,6 +248,13 @@ async def save_sticker_label_observation(
     await BackgroundJob.get_pymongo_collection().update_one({"job_id": job_id}, {"$set": {"payload": value}})
 
 
+def _is_content_rejection(exc: Exception) -> bool:
+    if isinstance(exc, ValueError):
+        return False
+    text = str(exc or "").lower()
+    return "data_inspection_failed" in text or "inappropriate content" in text
+
+
 async def handle_sticker_label_visual(payload: dict[str, Any]) -> None:
     from pallas.core.shared.utils.media_cache import get_image_by_content_hash
 
@@ -283,10 +291,8 @@ async def handle_sticker_label_visual(payload: dict[str, Any]) -> None:
 
         record_bot_llm_task("sticker_label", "callback_ok")
     except Exception as exc:
-        sticker_label_circuit_record(False)
         from pallas.product.llm.task_metrics import record_bot_llm_task
 
-        record_bot_llm_task("sticker_label", "callback_fail")
         failure_state = (
             "timeout"
             if isinstance(exc, TimeoutError)
@@ -296,6 +302,27 @@ async def handle_sticker_label_visual(payload: dict[str, Any]) -> None:
             if "no sticker vision endpoint" in str(exc)
             else "failed"
         )
+        if _is_content_rejection(exc):
+            negative = StickerSemanticLabel(
+                content_hash=expected_hash,
+                is_sticker=False,
+                confidence=0.9,
+                prompt_version=STICKER_LABEL_PROMPT_VERSION,
+            )
+            await sticker_label_repository().upsert(negative)
+            observation.update({
+                "state": "rejected",
+                "finished_at": time.time(),
+                "is_sticker": False,
+                "confidence": 0.9,
+                "error": f"{type(exc).__name__}: {str(exc)[:200]}",
+            })
+            await save_sticker_label_observation(job_id, dict(payload), observation)
+            logger.info("sticker label content rejected: job_id={} err={}", job_id, type(exc).__name__)
+            return
+        if failure_state not in {"parse_error", "no_vision"}:
+            sticker_label_circuit_record(False)
+            record_bot_llm_task("sticker_label", "callback_fail")
         observation.update({
             "state": failure_state,
             "finished_at": time.time(),
@@ -303,6 +330,8 @@ async def handle_sticker_label_visual(payload: dict[str, Any]) -> None:
         })
         await save_sticker_label_observation(job_id, dict(payload), observation)
         logger.warning("sticker label failed: job_id={} err={}", job_id, type(exc).__name__)
+        if failure_state in {"parse_error", "no_vision"}:
+            return
         raise
     observation.update({
         "state": "labeled",

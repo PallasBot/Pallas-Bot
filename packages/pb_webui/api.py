@@ -111,7 +111,7 @@ def register_api(
                     pallas_ver=pallas_ver,
                 )
             except Exception as e:  # noqa: BLE001
-                logger.debug("[控制台] health cache refresh failed: {}", e)
+                logger.debug("[WebUI] health cache refresh failed: {}", e)
 
     @driver.on_startup
     async def _health_cache_startup() -> None:

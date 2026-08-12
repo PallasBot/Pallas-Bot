@@ -152,6 +152,10 @@ class BlackListRepository(Protocol):
         """更新或插入指定群的 answers_reserve 候选黑名单"""
         ...
 
+    async def upsert_many_blacklist(self, entries: list[BlackList]) -> None:
+        """一次事务批量 upsert 多群黑名单（answers + answers_reserve）。"""
+        ...
+
 
 @runtime_checkable
 class ConfigRepository(Protocol):

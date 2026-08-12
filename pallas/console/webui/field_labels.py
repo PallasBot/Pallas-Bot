@@ -14,7 +14,7 @@ FIELD_LABELS: dict[str, str] = {
     "bootstrap_url": "多机协同中心地址",
     "bot_status_list_mode": "在吗名册模式",
     "bot_status_notice_email": "告警收件邮箱",
-    "bot_status_offline_grace_time": "离线宽限（分钟）",
+    "bot_status_offline_grace_time": "离线宽限（秒）",
     "bots": "已连接牛牛 QQ 集合",
     "chat_enable": "启用酒后 RWKV（独立通道）",
     "chat_endpoint": "聊天接口路径",

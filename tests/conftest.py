@@ -7,6 +7,24 @@ Uses mongomock_motor to provide in-memory MongoDB for async tests.
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _reset_embedding_runtime_state() -> None:
+    """每个测试后清理 embedding 模块全局状态，避免跨文件顺序污染。"""
+    yield
+    try:
+        from pallas.product.llm.feedback_embedding_cache import clear_feedback_embedding_caches_for_tests
+
+        clear_feedback_embedding_caches_for_tests()
+    except Exception:
+        pass
+    try:
+        from pallas.product.llm.knowledge import embedding_client
+
+        embedding_client._last_embedding_error = ""
+    except Exception:
+        pass
+
+
 @pytest.fixture
 async def beanie_fixture(monkeypatch: pytest.MonkeyPatch):
     """

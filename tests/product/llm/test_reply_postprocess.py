@@ -4,6 +4,7 @@ from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.reply_postprocess import (
     apply_chinese_typo,
     apply_reply_postprocess,
+    split_short_reply_segments,
     trim_terminal_period,
 )
 
@@ -36,3 +37,23 @@ def test_trim_terminal_period_keeps_questions_emphasis_and_long_or_multi_sentenc
     assert trim_terminal_period("第一句。第二句。", trim_rate=1.0, rng_seed=1) == "第一句。第二句。"
     text = "这个问题我得先核对一下上下文和已经整理的历史记录再说。"
     assert trim_terminal_period(text, trim_rate=1.0, rng_seed=1) == text
+
+
+def test_split_short_reply_splits_at_sentence_endings() -> None:
+    assert split_short_reply_segments("想得美。你谁啊你") == ["想得美。", "你谁啊你"]
+
+
+def test_split_short_reply_splits_newline_separated_bubbles() -> None:
+    assert split_short_reply_segments("想得美\n\n你谁啊你") == ["想得美", "你谁啊你"]
+
+
+def test_split_short_reply_splits_newlines_within_sentence_segments() -> None:
+    assert split_short_reply_segments("六点？\n你真狠\n我努力一下") == ["六点？", "你真狠", "我努力一下"]
+
+
+def test_split_short_reply_caps_at_three_bubbles() -> None:
+    assert split_short_reply_segments("一。\n二\n三\n四") == ["一。", "二", "三\n四"]
+
+
+def test_split_short_reply_keeps_plain_single_line_unchanged() -> None:
+    assert split_short_reply_segments("想你") == ["想你"]

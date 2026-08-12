@@ -86,13 +86,15 @@ SING_DECLARATION = register_prefix_command_handler(
 | --- | --- |
 | `reply(message)` | 返回一条由运行时统一发送的回复。 |
 | `DirectWorkJob(...)` | 提交可持久化、带幂等键的后台任务。 |
-| `completion_effect(name, run)` | 在统一提交阶段执行需要等待完成的异步效果。 |
+| `completion_effect(name, run, wait_for_completion=True)` | 在统一提交阶段执行异步效果；默认等待完成。 |
 | `matcher_fallback(reason)` | 当前 direct handler 不适用且尚未产生副作用时，交回 matcher。 |
 | `continue_matcher=True` | direct 已处理后仍允许 matcher 继续，用于确实需要两条路径协作的命令。 |
 
 `matcher_fallback()` 的结果不能同时携带回复、任务或完成效果。副作用提交一旦开始，发送或任务可能已经被下游接受；此后即使发生错误也不会回落 matcher 重试，以免产生重复操作。
 
 `continue_matcher` 可以在 `register_exact_command_handler()` 声明上设置，也可以由 `reply(..., continue_matcher=True)` 或 `DirectCommandResult` 针对单次结果设置。除非命令明确需要两套处理共同执行，否则保持默认 `False`。
+
+对已完成状态更新和用户提示、但后续动作可延后的场景，使用 `completion_effect(..., wait_for_completion=False)`。运行时会统一创建后台任务；不要在插件 handler 内自行 `asyncio.create_task()`。后台效果不保证与后续同群消息严格串行，不能用于依赖该顺序的状态变更、重复敏感操作或必须向用户同步报告失败的流程；这些情况应保持等待，或改为 `DirectWorkJob`。
 
 ### 外置 durable work handler
 

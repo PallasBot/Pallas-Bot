@@ -155,8 +155,13 @@ def reply(message: object, *, continue_matcher: bool = False) -> DirectCommandRe
     return DirectCommandResult(replies=(DirectReply(message),), continue_matcher=continue_matcher)
 
 
-def completion_effect(name: str, run: Callable[[], Awaitable[None]]) -> DirectCompletionEffect:
-    return DirectCompletionEffect(name=name, run=run)
+def completion_effect(
+    name: str,
+    run: Callable[[], Awaitable[None]],
+    *,
+    wait_for_completion: bool = True,
+) -> DirectCompletionEffect:
+    return DirectCompletionEffect(name=name, run=run, wait_for_completion=wait_for_completion)
 
 
 def matcher_fallback(reason: str | None = None) -> DirectCommandResult:

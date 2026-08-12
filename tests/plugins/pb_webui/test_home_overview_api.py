@@ -89,7 +89,10 @@ def test_home_overview_route_returns_bundle(monkeypatch) -> None:
         "plugin_run_stats": None,
         "community_stats": None,
     }
-    monkeypatch.setattr(mod, "_home_overview_payload", lambda: _async_return(sample))
+    monkeypatch.setattr(
+        "packages.pb_webui.system_home_api._home_overview_payload",
+        lambda: _async_return(sample),
+    )
     clear_extended_read_cache()
 
     client = _build_client(monkeypatch)
@@ -130,7 +133,7 @@ def test_home_overview_slice_logs_read_timeout_detail(monkeypatch) -> None:
 
     assert warnings == [
         (
-            "[控制台] home/overview {} 失败: {}",
+            "[WebUI] home/overview {} 失败: {}",
             (
                 "community_stats",
                 "ReadTimeout url=https://stats.pallasbot.top/v1/stats: ReadTimeout('')",

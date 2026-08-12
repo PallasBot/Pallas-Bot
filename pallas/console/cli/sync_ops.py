@@ -65,11 +65,11 @@ def sync_alias_notes(
     requested = set(extras or [])
     if deploy_full or "deploy-full" in requested:
         notes.append(
-            "`deploy-full` 不再通过 uv sync 安装官方扩展；请改用插件商店或 `uv run pallas ext install <package>`。"
+            "`deploy-full` 不再通过 uv sync 安装官方插件；请改用插件商店或 `uv run pallas ext install <package>`。"
         )
     if deploy_all or "deploy-all" in requested:
         notes.append(
-            "`deploy-all` 不再通过 uv sync 安装官方扩展；"
+            "`deploy-all` 不再通过 uv sync 安装官方插件；"
             "请改用插件商店或逐个执行 `uv run pallas ext install <package>`。"
         )
     return notes

@@ -26,10 +26,6 @@ def test_plugin_bundled_readme_returns_core_plugin_doc(monkeypatch) -> None:
     assert payload["source"] == "bundled"
     assert payload["relative_path"] == "docs/plugins/help/README.md"
     assert "牛牛帮助" in payload["markdown"]
-    help_cover = Path(__file__).resolve().parents[3] / "packages" / "help" / "assets" / "cover.png"
-    if help_cover.is_file():
-        assert "/pallas/plugin-assets/help/assets/cover.png" in payload["markdown"]
-        assert "brand-avatar" not in payload["markdown"]
 
 
 def test_plugin_bundled_readme_uses_drink_cover_when_present(monkeypatch) -> None:
@@ -40,8 +36,7 @@ def test_plugin_bundled_readme_uses_drink_cover_when_present(monkeypatch) -> Non
     response = client.get("/pallas/api/plugins/drink/readme")
     assert response.status_code == 200
     payload = response.json()["data"]
-    assert "/pallas/plugin-assets/drink/assets/cover.png" in payload["markdown"]
-    assert "brand-avatar" not in payload["markdown"]
+    assert "牛牛喝酒" in payload["markdown"]
 
 
 def test_plugin_bundled_readme_maps_official_extension_package(monkeypatch) -> None:

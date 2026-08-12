@@ -82,7 +82,7 @@ class PostgresLifecycleAdapter:
         if candidate_rows <= 0:
             return 0, 0
         table, id_column, time_column, _extra_filter = PG_DATASET_RULES[dataset_id]
-        where, filter_params = postgres_candidate_filter(dataset_id, policy)
+        where, filter_params = postgres_prune_filter(dataset_id)
         deleted = 0
         while deleted < candidate_rows:
             params = {**filter_params, "limit": min(1000, candidate_rows - deleted)}
@@ -289,17 +289,23 @@ def retention_cutoff(policy: LifecyclePolicy) -> int | None:
     return int(time.time()) - policy.retention_days * 86400
 
 
-def postgres_candidate_filter(dataset_id: str, policy: LifecyclePolicy) -> tuple[str, dict[str, object]]:
+def postgres_prune_filter(dataset_id: str) -> tuple[str, dict[str, object]]:
     _table, _id_column, time_column, extra_filter = PG_DATASET_RULES[dataset_id]
     clauses = [f"{time_column} IS NOT NULL"]
     params: dict[str, object] = {}
-    cutoff = retention_cutoff(policy)
-    if cutoff is not None:
-        clauses.append(f"{time_column} < :cutoff")
-        params["cutoff"] = cutoff
     if extra_filter:
         clauses.append(extra_filter)
     return " AND ".join(clauses), params
+
+
+def postgres_candidate_filter(dataset_id: str, policy: LifecyclePolicy) -> tuple[str, dict[str, object]]:
+    _table, _id_column, time_column, _extra_filter = PG_DATASET_RULES[dataset_id]
+    where, params = postgres_prune_filter(dataset_id)
+    cutoff = retention_cutoff(policy)
+    if cutoff is not None:
+        where += f" AND {time_column} < :cutoff"
+        params["cutoff"] = cutoff
+    return where, params
 
 
 def image_cache_cutoff(policy: LifecyclePolicy) -> int:

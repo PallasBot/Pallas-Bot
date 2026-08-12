@@ -144,6 +144,20 @@ def test_candidate_ranking_combines_native_history_with_direct_counts() -> None:
                 "direct_error": 2,
                 "legacy_handled": 1,
                 "matcher_handled": 2,
+                "outcomes": {
+                    "direct_handled": {
+                        "messages": 3,
+                        "matchers_selected": 0,
+                        "matchers_run": 0,
+                        "ingress_duration_ms_p95": 10.0,
+                    },
+                    "direct_fallback": {
+                        "messages": 3,
+                        "matchers_selected": 9,
+                        "matchers_run": 9,
+                        "ingress_duration_ms_p95": 50.0,
+                    },
+                },
             }
         ],
         day_key="2026-08-10",
@@ -156,6 +170,8 @@ def test_candidate_ranking_combines_native_history_with_direct_counts() -> None:
     assert row["direct_fallback"] == 3
     assert row["direct_error"] == 3
     assert row["matcher_handled"] == 3
+    assert row["outcomes"]["direct_handled"]["ingress_duration_ms_p95"] == 10.0
+    assert row["outcomes"]["direct_fallback"]["matchers_selected"] == 9
     assert "already_direct" in row["blockers"]
 
 

@@ -59,6 +59,8 @@ async def test_worker_commits_a_handler_result_before_completing_the_job() -> No
 
     assert await worker.run_once() is True
     assert result_committer.results == [result]
+    assert result_committer.committed[0][0] == "test"
+    assert result_committer.committed[0][1]
     assert await store.claim(owner="other", lease_sec=1) is None
 
 
@@ -96,10 +98,18 @@ async def test_worker_dead_letters_when_result_commit_fails() -> None:
 class SimpleResultCommitter:
     def __init__(self, error: Exception | None = None) -> None:
         self.results: list[DirectWorkResult] = []
+        self.committed: list[tuple[str, str]] = []
         self.error = error
 
-    async def commit(self, result: DirectWorkResult) -> bool:
+    async def commit(
+        self,
+        result: DirectWorkResult,
+        *,
+        job_kind: str = "",
+        job_id: str = "",
+    ) -> bool:
         self.results.append(result)
+        self.committed.append((job_kind, job_id))
         if self.error is not None:
             raise self.error
         return True

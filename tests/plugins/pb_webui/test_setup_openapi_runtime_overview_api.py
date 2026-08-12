@@ -309,8 +309,18 @@ def test_ai_extension_test_returns_payload_without_validation_error(monkeypatch)
     assert "tried_urls" in payload["data"]
 
 
-async def _fake_probe_provider(provider_id: str, *, cfg=None, timeout_sec: float = 15.0):
-    _ = (provider_id, cfg, timeout_sec)
+async def _fake_probe_provider(
+    provider_id: str,
+    *,
+    base_url: str = "",
+    api_key: str = "",
+    api_key_env: str = "",
+    kind: str = "",
+    request_method: str = "",
+    cfg=None,
+    timeout_sec: float = 15.0,
+):
+    _ = (provider_id, base_url, api_key, api_key_env, kind, request_method, cfg, timeout_sec)
     return {"provider_id": "local", "reachable": True, "latency_ms": 26.4, "error": ""}
 
 

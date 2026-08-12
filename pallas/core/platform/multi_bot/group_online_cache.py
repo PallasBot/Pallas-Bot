@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import time
 
-from nonebot import get_bots
+from nonebot import get_bots, logger
 
 GROUP_ONLINE_TTL_SEC = 45.0
 GROUP_ONLINE_CACHE_MAX = 512
@@ -122,7 +122,8 @@ async def resolve_local_connected_bots_in_group(group_id: int) -> list[int]:
             continue
         try:
             await bots[key].get_group_member_info(group_id=gid, user_id=bid)
-        except Exception:
+        except Exception as e:
+            logger.debug("group online cache: probe {} failed for group [{}]: {}", bid, gid, e)
             continue
         out.append(bid)
 

@@ -1,4 +1,4 @@
-"""官方扩展清单。"""
+"""官方插件清单。"""
 
 from __future__ import annotations
 

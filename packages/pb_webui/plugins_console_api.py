@@ -87,7 +87,7 @@ async def _scheduled_refresh_plugin_update_snapshot() -> None:
         await refresh_plugin_update_snapshot()
         drop_read_cache(("plugins-community-store", "plugins-official-extensions"))
     except Exception:  # noqa: BLE001
-        logger.exception("[控制台] 定时刷新插件更新快照失败")
+        logger.exception("[WebUI] 定时刷新插件更新快照失败")
 
 
 async def _scheduled_refresh_plugin_store_assets() -> None:
@@ -97,7 +97,7 @@ async def _scheduled_refresh_plugin_store_assets() -> None:
         await refresh_store_asset_snapshot()
         drop_read_cache(("plugins-community-store", "plugins-official-extensions"))
     except Exception:  # noqa: BLE001
-        logger.exception("[控制台] 定时刷新插件商店资源快照失败")
+        logger.exception("[WebUI] 定时刷新插件商店资源快照失败")
 
 
 class _HelpMenuVisibilityBody(BaseModel):
@@ -126,6 +126,12 @@ class _CommunityPluginActionBody(BaseModel):
     repository_url: str | None = Field(default=None, max_length=512)
     ref: str | None = Field(default=None, max_length=128)
     restart: bool = False
+
+
+class _LocalPluginActionBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    plugin_id: str = Field(min_length=1, max_length=64)
 
 
 class _GlobalPluginDisableBody(BaseModel):
@@ -174,6 +180,7 @@ PluginConfigRawBody = _PluginConfigRawBody
 PluginGovernanceBody = _PluginGovernanceBody
 OfficialExtensionPackageBody = _OfficialExtensionPackageBody
 CommunityPluginActionBody = _CommunityPluginActionBody
+LocalPluginActionBody = _LocalPluginActionBody
 HelpMenuVisibilityBody = _HelpMenuVisibilityBody
 GlobalPluginDisableBody = _GlobalPluginDisableBody
 GroupFleetWhitelistBody = _GroupFleetWhitelistBody
@@ -612,7 +619,7 @@ def register_plugins_console_router(
         except ExtensionInstallError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 安装官方扩展失败")
+            logger.exception("[WebUI] 安装官方插件失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.post(f"{x}/plugins/official-extensions/install-async", include_in_schema=True)
@@ -787,7 +794,7 @@ def register_plugins_console_router(
         except ExtensionInstallError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 卸载官方扩展失败")
+            logger.exception("[WebUI] 卸载官方插件失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.post(f"{x}/plugins/official-extensions/update", include_in_schema=True)
@@ -813,7 +820,7 @@ def register_plugins_console_router(
         except ExtensionInstallError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 更新官方扩展失败")
+            logger.exception("[WebUI] 更新官方插件失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.get(f"{x}/plugins/community-store", include_in_schema=True)
@@ -875,7 +882,7 @@ def register_plugins_console_router(
                 },
             })
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 刷新插件商店聚合数据失败")
+            logger.exception("[WebUI] 刷新插件商店聚合数据失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.post(f"{x}/plugins/update-snapshot/refresh", include_in_schema=True)
@@ -900,7 +907,7 @@ def register_plugins_console_router(
                 },
             })
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 刷新插件更新快照失败")
+            logger.exception("[WebUI] 刷新插件更新快照失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.post(f"{x}/plugins/store-assets/refresh", include_in_schema=True)
@@ -924,7 +931,7 @@ def register_plugins_console_router(
                 },
             })
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 刷新插件商店资源快照失败")
+            logger.exception("[WebUI] 刷新插件商店资源快照失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.post(f"{x}/plugins/community-plugins/install", include_in_schema=True)
@@ -953,7 +960,7 @@ def register_plugins_console_router(
         except CommunityPluginInstallError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 安装社区插件失败")
+            logger.exception("[WebUI] 安装社区插件失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.post(f"{x}/plugins/community-plugins/install-async", include_in_schema=True)
@@ -1092,7 +1099,7 @@ def register_plugins_console_router(
         except CommunityPluginInstallError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 卸载社区插件失败")
+            logger.exception("[WebUI] 卸载社区插件失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
 
     @router.post(f"{x}/plugins/community-plugins/update", include_in_schema=True)
@@ -1127,8 +1134,65 @@ def register_plugins_console_router(
         except CommunityPluginInstallError as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail) from e
         except Exception as e:  # noqa: BLE001
-            logger.exception("[控制台] 更新社区插件失败")
+            logger.exception("[WebUI] 更新社区插件失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
+
+    @router.post(f"{x}/plugins/local-plugins/uninstall", include_in_schema=True)
+    async def _plugins_local_plugins_uninstall(
+        body: LocalPluginActionBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.console.webui.local_plugin_uninstall import (
+            LocalPluginUninstallError,
+            uninstall_local_plugin,
+        )
+        from pallas.core.shared.utils.format_exception import format_exception_for_log
+
+        try:
+            data = await uninstall_local_plugin(body.plugin_id)
+            drop_read_cache(("plugins", "plugins-community-store", "plugins-official-extensions"))
+            return JSONResponse({"ok": True, "data": data})
+        except LocalPluginUninstallError as e:
+            raise HTTPException(status_code=e.status_code, detail=e.detail) from e
+        except Exception as e:  # noqa: BLE001
+            logger.exception("[WebUI] 卸载本地插件失败")
+            raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
+
+    @router.post(f"{x}/plugins/local-plugins/uninstall-async", include_in_schema=True)
+    async def _plugins_local_plugins_uninstall_async(
+        body: LocalPluginActionBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        import asyncio
+
+        from pallas.console.webui.local_plugin_uninstall import uninstall_local_plugin
+        from pallas.console.webui.plugin_store_job_progress import (
+            create_plugin_store_job,
+            job_progress_reporter,
+            run_plugin_store_job,
+        )
+
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        job = await create_plugin_store_job(
+            kind="local",
+            target=body.plugin_id.strip(),
+            action="uninstall",
+        )
+
+        async def runner(j) -> None:
+            data = await uninstall_local_plugin(
+                j.target,
+                on_progress=job_progress_reporter(j),
+            )
+            drop_read_cache(("plugins", "plugins-community-store", "plugins-official-extensions"))
+            j.result = dict(data)
+            j.message = str(data.get("message") or "完成")
+
+        asyncio.create_task(run_plugin_store_job(job, runner))
+        return JSONResponse({"ok": True, "data": {"job_id": job.job_id, "plugin_id": job.target}})
 
     from pallas.console.webui.git_mirror_api import register_git_mirror_router
 

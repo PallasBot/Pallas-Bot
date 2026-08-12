@@ -15,6 +15,7 @@ from nonebot.permission import SUPERUSER
 from pallas.api.perm import is_user_help_plugin
 from pallas.core.foundation.db import make_bot_config_repository, make_group_config_repository
 from pallas.core.foundation.db.modules import BotConfigModule, GroupConfigModule
+from pallas.core.foundation.logging.throttle import log_rate_limited
 from pallas.core.foundation.paths import plugin_data_dir
 from pallas.core.platform.bot_runtime.plugin_package_aliases import canonical_plugin_package
 
@@ -347,8 +348,14 @@ def bump_disabled_plugin_snapshot_remote_generation() -> None:
         if client is not None:
             _disabled_snapshot_synced_redis_gen = int(client.incr(_DISABLED_SNAPSHOT_REDIS_GEN_KEY))
             _disabled_snapshot_remote_gen_checked_at = time.monotonic()
-    except Exception:
-        pass
+    except Exception as e:
+        log_rate_limited(
+            logger,
+            "warning",
+            "coord_gen.disabled_plugin_snapshot",
+            "bump disabled-plugin snapshot redis generation failed: {}",
+            e,
+        )
 
 
 def sync_disabled_plugin_snapshot_remote_generation() -> int | None:

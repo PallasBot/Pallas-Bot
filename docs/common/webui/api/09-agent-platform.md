@@ -4,7 +4,7 @@
 
 前端：人物 / 任务等在 **AI 观测**；工具清单与覆盖在 **AI 配置 → 接话 → 工具**。使用说明见 [AI 扩展 · 观测与策略](/guide/ai#聊得起来之后ai-观测与对话策略)。
 
-基址与鉴权同 [WebUI API 契约](./)。写操作需写 token（`X-Pallas-Token` 或会话写权限）。
+基址与鉴权同 [WebUI API 契约](/common/webui/api/)。写操作需写 token（`X-Pallas-Token` 或会话写权限）。
 
 下表路径相对 `/pallas/api`。
 

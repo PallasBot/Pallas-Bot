@@ -140,6 +140,9 @@ def test_config_repo_dotenv_file_value_used_when_os_absent(tmp_path: Path, monke
                 return_value=tmp_path / "missing.json",
             ):
                 with patch("nonebot.get_driver", return_value=fake_driver):
+                    from pallas.core.foundation.config.repo_settings import clear_merged_repo_settings_cache
+
+                    clear_merged_repo_settings_cache()
                     c = MessageScrubConfig.from_env()
     assert c.inbound_filter_substrings == "from_dotenv"
 
@@ -219,6 +222,11 @@ def test_build_review_providers_default_baidu_before_json(
     monkeypatch.setenv("PALLAS_SCRUB_BAIDU_SECRET_KEY", "sk")
     monkeypatch.setenv("PALLAS_SCRUB_API_URL", "https://example.invalid/scrub")
     monkeypatch.delenv("PALLAS_SCRUB_REVIEW_PROVIDERS", raising=False)
+    monkeypatch.setattr(
+        "pallas.product.message_scrub.config.merged_repo_settings_upper",
+        dict,
+    )
+    reload_message_scrub_caches()
     ids = [p.id for p in build_review_providers()]
     assert ids == ["baidu", "json_http"]
 

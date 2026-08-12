@@ -532,6 +532,62 @@ def test_refresh_marks_peer_without_capability_protocol_as_incompatible(monkeypa
     assert mod.get_incompatible_federate_command_capability_peers() == ("dep-peer",)
 
 
+def test_log_incompatible_federate_ingress_peers_filters_by_shared_present_group(monkeypatch):
+    """仅对与本机有共同在场群的对端输出 ingress v2 不兼容告警。"""
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "collect_local_present_group_ids", lambda: [733291779])
+    warnings: list[tuple[str, tuple]] = []
+    monkeypatch.setattr(mod.logger, "warning", lambda msg, *args: warnings.append((msg, args)))
+
+    mod._cache_deployment_ids = frozenset({"dep-shared", "dep-alone", "dep-new"})
+    mod._cache_deployment_ingress_protocols = {
+        "dep-shared": 1,
+        "dep-alone": 1,
+        "dep-new": mod.INGRESS_PROTOCOL_VERSION,
+    }
+    mod._cache_deployment_present_groups = {
+        "dep-shared": frozenset({733291779}),
+        "dep-alone": frozenset({626266902}),
+        "dep-new": frozenset({733291779}),
+    }
+    mod._cache_deployment_rosters = {
+        "dep-shared": mod.FederatePeerBotRoster(
+            deployment_id="dep-shared",
+            deployment_name="旧部署甲",
+            bot_ids=frozenset(),
+            online_bot_ids=None,
+            public_bot_ids=frozenset(),
+        ),
+    }
+
+    mod.log_incompatible_federate_ingress_peers()
+    assert len(warnings) == 1
+    msg, args = warnings[0]
+    assert "dep-shared" in args[0]
+    assert "旧部署甲" in args[0]
+    assert "dep-alone" not in args[0]
+    assert "dep-new" not in args[0]
+
+    warnings.clear()
+    mod.log_incompatible_federate_ingress_peers()
+    assert warnings == []
+
+
+def test_log_incompatible_federate_ingress_peers_silent_without_shared_group(monkeypatch):
+    """对端与本机无共同在场群（含未宣告在场群）时静默。"""
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "collect_local_present_group_ids", lambda: [733291779])
+    warnings: list[tuple[str, tuple]] = []
+    monkeypatch.setattr(mod.logger, "warning", lambda msg, *args: warnings.append((msg, args)))
+
+    mod._cache_deployment_ids = frozenset({"dep-no-present", "dep-empty-present"})
+    mod._cache_deployment_ingress_protocols = {"dep-no-present": 1, "dep-empty-present": 1}
+    mod._cache_deployment_present_groups = {"dep-no-present": None, "dep-empty-present": frozenset()}
+
+    mod.log_incompatible_federate_ingress_peers()
+    assert warnings == []
+
+
 def test_collect_local_federate_command_capabilities_includes_explicit_command_prefixes(
     monkeypatch,
 ):

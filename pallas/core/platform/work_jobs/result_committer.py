@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from nonebot import logger
+
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
     from typing import Any
@@ -33,13 +35,27 @@ class WorkResultCommitter:
     def __init__(self, *, dispatcher=dispatch_bot_action) -> None:
         self._dispatcher = dispatcher
 
-    async def commit(self, result: DirectWorkResult) -> bool:
+    async def commit(
+        self,
+        result: DirectWorkResult,
+        *,
+        job_kind: str = "",
+        job_id: str = "",
+    ) -> bool:
         if not result.actions:
             return False
         for action in result.actions:
             try:
                 action.validate()
             except ValueError as exc:
+                logger.warning(
+                    "work aux: result action [{}] for bot [{}] is invalid while committing job [{}] of kind [{}]: {}",
+                    action.action,
+                    action.target_bot_id,
+                    job_id,
+                    job_kind,
+                    exc,
+                )
                 raise WorkResultCommitError(str(exc)) from exc
             ok, _response = await self._dispatcher(
                 action.action,
@@ -48,5 +64,12 @@ class WorkResultCommitter:
                 timeout_sec=action.timeout_sec,
             )
             if not ok:
+                logger.warning(
+                    "work aux: result action [{}] for bot [{}] was not accepted while committing job [{}] of kind [{}]",
+                    action.action,
+                    action.target_bot_id,
+                    job_id,
+                    job_kind,
+                )
                 raise WorkResultCommitError(f"work result action was not accepted: {action.action}")
         return True

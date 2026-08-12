@@ -29,6 +29,9 @@ _ROUTE_CANDIDATE_COUNTER_KEYS = (
     "direct_visible_actions",
     "direct_effect_actions",
 )
+_OUTCOME_KEYS = ("direct_handled", "direct_fallback", "direct_error", "matcher_only")
+_OUTCOME_COUNTER_KEYS = ("messages", "matchers_considered", "matchers_selected", "matchers_run")
+_RUNTIME_STAGE_NAMES = ("handler", "send", "deferred_wait", "deferred_submit", "commit")
 _HISTORY_LOCK = threading.Lock()
 _last_prune_at = 0
 _ROUTE_HISTORY_CACHE: dict[str, Any] = {
@@ -92,6 +95,45 @@ def _sanitize_route_candidates(raw: Any) -> list[dict[str, Any]]:
             row["ingress_duration_ms_p95"] = max(0.0, float(p95))
         if isinstance(item.get("eligible"), bool):
             row["eligible"] = item["eligible"]
+        runtime_stages = item.get("runtime_stages")
+        if isinstance(runtime_stages, dict):
+            sanitized_stages: dict[str, dict[str, int | float]] = {}
+            for name in _RUNTIME_STAGE_NAMES:
+                raw_stage = runtime_stages.get(name)
+                if not isinstance(raw_stage, dict):
+                    continue
+                samples = raw_stage.get("samples")
+                p95 = raw_stage.get("p95_ms")
+                if (
+                    isinstance(samples, (int, float))
+                    and not isinstance(samples, bool)
+                    and math.isfinite(float(samples))
+                    and isinstance(p95, (int, float))
+                    and not isinstance(p95, bool)
+                    and math.isfinite(float(p95))
+                ):
+                    sanitized_stages[name] = {"samples": max(0, int(samples)), "p95_ms": max(0.0, float(p95))}
+            if sanitized_stages:
+                row["runtime_stages"] = sanitized_stages
+        outcomes = item.get("outcomes")
+        if isinstance(outcomes, dict):
+            sanitized_outcomes: dict[str, dict[str, int | float]] = {}
+            for outcome in _OUTCOME_KEYS:
+                raw_outcome = outcomes.get(outcome)
+                if not isinstance(raw_outcome, dict):
+                    continue
+                sanitized: dict[str, int | float] = {}
+                for key in _OUTCOME_COUNTER_KEYS:
+                    value = raw_outcome.get(key)
+                    if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value)):
+                        sanitized[key] = max(0, int(value))
+                p95 = raw_outcome.get("ingress_duration_ms_p95")
+                if isinstance(p95, (int, float)) and not isinstance(p95, bool) and math.isfinite(float(p95)):
+                    sanitized["ingress_duration_ms_p95"] = max(0.0, float(p95))
+                if sanitized:
+                    sanitized_outcomes[outcome] = sanitized
+            if sanitized_outcomes:
+                row["outcomes"] = sanitized_outcomes
         candidates.append(row)
     candidates.sort(key=lambda row: tuple(row["route_modules"]))
     return candidates
@@ -182,6 +224,55 @@ def _apply_candidate_delta(
                 float(total.get("ingress_duration_ms_p95") or 0.0),
                 float(p95),
             )
+        outcomes = row.get("outcomes")
+        prior_outcomes = prior.get("outcomes") if prior is not None else None
+        if isinstance(outcomes, dict):
+            total_outcomes = total.setdefault("outcomes", {})
+            if not isinstance(total_outcomes, dict):
+                total_outcomes = {}
+                total["outcomes"] = total_outcomes
+            for outcome, raw_outcome in outcomes.items():
+                if not isinstance(raw_outcome, dict):
+                    continue
+                aggregate = total_outcomes.setdefault(outcome, {})
+                if not isinstance(aggregate, dict):
+                    aggregate = {}
+                    total_outcomes[outcome] = aggregate
+                prior_outcome = prior_outcomes.get(outcome) if isinstance(prior_outcomes, dict) else None
+                for key in _OUTCOME_COUNTER_KEYS:
+                    value = int(raw_outcome.get(key) or 0)
+                    prior_value = int(prior_outcome.get(key) or 0) if isinstance(prior_outcome, dict) else 0
+                    delta = value - prior_value if value >= prior_value else value
+                    aggregate[key] = int(aggregate.get(key) or 0) + delta
+                p95 = raw_outcome.get("ingress_duration_ms_p95")
+                if isinstance(p95, (int, float)):
+                    aggregate["ingress_duration_ms_p95"] = max(
+                        float(aggregate.get("ingress_duration_ms_p95") or 0.0),
+                        float(p95),
+                    )
+        runtime_stages = row.get("runtime_stages")
+        prior_stages = prior.get("runtime_stages") if prior is not None else None
+        if isinstance(runtime_stages, dict):
+            total_stages = total.setdefault("runtime_stages", {})
+            if not isinstance(total_stages, dict):
+                total_stages = {}
+                total["runtime_stages"] = total_stages
+            for name, raw_stage in runtime_stages.items():
+                if not isinstance(raw_stage, dict):
+                    continue
+                aggregate = total_stages.setdefault(name, {})
+                if not isinstance(aggregate, dict):
+                    aggregate = {}
+                    total_stages[name] = aggregate
+                prior_stage = prior_stages.get(name) if isinstance(prior_stages, dict) else None
+                samples = int(raw_stage.get("samples") or 0)
+                prior_samples = int(prior_stage.get("samples") or 0) if isinstance(prior_stage, dict) else 0
+                aggregate["samples"] = int(aggregate.get("samples") or 0) + (
+                    samples - prior_samples if samples >= prior_samples else samples
+                )
+                p95 = raw_stage.get("p95_ms")
+                if isinstance(p95, (int, float)):
+                    aggregate["p95_ms"] = max(float(aggregate.get("p95_ms") or 0.0), float(p95))
     return current
 
 

@@ -219,6 +219,7 @@ def record_route_candidate_safe(
             direct_visible_actions=visible_actions,
             direct_effect_actions=effect_actions,
             duration_ms=duration_ms,
+            runtime_stages_ms=direct_outcome.runtime_stages_ms if direct_outcome is not None else (),
         )
     except Exception:
         logger.exception("Route candidate metrics record failed")

@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 import time
 
+from nonebot.log import logger
+
+from pallas.core.foundation.logging.throttle import log_rate_limited
 from pallas.core.foundation.paths import plugin_data_dir
 
 from .visibility import BUILTIN_HELP_HIDDEN_PLUGINS
@@ -108,8 +111,14 @@ def bump_global_disable_remote_generation() -> None:
         client = get_coord_redis_client()
         if client is not None:
             client.incr(_REDIS_GEN_KEY)
-    except Exception:
-        pass
+    except Exception as e:
+        log_rate_limited(
+            logger,
+            "warning",
+            "coord_gen.global_disable",
+            "bump global-disable redis generation failed: {}",
+            e,
+        )
 
 
 def sync_global_disable_remote_generation() -> bool:

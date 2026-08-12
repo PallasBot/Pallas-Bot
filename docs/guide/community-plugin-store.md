@@ -1,6 +1,6 @@
 # 社区插件商店
 
-从策展索引浏览并安装第三方插件到 `local/plugins/<id>/`。日常总装法见 [安装插件 · 社区与本地插件](install-plugins.md#社区与本地插件)。
+从策展索引浏览并安装第三方插件到 `local/plugins/<id>/`。日常总装法见 [安装插件 · 社区和本地插件](install-plugins.md#社区和本地插件)。
 
 与 **官方插件**（pip）并存；**同名时 `local/plugins` 优先**。
 
@@ -36,7 +36,7 @@ extra_plugin_dirs = ["local/plugins"]
 - **README**：仓库根目录 `README.md`
 - **更新日志**：优先 `CHANGELOG.md`；没有则按 git 提交标题兜底
 
-官方与社区卡片详情形态相同（示意：官方扩展 MAA）：
+官方与社区卡片详情形态相同（示意：官方插件 MAA）：
 
 ![插件商店 · 卡片详情（README）](/assets/plugin-store-detail.png)
 

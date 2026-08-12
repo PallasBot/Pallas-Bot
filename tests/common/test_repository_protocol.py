@@ -54,6 +54,9 @@ class MockBlackListRepo:
     async def upsert_answers_reserve(self, group_id, answers):
         pass
 
+    async def upsert_many_blacklist(self, entries):
+        pass
+
 
 def test_context_repo_protocol():
     repo = MockContextRepo()

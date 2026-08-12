@@ -77,12 +77,15 @@ class HTTPXClient:
 
     @classmethod
     async def get(cls, url: str, **kwargs) -> httpx.Response | None:
+        raise_for_status = kwargs.pop("raise_for_status", True)
+
         @retry(**cls.DEFAULT_RETRY)
         async def _get():
             client = await cls._ensure_client()
             try:
                 response = await client.get(url, **kwargs)
-                response.raise_for_status()
+                if raise_for_status:
+                    response.raise_for_status()
                 return response
             except httpx.TransportError as e:
                 logger.error(cls._transport_error_message(e))
