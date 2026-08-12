@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="960" viewBox="0 0 1600 960" role="img" aria-labelledby="title desc">
+  <title id="title">LLM 输出管线与表达数据粒度</title>
+  <desc id="desc">LLM 输出从 Provider 到群消息经过的过滤、拆分与投递步骤，以及表达风格锚点与回复画像两套数据的存储粒度。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#64748b"/>
+    </marker>
+    <style>
+      text { font-family: 'Droid Sans Fallback', 'WenQuanYi Zen Hei', 'Noto Sans CJK SC', sans-serif; }
+      .title { font-size: 40px; font-weight: 700; fill: #172033; }
+      .subtitle { font-size: 21px; font-weight: 400; fill: #64748b; }
+      .node-title { font-size: 24px; font-weight: 700; fill: #172033; }
+      .node-copy { font-size: 17px; font-weight: 400; fill: #526071; }
+      .callout { font-size: 17px; font-weight: 600; fill: #334155; }
+      .code { font-size: 16px; font-weight: 600; fill: #64748b; }
+      .sec-title { font-size: 26px; font-weight: 700; fill: #172033; }
+      .line { fill: none; stroke: #64748b; stroke-width: 3; marker-end: url(#arrow); }
+      .dash { fill: none; stroke: #94a3b8; stroke-width: 2.5; stroke-dasharray: 8 8; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1600" height="960" fill="#f8fafc"/>
+  <text class="title" x="80" y="82">LLM 输出管线与表达数据粒度</text>
+  <text class="subtitle" x="80" y="120">Bot 进程内：Provider 输出 → 过滤与拆分 → 多气泡投递 → 学习回写</text>
+
+  <text class="sec-title" x="80" y="158">LLM 输出管线</text>
+  <path class="dash" d="M712 180V790"/>
+
+  <g>
+    <rect x="80" y="176" width="600" height="62" rx="8" fill="#ecfdf5" stroke="#16836a" stroke-width="2"/>
+    <text class="node-title" x="380" y="204" text-anchor="middle" fill="#126b58">表达语料直投</text>
+    <text class="node-copy" x="380" y="226" text-anchor="middle">命中去重与配额则直接投递真实语料，跳过 Provider</text>
+  </g>
+  <path class="line" d="M380 238V256"/>
+
+  <g>
+    <rect x="80" y="256" width="600" height="62" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text class="node-title" x="380" y="284" text-anchor="middle">生成 + 工具循环</text>
+    <text class="node-copy" x="380" y="306" text-anchor="middle">Provider 补全；tool call 执行后回填上下文继续</text>
+  </g>
+  <path class="line" d="M380 318V336"/>
+
+  <g>
+    <rect x="80" y="336" width="600" height="62" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text class="node-title" x="380" y="364" text-anchor="middle">人设输出防火墙</text>
+    <text class="node-copy" x="380" y="386" text-anchor="middle">命中规则可带修正重试，或回落 fallback</text>
+  </g>
+  <path class="line" d="M380 398V416"/>
+
+  <g>
+    <rect x="80" y="416" width="600" height="62" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text class="node-title" x="380" y="444" text-anchor="middle">JSON 契约解析</text>
+    <text class="node-copy" x="380" y="466" text-anchor="middle">期望 reply_segments 数组逐条成气泡；纯文本退化单段</text>
+  </g>
+  <path class="line" d="M380 478V496"/>
+
+  <g>
+    <rect x="80" y="496" width="600" height="62" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text class="node-title" x="380" y="524" text-anchor="middle">输出过滤</text>
+    <text class="node-copy" x="380" y="546" text-anchor="middle">语料污染词、续写残片、字符形态守卫</text>
+  </g>
+  <path class="line" d="M380 558V576"/>
+
+  <g>
+    <rect x="80" y="576" width="600" height="62" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text class="node-title" x="380" y="604" text-anchor="middle">短气泡兜底拆分</text>
+    <text class="node-copy" x="380" y="626" text-anchor="middle">short 取向单段时，按句末标点 / 换行拆成多气泡</text>
+  </g>
+  <path class="line" d="M380 638V656"/>
+
+  <g>
+    <rect x="80" y="656" width="600" height="62" rx="8" fill="#ffffff" stroke="#cbd5e1" stroke-width="2"/>
+    <text class="node-title" x="380" y="684" text-anchor="middle">轻量后处理</text>
+    <text class="node-copy" x="380" y="706" text-anchor="middle">错别字、句尾句号处理</text>
+  </g>
+  <path class="line" d="M380 718V736"/>
+
+  <g>
+    <rect x="80" y="736" width="600" height="62" rx="8" fill="#f0fdfa" stroke="#16836a" stroke-width="2"/>
+    <text class="node-title" x="380" y="764" text-anchor="middle" fill="#126b58">多气泡投递</text>
+    <text class="node-copy" x="380" y="786" text-anchor="middle">逐条发送到群，气泡间带短暂间隔</text>
+  </g>
+  <path class="line" d="M380 798V816"/>
+
+  <g>
+    <rect x="80" y="816" width="600" height="62" rx="8" fill="#fff7ed" stroke="#c97828" stroke-width="2"/>
+    <text class="node-title" x="380" y="844" text-anchor="middle" fill="#a35c1d">学习回写</text>
+    <text class="node-copy" x="380" y="866" text-anchor="middle">会话 · 行为 · 表达学习 · 引用反馈 · 记忆</text>
+  </g>
+
+  <text class="sec-title" x="740" y="158">表达数据粒度</text>
+
+  <g>
+    <rect x="740" y="176" width="800" height="250" rx="8" fill="#eff6ff" stroke="#376ca8" stroke-width="2"/>
+    <text class="node-title" x="770" y="216" fill="#285d98">表达风格锚点 / 例句</text>
+    <text class="code" x="770" y="244">repeater_semantic_style.py · profiles.json</text>
+    <text class="node-copy" x="770" y="290">粒度：每 bot × 每群 独立</text>
+    <text class="node-copy" x="770" y="318">key = bot_id : group_id : scene</text>
+    <text class="node-copy" x="770" y="352">注入【群表达指导】block</text>
+    <text class="callout" x="770" y="400" fill="#285d98">@牛牛 重置表达 只清本 bot 本群，之后重新学习</text>
+  </g>
+
+  <g>
+    <rect x="740" y="446" width="800" height="250" rx="8" fill="#eff6ff" stroke="#376ca8" stroke-width="2"/>
+    <text class="node-title" x="770" y="486" fill="#285d98">回复画像（气泡 / 节奏 / 长度）</text>
+    <text class="code" x="770" y="514">group_profiler.py → group config style_profile</text>
+    <text class="node-copy" x="770" y="560">粒度：群维度共享</text>
+    <text class="node-copy" x="770" y="588">由群最近消息统计生成</text>
+    <text class="node-copy" x="770" y="622">决定 reply_shape 段数、节奏与长度取向</text>
+    <text class="callout" x="770" y="670" fill="#285d98">同群所有 bot 共用同一份回复画像</text>
+  </g>
+
+  <g>
+    <rect x="740" y="716" width="800" height="160" rx="8" fill="#ffffff" stroke="#64748b" stroke-width="3"/>
+    <text class="node-title" x="770" y="758">粒度小结</text>
+    <text class="node-copy" x="770" y="798">同群不同 bot 的表达风格互不共享；</text>
+    <text class="node-copy" x="770" y="826">回复画像是群统计，同群所有 bot 共用。</text>
+    <text class="code" x="770" y="860">管理入口：packages/pb_webui/llm_product_api.py</text>
+  </g>
+</svg>
