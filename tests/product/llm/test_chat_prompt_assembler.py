@@ -133,3 +133,34 @@ def test_chat_prompt_assembler_keeps_quote_replies_within_casual_shape() -> None
     assert "引用只决定回复哪条消息" in prompt
     assert "不要因引用把话一次说完" in prompt
     assert "「行啊」「好呀」" in prompt
+
+
+def test_chat_prompt_complete_band_keeps_light_tone() -> None:
+    prompt = ChatPromptAssembler().assemble(
+        core_persona="核心",
+        self_identity="自称",
+        turn_policy=TurnPolicy(
+            reply_target="answer",
+            seriousness="serious",
+            social_action="ANSWER",
+            allow_teasing=False,
+            allow_affection=False,
+            needs_tool=False,
+            needs_grounding=True,
+        ),
+        context=ChatContextBundle(),
+        group_expression=None,
+        reply_shape=ReplyShapePolicy(
+            preferred_bubbles=1,
+            max_bubbles=2,
+            target_chars_min=8,
+            target_chars_max=80,
+            total_length_band="complete",
+            rhythm="single",
+            max_output_tokens=200,
+        ),
+    )
+
+    assert "语气别收干" in prompt
+    assert "别写成书面语或客服腔" in prompt
+    assert "先发即时反应" not in prompt

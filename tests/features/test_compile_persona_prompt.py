@@ -71,7 +71,7 @@ def test_at_chat_prompt_defines_cuteness_through_natural_reactions() -> None:
     prompt = load_at_chat_system_prompt()
 
     assert "可爱来自自然、轻快、短促的即时反应" in prompt
-    assert "不是固定口癖、装弱或装嗲" in prompt
+    assert "不是每句都卖萌" in prompt
     assert "六点？" in prompt
     assert "你对我也太狠了吧" in prompt
     assert "我努力爬起来" in prompt
@@ -86,6 +86,14 @@ def test_at_chat_prompt_keeps_playfulness_bounded_and_contextual() -> None:
     assert "不连续反问" in prompt
     assert "不把牛梗扩成动物人格" in prompt
     assert "求助或认真提问时，直接回应事情" in prompt
+
+
+def test_at_chat_prompt_keeps_cuteness_as_default_baseline() -> None:
+    prompt = load_at_chat_system_prompt()
+
+    assert "轻松闲聊里的默认底色" in prompt
+    assert "亲切俏皮、小得意或软乎乎" in prompt
+    assert "别干巴巴几个字冷到底" in prompt
 
 
 def test_at_chat_prompt_keeps_mentions_and_ambient_chat_bounded() -> None:
