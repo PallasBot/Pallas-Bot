@@ -1222,51 +1222,63 @@ class PgContextRepository:
         msg_cap, ans_cap = reply_query_caps(keywords)
         t_start = time.monotonic()
         async with get_session(read_only=True) as session:
-            row = (
+            context_row = (
                 (
                     await session.execute(
                         text(
                             """
-                        WITH ctx AS (
-                            SELECT id, keywords, time, trigger_count, clear_time
-                            FROM context WHERE keywords_hash = :khash
-                        ), answers AS (
-                            SELECT a.id, a.keywords, a.group_id, a.count, a.time
-                            FROM context_answer a JOIN ctx ON a.context_id = ctx.id
-                            ORDER BY a.count DESC, a.time DESC LIMIT :ans_cap
-                        ), ranked_messages AS (
-                            SELECT m.answer_id, m.message, m.id,
-                                   row_number() OVER (PARTITION BY m.answer_id ORDER BY m.id DESC) AS rn
-                            FROM context_answer_message m JOIN answers a ON a.id = m.answer_id
-                        ), messages AS (
-                            SELECT answer_id, jsonb_agg(message ORDER BY id) AS values
-                            FROM ranked_messages WHERE rn <= :msg_cap GROUP BY answer_id
-                        )
-                        SELECT ctx.keywords, ctx.time, ctx.trigger_count, ctx.clear_time,
+                        SELECT c.id, c.keywords, c.time, c.trigger_count, c.clear_time,
                             COALESCE((
                                 SELECT jsonb_agg(jsonb_build_object(
                                     'keywords', b.keywords, 'group_id', b.group_id,
                                     'reason', b.reason, 'time', b.time
                                 ) ORDER BY b.id)
-                                FROM context_ban b WHERE b.context_id = ctx.id
-                            ), '[]'::jsonb) AS bans,
-                            COALESCE((
-                                SELECT jsonb_agg(jsonb_build_object(
-                                    'keywords', a.keywords, 'group_id', a.group_id,
-                                    'count', a.count, 'time', a.time,
-                                    'messages', COALESCE(m.values, '[]'::jsonb)
-                                ) ORDER BY a.count DESC, a.time DESC)
-                                FROM answers a LEFT JOIN messages m ON m.answer_id = a.id
-                            ), '[]'::jsonb) AS answers
-                        FROM ctx
+                                FROM context_ban b WHERE b.context_id = c.id
+                            ), '[]'::jsonb) AS bans
+                        FROM context c WHERE c.keywords_hash = :khash
                         """
                         ),
-                        {"khash": khash, "ans_cap": ans_cap, "msg_cap": msg_cap},
+                        {"khash": khash},
                     )
                 )
                 .mappings()
                 .one_or_none()
             )
+            row = None
+            if context_row is not None:
+                answer_row = (
+                    (
+                        await session.execute(
+                            text(
+                                """
+                            WITH answers AS (
+                                SELECT a.id, a.keywords, a.group_id, a.count, a.time
+                                FROM context_answer a
+                                WHERE a.context_id = :context_id
+                                ORDER BY a.count DESC, a.time DESC LIMIT :ans_cap
+                            ), ranked_messages AS (
+                                SELECT m.answer_id, m.message, m.id,
+                                       row_number() OVER (PARTITION BY m.answer_id ORDER BY m.id DESC) AS rn
+                                FROM context_answer_message m JOIN answers a ON a.id = m.answer_id
+                            ), messages AS (
+                                SELECT answer_id, jsonb_agg(message ORDER BY id) AS values
+                                FROM ranked_messages WHERE rn <= :msg_cap GROUP BY answer_id
+                            )
+                            SELECT COALESCE(jsonb_agg(jsonb_build_object(
+                                'keywords', a.keywords, 'group_id', a.group_id,
+                                'count', a.count, 'time', a.time,
+                                'messages', COALESCE(m.values, '[]'::jsonb)
+                            ) ORDER BY a.count DESC, a.time DESC), '[]'::jsonb) AS answers
+                            FROM answers a LEFT JOIN messages m ON m.answer_id = a.id
+                            """
+                            ),
+                            {"context_id": context_row["id"], "ans_cap": ans_cap, "msg_cap": msg_cap},
+                        )
+                    )
+                    .mappings()
+                    .one()
+                )
+                row = {**context_row, "answers": answer_row["answers"]}
         elapsed_ms = (time.monotonic() - t_start) * 1000.0
         if row is None:
             self._log_reply_query_slow(

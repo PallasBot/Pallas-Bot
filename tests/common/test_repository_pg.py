@@ -215,7 +215,7 @@ async def test_find_by_keywords_for_reply_keeps_bans(pg_engine):
 
 
 @pytest.mark.asyncio
-async def test_find_by_keywords_for_reply_uses_one_read_round_trip(pg_engine):
+async def test_find_by_keywords_for_reply_uses_two_indexed_read_round_trips(pg_engine):
     from sqlalchemy import event
 
     from pallas.core.foundation.db.modules import Ban, Context
@@ -249,7 +249,7 @@ async def test_find_by_keywords_for_reply_uses_one_read_round_trip(pg_engine):
     assert found is not None
     assert found.answers[0].messages == ["reply"]
     assert [ban.keywords for ban in found.ban] == ["forbidden"]
-    assert len(statements) == 1
+    assert len(statements) == 2
 
 
 def test_reply_message_query_limits_to_selected_answer_ids():
