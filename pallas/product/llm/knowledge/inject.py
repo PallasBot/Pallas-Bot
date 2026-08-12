@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 
 from pallas.product.llm.config import LlmConfig, get_llm_config
@@ -46,7 +47,9 @@ async def enrich_system_with_knowledge_sources(
             pass
         return KnowledgeInjectionResult(system_prompt=system_prompt, trace=empty_trace)
 
-    hits = retrieve_from_knowledge_sources(
+    # 检索内会做 embedding（走 Redis 队列或远程），同步执行会阻塞事件循环，移到线程
+    hits = await asyncio.to_thread(
+        retrieve_from_knowledge_sources,
         query_text,
         bot_id=bot_id,
         group_id=group_id,

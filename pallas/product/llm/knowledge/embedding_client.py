@@ -14,6 +14,9 @@ if TYPE_CHECKING:
 _DEFAULT_DIMS = 16
 _last_embedding_error = ""
 
+# 检索路径（知识与记忆）embedding 的超时：慢则快速回落关键词，避免拖住消息处理
+EMBEDDING_QUERY_TIMEOUT_SEC = 2.0
+
 
 def embedding_model_name(cfg: LlmConfig | None = None) -> str:
     configured = str(getattr(cfg, "llm_embedding_model", "") or "").strip()
