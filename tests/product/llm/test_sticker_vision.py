@@ -102,12 +102,8 @@ async def test_choose_sticker_with_vision_skips_without_vision_endpoint(monkeypa
     monkeypatch.setattr("pallas.product.llm.providers_store.resolve_endpoint_for_task", lambda *_args, **_kwargs: None)
 
     observation: dict[str, object] = {}
-    candidates = [
-        (f"[CQ:image,file={index}.jpg]", bytes([index])) for index in range(3)
-    ]
-    selected = await sticker_vision.choose_sticker_with_vision(
-        candidates, user_text="笑死", observation=observation
-    )
+    candidates = [(f"[CQ:image,file={index}.jpg]", bytes([index])) for index in range(3)]
+    selected = await sticker_vision.choose_sticker_with_vision(candidates, user_text="笑死", observation=observation)
 
     assert selected is None
     assert observation["state"] == "skipped"
@@ -131,7 +127,9 @@ async def test_choose_sticker_with_vision_falls_back_to_none_on_provider_timeout
         request_method="POST",
         capabilities=["image"],
     )
-    monkeypatch.setattr("pallas.product.llm.providers_store.resolve_endpoint_for_task", lambda *_args, **_kwargs: endpoint)
+    monkeypatch.setattr(
+        "pallas.product.llm.providers_store.resolve_endpoint_for_task", lambda *_args, **_kwargs: endpoint
+    )
 
     async def slow_complete(*_args, **_kwargs):
         raise TimeoutError("slow")
@@ -168,7 +166,9 @@ async def test_choose_sticker_with_vision_falls_back_to_none_on_provider_error(m
         request_method="POST",
         capabilities=["image"],
     )
-    monkeypatch.setattr("pallas.product.llm.providers_store.resolve_endpoint_for_task", lambda *_args, **_kwargs: endpoint)
+    monkeypatch.setattr(
+        "pallas.product.llm.providers_store.resolve_endpoint_for_task", lambda *_args, **_kwargs: endpoint
+    )
 
     async def failing_complete(*_args, **_kwargs):
         raise LlmProviderError("HTTP 500")
@@ -201,7 +201,9 @@ async def test_choose_sticker_with_vision_reports_no_match_on_invalid_json(monke
         request_method="POST",
         capabilities=["image"],
     )
-    monkeypatch.setattr("pallas.product.llm.providers_store.resolve_endpoint_for_task", lambda *_args, **_kwargs: endpoint)
+    monkeypatch.setattr(
+        "pallas.product.llm.providers_store.resolve_endpoint_for_task", lambda *_args, **_kwargs: endpoint
+    )
 
     async def invalid_complete(*_args, **_kwargs):
         return {"content": "我选第二张"}

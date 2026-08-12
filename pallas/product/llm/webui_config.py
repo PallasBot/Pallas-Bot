@@ -651,6 +651,16 @@ class LlmWebuiConfig(BaseModel):
         le=1000,
         description=field_help("视觉选图每小时上限", "0 表示关闭视觉选图；达到上限时直接回退 Repeater 候选。"),
     )
+    llm_sticker_label_backfill_enabled: bool = Field(
+        default=True,
+        description=field_help("标签每日回填", "后台按每日预算为缺失标签的缓存图补建语义标签。"),
+    )
+    llm_sticker_label_backfill_daily_limit: int = Field(
+        default=200,
+        ge=0,
+        le=2000,
+        description=field_help("标签回填每日预算", "每天最多为多少张图调用视觉模型打标签；0 表示关闭。"),
+    )
     llm_reply_effect_eval_enabled: bool = Field(
         default=False,
         description=field_help(
@@ -964,6 +974,8 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_sticker_vision_candidate_count=cfg.llm_sticker_vision_candidate_count,
         llm_sticker_vision_timeout_sec=cfg.llm_sticker_vision_timeout_sec,
         llm_sticker_vision_max_per_hour=cfg.llm_sticker_vision_max_per_hour,
+        llm_sticker_label_backfill_enabled=cfg.llm_sticker_label_backfill_enabled,
+        llm_sticker_label_backfill_daily_limit=cfg.llm_sticker_label_backfill_daily_limit,
         llm_reply_effect_eval_enabled=cfg.llm_reply_effect_eval_enabled,
         llm_reply_style_variants=cfg.llm_reply_style_variants,
         llm_memory_rag_enabled=cfg.llm_memory_rag_enabled,
