@@ -67,6 +67,9 @@ def boot() -> nonebot.Driver:
         from pallas.core.platform.multi_bot.connected_roster import install_shutdown_signal_forwarder
 
         install_shutdown_signal_forwarder()
+        from pallas.core.platform.shard.coord.bot_action import start_bot_action_redis_listener
+
+        start_bot_action_redis_listener()
 
     @driver.on_shutdown
     async def shutdown() -> None:
