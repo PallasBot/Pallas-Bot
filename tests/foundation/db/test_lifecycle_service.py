@@ -121,3 +121,12 @@ async def test_scheduled_maintenance_only_runs_enabled_policies(monkeypatch: pyt
 
     assert [job.dataset_id for job in jobs] == ["image_cache"]
     assert adapter.pruned == ["image_cache"]
+
+
+@pytest.mark.asyncio
+async def test_acquire_global_lock_degrades_when_redis_unavailable(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.platform.coord import redis_claim
+
+    monkeypatch.setattr(redis_claim, "get_coord_redis_client", lambda: None)
+
+    assert await lifecycle_service.acquire_global_lock("owner") is True

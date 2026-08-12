@@ -149,5 +149,37 @@ async def test_postgres_background_job_prune_keeps_pending_rows_outside_candidat
     await adapter.prune_dataset("background_jobs", LifecyclePolicy(True, 30, None))
 
     assert "finished_at IS NOT NULL" in statements[0]
-    assert "finished_at < :cutoff" in statements[0]
     assert "status = 'done'" in statements[0]
+    assert "finished_at < :cutoff" not in statements[0]
+
+
+@pytest.mark.asyncio
+async def test_postgres_prune_deletes_capacity_rows_beyond_retention() -> None:
+    statements: list[str] = []
+
+    class DeleteResult:
+        rowcount = 2
+
+    class DeleteSession:
+        async def execute(self, statement: object, _params: dict[str, object]) -> DeleteResult:
+            statements.append(str(statement))
+            return DeleteResult()
+
+        async def commit(self) -> None:
+            return None
+
+    @asynccontextmanager
+    async def delete_session_factory() -> AsyncIterator[DeleteSession]:
+        yield DeleteSession()
+
+    adapter = PostgresLifecycleAdapter(session_factory=delete_session_factory)
+
+    async def capacity_candidate(_dataset_id: str, _policy: LifecyclePolicy) -> tuple[int, int]:
+        return 2, 200
+
+    adapter.preview_dataset = capacity_candidate  # type: ignore[method-assign]
+    deleted, _freed = await adapter.prune_dataset("message_history", LifecyclePolicy(True, 30, 100))
+
+    assert deleted == 2
+    assert "time IS NOT NULL" in statements[0]
+    assert "time < :cutoff" not in statements[0]

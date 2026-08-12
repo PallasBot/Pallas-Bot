@@ -49,7 +49,7 @@ class LifecycleService:
         self.policy_loader = policy_loader
         self.token_ttl_sec = token_ttl_sec
         self.token_secret = secrets.token_bytes(32)
-        self.preview_nonces: set[str] = set()
+        self.preview_nonces: dict[str, float] = {}
         self.jobs: dict[str, LifecycleJob] = {}
         self.job_tasks: dict[str, asyncio.Task[None]] = {}
 
@@ -94,6 +94,8 @@ class LifecycleService:
         candidate_rows, candidate_bytes = await self.adapter.preview_dataset(dataset_id, policy)  # type: ignore[attr-defined]
         expires_at = time.time() + self.token_ttl_sec
         nonce = secrets.token_urlsafe(12)
+        self.prune_preview_nonces()
+        self.preview_nonces[nonce] = expires_at
         payload = {
             "backend": self.adapter.backend,
             "dataset_id": dataset_id,
@@ -103,7 +105,6 @@ class LifecycleService:
             "expires_at": expires_at,
             "nonce": nonce,
         }
-        self.preview_nonces.add(nonce)
         return LifecyclePreview(
             dataset_id=dataset_id,
             candidate_rows=candidate_rows,
@@ -148,7 +149,7 @@ class LifecycleService:
             raise LifecycleConflictError("确认信息已使用或无效，请重新预估")
         if self.active_job() is not None:
             raise LifecycleConflictError("已有生命周期任务正在运行")
-        self.preview_nonces.remove(nonce)
+        self.preview_nonces.pop(nonce, None)
         job = LifecycleJob(
             job_id=secrets.token_urlsafe(12),
             dataset_id=dataset_id,
@@ -214,6 +215,12 @@ class LifecycleService:
             raise LifecycleConflictError("确认信息已过期，请重新预估")
         return payload
 
+    def prune_preview_nonces(self) -> None:
+        now = time.time()
+        for nonce, expires_at in tuple(self.preview_nonces.items()):
+            if expires_at < now:
+                self.preview_nonces.pop(nonce, None)
+
     def prune_job_history(self) -> None:
         if len(self.jobs) <= 24:
             return
@@ -249,7 +256,7 @@ async def acquire_global_lock(owner: str) -> bool:
 
     client = get_coord_redis_client()
     if client is None:
-        return False
+        return True
     try:
         result = await asyncio.to_thread(
             client.set,
@@ -259,7 +266,7 @@ async def acquire_global_lock(owner: str) -> bool:
             ex=_GLOBAL_LOCK_TTL_SEC,
         )
     except Exception:  # noqa: BLE001
-        return False
+        return True
     return bool(result)
 
 
