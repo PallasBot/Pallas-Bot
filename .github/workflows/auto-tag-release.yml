@@ -1,0 +1,61 @@
+name: Auto Tag Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: auto-tag-release
+  cancel-in-progress: false
+
+jobs:
+  auto-tag:
+    runs-on: ubuntu-latest
+    if: github.repository == 'PallasBot/Pallas-Bot'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Detect release commit and tag
+        id: detect
+        run: |
+          set -euo pipefail
+          # 发版提交：squash 合入时 HEAD 即 chore(release)；merge commit 时取其第二 parent（dev tip）
+          MESSAGE="$(git log -1 --format=%s)"
+          if ! [[ "${MESSAGE}" =~ ^chore\(release\): ]]; then
+            MESSAGE="$(git log -1 --format=%s HEAD^2 2>/dev/null || true)"
+          fi
+          echo "release_message=${MESSAGE}"
+          if ! [[ "${MESSAGE}" =~ ^chore\(release\):[[:space:]]*v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+            echo "::notice::main 本次 push 未含 chore(release) 提交，跳过自动打 tag"
+            exit 0
+          fi
+          VERSION="$(sed -E 's/^chore\(release\):[[:space:]]*//' <<<"${MESSAGE}" | cut -d' ' -f1)"
+          if git rev-parse -q --verify "refs/tags/${VERSION}" >/dev/null 2>&1; then
+            echo "::notice::tag ${VERSION} 已存在，跳过"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "${VERSION}" -m "chore(release): ${VERSION}"
+          git push origin "${VERSION}"
+          echo "tag=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "::notice::已自动打 tag ${VERSION}"
+
+      - name: Trigger Release workflow
+        if: steps.detect.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # GITHUB_TOKEN push tag 不会触发 push:tags 事件，显式 dispatch Release
+          gh workflow run release.yml --ref main -f version="${{ steps.detect.outputs.tag }}"
+          echo "::notice::已触发 Release workflow for ${{ steps.detect.outputs.tag }}"
