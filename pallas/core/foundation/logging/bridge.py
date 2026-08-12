@@ -295,6 +295,8 @@ def format_business_event(action: str, result: str, /, **fields: object) -> str:
             f"in group [{fields.get('group')}]: pending [{fields.get('pending')}] "
             f"reached limit [{fields.get('limit')}]."
         )
+    if action == "发送队列" and result == "失败":
+        return f"[SendQueue] Bot [{fields.get('bot')}] failed {fields.get('api')}: {fields.get('error')}"
 
     subject = _BUSINESS_EVENT_ACTIONS.get(action, action)
     outcome = _BUSINESS_EVENT_RESULTS.get(result, result)

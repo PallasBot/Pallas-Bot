@@ -160,6 +160,12 @@ def test_format_business_event_writes_action_tagged_narratives() -> None:
         "[Reaction] Bot [10001] skipped auto reaction for message [99] in group [20002]: "
         "pending [64] reached limit [64]."
     )
+    assert (
+        format_business_event(
+            "发送队列", "失败", bot=10001, api="set_msg_emoji_like", error="ActionFailed(already set)"
+        )
+        == "[SendQueue] Bot [10001] failed set_msg_emoji_like: ActionFailed(already set)"
+    )
     assert format_business_event("语料回填批次", "已跳过", reason=None) == "Corpus backfill batch skipped"
 
 

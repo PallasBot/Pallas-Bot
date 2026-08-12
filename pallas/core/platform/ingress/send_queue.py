@@ -9,6 +9,7 @@ from typing import Any
 from nonebot.log import logger
 
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value
+from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.core.foundation.logging.throttle import log_rate_limited
 
 _ORIGINAL_CALL_API = None
@@ -239,10 +240,13 @@ async def _execute_queue_item(item: SendQueueItem) -> None:
             logger,
             "warning",
             f"send_queue.error.{item.api}",
-            "send_queue [{}] failed bot [{}]: {}",
-            item.api,
-            getattr(item.bot, "self_id", "?"),
-            exc,
+            format_business_event(
+                "发送队列",
+                "失败",
+                bot=getattr(item.bot, "self_id", "?"),
+                api=item.api,
+                error=exc,
+            ),
         )
         if not item.future.done():
             item.future.set_exception(exc)
