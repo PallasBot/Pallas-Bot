@@ -15,6 +15,13 @@ def test_apply_model_effort_disable_deepseek() -> None:
     assert payload["thinking"] == {"type": "disabled"}
 
 
+def test_apply_model_effort_non_deepseek_chat_disable_thinking() -> None:
+    payload: dict = {"model": "qwen3.7-max"}
+    apply_model_effort_to_payload(payload, {"model_effort": "disable"}, model="qwen3.7-max")
+    assert payload["thinking"] == {"type": "disabled"}
+    assert "reasoning_effort" not in payload
+
+
 def test_apply_model_effort_deepseek_default_disables_thinking() -> None:
     payload: dict = {"model": "deepseek-v4-flash"}
     apply_model_effort_to_payload(payload, {}, model="deepseek-v4-flash")

@@ -377,6 +377,10 @@ def apply_model_effort_to_payload(
         if is_responses:
             payload["reasoning"] = {"effort": "none"}
             payload.pop("reasoning_effort", None)
+            return
+        # 非 DeepSeek 模型（如 qwen3）默认可能开思考，required tool_choice 会被拒；同样禁用
+        payload["thinking"] = {"type": "disabled"}
+        payload.pop("reasoning_effort", None)
         return
 
     mapped = "high" if effort == "xhigh" else effort
