@@ -640,11 +640,7 @@ def _federate_peer_display_label(deployment_id: str) -> str:
 
 def log_incompatible_federate_ingress_peers() -> None:
     global _last_incompatible_ingress_peers
-    peers = tuple(
-        dep
-        for dep in get_incompatible_federate_ingress_peers()
-        if _federate_peer_shares_present_group(dep)
-    )
+    peers = tuple(dep for dep in get_incompatible_federate_ingress_peers() if _federate_peer_shares_present_group(dep))
     if peers == _last_incompatible_ingress_peers:
         return
     _last_incompatible_ingress_peers = peers
