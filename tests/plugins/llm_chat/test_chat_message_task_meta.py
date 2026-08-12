@@ -102,6 +102,23 @@ def test_llm_chat_rule_accepts_federated_alias_winner(monkeypatch: pytest.Monkey
 
 
 @pytest.mark.asyncio
+async def test_resolve_speak_aliases_caches_bot_persona(monkeypatch: pytest.MonkeyPatch) -> None:
+    from packages.llm_chat import chat_message as mod
+
+    repo = SimpleNamespace(get=AsyncMock(return_value=SimpleNamespace(persona={"self_aliases": ["牛牛"]})))
+    monkeypatch.setattr("pallas.core.foundation.db.make_bot_config_repository", lambda: repo)
+    monkeypatch.setattr(mod, "resolve_login_nickname", AsyncMock(return_value=""))
+    monkeypatch.setattr(mod, "resolve_cached_login_nickname", lambda _bot_id: "")
+    monkeypatch.setattr(mod, "resolve_managed_display_name", lambda _bot_id: "")
+    mod.clear_speak_alias_cache_for_tests()
+
+    assert await mod._resolve_speak_aliases(10001) == ["牛牛"]
+    assert await mod._resolve_speak_aliases(10001) == ["牛牛"]
+
+    repo.get.assert_awaited_once_with(10001)
+
+
+@pytest.mark.asyncio
 async def test_handle_llm_chat_skips_empty_to_me_without_reply(monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.llm_chat import chat_message as mod
 

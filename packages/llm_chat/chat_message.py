@@ -101,6 +101,13 @@ from .replies import (
     LLM_CHAT_VAGUE_REPLY,
 )
 
+_SPEAK_ALIAS_CACHE_TTL_SEC = 60.0
+_speak_alias_cache: dict[int, tuple[float, list[str]]] = {}
+
+
+def clear_speak_alias_cache_for_tests() -> None:
+    _speak_alias_cache.clear()
+
 
 async def load_recent_bot_plain_replies(bot_id: int, group_id: int, *, limit: int = 6) -> list[str]:
     from pallas.core.foundation.db import make_message_repository
@@ -155,25 +162,32 @@ llm_chat_msg = on_message(
 
 
 async def _resolve_speak_aliases(bot_id: int) -> list[str]:
-    login_nick = await resolve_login_nickname(int(bot_id))
+    bot_id = int(bot_id)
+    now = time.monotonic()
+    cached = _speak_alias_cache.get(bot_id)
+    if cached is not None and cached[0] > now:
+        return cached[1]
+    login_nick = await resolve_login_nickname(bot_id)
     if not login_nick:
-        login_nick = resolve_cached_login_nickname(int(bot_id))
-    managed_display_name = resolve_managed_display_name(int(bot_id))
+        login_nick = resolve_cached_login_nickname(bot_id)
+    managed_display_name = resolve_managed_display_name(bot_id)
     persona_dict = None
     try:
         from pallas.core.foundation.db import make_bot_config_repository
 
-        doc = await make_bot_config_repository().get(int(bot_id))
+        doc = await make_bot_config_repository().get(bot_id)
         raw = getattr(doc, "persona", None) if doc is not None else None
         if isinstance(raw, dict):
             persona_dict = raw
     except Exception:
         persona_dict = None
-    return extract_self_aliases(
+    aliases = extract_self_aliases(
         persona_dict,
         login_nickname=login_nick or None,
         managed_display_name=managed_display_name or None,
     )
+    _speak_alias_cache[bot_id] = (now + _SPEAK_ALIAS_CACHE_TTL_SEC, aliases)
+    return aliases
 
 
 async def latest_llm_assistant_reply(bot_id: int, group_id: int | None, user_id: int) -> str:
@@ -318,6 +332,7 @@ async def handle_llm_chat(
             return
 
     if await save_self_alias_from_teach(int(bot.self_id), plain or msg):
+        _speak_alias_cache.pop(int(bot.self_id), None)
         await send_message(LLM_CHAT_ALIAS_SAVED_REPLY)
         return
 
@@ -327,7 +342,8 @@ async def handle_llm_chat(
 
     # 弱模式称呼静默沉淀，不打断闲聊
     try:
-        await maybe_persist_self_alias_from_utterance(int(bot.self_id), plain or msg)
+        if await maybe_persist_self_alias_from_utterance(int(bot.self_id), plain or msg):
+            _speak_alias_cache.pop(int(bot.self_id), None)
     except Exception:
         logger.debug("self_alias observe persist skipped")
 
