@@ -18,6 +18,7 @@ from pallas.console.webui.community_plugin_index import (
     load_index_from_path,
 )
 from pallas.console.webui.community_plugin_registry import resolve_community_plugin_avatar
+from pallas.console.webui.local_plugin_uninstall import plugin_uninstall_info
 from pallas.console.webui.plugin_package_assets import resolve_plugin_package_visual_urls
 from pallas.core.foundation.paths import PROJECT_ROOT
 from pallas.core.platform.bot_runtime.plugin_matrix import (
@@ -664,6 +665,13 @@ def build_plugin_catalog_rows(
             plugin_source=plugin_source,
             plugin_root=root,
         )
+        uninstall_info = plugin_uninstall_info(
+            plugin_id=resolved_plugin_id,
+            plugin_source=plugin_source,
+            plugin_source_dir=plugin_source_dir,
+            module_name=module_name,
+            top_level_distributions=top_level_distributions,
+        )
         rows.append({
             "name": resolved_plugin_id,
             "nb_plugin_name": nb_name,
@@ -684,6 +692,9 @@ def build_plugin_catalog_rows(
             "plugin_source_dir": plugin_source_dir,
             "plugin_version": version,
             "extra_package": extra_package_for_plugin(resolved_plugin_id),
+            "uninstallable": uninstall_info["uninstallable"],
+            "uninstall_kind": uninstall_info["uninstall_kind"],
+            "uninstall_target": uninstall_info["uninstall_target"],
             "avatar": visuals["avatar"],
             "icon": visuals["icon"],
             "cover": visuals["cover"],

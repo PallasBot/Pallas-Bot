@@ -128,6 +128,12 @@ class _CommunityPluginActionBody(BaseModel):
     restart: bool = False
 
 
+class _LocalPluginActionBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    plugin_id: str = Field(min_length=1, max_length=64)
+
+
 class _GlobalPluginDisableBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -174,6 +180,7 @@ PluginConfigRawBody = _PluginConfigRawBody
 PluginGovernanceBody = _PluginGovernanceBody
 OfficialExtensionPackageBody = _OfficialExtensionPackageBody
 CommunityPluginActionBody = _CommunityPluginActionBody
+LocalPluginActionBody = _LocalPluginActionBody
 HelpMenuVisibilityBody = _HelpMenuVisibilityBody
 GlobalPluginDisableBody = _GlobalPluginDisableBody
 GroupFleetWhitelistBody = _GroupFleetWhitelistBody
@@ -1129,6 +1136,63 @@ def register_plugins_console_router(
         except Exception as e:  # noqa: BLE001
             logger.exception("[WebUI] 更新社区插件失败")
             raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
+
+    @router.post(f"{x}/plugins/local-plugins/uninstall", include_in_schema=True)
+    async def _plugins_local_plugins_uninstall(
+        body: LocalPluginActionBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.console.webui.local_plugin_uninstall import (
+            LocalPluginUninstallError,
+            uninstall_local_plugin,
+        )
+        from pallas.core.shared.utils.format_exception import format_exception_for_log
+
+        try:
+            data = await uninstall_local_plugin(body.plugin_id)
+            drop_read_cache(("plugins", "plugins-community-store", "plugins-official-extensions"))
+            return JSONResponse({"ok": True, "data": data})
+        except LocalPluginUninstallError as e:
+            raise HTTPException(status_code=e.status_code, detail=e.detail) from e
+        except Exception as e:  # noqa: BLE001
+            logger.exception("[WebUI] 卸载本地插件失败")
+            raise HTTPException(status_code=500, detail=format_exception_for_log(e)) from e
+
+    @router.post(f"{x}/plugins/local-plugins/uninstall-async", include_in_schema=True)
+    async def _plugins_local_plugins_uninstall_async(
+        body: LocalPluginActionBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        import asyncio
+
+        from pallas.console.webui.local_plugin_uninstall import uninstall_local_plugin
+        from pallas.console.webui.plugin_store_job_progress import (
+            create_plugin_store_job,
+            job_progress_reporter,
+            run_plugin_store_job,
+        )
+
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        job = await create_plugin_store_job(
+            kind="local",
+            target=body.plugin_id.strip(),
+            action="uninstall",
+        )
+
+        async def runner(j) -> None:
+            data = await uninstall_local_plugin(
+                j.target,
+                on_progress=job_progress_reporter(j),
+            )
+            drop_read_cache(("plugins", "plugins-community-store", "plugins-official-extensions"))
+            j.result = dict(data)
+            j.message = str(data.get("message") or "完成")
+
+        asyncio.create_task(run_plugin_store_job(job, runner))
+        return JSONResponse({"ok": True, "data": {"job_id": job.job_id, "plugin_id": job.target}})
 
     from pallas.console.webui.git_mirror_api import register_git_mirror_router
 

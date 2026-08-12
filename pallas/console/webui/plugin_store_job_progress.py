@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     from pallas.core.shared.utils.stream_download import StreamDownloadProgress
 
 JobPhase = Literal["queued", "running", "done", "failed"]
-StoreKind = Literal["official", "community"]
+StoreKind = Literal["official", "community", "local"]
 StoreAction = Literal["install", "update", "uninstall"]
 ProgressReporter = Callable[[int, str], None]
 
