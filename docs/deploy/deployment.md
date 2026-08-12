@@ -116,7 +116,7 @@ uv run python tools/migrate_env_to_pallas.py
 - PostgreSQL：[官方下载](https://www.postgresql.org/download/) · [deploy/pg/README.md](https://github.com/PallasBot/Pallas-Bot/blob/main/deploy/pg/README.md)
 - MongoDB（升级沿用）：[Windows](https://www.runoob.com/mongodb/mongodb-window-install.html) · [Linux](https://www.runoob.com/mongodb/mongodb-linux-install.html)
 
-库表由 Pallas-Bot 首次启动自动初始化（PG 须目标库已存在；应用账号不必为超级用户）。PG 排障见 [Docker 部署 · PG](/deploy/docker#pg-日志-fatal-database-pallasbot-does-not-exist)。
+库表由 Pallas-Bot 首次启动自动初始化（PG 须目标库已存在；应用账号不必为超级用户）。PG 排障见 [Docker 部署 · PG](/deploy/docker#排障)。
 
 启动前确认：
 
@@ -215,7 +215,7 @@ WantedBy=multi-user.target
 - 启动：`./scripts/run_sharded_bot.sh start`（[分片架构](/maintainer/deploy/sharded)）
 - Redis：**必需**；配置 `REDIS_URL` 并安装 `coord-redis` / `deploy-shard`
 - 控制台与协议端管理仅访问 hub 端口（默认 `8088`）
-- 切换前备份 `data/`；Docker 示例见 [Docker · 分片](/deploy/docker#多进程分片可选)
+- 切换前备份 `data/`；Docker 示例见 [Docker · 分片](/deploy/docker)
 
 ---
 
@@ -259,7 +259,7 @@ WantedBy=multi-user.target
 3. `bot.py` 启动时调用 `init_db()`、`ensure_voices()`（参见仓库 [`bot.py`](https://github.com/PallasBot/Pallas-Bot/blob/main/bot.py)）
 4. 配置使用 `config/pallas.toml` + `webui.json`
 
-插件列表：[插件索引](/plugins/index)。多 Bot 共存时注意 `matcher` 优先级与 `block` 插件。
+插件列表：[插件索引](/plugins/)。多 Bot 共存时注意 `matcher` 优先级与 `block` 插件。
 
 ---
 
@@ -268,7 +268,7 @@ WantedBy=multi-user.target
 | 主题 | 文档 |
 | --- | --- |
 | 插件安装 | [安装插件](/guide/install-plugins) |
-| 插件命令 | [插件索引](/plugins/index) |
+| 插件命令 | [插件索引](/plugins/) |
 | 控制台配置 | [Web 控制台](/common/webui) |
 | 排障 | [FAQ](/deploy/faq) |
 | Docker | [Docker 部署](/deploy/docker) |
