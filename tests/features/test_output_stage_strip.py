@@ -19,6 +19,14 @@ def test_strip_stage_direction_parens() -> None:
     assert "维尼修斯" in strip_stage_direction_parens("小熊（维尼修斯）也猛")
 
 
+def test_strip_stage_direction_parens_broadened() -> None:
+    assert strip_stage_direction_parens("（翻个白眼）我走了，你继续喵吧。") == "我走了，你继续喵吧。"
+    assert strip_stage_direction_parens("（引用）你这话说的，啥意思啊") == "你这话说的，啥意思啊"
+    # 行首整段旁白兜底剥离，再拆段
+    assert strip_stage_direction_parens("（这谁点的歌啊）\nStan？ 还是Eminem的Stan？") == "Stan？ 还是Eminem的Stan？"
+    assert strip_stage_direction_parens("（抬头看看）\n这得先定义什么叫正常") == "这得先定义什么叫正常"
+
+
 def test_looks_like_truncated_reply() -> None:
     assert looks_like_truncated_reply("我真牛啊，把别的")
     assert looks_like_truncated_reply("行，我把自己打成")
