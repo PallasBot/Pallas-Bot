@@ -7,7 +7,7 @@ import os
 import time
 from typing import Any
 
-from pallas.core.platform.coord.redis_claim import log_coord_redis_failure
+from pallas.core.platform.coord.redis_logging import log_coord_redis_failure
 from pallas.core.platform.shard import context as shard_ctx
 from pallas.core.platform.shard.registry import get_shard_registry, worker_port_for_shard
 from pallas.core.platform.shard.registry.config import get_shard_registry_settings

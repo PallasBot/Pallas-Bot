@@ -4,9 +4,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from nonebot.log import logger
-
-from pallas.core.foundation.logging.throttle import log_rate_limited
+from pallas.core.platform.coord.redis_logging import log_coord_redis_failure
 from pallas.core.platform.coord.redis_settings import (
     coord_redis_claim_ttl_sec,
     coord_redis_enabled,
@@ -14,18 +12,6 @@ from pallas.core.platform.coord.redis_settings import (
 )
 
 _KEY_PREFIX = "pallas:msg_claim:"
-
-
-def log_coord_redis_failure(op: str, err: Exception) -> None:
-    """coord Redis 故障限频 warning，避免每消息刷屏。"""
-    log_rate_limited(
-        logger,
-        "warning",
-        f"coord_redis.{op}",
-        "coord redis {} failed: {}",
-        op,
-        err,
-    )
 
 
 def claim_redis_key(plugin: str, group_id: int, message_id: int) -> str:

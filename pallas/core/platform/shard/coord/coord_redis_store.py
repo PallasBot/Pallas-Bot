@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from pallas.core.platform.coord.redis_claim import log_coord_redis_failure
+from pallas.core.platform.coord.redis_logging import log_coord_redis_failure
 
 
 def safe_key_part(raw: str | int) -> str:
