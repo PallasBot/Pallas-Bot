@@ -48,6 +48,11 @@ def test_stdlib_logger_channel_label_uses_repo_aliases() -> None:
     assert _stdlib_logger_channel_label("uvicorn.error") == "HTTP 服务"
 
 
+def test_stdlib_logger_channel_label_falls_back_to_dotted_pascal_case() -> None:
+    assert _stdlib_logger_channel_label("apscheduler.executors.default") == "ApschedulerExecutorsDefault"
+    assert _stdlib_logger_channel_label("third_party.client") == "ThirdPartyClient"
+
+
 def test_repo_console_log_template_colors_display_and_prefix() -> None:
     record = {"name": "pallas.core.platform.work_jobs.worker", "extra": {}, "message": "work aux: started"}
 

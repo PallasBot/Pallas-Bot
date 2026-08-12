@@ -32,6 +32,36 @@ def _send_queue_dropped(snap: dict) -> int:
     return int((snap.get("send_queue") or {}).get("dropped") or 0)
 
 
+def _dispatch_stats_text(snap: dict) -> str:
+    """入站调度统计：一行叙事摘要 + 一行关键详情，次要指标见 WebUI。"""
+    scheduler = snap.get("conversation_scheduler") or {}
+    send_q = snap.get("send_queue") or {}
+    hot = snap.get("hotpath") or {}
+
+    def ints(source: dict, *keys: str) -> tuple[int, ...]:
+        return tuple(int(source.get(key) or 0) for key in keys)
+
+    def ms(source: dict, key: str) -> str:
+        value = source.get(key)
+        return f"{value}ms" if value is not None else "-"
+
+    group_messages, cmd, chat = ints(snap, "group_messages", "command_traffic", "chatter_traffic")
+    overload, chat_degraded = ints(snap, "overload_signals", "chatter_overload_degraded")
+    pending = int(scheduler.get("pending") or 0)
+    llm_active, llm_waiting, llm_reserved = ints(scheduler, "llm_active", "llm_waiting", "llm_reserved")
+    depth, max_depth = ints(send_q, "depth", "max_depth")
+
+    return (
+        f"ingress_dispatch: processed [{group_messages}] group messages "
+        f"([{cmd}] commands, [{chat}] chat)\n"
+        f"  p95 [{ms(snap, 'ingress_duration_ms_p95')}]  overload [{overload}]  degraded [{chat_degraded}]\n"
+        f"  scheduler [{pending}/{scheduler.get('max_pending')}]  llm [{llm_active}/{llm_waiting}/{llm_reserved}]  "
+        f"send_q [{depth}/{max_depth}]\n"
+        f"  bundle [{ms(hot, 'bundle_ms_p95')}]  db_find [{ms(hot, 'db_find_ms_p95')}]  "
+        f"sql [{ms(hot, 'sql_total_ms_p95')}]"
+    )
+
+
 def dispatch_stats_tick_notable(snap: dict, *, prev: dict | None = None) -> bool:
     """健康周期票走 DEBUG；本周期 busy·丢弃增量 / 排队过半 / 高 p95 才 INFO。
 
@@ -74,76 +104,9 @@ async def dispatch_stats_log_loop() -> None:
         if group_messages <= 0:
             prev = snap
             continue
-        considered = int(snap.get("matchers_considered") or 0)
-        selected = int(snap.get("matchers_selected") or 0)
-        scheduler = snap.get("conversation_scheduler") or {}
-        chat_lane = (snap.get("lanes") or {}).get("chat") or {}
         log = logger.info if dispatch_stats_tick_notable(snap, prev=prev) else logger.debug
         prev = snap
-        log(
-            "ingress_dispatch: stats group_messages={} cmd={} chat={} route_hit={} route_fallback={} "
-            "matchers {}/{} run={} p95={}ms lane_wait_avg={} overload={} chat_drop={} chat_degraded={} stale_drop={} "
-            "lane_busy={} chat_lane={}/{} sched={}/{} active={} ready={} llm={}/{}/{} wait_p95={}ms backpressure={} "
-            "send_q={}/{} dropped={} "
-            "| hotpath route_p95={}ms kw_p95={}ms bundle_p95={}ms "
-            "bundle_cache_hit={} db_find_p95={}ms persona_p95={}ms ban_p95={}ms feedback_p95={}ms select_p95={}ms "
-            "sql_total_p95={}ms snap_hit={} "
-            "learn={}/{}/{}/{} work={}/{}/{} shed={} llm_retained={} llm_budget_skip={}/{}/{}/{}/{}",
-            group_messages,
-            int(snap.get("command_traffic") or 0),
-            int(snap.get("chatter_traffic") or 0),
-            int(snap.get("route_index_hits") or 0),
-            int(snap.get("route_index_fallbacks") or 0),
-            selected,
-            considered,
-            int(snap.get("matchers_run") or 0),
-            snap.get("ingress_duration_ms_p95"),
-            snap.get("lane_wait_ms_avg"),
-            int(snap.get("overload_signals") or 0),
-            int(snap.get("chatter_overload_dropped") or 0),
-            int(snap.get("chatter_overload_degraded") or 0),
-            int(snap.get("stale_messages_dropped") or 0),
-            int(snap.get("lane_busy") or 0),
-            chat_lane.get("in_use"),
-            chat_lane.get("limit"),
-            scheduler.get("pending"),
-            scheduler.get("max_pending"),
-            scheduler.get("active"),
-            scheduler.get("ready"),
-            scheduler.get("llm_active"),
-            scheduler.get("llm_waiting"),
-            scheduler.get("llm_reserved"),
-            scheduler.get("wait_ms_p95"),
-            scheduler.get("backpressure_waits"),
-            (snap.get("send_queue") or {}).get("depth"),
-            (snap.get("send_queue") or {}).get("max_depth"),
-            (snap.get("send_queue") or {}).get("dropped"),
-            (snap.get("hotpath") or {}).get("route_ms_p95"),
-            (snap.get("hotpath") or {}).get("keywords_ms_p95"),
-            (snap.get("hotpath") or {}).get("bundle_ms_p95"),
-            (snap.get("hotpath") or {}).get("bundle_cache_hit_ratio"),
-            (snap.get("hotpath") or {}).get("db_find_ms_p95"),
-            (snap.get("hotpath") or {}).get("persona_ms_p95"),
-            (snap.get("hotpath") or {}).get("ban_ms_p95"),
-            (snap.get("hotpath") or {}).get("feedback_ms_p95"),
-            (snap.get("hotpath") or {}).get("select_ms_p95"),
-            (snap.get("hotpath") or {}).get("sql_total_ms_p95"),
-            (snap.get("hotpath") or {}).get("reply_snapshot_hit_ratio"),
-            int((snap.get("hotpath") or {}).get("learn_buffered") or 0),
-            int((snap.get("hotpath") or {}).get("learn_persisted") or 0),
-            int((snap.get("hotpath") or {}).get("learn_skipped_full") or 0),
-            int((snap.get("hotpath") or {}).get("learn_dropped_shutdown") or 0),
-            int((snap.get("work_aux") or {}).get("completed_since_start") or 0),
-            int((snap.get("work_aux") or {}).get("retried_since_start") or 0),
-            int((snap.get("work_aux") or {}).get("dead_lettered_since_start") or 0),
-            int((snap.get("hotpath") or {}).get("chat_shed_sidework") or 0),
-            int((snap.get("hotpath") or {}).get("llm_retained_under_shed") or 0),
-            int((snap.get("hotpath") or {}).get("llm_budget_skipped_explicit") or 0),
-            int((snap.get("hotpath") or {}).get("llm_budget_skipped_ambient") or 0),
-            int((snap.get("hotpath") or {}).get("llm_budget_skipped_repeater_strong") or 0),
-            int((snap.get("hotpath") or {}).get("llm_budget_skipped_repeater_weak") or 0),
-            int((snap.get("hotpath") or {}).get("llm_budget_skipped_proactive") or 0),
-        )
+        log(_dispatch_stats_text(snap))
 
 
 def start_dispatch_stats_logger() -> None:
