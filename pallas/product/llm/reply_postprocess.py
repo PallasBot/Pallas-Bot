@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import random
+import re
 
 _SHORT_REPLY_SPLIT_PUNCTUATION = frozenset("。！？!?")
 
@@ -53,25 +54,39 @@ def apply_chinese_typo(text: str, *, error_rate: float = 0.01, rng_seed: int | N
     return "".join(chars)
 
 
-def split_short_reply_segments(text: str) -> list[str]:
-    plain = str(text or "").strip()
-    if not plain:
-        return []
+def _split_line_at_sentence_endings(text: str) -> list[str]:
     segments: list[str] = []
     start = 0
-    for index, char in enumerate(plain):
+    for index, char in enumerate(text):
         if char not in _SHORT_REPLY_SPLIT_PUNCTUATION:
             continue
-        segment = plain[start : index + 1].strip()
+        segment = text[start : index + 1].strip()
         if segment:
             segments.append(segment)
         start = index + 1
         if len(segments) == 2:
             break
-    tail = plain[start:].strip()
+    tail = text[start:].strip()
     if tail:
         segments.append(tail)
-    return segments if len(segments) > 1 else [plain]
+    return segments
+
+
+def split_short_reply_segments(text: str) -> list[str]:
+    plain = str(text or "").strip()
+    if not plain:
+        return []
+    segments: list[str] = []
+    for line in re.split(r"[ \t]*\r?\n[ \t]*", plain):
+        line = line.strip()
+        if not line:
+            continue
+        segments.extend(_split_line_at_sentence_endings(line))
+    if len(segments) <= 1:
+        return [plain]
+    if len(segments) > 3:
+        return [*segments[:2], "\n".join(segments[2:])]
+    return segments
 
 
 def apply_reply_postprocess(
