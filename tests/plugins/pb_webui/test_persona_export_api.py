@@ -4,9 +4,26 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI
+from fastapi.routing import _IncludedRouter
 
 from packages.pb_webui import extended_api as mod
 from packages.pb_webui.config import Config
+
+
+def _find_console_route_endpoint(app: FastAPI, path: str):
+    """FastAPI 0.141 include_router 把路由包进 _IncludedRouter，需展开查找。"""
+
+    def _walk(routes):
+        for route in routes:
+            if isinstance(route, _IncludedRouter):
+                yield from _walk(route.effective_candidates())
+            else:
+                yield route
+
+    for candidate in _walk(app.routes):
+        if getattr(candidate, "path", "") == path:
+            return getattr(candidate, "endpoint", None)
+    raise LookupError(path)
 
 
 def test_persona_export_endpoint_only_accepts_current_parameters(monkeypatch) -> None:
@@ -39,11 +56,7 @@ async def test_persona_export_endpoint_forwards_current_parameters(monkeypatch) 
     )
     app = FastAPI()
     mod.register_extended_api(app, api_base="/pallas/api", plugin_config=Config())
-    endpoint = next(
-        route.endpoint
-        for route in app.routes
-        if getattr(route, "path", "") == "/pallas/api/common-config/llm/persona/export"
-    )
+    endpoint = _find_console_route_endpoint(app, "/pallas/api/common-config/llm/persona/export")
     response = await endpoint(bot_id=10, group_id=20, plain_text="test", mode="normal")
 
     assert response.status_code == 200

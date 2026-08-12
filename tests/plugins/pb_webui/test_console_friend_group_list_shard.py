@@ -11,7 +11,7 @@ def empty_bots():
 
 
 def test_console_bot_online_in_cluster(monkeypatch) -> None:
-    monkeypatch.setattr(mod, "_shard_hub_console", lambda: True)
+    monkeypatch.setattr("packages.pb_webui.social_api.shard_hub_console", lambda: True)
     monkeypatch.setattr(
         "pallas.core.platform.shard.presence.get_cluster_online_bot_ids",
         lambda: frozenset({10001}),
@@ -21,8 +21,8 @@ def test_console_bot_online_in_cluster(monkeypatch) -> None:
 
 
 def test_console_bot_connection_meta_from_presence(monkeypatch) -> None:
-    monkeypatch.setattr(mod, "get_bots", empty_bots)
-    monkeypatch.setattr(mod, "_console_bot_online_in_cluster", lambda _sid: True)
+    monkeypatch.setattr("packages.pb_webui.social_api.get_bots", empty_bots)
+    monkeypatch.setattr("packages.pb_webui.social_api._console_bot_online_in_cluster", lambda _sid: True)
     monkeypatch.setattr(
         "pallas.core.platform.shard.presence.read_presence_bots",
         lambda: {
@@ -39,8 +39,8 @@ def test_console_bot_connection_meta_from_presence(monkeypatch) -> None:
 
 
 def test_console_bot_connection_meta_not_connected(monkeypatch) -> None:
-    monkeypatch.setattr(mod, "get_bots", empty_bots)
-    monkeypatch.setattr(mod, "_console_bot_online_in_cluster", lambda _sid: False)
+    monkeypatch.setattr("packages.pb_webui.social_api.get_bots", empty_bots)
+    monkeypatch.setattr("packages.pb_webui.social_api._console_bot_online_in_cluster", lambda _sid: False)
     with pytest.raises(HTTPException) as exc:
         mod._console_bot_connection_meta(10001)
     assert exc.value.status_code == 404

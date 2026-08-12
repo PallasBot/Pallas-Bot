@@ -4,11 +4,30 @@ import json
 from unittest.mock import AsyncMock
 
 from fastapi import FastAPI, Request
+from fastapi.routing import _IncludedRouter
 from fastapi.testclient import TestClient
 
 from packages.pb_webui import extended_api as mod
 from packages.pb_webui import plugins_console_api
 from packages.pb_webui.config import Config
+
+
+def _find_console_route(app: FastAPI, path: str, method: str):
+    """FastAPI 0.141 include_router 把路由包进 _IncludedRouter，需展开查找。"""
+
+    def _walk(routes):
+        for route in routes:
+            if isinstance(route, _IncludedRouter):
+                yield from _walk(route.effective_candidates())
+            else:
+                yield route
+
+    for candidate in _walk(app.routes):
+        if getattr(candidate, "path", "") == path and method in (
+            getattr(getattr(candidate, "original_route", None), "methods", None) or set()
+        ):
+            return candidate
+    raise LookupError(f"{method} {path}")
 
 
 def _build_client(monkeypatch) -> TestClient:
@@ -48,8 +67,7 @@ def test_plugin_governance_get_returns_commands_and_runtime(monkeypatch) -> None
         },
     )
     monkeypatch.setattr(
-        mod,
-        "_list_plugins_dict",
+        "packages.pb_webui.plugins_console_api._list_plugins_dict",
         lambda: [
             {
                 "package": "sing",
@@ -282,12 +300,7 @@ async def test_plugin_governance_put_omitted_fields_keep_existing_state(monkeypa
 
     app = FastAPI()
     mod.register_extended_api(app, api_base="/pallas/api", plugin_config=Config())
-    route = next(
-        route
-        for route in app.routes
-        if getattr(route, "path", "") == "/pallas/api/plugins/{plugin_name}/governance"
-        and "PUT" in getattr(route, "methods", set())
-    )
+    route = _find_console_route(app, "/pallas/api/plugins/{plugin_name}/governance", "PUT")
     response = await route.endpoint(
         plugin_name="dream",
         body=plugins_console_api.PluginGovernanceBody(help_hidden=True),
@@ -397,8 +410,7 @@ def test_plugin_config_get_resolves_official_pip_plugin_short_name(monkeypatch) 
 def test_plugin_config_get_preserves_field_groups_in_response_model(monkeypatch) -> None:
     """GET 经 response_model 序列化后须保留 field_groups，否则前端会退回单组面板。"""
     monkeypatch.setattr(
-        mod,
-        "plugin_config_payload",
+        "packages.pb_webui.plugins_console_api.plugin_config_payload",
         lambda _name: {
             "plugin": "pb_core",
             "module": "pb_core.config",

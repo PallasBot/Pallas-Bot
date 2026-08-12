@@ -11,7 +11,7 @@ def test_collect_flush_entries_merges_cluster_and_local(monkeypatch) -> None:
     ext._PLUGIN_RUN_STATS.clear()
     ext._CONSOLE_CAL_DAY.clear()
 
-    monkeypatch.setattr(ext, "_shard_hub_console", lambda: True)
+    monkeypatch.setattr("packages.pb_webui.console_metrics_runtime.shard_hub_console", lambda: True)
     monkeypatch.setattr(
         "pallas.core.platform.shard.console_stats.load_cluster_console_stats_by_sid",
         lambda: {
@@ -48,10 +48,10 @@ def test_collect_flush_entries_merges_cluster_and_local(monkeypatch) -> None:
 
 
 def test_console_daily_stats_disk_disabled_on_worker(monkeypatch) -> None:
-    monkeypatch.setattr(ext, "_shard_worker_console", lambda: True)
+    monkeypatch.setattr("packages.pb_webui.console_metrics_runtime.shard_worker_console", lambda: True)
     assert ext._console_daily_stats_disk_enabled() is False
 
-    monkeypatch.setattr(ext, "_shard_worker_console", lambda: False)
+    monkeypatch.setattr("packages.pb_webui.console_metrics_runtime.shard_worker_console", lambda: False)
     assert ext._console_daily_stats_disk_enabled() is True
 
 
@@ -80,11 +80,11 @@ def test_flush_worker_shard_console_stats_skips_non_local_stale_bots(monkeypatch
 
     captured: dict[str, object] = {}
 
-    monkeypatch.setattr(ext, "_shard_worker_console", lambda: True)
+    monkeypatch.setattr("packages.pb_webui.console_metrics_runtime.shard_worker_console", lambda: True)
     monkeypatch.setattr("nonebot.get_bots", lambda: {"222": object()})
     monkeypatch.setattr(
         "pallas.core.platform.shard.registry.config.get_shard_registry_settings",
-        lambda: SimpleNamespace(shard_id=1),
+        lambda: SimpleNamespace(shard_id=1, enabled=True),
     )
     monkeypatch.setattr(
         "pallas.core.platform.shard.presence.filter_local_qq_ids_for_presence",
@@ -132,15 +132,16 @@ def test_flush_worker_shard_console_stats_skips_non_local_stale_bots(monkeypatch
             "by_plugin": {"repeater": {"day_runs": 3}},
             "matcher_duration_log": [],
             "msg": {
-                "day_api_counts": {},
-                "day_api_total": 0,
-                "day_key": "2026-07-04",
-                "day_received": 2,
-                "day_sent": 1,
-                "received": 0,
                 "sent": 0,
+                "received": 0,
+                "day_sent": 1,
+                "day_received": 2,
+                "day_key": "2026-07-04",
+                "day_api_total": 0,
+                "day_api_counts": {},
                 "api_call_buckets": [],
                 "msg_traffic_buckets": [],
+                "day_active_groups": [],
             },
         }
     }

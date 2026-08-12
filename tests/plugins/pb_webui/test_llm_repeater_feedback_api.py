@@ -43,10 +43,8 @@ def test_llm_repeater_feedback_api_returns_recent_entries(monkeypatch) -> None:
         ]
 
     monkeypatch.setattr(
-        mod,
-        "list_group_feedback_entries",
+        "packages.pb_webui.llm_product_api.list_group_feedback_entries",
         fake_list_group_feedback_entries,
-        raising=False,
     )
 
     client = _build_client(monkeypatch)
@@ -74,10 +72,8 @@ def test_llm_repeater_feedback_summary_api_returns_group_snapshot(monkeypatch) -
         }
 
     monkeypatch.setattr(
-        mod,
-        "group_feedback_bias_snapshot",
+        "packages.pb_webui.llm_product_api.group_feedback_bias_snapshot",
         fake_group_feedback_bias_snapshot,
-        raising=False,
     )
 
     client = _build_client(monkeypatch)
@@ -117,10 +113,8 @@ def test_llm_repeater_feedback_promotion_candidates_api(monkeypatch) -> None:
         ]
 
     monkeypatch.setattr(
-        mod,
-        "list_promotion_candidates",
+        "packages.pb_webui.llm_product_api.list_promotion_candidates",
         fake_list_promotion_candidates,
-        raising=False,
     )
 
     client = _build_client(monkeypatch)
@@ -155,10 +149,8 @@ def test_llm_repeater_feedback_promotion_candidates_resolve_api(monkeypatch) -> 
         )
 
     monkeypatch.setattr(
-        mod,
-        "resolve_promotion_candidate_with_writeback",
+        "packages.pb_webui.llm_product_api.resolve_promotion_candidate_with_writeback",
         AsyncMock(side_effect=fake_resolve_promotion_candidate),
-        raising=False,
     )
 
     client = _build_client(monkeypatch)
@@ -190,7 +182,10 @@ def test_llm_repeater_feedback_manage_api(monkeypatch) -> None:
             eligible_for_bias=False,
         )
 
-    monkeypatch.setattr(mod, "set_feedback_entry_eligibility", fake_set_feedback_entry_eligibility, raising=False)
+    monkeypatch.setattr(
+        "packages.pb_webui.llm_product_api.set_feedback_entry_eligibility",
+        fake_set_feedback_entry_eligibility,
+    )
 
     client = _build_client(monkeypatch)
     response = client.post(
@@ -235,7 +230,10 @@ def test_llm_repeater_feedback_manage_correct_api(monkeypatch) -> None:
         )
 
     monkeypatch.setattr(mod, "find_feedback_entry", fake_find_feedback_entry, raising=False)
-    monkeypatch.setattr(mod, "set_feedback_entry_correction", fake_set_feedback_entry_correction, raising=False)
+    monkeypatch.setattr(
+        "packages.pb_webui.llm_product_api.set_feedback_entry_correction",
+        fake_set_feedback_entry_correction,
+    )
 
     client = _build_client(monkeypatch)
     response = client.post(

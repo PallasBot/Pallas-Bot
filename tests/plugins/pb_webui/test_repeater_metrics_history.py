@@ -30,7 +30,7 @@ def test_append_repeater_metrics_history_dedupes_last_row(tmp_path, monkeypatch)
 def test_flush_repeater_metrics_history_sync_writes_cluster(tmp_path, monkeypatch) -> None:
     from packages.pb_webui import repeater_metrics_history as hist_mod
 
-    monkeypatch.setattr(ext, "_shard_worker_console", lambda: False)
+    monkeypatch.setattr("packages.pb_webui.console_metrics_runtime.shard_worker_console", lambda: False)
     monkeypatch.setattr(hist_mod, "repeater_metrics_history_path", lambda: tmp_path / "repeater_metrics_history.jsonl")
     monkeypatch.setattr(
         "pallas.core.platform.shard.observability.aggregate_shard_observability",
@@ -54,7 +54,7 @@ def test_flush_repeater_metrics_history_sync_writes_cluster(tmp_path, monkeypatc
 def test_flush_repeater_metrics_history_sync_skips_worker(tmp_path, monkeypatch) -> None:
     from packages.pb_webui import repeater_metrics_history as hist_mod
 
-    monkeypatch.setattr(ext, "_shard_worker_console", lambda: True)
+    monkeypatch.setattr("packages.pb_webui.console_metrics_runtime.shard_worker_console", lambda: True)
     monkeypatch.setattr(hist_mod, "repeater_metrics_history_path", lambda: tmp_path / "repeater_metrics_history.jsonl")
 
     assert ext.flush_repeater_metrics_history_sync() is False
