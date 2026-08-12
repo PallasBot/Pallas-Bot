@@ -247,8 +247,10 @@ def _log_prefix_label(logger_name: str, message: str) -> str:
 
 _RAW_MESSAGE_EXTRA_KEY = "raw_message"
 
-# 消息行首业务标签：仅字母/中文（不含空格数字），避免误拆 ``[Bot 1111]`` 等正文
-_LEADING_TAG_RE = re.compile(r"^\[(?P<tag>[A-Za-z\u4e00-\u9fff]+)\]\s?(?P<body>[\s\S]*)$")
+# 消息行首业务标签：字母/中文/连字符/点/下划线，词间允许单空格；不含数字，
+# 避免误拆 ``[Bot 1111]``/``[群 123]``/``[用户发送了 3 张图片]`` 等正文
+_TAG_WORD = r"[A-Za-z\u4e00-\u9fff][A-Za-z\u4e00-\u9fff.\-_]*"
+_LEADING_TAG_RE = re.compile(rf"^\[(?P<tag>{_TAG_WORD}(?: {_TAG_WORD})*)\]\s?(?P<body>[\s\S]*)$")
 
 
 def _leading_business_tag(message: str) -> tuple[str, str]:
