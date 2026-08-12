@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 
 from pallas.console.cli.process_util import (
     clear_pid_file,
     pid_alive,
     read_pid_file,
+    report_process_stop,
     spawn_detached,
     stop_pid,
     uv_run_python_cmd,
@@ -75,7 +77,9 @@ def stop_work_aux(*, force: bool = False, dry_run: bool = False) -> None:
         return
     pid = read_pid_file(PID_FILE)
     if pid is not None:
+        started = time.monotonic()
         stop_pid(pid, timeout_s=15.0, force=force)
+        report_process_stop("work", pid, time.monotonic() - started)
     clear_pid_file(PID_FILE)
     print(f"  · work 辅进程：{'已强制停止' if force else '已停止'}")
 
