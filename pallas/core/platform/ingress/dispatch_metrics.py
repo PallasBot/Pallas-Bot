@@ -14,6 +14,7 @@ _COUNTERS = (
     "preprocessor_dropped",
     "chatter_overload_dropped",
     "chatter_overload_degraded",
+    "stale_messages_dropped",
     "route_index_hits",
     "route_index_fallbacks",
     "matchers_considered",
@@ -87,6 +88,11 @@ def record_chatter_overload_dropped() -> None:
 def record_chatter_overload_degraded() -> None:
     _rollover_if_needed()
     _state["chatter_overload_degraded"] += 1
+
+
+def record_stale_message_dropped() -> None:
+    _rollover_if_needed()
+    _state["stale_messages_dropped"] += 1
 
 
 def record_route_index_decision(*, index_hit: bool, fallback: bool) -> None:

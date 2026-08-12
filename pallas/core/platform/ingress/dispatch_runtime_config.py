@@ -177,6 +177,36 @@ class IngressDispatchRuntimeConfig(BaseModel):
             "变更后需重启 Bot 才生效",
         ),
     )
+    conversation_scheduler_startup_concurrency: int = Field(
+        default=2,
+        ge=1,
+        le=64,
+        description=field_help(
+            "冷启动窗口内群会话调度初始并发，窗口结束前渐进到目标并发",
+            "填正整数，默认 2",
+            "变更后需重启 Bot 才生效",
+        ),
+    )
+    cold_start_window_sec: float = Field(
+        default=60.0,
+        ge=0.0,
+        le=3600.0,
+        description=field_help(
+            "启动多久内视为冷启动窗口：闲聊接话降质、调度并发渐进",
+            "填秒数，默认 60；0 表示关闭冷启动保护",
+            "变更后需重启 Bot 才生效",
+        ),
+    )
+    stale_message_sec: float = Field(
+        default=120.0,
+        ge=0.0,
+        le=3600.0,
+        description=field_help(
+            "消息时间比当前早超过多少秒视为积压补推，只处理命令、跳过闲聊与复读",
+            "填秒数，默认 120；0 表示关闭积压丢弃",
+            "变更后需重启 Bot 才生效",
+        ),
+    )
     conversation_scheduler_llm_reserved: int = Field(
         default=6,
         ge=0,
@@ -337,6 +367,22 @@ class IngressDispatchRuntimeConfig(BaseModel):
                 default=conversation_default,
                 minimum=1,
                 maximum=64,
+            ),
+            conversation_scheduler_startup_concurrency=dispatch_env_int(
+                "PALLAS_CONVERSATION_SCHEDULER_STARTUP_CONCURRENCY",
+                default=min(2, conversation_default),
+                minimum=1,
+                maximum=64,
+            ),
+            cold_start_window_sec=dispatch_env_float(
+                "PALLAS_INGRESS_COLD_START_WINDOW_SEC",
+                default=60.0,
+                minimum=0.0,
+            ),
+            stale_message_sec=dispatch_env_float(
+                "PALLAS_INGRESS_STALE_MESSAGE_SEC",
+                default=120.0,
+                minimum=0.0,
             ),
             conversation_scheduler_adaptive_max=dispatch_env_int(
                 "PALLAS_CONVERSATION_SCHEDULER_ADAPTIVE_MAX",

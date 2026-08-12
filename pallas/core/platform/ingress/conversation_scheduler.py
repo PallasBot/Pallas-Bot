@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 
 from nonebot.adapters.onebot.v11 import GroupMessageEvent
 
+from pallas.core.platform.ingress.cold_start import in_cold_start_window
 from pallas.core.platform.ingress.dispatch_runtime_config import get_ingress_dispatch_runtime_config
 
 if TYPE_CHECKING:
@@ -157,6 +158,11 @@ class ConversationScheduler:
         async with self._condition:
             self.concurrency = max(1, int(concurrency))
             self._start_ready_locked()
+            self._condition.notify_all()
+
+    async def set_llm_reserved(self, reserved: int) -> None:
+        async with self._condition:
+            self.llm_reserved = max(0, min(int(reserved), self.concurrency - 1))
             self._condition.notify_all()
 
     async def stop(self) -> None:
@@ -344,12 +350,33 @@ async def start_conversation_scheduler() -> None:
     if _scheduler is not None or not conversation_scheduler_enabled():
         return
     config = get_ingress_dispatch_runtime_config()
+    target = config.conversation_scheduler_concurrency
+    startup = min(config.conversation_scheduler_startup_concurrency, target)
     _scheduler = ConversationScheduler(
-        concurrency=config.conversation_scheduler_concurrency,
+        concurrency=startup,
         max_pending=config.conversation_scheduler_max_pending,
         per_key_pending=config.conversation_scheduler_per_key_pending,
         llm_reserved=config.conversation_scheduler_llm_reserved,
     )
+    if startup < target:
+        asyncio.create_task(_ramp_up_scheduler(_scheduler), name="conversation_scheduler_startup_ramp")
+
+
+async def _ramp_up_scheduler(scheduler: ConversationScheduler) -> None:
+    """冷启动窗口内把调度并发渐进到目标，窗口结束或达目标后一次到位。"""
+    config = get_ingress_dispatch_runtime_config()
+    target = config.conversation_scheduler_concurrency
+    startup = config.conversation_scheduler_startup_concurrency
+    interval = config.conversation_scheduler_adaptive_interval_sec
+    while True:
+        if scheduler._stopping or scheduler.concurrency >= target:
+            break
+        if not in_cold_start_window():
+            break
+        await asyncio.sleep(interval)
+        await scheduler.set_concurrency(min(target, scheduler.concurrency + startup))
+    await scheduler.set_concurrency(target)
+    await scheduler.set_llm_reserved(config.conversation_scheduler_llm_reserved)
 
 
 async def stop_conversation_scheduler() -> None:

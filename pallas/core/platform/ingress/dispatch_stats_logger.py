@@ -82,7 +82,7 @@ async def dispatch_stats_log_loop() -> None:
         prev = snap
         log(
             "ingress_dispatch: stats group_messages={} cmd={} chat={} route_hit={} route_fallback={} "
-            "matchers {}/{} run={} p95={}ms lane_wait_avg={} overload={} chat_drop={} chat_degraded={} "
+            "matchers {}/{} run={} p95={}ms lane_wait_avg={} overload={} chat_drop={} chat_degraded={} stale_drop={} "
             "lane_busy={} chat_lane={}/{} sched={}/{} active={} ready={} llm={}/{}/{} wait_p95={}ms backpressure={} "
             "send_q={}/{} dropped={} "
             "| hotpath route_p95={}ms kw_p95={}ms bundle_p95={}ms "
@@ -102,6 +102,7 @@ async def dispatch_stats_log_loop() -> None:
             int(snap.get("overload_signals") or 0),
             int(snap.get("chatter_overload_dropped") or 0),
             int(snap.get("chatter_overload_degraded") or 0),
+            int(snap.get("stale_messages_dropped") or 0),
             int(snap.get("lane_busy") or 0),
             chat_lane.get("in_use"),
             chat_lane.get("limit"),

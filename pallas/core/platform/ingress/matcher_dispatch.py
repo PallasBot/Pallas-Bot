@@ -12,6 +12,7 @@ from nonebot.log import logger
 from nonebot.matcher import matchers
 
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value
+from pallas.core.platform.ingress.cold_start import in_cold_start_window, stale_message_drop_needed
 from pallas.core.platform.ingress.conversation_scheduler import (
     conversation_scheduler_enabled,
     submit_conversation_event,
@@ -27,6 +28,7 @@ from pallas.core.platform.ingress.dispatch_metrics import (
     record_group_message_ingress,
     record_preprocessor_dropped,
     record_route_index_decision,
+    record_stale_message_dropped,
 )
 from pallas.core.platform.ingress.fleet_dispatch_scale import scaled_dispatch_int
 from pallas.core.platform.ingress.matcher_activation import (
@@ -364,9 +366,10 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                     fallback=command_traffic and not resolution.index_hit,
                 )
             chat_degraded_token = None
-            if apply_dispatch and not command_traffic and is_overloaded():
-                if chat_drop_on_overload_enabled():
-                    record_chatter_overload_dropped()
+            if apply_dispatch and not command_traffic:
+                if stale_message_drop_needed(event):
+                    # 积压补推的旧消息：只处理命令，跳过闲聊与复读
+                    record_stale_message_dropped()
                     record_group_message_ingress(
                         duration_ms=(time.perf_counter() - ingress_started) * 1000.0,
                         command_traffic=False,
@@ -376,9 +379,21 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                     )
                     await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
                     return
-                # 默认：继续跑闲聊 matcher，标记降质（停附属、保本地接话）
-                record_chatter_overload_degraded()
-                chat_degraded_token = mark_chat_degraded(True)
+                if is_overloaded() or in_cold_start_window():
+                    if is_overloaded() and chat_drop_on_overload_enabled():
+                        record_chatter_overload_dropped()
+                        record_group_message_ingress(
+                            duration_ms=(time.perf_counter() - ingress_started) * 1000.0,
+                            command_traffic=False,
+                            matchers_considered=0,
+                            matchers_selected=0,
+                            matchers_run=0,
+                        )
+                        await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
+                        return
+                    # 默认：继续跑闲聊 matcher，标记降质（停附属、保本地接话）
+                    record_chatter_overload_degraded()
+                    chat_degraded_token = mark_chat_degraded(True)
 
             try:
                 total_selected = 0
