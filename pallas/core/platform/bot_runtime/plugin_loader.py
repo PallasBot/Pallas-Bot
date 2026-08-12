@@ -314,7 +314,12 @@ def _load_plugin_module(
         return False
     try:
         started_at = time.perf_counter()
-        nonebot.load_plugin(module_path)
+        plugin = nonebot.load_plugin(module_path)
+        if plugin is None:
+            # NoneBot 吞掉导入异常，仅打 Failed to import；此处据返回记为失败
+            record_startup_plugin_load_failure(module_path)
+            logger.warning("启动：{} 加载 {} 失败", role_label, module_path)
+            return False
         load_bundled_plugin_entry_submodules(module_path)
         record_startup_plugin_load_success(module_path, elapsed_sec=time.perf_counter() - started_at)
         loaded_short.add(slot)

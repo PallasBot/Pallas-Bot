@@ -1,5 +1,7 @@
 import ast
+import io
 import logging
+import sys
 from pathlib import Path
 
 from pallas.api.logging import format_plugin_event
@@ -51,6 +53,30 @@ def test_repo_console_log_format_aligns_level_and_source() -> None:
     assert "{{{extra[display_name]:<8}}}" in REPO_CONSOLE_LOG_FORMAT
     assert "{level:<8}" in REPO_FILE_LOG_FORMAT
     assert "{{{extra[display_name]:<8}}}" in REPO_FILE_LOG_FORMAT
+    assert "{exception}" in REPO_CONSOLE_LOG_FORMAT
+    assert "{exception}" in REPO_FILE_LOG_FORMAT
+
+
+def test_repo_file_log_format_renders_exception_traceback() -> None:
+    from loguru import logger
+
+    buf = io.StringIO()
+    logger.remove()
+    try:
+        logger.add(buf, level=0, colorize=False, format=format_repo_file_log)
+        try:
+            raise ValueError("secret root cause")
+        except ValueError:
+            logger.opt(exception=True).error("boom")
+    finally:
+        logger.remove()
+        logger.add(sys.stderr)
+
+    out = buf.getvalue()
+    assert "boom" in out
+    assert "secret root cause" in out
+    assert "ValueError" in out
+    assert "test_repo_file_log_format_renders_exception_traceback" in out
 
 
 def test_repo_console_log_uses_core_display_name_without_rewriting_logger_name() -> None:
@@ -80,7 +106,8 @@ def test_display_log_name_normalizes_builtin_and_external_plugin_packages() -> N
 def test_repo_file_log_formatter_ends_each_record_with_a_newline() -> None:
     record = {"name": "pallas", "extra": {}}
 
-    assert format_repo_file_log(record).endswith("\n")
+    assert format_repo_file_log(record).endswith("\n{exception}")
+    assert "{message}\n{exception}" in format_repo_file_log(record)
 
 
 def test_record_source_module_name_prefers_patcher_stash() -> None:

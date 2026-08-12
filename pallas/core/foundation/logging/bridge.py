@@ -14,9 +14,10 @@ if TYPE_CHECKING:
     from typing import Any
 
 REPO_CONSOLE_LOG_FORMAT = (
-    "<g>{time:MM-DD HH:mm:ss}</g> [<lvl>{level:<8}</lvl>] <c><u>{{{extra[display_name]:<8}}}</u></c> {message}\n"
+    "<g>{time:MM-DD HH:mm:ss}</g> [<lvl>{level:<8}</lvl>] <c><u>{{{extra[display_name]:<8}}}</u></c> "
+    "{message}\n{exception}"
 )
-REPO_FILE_LOG_FORMAT = "{time:MM-DD HH:mm:ss} [{level:<8}] {{{extra[display_name]:<8}}} {message}\n"
+REPO_FILE_LOG_FORMAT = "{time:MM-DD HH:mm:ss} [{level:<8}] {{{extra[display_name]:<8}}} {message}\n{exception}"
 
 _TRANSIENT_UVICORN_MESSAGES = (
     "keepalive ping failed",
