@@ -243,6 +243,50 @@ def test_parse_visual_label_requires_strict_json_schema() -> None:
     assert parse_sticker_visual_label("不是 JSON") is None
 
 
+def test_parse_visual_label_accepts_partial_and_extra_fields() -> None:
+    from pallas.product.llm.sticker_label_jobs import parse_sticker_visual_label
+
+    label = parse_sticker_visual_label(
+        '{"is_sticker":true,"emotions":["开心","难过"],"actions":"挥手",'
+        '"intensity":2,"usage":"打招呼","confidence":0.8,"extra":"ignored"}'
+    )
+
+    assert label is not None
+    assert label["is_sticker"] is True
+    assert label["emotions"] == ("开心", "难过")
+    assert label["actions"] == ("挥手",)
+    assert label["usage"] == ("打招呼",)
+    assert label["tones"] == ()
+    assert label["avoid"] == ()
+    assert label["caption"] == ""
+    assert label["confidence"] == 0.8
+    assert "extra" not in label
+
+
+def test_parse_visual_label_accepts_comma_separated_array_fields() -> None:
+    from pallas.product.llm.sticker_label_jobs import parse_sticker_visual_label
+
+    label = parse_sticker_visual_label(
+        '{"is_sticker":true,"emotions":"开心, 难过","actions":"微笑,大笑",'
+        '"tones":"可爱,友好","usage":"适合聊天","avoid":"别在严肃场合","caption":"挥手","confidence":0.7}'
+    )
+
+    assert label is not None
+    assert label["emotions"] == ("开心", "难过")
+    assert label["actions"] == ("微笑", "大笑")
+    assert label["tones"] == ("可爱", "友好")
+    assert label["usage"] == ("适合聊天",)
+    assert label["avoid"] == ("别在严肃场合",)
+
+
+def test_parse_visual_label_requires_confidence_and_boolean() -> None:
+    from pallas.product.llm.sticker_label_jobs import parse_sticker_visual_label
+
+    assert parse_sticker_visual_label('{"is_sticker":true}') is None
+    assert parse_sticker_visual_label('{"is_sticker":"yes","confidence":0.8}') is None
+    assert parse_sticker_visual_label('{"is_sticker":true,"confidence":"high"}') is None
+
+
 @pytest.mark.asyncio
 async def test_worker_marks_cache_changed_complete_without_calling_vision(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.product.llm import sticker_label_jobs
@@ -513,7 +557,9 @@ async def test_permanent_label_errors_do_not_retry_worker(
             )
         )
         worker = WorkJobWorker(
-            store=store, owner="worker", handlers={"sticker.label.visual": sticker_label_jobs.handle_sticker_label_visual}
+            store=store,
+            owner="worker",
+            handlers={"sticker.label.visual": sticker_label_jobs.handle_sticker_label_visual},
         )
 
         assert await worker.run_once()
@@ -523,4 +569,79 @@ async def test_permanent_label_errors_do_not_retry_worker(
         assert (await store.stats())["pending"] == 0
         assert await store.claim(owner="next", lease_sec=1) is None
         assert save_observation.await_args.args[2]["state"] in {"parse_error", "no_vision"}
+    sticker_label_jobs.reset_sticker_label_runtime_state_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_content_rejection_records_negative_label_without_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm import sticker_label_jobs
+    from pallas.product.llm.provider_client import LlmProviderError
+    from pallas.product.llm.sticker_labels import content_hash_for_bytes
+
+    sticker_label_jobs.reset_sticker_label_runtime_state_for_tests()
+    content = b"nsfw-content"
+    content_hash = content_hash_for_bytes(content)
+    save_observation = AsyncMock()
+    repository = SimpleNamespace(upsert=AsyncMock())
+    monkeypatch.setattr(sticker_label_jobs, "sticker_label_repository", lambda: repository)
+    monkeypatch.setattr(sticker_label_jobs, "save_sticker_label_observation", save_observation)
+    monkeypatch.setattr(
+        "pallas.core.shared.utils.media_cache.get_image_by_content_hash", AsyncMock(return_value=content)
+    )
+    monkeypatch.setattr(
+        sticker_label_jobs.sticker_label_runtime_state,
+        "sticker_label_circuit_open",
+        lambda *, now=None: False,
+    )
+
+    async def reject_content(_content: bytes) -> None:
+        raise LlmProviderError(
+            'Input image data may contain inappropriate content. {"code":"data_inspection_failed"}',
+            status=400,
+        )
+
+    monkeypatch.setattr(sticker_label_jobs, "label_sticker_with_vision", reject_content)
+
+    await sticker_label_jobs.handle_sticker_label_visual({
+        "job_id": "job-rejected",
+        "content_hash": content_hash,
+        "prompt_version": 1,
+        "observation": {"state": "queued"},
+    })
+
+    assert save_observation.await_args.args[2]["state"] == "rejected"
+    observation = save_observation.await_args.args[2]
+    assert observation["is_sticker"] is False
+    assert repository.upsert.await_args.args[0].is_sticker is False
+    assert sticker_label_jobs.sticker_label_circuit_open() is False
+    sticker_label_jobs.reset_sticker_label_runtime_state_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_parse_error_does_not_open_circuit(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import sticker_label_jobs
+    from pallas.product.llm.sticker_labels import content_hash_for_bytes
+
+    sticker_label_jobs.reset_sticker_label_runtime_state_for_tests()
+    monkeypatch.setattr(sticker_label_jobs, "save_sticker_label_observation", AsyncMock())
+    monkeypatch.setattr(
+        "pallas.core.shared.utils.media_cache.get_image_by_content_hash", AsyncMock(return_value=b"image")
+    )
+
+    async def invalid_json(_content: bytes) -> None:
+        raise ValueError("invalid sticker label JSON")
+
+    monkeypatch.setattr(sticker_label_jobs, "label_sticker_with_vision", invalid_json)
+
+    for _ in range(sticker_label_jobs.STICKER_LABEL_CIRCUIT_FAILURES + 1):
+        await sticker_label_jobs.handle_sticker_label_visual({
+            "job_id": "job-parse",
+            "content_hash": content_hash_for_bytes(b"image"),
+            "prompt_version": 1,
+            "observation": {},
+        })
+
+    assert sticker_label_jobs.sticker_label_circuit_open() is False
     sticker_label_jobs.reset_sticker_label_runtime_state_for_tests()
