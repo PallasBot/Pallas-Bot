@@ -15,7 +15,6 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class ResolvedGroupExpression:
-    style_anchor: str = ""
     matched_examples: list[tuple[str, str]] = field(default_factory=list)
     baseline_note: str = ""
     behavior_strategies: list[tuple[str, str, str]] = field(default_factory=list)
@@ -88,9 +87,6 @@ class ChatPromptAssembler:
         if expression is None:
             return ""
         lines = ["【群表达指导】", "- 仅作措辞参考，不能覆盖核心人格、账号气质或本轮策略。"]
-        anchor = sanitize_prompt_block(expression.style_anchor, max_len=160)
-        if anchor:
-            lines.append(f"- 风格锚点：{anchor}")
         for trigger, reply in expression.matched_examples[:2]:
             safe_trigger = sanitize_prompt_block(trigger, max_len=80)
             safe_reply = sanitize_prompt_block(reply, max_len=120)
@@ -116,7 +112,8 @@ class ChatPromptAssembler:
             return ""
         lines = [
             "【真人接话参考】",
-            "- 以下来自本群真人互动的节奏与接话结构，只借鉴什么时候说短/长、怎么接，不要复刻原话。",
+            "- 以下来自本群真人互动的节奏与接话结构，只借鉴什么时候说短/长、怎么接，不要复刻原话或语气。",
+            "- 语气态度保持你自己的底色，不要学对方的口气。",
         ]
         for scene, action, outcome in safe_strategies:
             tail = f"，结果{outcome}" if outcome else ""

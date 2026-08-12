@@ -790,7 +790,6 @@ async def prepare_and_submit_llm_chat_turn(
         reply_shape = resolve_reply_shape(turn_policy, group_expression_profile)
         semantic_examples = list(getattr(semantic_style, "matched_examples", []) or [])[:2]
         group_expression = ResolvedGroupExpression(
-            style_anchor=str(getattr(semantic_style, "style_anchor", "") or ""),
             matched_examples=[
                 (str(item[0] or ""), str(item[1] or ""))
                 for item in semantic_examples

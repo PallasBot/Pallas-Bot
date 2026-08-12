@@ -28,7 +28,6 @@ def test_chat_prompt_assembler_uses_fixed_order_without_aliases_or_duplicates() 
             person_facts="【偏好】\n- 喜欢短句。",
         ),
         group_expression=ResolvedGroupExpression(
-            style_anchor="短句接梗，别抢戏。",
             matched_examples=[("你又来了", "我一直都在呀"), ("好困", "那就眯一会儿")],
         ),
         reply_shape=ReplyShapePolicy(
@@ -56,7 +55,6 @@ def test_chat_prompt_assembler_uses_fixed_order_without_aliases_or_duplicates() 
         "【回复形状与输出契约】",
     ]
     assert [prompt.index(section) for section in sections] == sorted(prompt.index(section) for section in sections)
-    assert prompt.count("短句接梗，别抢戏。") == 1
     assert prompt.count("我一直都在呀") == 1
     assert "登录昵称" not in prompt
     assert "学习别名" not in prompt
@@ -80,7 +78,6 @@ def test_chat_prompt_assembler_renders_behavior_strategy_reference_and_baseline(
         ),
         context=ChatContextBundle(),
         group_expression=ResolvedGroupExpression(
-            style_anchor="短句接梗，别抢戏。",
             matched_examples=[("你又来了", "我一直都在呀")],
             baseline_note="本群真人单条短气泡为主（占比约 83%），单段中位约 6 字。",
             behavior_strategies=[
