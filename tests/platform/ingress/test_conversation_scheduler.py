@@ -82,6 +82,60 @@ async def test_hot_conversation_does_not_starve_ready_conversation() -> None:
 
 
 @pytest.mark.asyncio
+async def test_chat_work_can_run_twice_for_one_conversation() -> None:
+    scheduler = ConversationScheduler(concurrency=2, max_pending=8)
+    started: list[int] = []
+    release = asyncio.Event()
+
+    async def work(value: int) -> None:
+        started.append(value)
+        await release.wait()
+
+    tasks = [
+        asyncio.create_task(scheduler.submit(("10001", 1), lambda value=value: work(value), mode="chat"))
+        for value in (1, 2, 3)
+    ]
+    await scheduler.wait_for_pending_at_least(3)
+    await asyncio.sleep(0)
+
+    assert started == [1, 2]
+    release.set()
+    await asyncio.gather(*tasks)
+    await scheduler.stop()
+
+
+@pytest.mark.asyncio
+async def test_serial_work_preempts_queued_chat_for_same_conversation() -> None:
+    scheduler = ConversationScheduler(concurrency=2, max_pending=8)
+    started: list[str] = []
+    release_chat = asyncio.Event()
+    release_serial = asyncio.Event()
+
+    async def chat() -> None:
+        started.append("chat-1")
+        await release_chat.wait()
+
+    async def serial() -> None:
+        started.append("serial")
+        await release_serial.wait()
+
+    first = asyncio.create_task(scheduler.submit(("10001", 1), chat, mode="chat"))
+    await asyncio.sleep(0)
+    queued_chat = asyncio.create_task(scheduler.submit(("10001", 1), lambda: asyncio.sleep(0), mode="chat"))
+    queued_serial = asyncio.create_task(scheduler.submit(("10001", 1), serial, mode="serial"))
+    await scheduler.wait_for_pending_at_least(3)
+    await asyncio.sleep(0)
+
+    release_chat.set()
+    await first
+    await asyncio.sleep(0)
+    assert started == ["chat-1", "serial"]
+    release_serial.set()
+    await asyncio.gather(queued_serial, queued_chat)
+    await scheduler.stop()
+
+
+@pytest.mark.asyncio
 async def test_hot_conversation_cannot_fill_all_pending_capacity() -> None:
     scheduler = ConversationScheduler(concurrency=1, max_pending=4, per_key_pending=2)
     started = asyncio.Event()

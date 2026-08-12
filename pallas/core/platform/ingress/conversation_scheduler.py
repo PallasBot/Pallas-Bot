@@ -24,6 +24,7 @@ class ConversationWork:
     work: Work
     future: asyncio.Future[None]
     queued_at: float
+    mode: str
 
 
 @dataclass(slots=True)
@@ -47,6 +48,7 @@ class ConversationScheduler:
         self._ready: deque[ConversationKey] = deque()
         self._ready_keys: set[ConversationKey] = set()
         self._running_keys: set[ConversationKey] = set()
+        self._running_by_key: dict[ConversationKey, int] = {}
         self._tasks: set[asyncio.Task[None]] = set()
         self._pending_count = 0
         self._pending_by_key: dict[ConversationKey, int] = {}
@@ -66,10 +68,11 @@ class ConversationScheduler:
         work: Work,
         *,
         reservation: ConversationCapacityReservation | None = None,
+        mode: str = "serial",
     ) -> None:
         loop = asyncio.get_running_loop()
         future: asyncio.Future[None] = loop.create_future()
-        item = ConversationWork(work=work, future=future, queued_at=time.monotonic())
+        item = ConversationWork(work=work, future=future, queued_at=time.monotonic(), mode=mode)
         async with self._condition:
             reserved = reservation is not None and reservation.scheduler is self
             if reserved:
@@ -214,9 +217,14 @@ class ConversationScheduler:
             self._scheduled_by_key.pop(key, None)
 
     def _queue_ready_key_locked(self, key: ConversationKey) -> None:
-        if key in self._running_keys or key in self._ready_keys:
+        if key in self._ready_keys:
             return
         if not self._queues.get(key):
+            return
+        running = self._running_by_key.get(key, 0)
+        if running and any(item.mode != "chat" for item in self._queues[key]):
+            return
+        if running >= 2:
             return
         self._ready.append(key)
         self._ready_keys.add(key)
@@ -225,25 +233,31 @@ class ConversationScheduler:
         while not self._stopping and len(self._running_keys) < self.concurrency and self._ready:
             key = self._ready.popleft()
             self._ready_keys.discard(key)
-            if key in self._running_keys or not self._queues.get(key):
+            if not self._queues.get(key):
                 continue
+            running = self._running_by_key.get(key, 0)
+            queue = self._queues[key]
+            serial_index = next((index for index, item in enumerate(queue) if item.mode != "chat"), None)
+            if serial_index is not None and running:
+                continue
+            if serial_index is not None:
+                item = queue[serial_index]
+                del queue[serial_index]
+            elif running >= 2:
+                continue
+            else:
+                item = queue.popleft()
+            if not queue:
+                self._queues.pop(key, None)
             self._running_keys.add(key)
+            self._running_by_key[key] = running + 1
             self._record_peaks_locked()
-            task = asyncio.create_task(self._run_one(key), name=f"conversation_scheduler:{key[0]}:{key[1]}")
+            task = asyncio.create_task(self._run_one(key, item), name=f"conversation_scheduler:{key[0]}:{key[1]}")
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
 
-    async def _run_one(self, key: ConversationKey) -> None:
-        item: ConversationWork | None = None
+    async def _run_one(self, key: ConversationKey, item: ConversationWork) -> None:
         try:
-            async with self._condition:
-                queue = self._queues.get(key)
-                if queue:
-                    item = queue.popleft()
-                    if not queue:
-                        self._queues.pop(key, None)
-            if item is None:
-                return
             self._wait_samples_ms.append((time.monotonic() - item.queued_at) * 1000.0)
             try:
                 await item.work()
@@ -262,7 +276,12 @@ class ConversationScheduler:
                 if item is not None:
                     self._release_pending_locked(key)
                     self._release_scheduled_locked(key)
-                self._running_keys.discard(key)
+                running = self._running_by_key.get(key, 1) - 1
+                if running > 0:
+                    self._running_by_key[key] = running
+                else:
+                    self._running_by_key.pop(key, None)
+                    self._running_keys.discard(key)
                 if not self._stopping:
                     self._queue_ready_key_locked(key)
                     self._start_ready_locked()
@@ -330,7 +349,11 @@ async def submit_conversation_event(bot: Bot, event: Event, work: Work) -> None:
     if reservation is not None and reservation.scheduler is not scheduler:
         await reservation.release()
         reservation = None
-    await scheduler.submit(key, work, reservation=reservation)
+    from pallas.core.platform.ingress.matcher_activation import legacy_command_traffic
+
+    plain = str(getattr(event, "get_plaintext", lambda: "")() or "").strip()
+    mode = "serial" if legacy_command_traffic(plain, group_only=True) or plain in {"牛牛", "帕拉斯"} else "chat"
+    await scheduler.submit(key, work, reservation=reservation, mode=mode)
 
 
 async def reserve_conversation_capacity(
