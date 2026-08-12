@@ -1,7 +1,6 @@
 import ast
 import io
 import logging
-import sys
 from pathlib import Path
 
 from pallas.api.logging import format_plugin_event
@@ -61,16 +60,14 @@ def test_repo_file_log_format_renders_exception_traceback() -> None:
     from loguru import logger
 
     buf = io.StringIO()
-    logger.remove()
+    handler_id = logger.add(buf, level=0, colorize=False, format=format_repo_file_log)
     try:
-        logger.add(buf, level=0, colorize=False, format=format_repo_file_log)
         try:
             raise ValueError("secret root cause")
         except ValueError:
             logger.opt(exception=True).error("boom")
     finally:
-        logger.remove()
-        logger.add(sys.stderr)
+        logger.remove(handler_id)
 
     out = buf.getvalue()
     assert "boom" in out
@@ -101,6 +98,8 @@ def test_display_log_name_normalizes_builtin_and_external_plugin_packages() -> N
     assert display_log_name("packages.llm_chat.drunk_chat") == "Drink"
     assert display_log_name("pallas_plugin_protocol.runtime") == "Protocol"
     assert display_log_name("nonebot_plugin_apscheduler") == "Apscheduler"
+    assert display_log_name("pallas.core.platform.work_jobs.worker") == "WorkAux"
+    assert display_log_name("pallas.core.platform.work_jobs.result_committer") == "WorkAux"
 
 
 def test_repo_file_log_formatter_ends_each_record_with_a_newline() -> None:
@@ -144,6 +143,13 @@ def test_business_log_messages_get_module_labels_without_duplicates() -> None:
     assert prefix_business_log_message("pallas.product.llm.client", "request failed") == "[LLM] request failed"
     assert prefix_business_log_message("packages.pb_webui.api", "started") == "[WebUI] started"
     assert prefix_business_log_message("pallas.console.webui.console_login", "auth ok") == "[WebUI] auth ok"
+    assert (
+        prefix_business_log_message(
+            "pallas.core.platform.work_jobs.worker",
+            "work aux: claimed [3] jobs of kinds [repeater.learn] by owner [host:1:0]",
+        )
+        == "[WorkAux] work aux: claimed [3] jobs of kinds [repeater.learn] by owner [host:1:0]"
+    )
     assert prefix_business_log_message("pallas.core.foundation.db.repository_pg", "connected") == "[DB] connected"
     assert prefix_business_log_message("pallas.product.message_scrub.filter", "skipped") == "[Scrub] skipped"
     assert prefix_business_log_message("third_party.client", "unchanged") == "unchanged"

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, call
 
 import pytest
@@ -56,3 +57,27 @@ async def test_result_committer_revalidates_mutated_action_before_dispatch() -> 
         await WorkResultCommitter(dispatcher=dispatch).commit(DirectWorkResult(actions=(action,)))
 
     dispatch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_result_committer_warns_when_action_rejected_with_job_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    warnings: list[tuple[str, tuple[object, ...]]] = []
+    monkeypatch.setattr(
+        "pallas.core.platform.work_jobs.result_committer.logger",
+        SimpleNamespace(warning=lambda message, *args: warnings.append((message, args))),
+    )
+    dispatch = AsyncMock(return_value=(False, None))
+    committer = WorkResultCommitter(dispatcher=dispatch)
+    result = DirectWorkResult(
+        actions=(DirectBotAction("send_group_msg", 1001, {"group_id": 42, "message_text": "hello"}),)
+    )
+
+    with pytest.raises(WorkResultCommitError, match="was not accepted"):
+        await committer.commit(result, job_kind="repeater.learn", job_id="abc123")
+
+    assert warnings == [
+        (
+            "work aux: result action [{}] for bot [{}] was not accepted while committing job [{}] of kind [{}]",
+            ("send_group_msg", 1001, "abc123", "repeater.learn"),
+        )
+    ]

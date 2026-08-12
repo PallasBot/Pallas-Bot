@@ -53,6 +53,7 @@ _CHANNEL_ALIASES = (
 )
 
 _BUSINESS_LOG_LABELS = (
+    ("pallas.core.platform.work_jobs", "WorkAux"),
     ("packages.repeater.learn_queue", "Learn"),
     ("packages.repeater.learner", "Learn"),
     ("packages.repeater.fanout", "Reply"),
@@ -162,6 +163,8 @@ _QUIET_LIBRARY_LOGGER_NAMES = (
 def display_log_name(logger_name: str) -> str:
     """返回日志中展示的短名称，不改动原始 logger name。"""
     name = (logger_name or "").strip()
+    if name.startswith("pallas.core.platform.work_jobs."):
+        return "WorkAux"
     if name in {"pallas", "pallas.core"} or name.startswith("pallas.core."):
         return "Core"
     if name == "packages.llm_chat.drunk_chat" or name.startswith("packages.llm_chat.drunk_chat."):

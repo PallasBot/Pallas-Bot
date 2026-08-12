@@ -9,6 +9,10 @@ import nonebot
 from nonebot import logger
 
 from pallas.core.foundation.config.repo_settings import apply_repo_settings_to_environ
+from pallas.core.foundation.logging import (
+    install_repo_console_log_format,
+    install_startup_log_noise_patcher,
+)
 from pallas.core.platform.work_jobs.service import run_work_service
 
 
@@ -53,6 +57,8 @@ def load_external_work_handlers(*, entry_points_getter=metadata.entry_points):
 
 def load_work_handlers():
     nonebot.init()
+    install_repo_console_log_format()
+    install_startup_log_noise_patcher()
     handlers = repeater_work_handlers()
     for kind, handler in load_external_work_handlers().items():
         if kind in handlers:
