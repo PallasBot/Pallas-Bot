@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -398,3 +398,45 @@ async def test_fetch_llm_task_stats_history_fallback_ignores_images_only_live(
     assert payload["ai"]["tokens"]["total_tokens"] == 200
     assert payload["ai"]["images"]["ok_count"] == 2
     assert payload["ai"]["images"]["image_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_fetch_llm_task_stats_exposes_zero_sticker_blocks_when_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bot_snapshot = {
+        "source": "bot",
+        "day_key": "2026-06-18",
+        "updated_at": 1.0,
+        "by_task": {},
+        "totals": {},
+    }
+    _patch_bot_snapshots(monkeypatch, bot_snapshot)
+    monkeypatch.setattr(
+        "pallas.product.llm.model_admin.today_key",
+        lambda: "2026-06-18",
+        raising=False,
+    )
+    _patch_bot_tokens(monkeypatch, {})
+    monkeypatch.setattr(
+        "pallas.product.llm.model_admin.load_llm_daily_stats_range",
+        lambda *, start_day, end_day: ([], start_day, end_day),
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.sticker_vision.fetch_sticker_vision_stats",
+        AsyncMock(return_value={"requests": 0, "recent": []}),
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.sticker_label_observability.fetch_sticker_label_job_stats",
+        AsyncMock(return_value={"submitted": 0, "recent_errors": []}),
+    )
+
+    payload = await fetch_llm_task_stats(start="2026-06-18", end="2026-06-18")
+
+    sticker_vision = payload["ai"].get("sticker_vision")
+    assert isinstance(sticker_vision, dict)
+    assert sticker_vision.get("requests") == 0
+    assert sticker_vision.get("recent") == []
+    sticker_label = payload["ai"].get("sticker_label")
+    assert isinstance(sticker_label, dict)
+    assert sticker_label.get("submitted") == 0

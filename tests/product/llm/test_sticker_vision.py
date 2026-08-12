@@ -82,6 +82,146 @@ def test_build_sticker_vision_stats_exposes_result_delivery_and_recent_error() -
 
 
 @pytest.mark.asyncio
+async def test_choose_sticker_with_vision_skips_when_fewer_than_three_candidates() -> None:
+    from pallas.product.llm import sticker_vision
+
+    observation: dict[str, object] = {}
+    selected = await sticker_vision.choose_sticker_with_vision(
+        [("[CQ:image,file=a.jpg]", b"a")], user_text="笑死", observation=observation
+    )
+
+    assert selected is None
+    assert observation["state"] == "skipped"
+    assert "候选表情不足 3 张" in str(observation["error"])
+
+
+@pytest.mark.asyncio
+async def test_choose_sticker_with_vision_skips_without_vision_endpoint(monkeypatch) -> None:
+    from pallas.product.llm import sticker_vision
+
+    monkeypatch.setattr("pallas.product.llm.providers_store.resolve_endpoint_for_task", lambda *_args, **_kwargs: None)
+
+    observation: dict[str, object] = {}
+    candidates = [
+        (f"[CQ:image,file={index}.jpg]", bytes([index])) for index in range(3)
+    ]
+    selected = await sticker_vision.choose_sticker_with_vision(
+        candidates, user_text="笑死", observation=observation
+    )
+
+    assert selected is None
+    assert observation["state"] == "skipped"
+    assert "未配置支持图片的表情视觉模型" in str(observation["error"])
+
+
+@pytest.mark.asyncio
+async def test_choose_sticker_with_vision_falls_back_to_none_on_provider_timeout(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from unittest.mock import AsyncMock
+
+    from pallas.product.llm import sticker_vision
+    from pallas.product.llm.provider_client import LlmProviderError
+
+    endpoint = SimpleNamespace(
+        model="gemini-2.5-flash-image",
+        provider_id="yunwu",
+        base_url="https://example.test",
+        api_key="k",
+        request_method="POST",
+        capabilities=["image"],
+    )
+    monkeypatch.setattr("pallas.product.llm.providers_store.resolve_endpoint_for_task", lambda *_args, **_kwargs: endpoint)
+
+    async def slow_complete(*_args, **_kwargs):
+        raise TimeoutError("slow")
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", slow_complete)
+    metric = AsyncMock()
+    monkeypatch.setattr("pallas.product.llm.task_metrics.record_bot_llm_task", metric)
+
+    observation: dict[str, object] = {}
+    candidates = [(f"[CQ:image,file={index}.jpg]", bytes([index])) for index in range(3)]
+    selected = await sticker_vision.choose_sticker_with_vision(
+        candidates, user_text="笑死", timeout_sec=0.1, observation=observation
+    )
+
+    assert selected is None
+    assert observation["state"] == "failed"
+    assert "TimeoutError" in str(observation["error"])
+    metric.assert_any_call("sticker_vision", "submit_ok")
+    metric.assert_any_call("sticker_vision", "callback_fail")
+
+
+@pytest.mark.asyncio
+async def test_choose_sticker_with_vision_falls_back_to_none_on_provider_error(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from pallas.product.llm import sticker_vision
+    from pallas.product.llm.provider_client import LlmProviderError
+
+    endpoint = SimpleNamespace(
+        model="gemini-2.5-flash-image",
+        provider_id="yunwu",
+        base_url="https://example.test",
+        api_key="k",
+        request_method="POST",
+        capabilities=["image"],
+    )
+    monkeypatch.setattr("pallas.product.llm.providers_store.resolve_endpoint_for_task", lambda *_args, **_kwargs: endpoint)
+
+    async def failing_complete(*_args, **_kwargs):
+        raise LlmProviderError("HTTP 500")
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", failing_complete)
+
+    observation: dict[str, object] = {}
+    candidates = [(f"[CQ:image,file={index}.jpg]", bytes([index])) for index in range(3)]
+    selected = await sticker_vision.choose_sticker_with_vision(
+        candidates, user_text="笑死", timeout_sec=0.1, observation=observation
+    )
+
+    assert selected is None
+    assert observation["state"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_choose_sticker_with_vision_reports_no_match_on_invalid_json(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from unittest.mock import AsyncMock
+
+    from pallas.product.llm import sticker_vision
+
+    endpoint = SimpleNamespace(
+        model="gemini-2.5-flash-image",
+        provider_id="yunwu",
+        base_url="https://example.test",
+        api_key="k",
+        request_method="POST",
+        capabilities=["image"],
+    )
+    monkeypatch.setattr("pallas.product.llm.providers_store.resolve_endpoint_for_task", lambda *_args, **_kwargs: endpoint)
+
+    async def invalid_complete(*_args, **_kwargs):
+        return {"content": "我选第二张"}
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", invalid_complete)
+    metric = AsyncMock()
+    monkeypatch.setattr("pallas.product.llm.task_metrics.record_bot_llm_task", metric)
+
+    observation: dict[str, object] = {}
+    candidates = [(f"[CQ:image,file={index}.jpg]", bytes([index])) for index in range(3)]
+    selected = await sticker_vision.choose_sticker_with_vision(
+        candidates, user_text="笑死", timeout_sec=0.1, observation=observation
+    )
+
+    assert selected is None
+    assert observation["state"] == "no_match"
+    metric.assert_any_call("sticker_vision", "callback_ok")
+
+
+@pytest.mark.asyncio
 async def test_enqueue_sticker_vision_job_records_durable_delivery_target(monkeypatch) -> None:
     from types import SimpleNamespace
     from unittest.mock import AsyncMock
@@ -165,3 +305,34 @@ async def test_vision_dispatch_rechecks_guard_and_does_not_send_when_it_is_close
     assert await sticker_vision.dispatch_sticker_vision_delivery_once()
     bot.call_api.assert_not_awaited()
     save.assert_awaited_once_with("job-guarded", payload, state="failed", error="表情图发送条件已失效")
+
+
+@pytest.mark.asyncio
+async def test_vision_dispatch_falls_back_to_original_candidate_when_selection_missing(monkeypatch) -> None:
+    from unittest.mock import AsyncMock, MagicMock
+
+    from pallas.product.llm import sticker_vision
+
+    bot = MagicMock()
+    bot.call_api = AsyncMock()
+    fallback = "[CQ:image,file=fallback.jpg]"
+    payload = {
+        "job_id": "job-fallback",
+        "vision_result": {"selected_cq_code": None},
+        "delivery": {"bot_id": 100, "group_id": 200, "cooldown_sec": 90, "fallback_cq_code": fallback},
+    }
+    monkeypatch.setattr(sticker_vision, "claim_sticker_vision_delivery", AsyncMock(return_value=payload))
+    monkeypatch.setattr("nonebot.get_bots", lambda: {"100": bot})
+    monkeypatch.setattr("pallas.core.shared.utils.media_cache.get_image", AsyncMock(return_value=b"same-content"))
+    monkeypatch.setattr(
+        "pallas.product.llm.sticker_followup.should_send_repeater_image", lambda *_args, **_kwargs: True
+    )
+    save = AsyncMock()
+    monkeypatch.setattr(sticker_vision, "save_sticker_vision_delivery", save)
+
+    assert await sticker_vision.dispatch_sticker_vision_delivery_once()
+    sent = bot.call_api.await_args
+    assert sent is not None
+    assert sent.kwargs["group_id"] == 200
+    assert "image" in str(sent.kwargs["message"])
+    save.assert_awaited_once_with("job-fallback", payload, state="sent")

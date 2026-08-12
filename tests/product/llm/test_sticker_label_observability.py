@@ -90,3 +90,44 @@ async def test_requeue_stale_labels_counts_active_jobs_as_skipped(beanie_fixture
     )
 
     assert result == {"requeued": 0, "queued": 0, "skipped": 1, "missing_cache": 0}
+
+
+def test_build_sticker_label_job_stats_counts_terminal_states_by_category() -> None:
+    from pallas.product.llm.sticker_label_observability import build_sticker_label_job_stats
+
+    records = [
+        {
+            "job_id": f"job-{state}",
+            "created_at": float(index),
+            "payload": {"observation": {"state": state, "error": f"err-{state}"}},
+            "last_error": None,
+        }
+        for index, state in enumerate(
+            ["labeled", "labeled", "timeout", "parse_error", "no_vision", "failed", "circuit_open", "cache_changed"]
+        )
+    ]
+    records.append({
+        "job_id": "job-pending",
+        "created_at": 100.0,
+        "payload": {"observation": {"state": "queued"}},
+        "last_error": None,
+    })
+    records.append({
+        "job_id": "job-running",
+        "created_at": 101.0,
+        "payload": {"observation": {"state": "running"}},
+        "last_error": None,
+    })
+
+    stats = build_sticker_label_job_stats(records, recent_limit=3)
+
+    assert stats["submitted"] == 10
+    assert stats["labeled"] == 2
+    assert stats["timeout"] == 1
+    assert stats["parse_error"] == 1
+    assert stats["no_vision"] == 1
+    assert stats["failed"] == 1
+    assert stats["circuit_open"] == 1
+    assert stats["cache_changed"] == 1
+    assert stats["pending"] == 2
+    assert len(stats["recent_errors"]) == 3

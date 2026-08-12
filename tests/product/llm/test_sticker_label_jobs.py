@@ -69,7 +69,7 @@ async def test_enqueue_candidate_uses_hash_locator_and_redacts_durable_payload(m
     from pallas.product.llm.sticker_labels import content_hash_for_bytes
 
     original = b"original-gif-bytes"
-    store = SimpleNamespace(requeue_terminal=AsyncMock(side_effect=lambda job: job))
+    store = SimpleNamespace(requeue_terminal=AsyncMock(side_effect=lambda job: (job, True)))
     repository = SimpleNamespace(get=AsyncMock(return_value=None))
     monkeypatch.setattr(sticker_label_jobs, "build_work_job_store", lambda: store)
     monkeypatch.setattr(sticker_label_jobs, "sticker_label_repository", lambda: repository)
@@ -140,7 +140,7 @@ async def test_low_confidence_or_old_prompt_label_requeues(monkeypatch: pytest.M
             )
         )
     )
-    store = SimpleNamespace(requeue_terminal=AsyncMock(side_effect=lambda job: job))
+    store = SimpleNamespace(requeue_terminal=AsyncMock(side_effect=lambda job: (job, True)))
     monkeypatch.setattr(sticker_label_jobs, "sticker_label_repository", lambda: repository)
     monkeypatch.setattr(sticker_label_jobs, "build_work_job_store", lambda: store)
     monkeypatch.setattr("pallas.core.shared.utils.media_cache.bind_image_content_hash", AsyncMock())
@@ -149,6 +149,71 @@ async def test_low_confidence_or_old_prompt_label_requeues(monkeypatch: pytest.M
         cache_key="[CQ:image,file=old.image]", content=content, source=StickerLabelSource.FOLLOWUP_CANDIDATE
     )
     store.requeue_terminal.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_enqueue_candidate_counts_cache_hit_when_label_is_sufficient(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm import sticker_label_jobs
+    from pallas.product.llm.sticker_label_jobs import StickerLabelSource
+    from pallas.product.llm.sticker_labels import StickerSemanticLabel, content_hash_for_bytes
+    from pallas.product.llm.task_metrics import record_bot_llm_task
+
+    content = b"already-labeled"
+    repository = SimpleNamespace(
+        get=AsyncMock(
+            return_value=StickerSemanticLabel(
+                content_hash=content_hash_for_bytes(content),
+                is_sticker=True,
+                confidence=0.95,
+                prompt_version=1,
+            )
+        )
+    )
+    store = SimpleNamespace(requeue_terminal=AsyncMock())
+    metric = Mock()
+    monkeypatch.setattr(sticker_label_jobs, "sticker_label_repository", lambda: repository)
+    monkeypatch.setattr(sticker_label_jobs, "build_work_job_store", lambda: store)
+    monkeypatch.setattr("pallas.product.llm.task_metrics.record_bot_llm_task", metric)
+
+    assert not await sticker_label_jobs.enqueue_sticker_label_candidate(
+        cache_key="[CQ:image,file=already-labeled.image]",
+        content=content,
+        source=StickerLabelSource.FOLLOWUP_CANDIDATE,
+    )
+    store.requeue_terminal.assert_not_awaited()
+    metric.assert_any_call("sticker_label", "cache_hit")
+    assert not any(call.args[1] == "submit_ok" for call in metric.call_args_list)
+    assert record_bot_llm_task is not None
+
+
+@pytest.mark.asyncio
+async def test_enqueue_candidate_counts_coalesced_when_job_already_pending(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm import sticker_label_jobs
+    from pallas.product.llm.sticker_label_jobs import StickerLabelSource
+    from pallas.product.llm.sticker_labels import content_hash_for_bytes
+
+    content = b"dup-content"
+    repository = SimpleNamespace(get=AsyncMock(return_value=None))
+    store = SimpleNamespace(requeue_terminal=AsyncMock(side_effect=lambda job: (job, False)))
+    metric = Mock()
+    monkeypatch.setattr(sticker_label_jobs, "sticker_label_repository", lambda: repository)
+    monkeypatch.setattr(sticker_label_jobs, "build_work_job_store", lambda: store)
+    monkeypatch.setattr("pallas.core.shared.utils.media_cache.bind_image_content_hash", AsyncMock())
+    monkeypatch.setattr("pallas.product.llm.task_metrics.record_bot_llm_task", metric)
+
+    queued = await sticker_label_jobs.enqueue_sticker_label_candidate(
+        cache_key="[CQ:image,file=dup.image]",
+        content=content,
+        source=StickerLabelSource.FOLLOWUP_CANDIDATE,
+    )
+
+    assert queued is True
+    assert not any(call.args[1] == "submit_ok" for call in metric.call_args_list)
+    assert any(call.args == ("sticker_label", "background_coalesced") for call in metric.call_args_list)
 
 
 @pytest.mark.asyncio
@@ -413,3 +478,49 @@ async def test_cache_changed_is_completed_by_actual_worker(monkeypatch: pytest.M
 
     assert await worker.run_once()
     assert await store.claim(owner="other", lease_sec=1) is None
+
+
+@pytest.mark.asyncio
+async def test_permanent_label_errors_do_not_retry_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
+    from pallas.core.platform.work_jobs.worker import WorkJobWorker
+    from pallas.product.llm import sticker_label_jobs
+    from pallas.product.llm.sticker_labels import content_hash_for_bytes
+
+    sticker_label_jobs.reset_sticker_label_runtime_state_for_tests()
+    for case in ("parse_error", "no_vision"):
+        save_observation = AsyncMock()
+        monkeypatch.setattr(sticker_label_jobs, "save_sticker_label_observation", save_observation)
+        monkeypatch.setattr(
+            "pallas.core.shared.utils.media_cache.get_image_by_content_hash", AsyncMock(return_value=b"image")
+        )
+
+        async def fail_vision(_content: bytes) -> None:
+            if case == "parse_error":
+                raise ValueError("invalid sticker label JSON")
+            raise RuntimeError("no sticker vision endpoint")
+
+        monkeypatch.setattr(sticker_label_jobs, "label_sticker_with_vision", fail_vision)
+        store = MemoryWorkJobStore()
+        await store.enqueue(
+            WorkJob.create(
+                kind="sticker.label.visual",
+                payload={"content_hash": content_hash_for_bytes(b"image"), "observation": {"state": "queued"}},
+                idempotency_key=f"label:permanent:{case}",
+            )
+        )
+        worker = WorkJobWorker(
+            store=store, owner="worker", handlers={"sticker.label.visual": sticker_label_jobs.handle_sticker_label_visual}
+        )
+
+        assert await worker.run_once()
+        assert (await store.stats())["leased"] == 0
+        assert (await store.stats())["dead_lettered"] == 0
+        assert worker.metrics.snapshot()["retried_since_start"] == 0
+        assert (await store.stats())["pending"] == 0
+        assert await store.claim(owner="next", lease_sec=1) is None
+        assert save_observation.await_args.args[2]["state"] in {"parse_error", "no_vision"}
+    sticker_label_jobs.reset_sticker_label_runtime_state_for_tests()

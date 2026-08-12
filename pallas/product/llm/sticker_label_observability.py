@@ -18,17 +18,32 @@ from pallas.product.llm.sticker_label_runtime_state import snapshot as sticker_l
 
 
 def build_sticker_label_job_stats(records: list[dict[str, object]], *, recent_limit: int = 8) -> dict[str, object]:
-    pending = failed = 0
+    submitted = labeled = pending = failed = 0
+    timeout = parse_error = no_vision = circuit_open = cache_changed = 0
     recent_errors: list[dict[str, object]] = []
     for row in sorted(records, key=lambda item: float(item.get("created_at") or 0), reverse=True):
+        submitted += 1
         payload = row.get("payload") if isinstance(row.get("payload"), dict) else {}
         observation = payload.get("observation") if isinstance(payload.get("observation"), dict) else {}
         state = str(observation.get("state") or "queued")
         if state in {"queued", "running"}:
             pending += 1
+        elif state == "labeled":
+            labeled += 1
+        elif state == "timeout":
+            timeout += 1
+        elif state == "parse_error":
+            parse_error += 1
+        elif state == "no_vision":
+            no_vision += 1
+        elif state == "circuit_open":
+            circuit_open += 1
+        elif state == "cache_changed":
+            cache_changed += 1
+        elif state == "failed":
+            failed += 1
         error = str(observation.get("error") or row.get("last_error") or "").strip()
         if error:
-            failed += 1
             if len(recent_errors) < max(1, int(recent_limit)):
                 recent_errors.append({
                     "job_id": str(row.get("job_id") or "")[:64],
@@ -36,7 +51,18 @@ def build_sticker_label_job_stats(records: list[dict[str, object]], *, recent_li
                     "state": state,
                     "error": error[:240],
                 })
-    return {"pending": pending, "failed": failed, "recent_errors": recent_errors}
+    return {
+        "submitted": submitted,
+        "labeled": labeled,
+        "pending": pending,
+        "failed": failed,
+        "timeout": timeout,
+        "parse_error": parse_error,
+        "no_vision": no_vision,
+        "circuit_open": circuit_open,
+        "cache_changed": cache_changed,
+        "recent_errors": recent_errors,
+    }
 
 
 async def fetch_sticker_label_job_stats(*, recent_limit: int = 8, aggregate_limit: int = 500) -> dict[str, object]:

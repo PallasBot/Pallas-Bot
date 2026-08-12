@@ -150,8 +150,12 @@ async def enqueue_sticker_label_candidate(*, cache_key: str, content: bytes, sou
         prompt_version=STICKER_LABEL_PROMPT_VERSION,
         min_confidence=STICKER_LABEL_MIN_CONFIDENCE,
     ):
+        from pallas.product.llm.task_metrics import record_bot_llm_task
+
+        record_bot_llm_task("sticker_label", "cache_hit")
         return False
     from pallas.core.shared.utils.media_cache import bind_image_content_hash
+    from pallas.product.llm.task_metrics import record_bot_llm_task
 
     await bind_image_content_hash(cache_key, content)
     job = WorkJob.create(
@@ -168,10 +172,8 @@ async def enqueue_sticker_label_candidate(*, cache_key: str, content: bytes, sou
             "observation": {"state": "queued"},
         },
     )
-    await build_work_job_store().requeue_terminal(job)
-    from pallas.product.llm.task_metrics import record_bot_llm_task
-
-    record_bot_llm_task("sticker_label", "submit_ok")
+    _reactivated_job, reactivated = await build_work_job_store().requeue_terminal(job)
+    record_bot_llm_task("sticker_label", "submit_ok" if reactivated else "background_coalesced")
     return True
 
 
@@ -303,6 +305,8 @@ async def handle_sticker_label_visual(payload: dict[str, Any]) -> None:
         })
         await save_sticker_label_observation(job_id, dict(payload), observation)
         logger.warning("sticker label failed: job_id={} err={}", job_id, type(exc).__name__)
+        if failure_state in {"parse_error", "no_vision"}:
+            return
         raise
     observation.update({
         "state": "labeled",

@@ -23,6 +23,7 @@ _EVENTS = frozenset({
     "background_coalesced",
     "callback_ok",
     "callback_fail",
+    "cache_hit",
     "reply_gate_skip",
     "reply_gate_defer",
     "reply_gate_proceed",
