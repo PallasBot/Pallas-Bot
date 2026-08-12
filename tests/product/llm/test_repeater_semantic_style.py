@@ -1462,3 +1462,64 @@ def test_cached_semantic_style_resolution_injects_strategy_and_baseline(tmp_path
     assert resolution.baseline_note.startswith("本群真人单条短气泡为主")
     assert len(resolution.behavior_strategies) == 1
     assert resolution.behavior_strategies[0].action == "先短句接住情绪，再问一句具体的事"
+
+
+def test_matched_examples_rank_by_similarity_and_strategy_is_fallback(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    clear_semantic_style_cache_for_tests()
+    mod._write_profiles({
+        (99, 42, "group_chat"): mod.SemanticStyleProfile(
+            bot_id=99,
+            group_id=42,
+            scene="group_chat",
+            direct_pairs=[
+                {"trigger_text": "好烦，又跟对象吵架了", "reply_text": "哈哈", "source_example_id": "sim:1"},
+                {"trigger_text": "早上吃什么", "reply_text": "食堂随便", "source_example_id": "sim:2"},
+                {"trigger_text": "作业好多", "reply_text": "加油写", "source_example_id": "sim:3"},
+            ],
+            behavior_strategies=[
+                mod.BehaviorStrategy(
+                    scene="对方表达负面情绪时",
+                    action="用笑声开头缓和气氛",
+                    trigger="好烦，又跟对象吵架了",
+                )
+            ],
+        )
+    })
+    request_id = next(
+        item for item in (f"request-{index}" for index in range(100)) if mod.semantic_style_injection_enabled(item)
+    )
+    resolution = mod.resolve_cached_semantic_style(
+        99,
+        42,
+        "group_chat",
+        request_id=request_id,
+        query_text="好烦，又跟对象吵架了",
+    )
+
+    # 相似度召回优先于"最近两条"，且策略只在无相似示例时兜底
+    assert resolution.matched_examples == [("好烦，又跟对象吵架了", "哈哈")]
+    assert resolution.behavior_strategies == []
+
+    unrelated = mod.resolve_cached_semantic_style(
+        99,
+        42,
+        "group_chat",
+        request_id=request_id,
+        query_text="对象又吵架了真烦",
+    )
+    # 相似但未达示例阈值时，策略兜底生效；完全无关则不注入
+    assert unrelated.matched_examples == []
+    assert [item.action for item in unrelated.behavior_strategies] == ["用笑声开头缓和气氛"]
+
+    remote = mod.resolve_cached_semantic_style(
+        99,
+        42,
+        "group_chat",
+        request_id=request_id,
+        query_text="完全不相干的话题啊",
+    )
+    assert remote.matched_examples == []
+    assert remote.behavior_strategies == []

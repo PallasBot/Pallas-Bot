@@ -81,6 +81,7 @@ _BEHAVIOR_STRATEGY_LIMIT = 8
 _BASELINE_MIN_SAMPLE = 20
 _BEHAVIOR_STRATEGY_MIN_SIMILARITY = 0.3
 _BEHAVIOR_STRATEGY_MAX_HITS = 2
+_MATCHED_EXAMPLE_LIMIT = 2
 _PROFILE_REFRESH_SEC = 20.0
 _JSON_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE)
 _VISUAL_SUBJECT_VALUES = frozenset({
@@ -1338,26 +1339,36 @@ def resolve_cached_semantic_style(
         query_text=query_text,
         recent_assistant_replies=recent_assistant_replies,
     )
-    safe_examples = [
+    safe_matched = [
         pair
-        for pair in profile.direct_pairs[-2:]
+        for pair in select_semantic_style_matched_pairs(
+            profile.direct_pairs,
+            query_text=query_text,
+            recent_assistant_replies=recent_assistant_replies,
+            limit=_MATCHED_EXAMPLE_LIMIT,
+        )
         if prompt_safe_expression_sample(pair.trigger_text) and prompt_safe_expression_sample(pair.reply_text)
+    ]
+    matched_examples = [
+        (_short_text(pair.trigger_text, _MAX_SEED_LEN), _short_text(pair.reply_text, _MAX_SEED_LEN))
+        for pair in safe_matched
     ]
     safe_anchor = prompt_safe_expression_sample(profile.style_anchor)
     safe_seed = prompt_safe_expression_sample(rewrite_seed)
     safe_direct_candidate = prompt_safe_expression_sample(direct_pair.reply_text) if direct_pair is not None else ""
-    behavior_strategies = [
-        strategy
-        for strategy in select_behavior_strategies(profile.behavior_strategies, query_text=query_text)
-        if prompt_safe_expression_sample(strategy.scene) and prompt_safe_expression_sample(strategy.action)
-    ]
+    behavior_strategies = (
+        []
+        if matched_examples
+        else [
+            strategy
+            for strategy in select_behavior_strategies(profile.behavior_strategies, query_text=query_text)
+            if prompt_safe_expression_sample(strategy.scene) and prompt_safe_expression_sample(strategy.action)
+        ]
+    )
     return SemanticStyleResolution(
         style_anchor=safe_anchor,
         prompt_block=append_cached_semantic_style_block("", safe_anchor, safe_seed),
-        matched_examples=[
-            (_short_text(pair.trigger_text, _MAX_SEED_LEN), _short_text(pair.reply_text, _MAX_SEED_LEN))
-            for pair in safe_examples
-        ],
+        matched_examples=matched_examples,
         direct_candidate=safe_direct_candidate,
         source_example_id=direct_pair.source_example_id if direct_pair is not None else "",
         baseline_note=build_rhythm_baseline_note(profile),
@@ -1460,6 +1471,38 @@ def build_rhythm_baseline_note(profile: SemanticStyleProfile | None) -> str:
     if visual_ratio >= 5:
         parts.append(f"约 {visual_ratio}% 的回复带图")
     return "；".join(parts) + "。"
+
+
+def select_semantic_style_matched_pairs(
+    pairs: Iterable[SemanticStyleDirectPair],
+    *,
+    query_text: str,
+    recent_assistant_replies: Iterable[str] = (),
+    limit: int = _MATCHED_EXAMPLE_LIMIT,
+) -> list[SemanticStyleDirectPair]:
+    """按当前触发句相似度召回具体真人接话对，作为可见回复的参考示例。"""
+    recent = [reply for reply in recent_assistant_replies if normalize_semantic_style_match_text(reply)]
+    ranked = sorted(
+        (
+            (semantic_style_text_similarity(query_text, pair.trigger_text), index, pair)
+            for index, pair in enumerate(pairs)
+            if pair.trigger_text and pair.reply_text
+        ),
+        reverse=True,
+    )
+    hits: list[SemanticStyleDirectPair] = []
+    for score, _index, pair in ranked:
+        if score < _DIRECT_TRIGGER_SIMILARITY:
+            break
+        if any(
+            semantic_style_text_similarity(pair.reply_text, previous) >= _DIRECT_REPLY_DEDUP_SIMILARITY
+            for previous in recent
+        ):
+            continue
+        hits.append(pair)
+        if len(hits) >= max(1, min(2, int(limit))):
+            break
+    return hits
 
 
 def select_semantic_style_direct_pair(
