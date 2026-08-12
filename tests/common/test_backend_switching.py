@@ -54,6 +54,9 @@ class _FakeBlackListRepo:
     async def upsert_answers_reserve(self, group_id, answers):  # noqa: ARG002
         return None
 
+    async def upsert_many_blacklist(self, entries):  # noqa: ARG002
+        return None
+
 
 async def _fake_init():
     return None

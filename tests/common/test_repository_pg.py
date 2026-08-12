@@ -975,6 +975,33 @@ async def test_blacklist_answers_and_reserve_do_not_clobber(pg_engine):
 
 
 @pytest.mark.asyncio
+async def test_blacklist_upsert_many(pg_engine):
+    """批量 upsert 多群黑名单：一次写多群，answers 与 answers_reserve 同时落库。"""
+    from pallas.core.foundation.db.modules import BlackList
+    from pallas.core.foundation.db.repository_pg import PgBlackListRepository
+
+    repo = PgBlackListRepository()
+    await repo.upsert_many_blacklist([
+        BlackList.model_construct(group_id=1, answers=["a", "b"], answers_reserve=["r1"]),
+        BlackList.model_construct(group_id=2, answers=["c"], answers_reserve=[]),
+    ])
+    rows = {r.group_id: r for r in await repo.find_all()}
+    assert sorted(rows[1].answers) == ["a", "b"]
+    assert rows[1].answers_reserve == ["r1"]
+    assert rows[2].answers == ["c"]
+    assert rows[2].answers_reserve == []
+
+    # 再次批量 upsert：覆盖两列，不新增行
+    await repo.upsert_many_blacklist([
+        BlackList.model_construct(group_id=1, answers=["b", "c"], answers_reserve=["r2"])
+    ])
+    rows = {r.group_id: r for r in await repo.find_all()}
+    assert sorted(rows[1].answers) == ["b", "c"]
+    assert rows[1].answers_reserve == ["r2"]
+    assert len(rows) == 2
+
+
+@pytest.mark.asyncio
 async def test_image_cache_save_is_upsert(pg_engine):
     """PgImageCacheRepository.save 必须对齐 Mongo save() 的 upsert 语义。
 

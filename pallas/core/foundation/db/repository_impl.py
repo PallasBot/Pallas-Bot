@@ -234,6 +234,22 @@ class MongoBlackListRepository:
             on_insert=BlackList(group_id=group_id, answers_reserve=answers),
         )
 
+    async def upsert_many_blacklist(self, entries: list[BlackList]) -> None:
+        """批量 upsert 多群黑名单，避免 shutdown 收尾时逐群串行往返。"""
+        if not entries:
+            return
+        from pymongo import UpdateOne
+
+        ops = [
+            UpdateOne(
+                {"group_id": e.group_id},
+                {"$set": {"answers": list(e.answers), "answers_reserve": list(e.answers_reserve)}},
+                upsert=True,
+            )
+            for e in entries
+        ]
+        await BlackList.get_pymongo_collection().bulk_write(ops, ordered=False)
+
 
 class MongoConfigRepository:
     """

@@ -46,7 +46,7 @@ from pallas.core.platform.observability import slow_path_threshold_ms
 from pallas.product.llm.corpus_contamination import reject_corpus_learn_message
 
 if TYPE_CHECKING:
-    from pallas.core.foundation.db.modules import Answer, Ban, Context, ImageCache, Message
+    from pallas.core.foundation.db.modules import Answer, Ban, BlackList, Context, ImageCache, Message
     from pallas.core.foundation.db.repository import ImageCachePrunePolicy, ImageCachePruneResult
 
 _JsonB = JSONB().with_variant(JSON(), "sqlite")
@@ -1820,6 +1820,26 @@ class PgBlackListRepository:
                 index_elements=["group_id"],
                 set_={"answers_reserve": stmt.excluded.answers_reserve},
             )
+            await session.execute(stmt)
+            await session.commit()
+
+    async def upsert_many_blacklist(self, entries: list[BlackList]) -> None:
+        """单事务批量 upsert 多群黑名单，避免 shutdown 收尾时逐群串行 commit。"""
+        if not entries:
+            return
+        stmt = pg_insert(BlackListRow).values([
+            {
+                "group_id": e.group_id,
+                "answers": _strip_null_deep(list(e.answers)),
+                "answers_reserve": _strip_null_deep(list(e.answers_reserve)),
+            }
+            for e in entries
+        ])
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["group_id"],
+            set_={"answers": stmt.excluded.answers, "answers_reserve": stmt.excluded.answers_reserve},
+        )
+        async with get_session() as session:
             await session.execute(stmt)
             await session.commit()
 

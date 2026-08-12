@@ -4,7 +4,7 @@ from collections import defaultdict
 
 from nonebot import logger
 
-from pallas.core.foundation.db import Ban, Context, make_blacklist_repository
+from pallas.core.foundation.db import Ban, BlackList, Context, make_blacklist_repository
 from pallas.core.foundation.db.context_repo_access import context_repo
 
 from .config import get_repeater_config
@@ -167,16 +167,18 @@ class BanManager:
     async def _sync_blacklist() -> None:
         await BanManager._select_blacklist()
 
-        for group_id, answers in BanManager._blacklist_answer.items():
-            if not len(answers):
+        entries: list[BlackList] = []
+        for group_id in set(BanManager._blacklist_answer) | set(BanManager._blacklist_answer_reserve):
+            answers = BanManager._blacklist_answer.get(group_id, set())
+            reserve = BanManager._blacklist_answer_reserve.get(group_id, set())
+            if not answers and not reserve:
                 continue
-            await blacklist_repo.upsert_answers(group_id, list(answers))
-
-        for group_id, answers_set in BanManager._blacklist_answer_reserve.items():
-            if not len(answers_set):
-                continue
-            filtered_answers = answers_set
-            if group_id in BanManager._blacklist_answer:
-                filtered_answers = answers_set - BanManager._blacklist_answer[group_id]
-
-            await blacklist_repo.upsert_answers_reserve(group_id, list(filtered_answers))
+            entries.append(
+                BlackList.model_construct(
+                    group_id=group_id,
+                    answers=sorted(answers),
+                    answers_reserve=sorted(reserve - answers),
+                )
+            )
+        if entries:
+            await blacklist_repo.upsert_many_blacklist(entries)
