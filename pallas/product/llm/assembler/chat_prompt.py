@@ -133,6 +133,7 @@ class ChatPromptAssembler:
                 f"总长度取向：{policy.total_length_band}。"
             ),
             "- 直接输出一条或多条可见对白；多条时用换行分隔成短气泡。不要输出 JSON、代码块、括号旁白或 Markdown。",
+            "- 想要跟一张表情包时，在回复末尾另起一行写 [表情：得意]（得意/开心/无奈/难过/生气等），这一行不会被发送。",
         ]
         if policy.total_length_band == "short":
             lines.extend([

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from nonebot.adapters.onebot.v11 import Message
@@ -346,3 +347,58 @@ def test_llm_mention_delivery_requires_multi_party_and_respects_group_cooldown(m
         mention_cooldown_sec=900,
         now=2000,
     ) == (None, None)
+
+
+def test_extract_sticker_marker_and_intent_mapping() -> None:
+    assert llm_delivery.extract_sticker_marker("哈哈\n[表情：得意]") == ("哈哈", "得意")
+    assert llm_delivery.extract_sticker_marker("早呀[表情:开心]") == ("早呀", "开心")
+    assert llm_delivery.extract_sticker_marker("没有标记") == ("没有标记", "")
+    assert llm_delivery.extract_sticker_marker("[表情：无奈]") == ("", "无奈")
+
+    assert "emotion:得意" in llm_delivery.marker_to_sticker_tokens("得意")
+    assert "action:拥抱" in llm_delivery.marker_to_sticker_tokens("拥抱")
+    assert llm_delivery.marker_to_sticker_tokens("随便发一个").startswith("usage:")
+    assert llm_delivery.marker_to_sticker_tokens("") == "usage:"
+
+
+@pytest.mark.asyncio
+async def test_llm_callback_sticker_marker_is_stripped_and_triggers_followup(monkeypatch) -> None:
+    import asyncio
+
+    sent: list[tuple[str, dict]] = []
+
+    async def fake_send_with_receipt(_bot, _group_id, text, **_kwargs):
+        sent.append((text, _kwargs))
+        return SimpleNamespace(message_id=len(sent), delivered=True)
+
+    async def fake_sleep(delay: float) -> None:
+        del delay
+
+    followup = AsyncMock(return_value=True)
+    monkeypatch.setattr(llm_delivery, "send_group_message_with_receipt", fake_send_with_receipt, raising=False)
+    monkeypatch.setattr(
+        "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt", fake_send_with_receipt
+    )
+    monkeypatch.setattr(llm_delivery, "should_append_llm_session", lambda _task: False)
+    monkeypatch.setattr("pallas.product.llm.sticker_followup.should_schedule_outgoing_sticker", lambda *_a, **_k: True)
+    monkeypatch.setattr(llm_delivery, "send_repeater_emotion_image", followup)
+    reply_text, delivered, _ = await llm_delivery.deliver_llm_callback_success(
+        "task-sticker-marker",
+        {"task_type": "llm_chat", "bot_id": 99, "group_id": 42, "user_id": 7},
+        bot=SimpleNamespace(self_id="99"),
+        group_id=42,
+        bot_id=99,
+        bot_id_str="99",
+        text="早呀\n[表情：得意]",
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+        sleeper=fake_sleep,
+    )
+
+    assert reply_text == "早呀"
+    assert delivered is True
+    assert sent == [("早呀", {"reply_to_message_id": None, "at_user_id": None})]
+    await asyncio.sleep(0)
+    followup.assert_awaited_once()
+    assert "emotion:得意" in followup.await_args.args[4]

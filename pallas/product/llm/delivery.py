@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import re
 import time
 from contextlib import nullcontext
 from io import BytesIO
@@ -26,6 +27,40 @@ from pallas.product.llm.session_store import append_llm_message, compact_user_ll
 from pallas.product.llm.task_metrics import record_bot_llm_route, record_bot_llm_task
 
 STICKER_IMAGE_MAX_SIDE = 160
+
+_STICKER_MARKER_RE = re.compile(r"\[表情[：:]\s*([^\]\n]{1,24})\]\s*$")
+
+
+def extract_sticker_marker(text: str) -> tuple[str, str]:
+    """若文本末尾是 [表情：XX] 标记，返回 (去掉标记的正文, 表情词)；否则返回 (原文本, '')。"""
+    plain = str(text or "").strip()
+    if not plain:
+        return plain, ""
+    match = _STICKER_MARKER_RE.search(plain)
+    if match is None:
+        return plain, ""
+    intent = match.group(1).strip()
+    body = (plain[: match.start()] + plain[match.end() :]).strip(" \t\n")
+    return body, intent
+
+
+def marker_to_sticker_tokens(intent: str) -> str:
+    """把 [表情：得意] 里的词映射成表情挑选器识别的 emotion:/action:/tone: 意图串。"""
+    from pallas.product.llm.sticker_labels import (
+        ACTION_VOCABULARY,
+        EMOTION_VOCABULARY,
+        TONE_VOCABULARY,
+    )
+
+    parts: list[str] = []
+    for key, vocabulary in (
+        ("emotion", EMOTION_VOCABULARY),
+        ("action", ACTION_VOCABULARY),
+        ("tone", TONE_VOCABULARY),
+    ):
+        parts.extend(f"{key}:{word}" for word in vocabulary if word in intent)
+    return " ".join(parts) or f"usage:{intent[:160]}"
+
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -414,6 +449,9 @@ async def deliver_llm_callback_success(
     if should_suppress_llm_duplicate_reply(task, reply_text):
         fallback = str(task.get("fallback_text") or "").strip()
         reply_text = fallback if fallback and fallback != reply_text else ""
+    marker_intent = ""
+    if task_type == LLM_CHAT_TASK_TYPE and reply_text:
+        reply_text, marker_intent = extract_sticker_marker(reply_text)
     from pallas.product.llm.models import StructuredChatReply
     from pallas.product.llm.output_filter import profile_for_task_type, resolve_output_filtered_chat_reply
     from pallas.product.llm.structured_reply import parse_structured_reply
@@ -482,9 +520,12 @@ async def deliver_llm_callback_success(
                 )
             )
         ]
+    sticker_intent = str(structured_reply.sticker_intent or "")
+    if marker_intent and sticker_intent in ("", "none"):
+        sticker_intent = marker_to_sticker_tokens(marker_intent)
     structured_sticker_requested = bool(
         delivery_segments
-        and structured_reply.sticker_intent != "none"
+        and sticker_intent not in ("", "none")
         and group_id
         and bot is not None
         and bool(getattr(cfg, "llm_chat_sticker_enabled", False))
@@ -584,7 +625,7 @@ async def deliver_llm_callback_success(
                     int(group_id),
                     int(bot_id),
                     int(task.get("user_id") or 0),
-                    structured_reply.sticker_intent,
+                    sticker_intent,
                 ),
                 name=f"llm_sticker_followup:{task_id}",
             )
