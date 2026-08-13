@@ -413,11 +413,19 @@ def _maybe_warn_stale_open(row: dict[str, Any], *, now: float) -> None:
 async def bot_action_redis_listen_loop() -> None:
     from nonebot import get_bots
 
-    from pallas.core.platform.coord.redis_claim import get_coord_redis_client
-    from pallas.core.platform.coord.redis_settings import coord_redis_enabled
+    from pallas.core.platform.coord.redis_claim import (
+        clear_coord_redis_client_cache,
+        get_coord_redis_client,
+    )
+    from pallas.core.platform.coord.redis_settings import (
+        clear_coord_redis_settings_cache,
+        coord_redis_enabled,
+    )
 
     while True:
         if not coord_redis_enabled():
+            clear_coord_redis_settings_cache()
+            clear_coord_redis_client_cache()
             await asyncio.sleep(2.0)
             continue
         client = get_coord_redis_client()
@@ -469,9 +477,7 @@ async def bot_action_redis_listen_loop() -> None:
 
 def start_bot_action_redis_listener() -> None:
     global _listener_started
-    from pallas.core.platform.coord.redis_settings import coord_redis_enabled
-
-    if _listener_started or not coord_redis_enabled():
+    if _listener_started:
         return
     _listener_started = True
     asyncio.create_task(bot_action_redis_listen_loop())

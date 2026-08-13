@@ -22,7 +22,7 @@ def test_start_bot_action_redis_listener_starts_when_coord_enabled(fake_coord_re
     assert mod._listener_started is True
 
 
-def test_start_bot_action_redis_listener_skips_without_coord(monkeypatch):
+def test_start_bot_action_redis_listener_starts_even_without_coord(monkeypatch):
     monkeypatch.setattr(
         "pallas.core.platform.coord.redis_settings.coord_redis_enabled",
         lambda: False,
@@ -36,7 +36,8 @@ def test_start_bot_action_redis_listener_skips_without_coord(monkeypatch):
 
     monkeypatch.setattr(mod.asyncio, "create_task", fake_create_task)
     mod.start_bot_action_redis_listener()
-    assert started == []
+    assert len(started) == 1
+    assert mod._listener_started is True
 
 
 def test_bot_action_request_roundtrip(fake_coord_redis) -> None:
