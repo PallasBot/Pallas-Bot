@@ -96,7 +96,13 @@ class MessageRuntime:
             try:
                 await self._action_committer.commit(outcome, bot=bot, event=event, record_stage=record_stage)
             except SideEffectCommitError as exc:
-                logger.warning("MessageRuntime direct side effect failed error_class={}", type(exc).__name__)
+                cause = exc.__cause__ or exc
+                logger.warning(
+                    "MessageRuntime direct side effect commit failed for handler [{}]: [{}] [{}]",
+                    outcome.handler_id,
+                    type(cause).__name__,
+                    str(cause)[:200],
+                )
                 return replace(
                     outcome,
                     error_class=type(exc).__name__,
