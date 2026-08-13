@@ -58,8 +58,13 @@ async def test_help_native_handler_toggles_one_plugin_with_existing_manager(
     toggle_plugin = AsyncMock(return_value=(True, "已关闭复读"))
     monkeypatch.setattr("packages.help.direct.toggle_plugin", toggle_plugin)
 
-    outcome = await HelpDirectHandler().handle(context(plain_text="牛牛关闭 复读"), bot=MagicMock(), event=MagicMock())
+    event = MagicMock()
+    event.user_id = "3023094357"
+
+    outcome = await HelpDirectHandler().handle(context(plain_text="牛牛关闭 复读"), bot=MagicMock(), event=event)
 
     assert outcome.handled is True
     assert outcome.actions == (SendAction(message="已关闭复读"),)
-    toggle_plugin.assert_awaited_once_with("repeater", 2, 1, "disable", is_superuser=True)
+    toggle_plugin.assert_awaited_once_with(
+        "repeater", 2, 1, "disable", is_superuser=True, operator="3023094357"
+    )

@@ -77,6 +77,16 @@ async def _apply_bot_config_patch(account: int, body: _BotConfigPatch) -> dict[s
                 incoming,
                 bot_id=account,
             )
+    if "disabled_plugins" in fields:
+        from pallas.core.foundation.db.modules import append_disabled_plugins_audit
+
+        current = await repo.get(account)
+        fields["disabled_plugins_audit"] = append_disabled_plugins_audit(
+            getattr(current, "disabled_plugins_audit", None) if current is not None else None,
+            old_disabled=list(current.disabled_plugins) if current is not None else [],
+            new_disabled=fields["disabled_plugins"],
+            operator="webui",
+        )
     await repo.upsert_fields(account, fields)
     if "disabled_plugins" in fields:
         from packages.help.plugin_manager import apply_disabled_plugin_config_change
@@ -113,6 +123,16 @@ async def _apply_group_config_patch(group_id: int, body: _GroupConfigPatch) -> d
             fields[field_name] = [int(x) for x in raw]
         else:
             fields[field_name] = raw
+    if "disabled_plugins" in fields:
+        from pallas.core.foundation.db.modules import append_disabled_plugins_audit
+
+        current = await repo.get(group_id)
+        fields["disabled_plugins_audit"] = append_disabled_plugins_audit(
+            getattr(current, "disabled_plugins_audit", None) if current is not None else None,
+            old_disabled=list(current.disabled_plugins) if current is not None else [],
+            new_disabled=fields["disabled_plugins"],
+            operator="webui",
+        )
     await repo.upsert_fields(group_id, fields)
     if "blocked_user_ids" in fields:
         from packages.blacklist import apply_group_blocked_users_change
@@ -233,7 +253,7 @@ def register_instances_configs_router(
         doc = await repo.get(account, ignore_cache=True)
         if doc is None:
             raise HTTPException(status_code=404, detail="未找到该账号的 Bot 配置")
-        return JSONResponse({"ok": True, "data": bot_config_to_public(doc)})
+        return JSONResponse({"ok": True, "data": bot_config_to_public(doc, include_audit=True)})
 
     @router.put(f"{x}/bot-configs/{{account}}", include_in_schema=True)
     async def _bot_config_put(
@@ -356,7 +376,7 @@ def register_instances_configs_router(
 
         repo = make_group_config_repository()
         doc, _created = await repo.get_or_create(group_id, disabled_plugins=[])
-        return JSONResponse({"ok": True, "data": group_config_to_public(doc)})
+        return JSONResponse({"ok": True, "data": group_config_to_public(doc, include_audit=True)})
 
     @router.put(f"{x}/group-configs/{{group_id}}", include_in_schema=True)
     async def _group_config_put(

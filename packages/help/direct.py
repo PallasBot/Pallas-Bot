@@ -96,6 +96,7 @@ class HelpDirectHandler:
             context.bot_id,
             action,
             is_superuser=is_superuser,
+            operator=getattr(event, "user_id", None),
         )
         if message is None:
             return HandlingOutcome(handled=False, fallback_to_matcher=True)

@@ -14,7 +14,7 @@ from nonebot.permission import SUPERUSER
 
 from pallas.api.perm import is_user_help_plugin
 from pallas.core.foundation.db import make_bot_config_repository, make_group_config_repository
-from pallas.core.foundation.db.modules import BotConfigModule, GroupConfigModule
+from pallas.core.foundation.db.modules import BotConfigModule, GroupConfigModule, append_disabled_plugins_audit
 from pallas.core.foundation.logging.throttle import log_rate_limited
 from pallas.core.foundation.paths import plugin_data_dir
 from pallas.core.platform.bot_runtime.plugin_package_aliases import canonical_plugin_package
@@ -607,11 +607,26 @@ async def get_group_config(group_id: int) -> tuple[GroupConfigModule, bool]:
     return group_config, created
 
 
-async def update_bot_config(bot_id: int, disabled_plugins: list[str]) -> BotConfigModule:
+async def update_bot_config(
+    bot_id: int,
+    disabled_plugins: list[str],
+    *,
+    operator: str | int | None = None,
+) -> BotConfigModule:
     """
     更新Bot配置中的禁用插件列表
     """
-    await bot_config_repo.upsert_field(bot_id, "disabled_plugins", disabled_plugins.copy())
+    fields: dict[str, Any] = {"disabled_plugins": disabled_plugins.copy()}
+    if operator is not None:
+        current = await bot_config_repo.get(bot_id)
+        existing_audit = getattr(current, "disabled_plugins_audit", None) if current is not None else None
+        fields["disabled_plugins_audit"] = append_disabled_plugins_audit(
+            existing_audit,
+            old_disabled=list(current.disabled_plugins) if current is not None else [],
+            new_disabled=disabled_plugins,
+            operator=operator,
+        )
+    await bot_config_repo.upsert_fields(bot_id, fields)
     await bot_config_repo.invalidate_cache()
     await apply_disabled_plugin_config_change(bot_id=bot_id, disabled_plugins=disabled_plugins)
 
@@ -623,11 +638,26 @@ async def update_bot_config(bot_id: int, disabled_plugins: list[str]) -> BotConf
     return bot_config
 
 
-async def update_group_config(group_id: int, disabled_plugins: list[str]) -> GroupConfigModule:
+async def update_group_config(
+    group_id: int,
+    disabled_plugins: list[str],
+    *,
+    operator: str | int | None = None,
+) -> GroupConfigModule:
     """
     更新群配置中的禁用插件列表
     """
-    await group_config_repo.upsert_field(group_id, "disabled_plugins", disabled_plugins.copy())
+    fields: dict[str, Any] = {"disabled_plugins": disabled_plugins.copy()}
+    if operator is not None:
+        current = await group_config_repo.get(group_id)
+        existing_audit = getattr(current, "disabled_plugins_audit", None) if current is not None else None
+        fields["disabled_plugins_audit"] = append_disabled_plugins_audit(
+            existing_audit,
+            old_disabled=list(current.disabled_plugins) if current is not None else [],
+            new_disabled=disabled_plugins,
+            operator=operator,
+        )
+    await group_config_repo.upsert_fields(group_id, fields)
     await group_config_repo.invalidate_cache()
     await apply_disabled_plugin_config_change(group_id=group_id, disabled_plugins=disabled_plugins)
 
@@ -690,16 +720,22 @@ async def modify_disabled_list(disabled_list: list[str], plugin_name: str, shoul
 
 
 async def update_config_and_cache(
-    config_type: str, id_value: int, disabled_list: list[str], plugin_name: str, should_disable: bool
+    config_type: str,
+    id_value: int,
+    disabled_list: list[str],
+    plugin_name: str,
+    should_disable: bool,
+    *,
+    operator: str | int | None = None,
 ) -> tuple[bool, BotConfigModule | GroupConfigModule]:
     """
     更新配置并清除缓存
     """
     if config_type == "bot":
-        config = await update_bot_config(id_value, disabled_list)
+        config = await update_bot_config(id_value, disabled_list, operator=operator)
         expected_state = plugin_name in config.disabled_plugins
     else:  # group
-        config = await update_group_config(id_value, disabled_list)
+        config = await update_group_config(id_value, disabled_list, operator=operator)
         expected_state = plugin_name in config.disabled_plugins
 
     # 验证操作结果
@@ -720,6 +756,7 @@ async def toggle_plugin(
     action: str = "toggle",
     *,
     is_superuser: bool = False,
+    operator: str | int | None = None,
 ) -> tuple[bool, str | None]:
     """
     切换插件启用/禁用状态
@@ -753,11 +790,11 @@ async def toggle_plugin(
 
     if bot_id and not group_id:
         return await _handle_global_plugin_operation(
-            plugin_name, user_visible_name, bot_id, action, is_superuser=is_superuser
+            plugin_name, user_visible_name, bot_id, action, is_superuser=is_superuser, operator=operator
         )
     elif bot_id and group_id:
         return await _handle_group_plugin_operation(
-            plugin_name, user_visible_name, group_id, bot_id, action, is_superuser=is_superuser
+            plugin_name, user_visible_name, group_id, bot_id, action, is_superuser=is_superuser, operator=operator
         )
     else:
         return False, None
@@ -770,6 +807,7 @@ async def _handle_global_plugin_operation(
     action: str,
     *,
     is_superuser: bool = False,
+    operator: str | int | None = None,
 ) -> tuple[bool, str]:
     """处理全局插件操作"""
 
@@ -794,7 +832,14 @@ async def _handle_global_plugin_operation(
 
     new_disabled = await modify_disabled_list(current_disabled, plugin_name, should_disable)
 
-    success, _ = await update_config_and_cache("bot", bot_id, new_disabled, plugin_name, should_disable)
+    success, _ = await update_config_and_cache(
+        "bot",
+        bot_id,
+        new_disabled,
+        plugin_name,
+        should_disable,
+        operator=operator,
+    )
     if not success:
         action_name = "禁用" if should_disable else "启用"
         return False, f"{action_name} {user_visible_name}失败"
@@ -830,6 +875,7 @@ async def _handle_group_plugin_operation(
     action: str,
     *,
     is_superuser: bool = False,
+    operator: str | int | None = None,
 ) -> tuple[bool, str]:
     """处理群级插件操作"""
 
@@ -859,7 +905,14 @@ async def _handle_group_plugin_operation(
 
     new_disabled = await modify_disabled_list(current_disabled, plugin_name, should_disable)
 
-    success, _ = await update_config_and_cache("group", group_id, new_disabled, plugin_name, should_disable)
+    success, _ = await update_config_and_cache(
+        "group",
+        group_id,
+        new_disabled,
+        plugin_name,
+        should_disable,
+        operator=operator,
+    )
     if not success:
         action_name = "停止" if should_disable else "启用"
         return (

@@ -23,9 +23,9 @@ def _jsonable_sing_progress(obj: Any) -> Any:
     return str(obj)
 
 
-def bot_config_to_public(doc_or_row: Any) -> dict[str, Any]:
+def bot_config_to_public(doc_or_row: Any, *, include_audit: bool = False) -> dict[str, Any]:
     """统一 Mongo Document 与 PG Row 的 JSON 形态。"""
-    return {
+    data = {
         "account": int(doc_or_row.account),
         "admins": list(doc_or_row.admins or []),
         "auto_accept_friend": bool(getattr(doc_or_row, "auto_accept_friend", False)),
@@ -38,6 +38,9 @@ def bot_config_to_public(doc_or_row: Any) -> dict[str, Any]:
         "persona": dict(doc_or_row.persona) if getattr(doc_or_row, "persona", None) else None,
         "group_style_enabled": bool(getattr(doc_or_row, "group_style_enabled", True)),
     }
+    if include_audit:
+        data["disabled_plugins_audit"] = list(getattr(doc_or_row, "disabled_plugins_audit", None) or [])
+    return data
 
 
 async def bot_community_roster_show_qq_by_accounts(account_ids: list[int]) -> dict[int, bool]:
@@ -70,7 +73,7 @@ async def bot_community_roster_show_qq_by_accounts(account_ids: list[int]) -> di
     return out
 
 
-def group_config_to_public(doc_or_row: Any) -> dict[str, Any]:
+def group_config_to_public(doc_or_row: Any, *, include_audit: bool = False) -> dict[str, Any]:
     from pallas.product.persona.compile_group_style import compile_group_style_snapshot
 
     sp = getattr(doc_or_row, "sing_progress", None)
@@ -83,7 +86,7 @@ def group_config_to_public(doc_or_row: Any) -> dict[str, Any]:
         except (TypeError, ValueError):
             continue
     snapshot = compile_group_style_snapshot(style_profile_raw if isinstance(style_profile_raw, dict) else None)
-    return {
+    data = {
         "group_id": int(doc_or_row.group_id),
         "roulette_mode": int(getattr(doc_or_row, "roulette_mode", 1)),
         "banned": bool(getattr(doc_or_row, "banned", False)),
@@ -92,6 +95,9 @@ def group_config_to_public(doc_or_row: Any) -> dict[str, Any]:
         "blocked_user_ids": sorted(set(blocked)),
         "style_profile_snapshot": snapshot,
     }
+    if include_audit:
+        data["disabled_plugins_audit"] = list(getattr(doc_or_row, "disabled_plugins_audit", None) or [])
+    return data
 
 
 def user_config_to_public(doc_or_row: Any) -> dict[str, Any]:

@@ -6,6 +6,33 @@ from beanie import Document
 from pydantic import BaseModel, Field, PrivateAttr
 from pymongo import IndexModel
 
+DISABLED_PLUGINS_AUDIT_CAP = 500
+
+
+def append_disabled_plugins_audit(
+    existing: list[dict] | None,
+    *,
+    old_disabled: list[str],
+    new_disabled: list[str],
+    operator: str | int | None,
+    ts: int | None = None,
+) -> list[dict]:
+    """对比新旧禁用列表，逐插件追加 enable/disable 审计条目并截断到上限。"""
+    entries = [dict(e) for e in (existing or [])]
+    now = int(ts or time.time())
+    op = "" if operator is None else str(operator)
+    old_set = set(old_disabled or [])
+    new_set = set(new_disabled or [])
+    entries.extend(
+        {"plugin": name, "action": "disable", "operator": op, "ts": now} for name in sorted(new_set - old_set)
+    )
+    entries.extend(
+        {"plugin": name, "action": "enable", "operator": op, "ts": now} for name in sorted(old_set - new_set)
+    )
+    if len(entries) > DISABLED_PLUGINS_AUDIT_CAP:
+        entries = entries[-DISABLED_PLUGINS_AUDIT_CAP:]
+    return entries
+
 
 class SingProgress(BaseModel):
     complete: bool = False
@@ -29,6 +56,7 @@ class BotConfigModule(Document):
     taken_name: dict[str, int] = Field(default_factory=dict)
     drunk: dict[int, float] = Field(default_factory=dict)
     disabled_plugins: list[str] = Field(default_factory=list)
+    disabled_plugins_audit: list[dict] = Field(default_factory=list)
     community_roster_show_qq: bool = Field(default=True)
     persona: dict | None = Field(default=None)
     group_style_enabled: bool = Field(default=True)
@@ -48,6 +76,7 @@ class GroupConfigModule(Document):
     banned: bool = False
     sing_progress: SingProgress | None = None
     disabled_plugins: list[str] = Field(default_factory=list)
+    disabled_plugins_audit: list[dict] = Field(default_factory=list)
     blocked_user_ids: list[int] = Field(default_factory=list)
     style_profile: dict | None = Field(default=None)
     plugin_storage: dict = Field(default_factory=dict)

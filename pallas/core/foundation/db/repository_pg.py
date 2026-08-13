@@ -259,6 +259,7 @@ class BotConfigRow(Base):
     taken_name: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=dict)
     drunk: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=dict)
     disabled_plugins: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=list)
+    disabled_plugins_audit: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=list)
     community_roster_show_qq: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     persona: Mapped[Any] = mapped_column(_JsonB, nullable=True)
     group_style_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
@@ -273,6 +274,7 @@ class GroupConfigRow(Base):
     banned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     sing_progress: Mapped[Any] = mapped_column(_JsonB, nullable=True)
     disabled_plugins: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=list)
+    disabled_plugins_audit: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=list)
     blocked_user_ids: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=list)
     style_profile: Mapped[Any] = mapped_column(_JsonB, nullable=True)
     plugin_storage: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=dict)
@@ -564,6 +566,32 @@ def _ensure_pg_group_config_plugin_storage(connection) -> None:
     connection.execute(text("ALTER TABLE group_config ADD COLUMN plugin_storage JSONB NOT NULL DEFAULT '{}'::jsonb"))
 
 
+def _ensure_pg_group_config_disabled_plugins_audit(connection) -> None:
+    """旧库 group_config 缺审计列时补列。"""
+    insp = inspect(connection)
+    if not insp.has_table("group_config"):
+        return
+    names = {c["name"] for c in insp.get_columns("group_config")}
+    if "disabled_plugins_audit" in names:
+        return
+    connection.execute(
+        text("ALTER TABLE group_config ADD COLUMN disabled_plugins_audit JSONB NOT NULL DEFAULT '[]'::jsonb")
+    )
+
+
+def _ensure_pg_bot_config_disabled_plugins_audit(connection) -> None:
+    """旧库 bot_config 缺审计列时补列。"""
+    insp = inspect(connection)
+    if not insp.has_table("bot_config"):
+        return
+    names = {c["name"] for c in insp.get_columns("bot_config")}
+    if "disabled_plugins_audit" in names:
+        return
+    connection.execute(
+        text("ALTER TABLE bot_config ADD COLUMN disabled_plugins_audit JSONB NOT NULL DEFAULT '[]'::jsonb")
+    )
+
+
 def _ensure_pg_bot_config_persona(connection) -> None:
     """旧库 bot_config 缺列时补列。"""
     insp = inspect(connection)
@@ -853,6 +881,8 @@ PG_SCHEMA_ENSURE_STEPS: list[tuple[str, Any]] = [
     ("ddl.background_job_lease_id", _ensure_pg_background_job_lease_id),
     ("ddl.group_config_style_profile", _ensure_pg_group_config_style_profile),
     ("ddl.group_config_plugin_storage", _ensure_pg_group_config_plugin_storage),
+    ("ddl.group_config_disabled_plugins_audit", _ensure_pg_group_config_disabled_plugins_audit),
+    ("ddl.bot_config_disabled_plugins_audit", _ensure_pg_bot_config_disabled_plugins_audit),
     ("ddl.bot_config_community_roster_show_qq", _ensure_pg_bot_config_community_roster_show_qq),
     ("ddl.bot_config_group_style_enabled", _ensure_pg_bot_config_group_style_enabled),
     ("ddl.bot_config_persona", _ensure_pg_bot_config_persona),

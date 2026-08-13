@@ -224,12 +224,14 @@ async def handle_plugin_operation(
         elif args[1].isdigit():
             group_id = int(args[1])
 
-    success, message = await toggle_plugin(plugin_name, group_id, bot_id, action, is_superuser=is_superuser)
+    success, message = await toggle_plugin(
+        plugin_name, group_id, bot_id, action, is_superuser=is_superuser, operator=event.user_id
+    )
     if success:
         logger.info(
             format_plugin_event(
                 "enable_plugin" if action == "enable" else "disable_plugin",
-                f"Bot [{bot_id}] {action}d plugin [{plugin_name}] in group [{group_id or '-'}]",
+                f"Bot [{bot_id}] {action}d plugin [{plugin_name}] in group [{group_id or '-'}] by [{event.user_id}]",
             )
         )
     await matcher.finish(message)

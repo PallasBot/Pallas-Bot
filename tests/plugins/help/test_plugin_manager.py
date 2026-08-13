@@ -122,6 +122,55 @@ async def test_update_group_config_roundtrip(beanie_fixture, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_update_group_config_records_audit_with_operator(beanie_fixture, monkeypatch):
+    from packages.help import plugin_manager
+
+    monkeypatch.setattr(plugin_manager, "clear_help_cache", lambda *a, **k: None)
+
+    await plugin_manager.get_group_config(4321)
+    await plugin_manager.update_group_config(4321, ["p1"], operator="3023094357")
+    await plugin_manager.update_group_config(4321, ["p1", "p2"], operator="3023094357")
+    await plugin_manager.update_group_config(4321, ["p2"], operator="10001")
+
+    cfg = await plugin_manager.group_config_repo.get(4321, ignore_cache=True)
+    assert cfg is not None
+    audit = cfg.disabled_plugins_audit
+    assert audit == [
+        {"plugin": "p1", "action": "disable", "operator": "3023094357", "ts": audit[0]["ts"]},
+        {"plugin": "p2", "action": "disable", "operator": "3023094357", "ts": audit[1]["ts"]},
+        {"plugin": "p1", "action": "enable", "operator": "10001", "ts": audit[2]["ts"]},
+    ]
+
+
+def test_append_disabled_plugins_audit_diffs_and_caps() -> None:
+    from pallas.core.foundation.db.modules import DISABLED_PLUGINS_AUDIT_CAP, append_disabled_plugins_audit
+
+    existing = [{"plugin": "old", "action": "disable", "operator": "1", "ts": 1}]
+    out = append_disabled_plugins_audit(
+        existing,
+        old_disabled=["a", "b"],
+        new_disabled=["a", "c"],
+        operator="9",
+        ts=42,
+    )
+    assert out == [
+        {"plugin": "old", "action": "disable", "operator": "1", "ts": 1},
+        {"plugin": "c", "action": "disable", "operator": "9", "ts": 42},
+        {"plugin": "b", "action": "enable", "operator": "9", "ts": 42},
+    ]
+
+    many = append_disabled_plugins_audit(
+        None,
+        old_disabled=[],
+        new_disabled=[str(i) for i in range(DISABLED_PLUGINS_AUDIT_CAP + 10)],
+        operator="9",
+        ts=1,
+    )
+    expected = sorted(str(i) for i in range(DISABLED_PLUGINS_AUDIT_CAP + 10))[-DISABLED_PLUGINS_AUDIT_CAP:]
+    assert [e["plugin"] for e in many] == expected
+
+
+@pytest.mark.asyncio
 async def test_collect_disabled_plugin_names_merges_bot_and_group(beanie_fixture, tmp_path, monkeypatch):
     from packages.help import global_disable, plugin_manager
 

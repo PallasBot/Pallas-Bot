@@ -48,11 +48,11 @@ async def _get_db_table_row_public(table: str, row_id: int) -> dict[str, Any] | 
     if t == "bot_config":
         repo = make_bot_config_repository()
         row = await repo.get(int(row_id), ignore_cache=True)
-        return None if row is None else bot_config_to_public(row)
+        return None if row is None else bot_config_to_public(row, include_audit=True)
     if t == "group_config":
         repo = make_group_config_repository()
         row = await repo.get(int(row_id), ignore_cache=True)
-        return None if row is None else group_config_to_public(row)
+        return None if row is None else group_config_to_public(row, include_audit=True)
     if t == "user_config":
         repo = make_user_config_repository()
         row = await repo.get(int(row_id), ignore_cache=True)
@@ -86,10 +86,22 @@ async def _upsert_db_table_row(table: str, row_id: int, data: dict[str, Any]) ->
             if k not in allowed:
                 raise ValueError(f"bot_config 不允许字段: {k}")
         await repo.get_or_create(int(row_id), disabled_plugins=[])
+        current = await repo.get(int(row_id))
+        old_disabled = list(current.disabled_plugins) if current is not None else []
+        existing_audit = getattr(current, "disabled_plugins_audit", None) if current is not None else None
         for k, v in payload.items():
             await repo.upsert_field(int(row_id), k, v)
         await repo.invalidate_cache()
         if "disabled_plugins" in payload:
+            from pallas.core.foundation.db.modules import append_disabled_plugins_audit
+
+            audit = append_disabled_plugins_audit(
+                existing_audit,
+                old_disabled=old_disabled,
+                new_disabled=payload["disabled_plugins"],
+                operator="webui",
+            )
+            await repo.upsert_field(int(row_id), "disabled_plugins_audit", audit)
             from packages.help.plugin_manager import apply_disabled_plugin_config_change
 
             await apply_disabled_plugin_config_change(
@@ -111,6 +123,9 @@ async def _upsert_db_table_row(table: str, row_id: int, data: dict[str, Any]) ->
             if k not in allowed:
                 raise ValueError(f"group_config 不允许字段: {k}")
         await repo.get_or_create(int(row_id), disabled_plugins=[])
+        current = await repo.get(int(row_id))
+        old_disabled = list(current.disabled_plugins) if current is not None else []
+        existing_audit = getattr(current, "disabled_plugins_audit", None) if current is not None else None
         for k, v in payload.items():
             await repo.upsert_field(int(row_id), k, v)
         await repo.invalidate_cache()
@@ -124,7 +139,15 @@ async def _upsert_db_table_row(table: str, row_id: int, data: dict[str, Any]) ->
             await apply_group_banned_change(int(row_id), bool(payload["banned"]))
         if "disabled_plugins" in payload:
             from packages.help.plugin_manager import apply_disabled_plugin_config_change
+            from pallas.core.foundation.db.modules import append_disabled_plugins_audit
 
+            audit = append_disabled_plugins_audit(
+                existing_audit,
+                old_disabled=old_disabled,
+                new_disabled=payload["disabled_plugins"],
+                operator="webui",
+            )
+            await repo.upsert_field(int(row_id), "disabled_plugins_audit", audit)
             await apply_disabled_plugin_config_change(
                 group_id=int(row_id),
                 disabled_plugins=list(payload["disabled_plugins"] or []),
