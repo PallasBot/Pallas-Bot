@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -151,3 +152,25 @@ async def test_storage_decl_resolves_pip_module_alias(monkeypatch, tmp_path) -> 
 
     DeployPluginStorage("draw").set("daily_usage", {"version": 1, "entries": {}})
     assert DeployPluginStorage("draw").get("daily_usage") == {"version": 1, "entries": {}}
+
+
+def test_deploy_storage_writes_audit_entry(monkeypatch, tmp_path) -> None:
+    import packages.help
+    from pallas.core.storage.deploy_store import DeployPluginStorage
+
+    class FakePlugin:
+        name = "help"
+        metadata = packages.help.__plugin_meta__
+
+    monkeypatch.setattr("nonebot.get_loaded_plugins", lambda: [FakePlugin()])
+    monkeypatch.setattr("pallas.core.storage.deploy_store.plugin_data_dir", lambda _name: tmp_path)
+    clear_plugin_storage_registry_cache()
+    DeployPluginStorage("help").set("global_disabled_plugins", ["dream"])
+
+    audit = (tmp_path / "plugin_storage.audit.jsonl").read_text(encoding="utf-8").splitlines()
+    entry = json.loads(audit[-1])
+    assert entry["plugin"] == "help"
+    assert entry["key"] == "global_disabled_plugins"
+    assert entry["old"] is None
+    assert entry["new"] == ["dream"]
+    assert entry["pid"] > 0

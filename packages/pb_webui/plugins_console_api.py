@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
@@ -138,6 +139,7 @@ class _GlobalPluginDisableBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     disabled_plugins: list[str] = Field(default_factory=list, max_length=2000)
+    expected_revision: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 class _PluginGovernanceBody(BaseModel):
@@ -146,6 +148,7 @@ class _PluginGovernanceBody(BaseModel):
     command_permission_overrides: dict[str, str] | None = None
     command_limit_overrides: dict[str, int] | None = None
     global_disable: bool | None = None
+    global_disable_revision: str | None = None
     help_hidden: bool | None = None
     blocked_user_ids: list[int] | None = None
 
@@ -309,7 +312,7 @@ def register_plugins_console_router(
         response_model=_ApiOkResponse[_PluginGovernanceData],
     )
     async def _plugin_governance_get(plugin_name: str) -> dict[str, Any]:
-        from packages.help.global_disable import load_global_disabled_plugins
+        from packages.help.global_disable import global_disabled_plugins_revision, load_global_disabled_plugins
         from packages.help.visibility import load_help_hidden_plugins
         from pallas.console.webui.plugin_governance import (
             canonical_plugin_name,
@@ -378,7 +381,8 @@ def register_plugins_console_router(
                 runtime_ids.add(value)
                 runtime_ids.add(canonical_plugin_name(value))
         hidden = {str(x).strip() for x in load_help_hidden_plugins() if str(x).strip()}
-        disabled = {str(x).strip() for x in load_global_disabled_plugins() if str(x).strip()}
+        disabled_list = load_global_disabled_plugins()
+        disabled = {str(x).strip() for x in disabled_list if str(x).strip()}
         commands = enrich_commands_with_menu_triggers(
             list(plugin_row.get("commands") or []),
             menu_items,
@@ -393,6 +397,7 @@ def register_plugins_console_router(
                 "menu_items": menu_items,
                 "runtime": {
                     "global_disable": any(item in disabled for item in runtime_ids),
+                    "global_disable_revision": global_disabled_plugins_revision(disabled_list),
                     "help_hidden": any(item in hidden for item in runtime_ids),
                     "global_disable_protected": bool(plugin_meta.get("global_disable_protected")),
                     "help_ignored": bool(plugin_meta.get("help_ignored")),
@@ -426,7 +431,12 @@ def register_plugins_console_router(
         if not target:
             raise HTTPException(status_code=400, detail="plugin_name required")
 
-        from packages.help.global_disable import load_global_disabled_plugins, save_global_disabled_plugins
+        from packages.help.global_disable import (
+            global_disabled_plugins_revision,
+            load_global_disabled_plugins,
+            save_global_disabled_plugins,
+            save_global_disabled_plugins_if_revision,
+        )
         from packages.help.plugin_manager import invalidate_disabled_plugin_gate_cache
         from packages.help.visibility import load_help_hidden_plugins, save_help_hidden_plugins
         from pallas.api.config import upsert_repo_settings_items
@@ -509,18 +519,32 @@ def register_plugins_console_router(
         else:
             hidden_saved = sorted(hidden)
 
-        disabled = set(load_global_disabled_plugins())
+        disabled_list = load_global_disabled_plugins()
+        disabled = set(disabled_list)
         disabled_before = target in disabled
         if "global_disable" in fields_set:
+            current_revision = global_disabled_plugins_revision(disabled_list)
+            if body.global_disable_revision is not None and body.global_disable_revision != current_revision:
+                raise HTTPException(status_code=409, detail="全局禁用名单已被其他请求更新，请刷新后重试")
             if body.global_disable:
                 disabled.add(target)
             else:
                 disabled.discard(target)
-            disabled_saved = save_global_disabled_plugins(sorted(disabled))
+            next_disabled = sorted(disabled)
+            if body.global_disable_revision is None:
+                disabled_saved = save_global_disabled_plugins(next_disabled)
+            else:
+                saved_ok, disabled_saved, _ = save_global_disabled_plugins_if_revision(
+                    next_disabled,
+                    current_revision,
+                )
+                if not saved_ok:
+                    raise HTTPException(status_code=409, detail="全局禁用名单已被其他请求更新，请刷新后重试")
             await invalidate_disabled_plugin_gate_cache(clear_all=True)
             audit_changes["global_disable"] = {"before": disabled_before, "after": target in disabled_saved}
         else:
             disabled_saved = sorted(disabled)
+        disabled_revision = global_disabled_plugins_revision(disabled_saved)
 
         blocked_before = await list_plugin_blocked_user_ids(target)
         if "blocked_user_ids" in fields_set:
@@ -547,6 +571,7 @@ def register_plugins_console_router(
                 "blocked_user_ids": blocked_saved,
                 "runtime": {
                     "global_disable": target in disabled_saved,
+                    "global_disable_revision": disabled_revision,
                     "help_hidden": target in hidden_saved,
                 },
             },
@@ -1215,6 +1240,8 @@ def register_plugins_console_router(
                 "hidden_plugins": load_help_hidden_plugins(),
                 "ignored_plugins": resolve_help_ignored_plugins(),
             }
+        except HTTPException:
+            raise
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
@@ -1240,11 +1267,14 @@ def register_plugins_console_router(
         try:
             from packages.help.global_disable import (
                 GLOBAL_DISABLE_PROTECTED_PLUGINS,
+                global_disabled_plugins_revision,
                 load_global_disabled_plugins,
             )
 
+            disabled = load_global_disabled_plugins()
             data = {
-                "disabled_plugins": load_global_disabled_plugins(),
+                "disabled_plugins": disabled,
+                "revision": global_disabled_plugins_revision(disabled),
                 "protected_plugins": sorted(GLOBAL_DISABLE_PROTECTED_PLUGINS),
             }
         except Exception as e:  # noqa: BLE001
@@ -1254,6 +1284,7 @@ def register_plugins_console_router(
     @router.put(f"{x}/plugins/global-disable", include_in_schema=True)
     async def _plugins_global_disable_put(
         body: GlobalPluginDisableBody,
+        request: Request,
         token: str | None = Query(default=None),
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
@@ -1261,12 +1292,38 @@ def register_plugins_console_router(
         try:
             from packages.help.global_disable import (
                 GLOBAL_DISABLE_PROTECTED_PLUGINS,
-                save_global_disabled_plugins,
+                global_disabled_plugins_revision,
+                load_global_disabled_plugins,
+                save_global_disabled_plugins_if_revision,
             )
             from packages.help.plugin_manager import invalidate_disabled_plugin_gate_cache
 
-            disabled = save_global_disabled_plugins(body.disabled_plugins)
+            previous = load_global_disabled_plugins()
+            previous_revision = global_disabled_plugins_revision(previous)
+            if body.expected_revision is not None and body.expected_revision != previous_revision:
+                raise HTTPException(status_code=409, detail="全局禁用名单已被其他请求更新，请刷新后重试")
+            saved_ok, disabled, revision = save_global_disabled_plugins_if_revision(
+                body.disabled_plugins,
+                previous_revision,
+            )
+            if not saved_ok:
+                raise HTTPException(status_code=409, detail="全局禁用名单已被其他请求更新，请刷新后重试")
             await invalidate_disabled_plugin_gate_cache(clear_all=True)
+            logger.info(
+                "global plugin disable audit: client={} path={} pid={} old={} new={} "
+                "added={} removed={} revision={}=>{}",
+                request.client.host if request.client else "unknown",
+                request.url.path,
+                os.getpid(),
+                json.dumps(previous, ensure_ascii=False, separators=(",", ":")),
+                json.dumps(disabled, ensure_ascii=False, separators=(",", ":")),
+                json.dumps(sorted(set(disabled) - set(previous)), ensure_ascii=False, separators=(",", ":")),
+                json.dumps(sorted(set(previous) - set(disabled)), ensure_ascii=False, separators=(",", ":")),
+                previous_revision,
+                revision,
+            )
+        except HTTPException:
+            raise
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         drop_read_cache(("plugins", "home-overview"))
@@ -1274,6 +1331,7 @@ def register_plugins_console_router(
             "ok": True,
             "data": {
                 "disabled_plugins": disabled,
+                "revision": revision,
                 "protected_plugins": sorted(GLOBAL_DISABLE_PROTECTED_PLUGINS),
             },
         })

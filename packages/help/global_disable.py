@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 
@@ -166,6 +167,12 @@ def load_global_disabled_plugins() -> list[str]:
     return sorted(resolve_global_disabled_plugin_names())
 
 
+def global_disabled_plugins_revision(disabled_plugins: list[str] | None = None) -> str:
+    values = sorted(disabled_plugins if disabled_plugins is not None else load_global_disabled_plugins())
+    payload = json.dumps(values, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
 def save_global_disabled_plugins(disabled_plugins: list[str]) -> list[str]:
     global _cache_mtime_ns, _cache_names, _synced_redis_gen, _remote_gen_checked_at
     protected = GLOBAL_DISABLE_PROTECTED_PLUGINS
@@ -188,6 +195,38 @@ def save_global_disabled_plugins(disabled_plugins: list[str]) -> list[str]:
     except Exception:
         pass
     return out
+
+
+def save_global_disabled_plugins_if_revision(
+    disabled_plugins: list[str],
+    expected_revision: str,
+) -> tuple[bool, list[str], str]:
+    protected = GLOBAL_DISABLE_PROTECTED_PLUGINS
+    out = sorted({str(x).strip() for x in disabled_plugins if str(x).strip() and str(x).strip() not in protected})
+    from pallas.api.storage import DeployPluginStorage
+
+    current = load_global_disabled_plugins()
+    if global_disabled_plugins_revision(current) != expected_revision:
+        return False, current, global_disabled_plugins_revision(current)
+    if not DeployPluginStorage("help").set_if_current(_STORAGE_KEY, out, current):
+        current = load_global_disabled_plugins()
+        return False, current, global_disabled_plugins_revision(current)
+    global _cache_mtime_ns, _cache_names, _synced_redis_gen, _remote_gen_checked_at
+    names = frozenset(out)
+    _cache_mtime_ns = file_mtime_ns(global_disabled_plugins_path())
+    _cache_names = names
+    bump_global_disable_remote_generation()
+    try:
+        from pallas.core.platform.coord.redis_claim import get_coord_redis_client
+
+        client = get_coord_redis_client()
+        if client is not None:
+            raw = client.get(_REDIS_GEN_KEY)
+            _synced_redis_gen = int(raw) if raw else _synced_redis_gen
+            _remote_gen_checked_at = time.monotonic()
+    except Exception:
+        pass
+    return True, out, global_disabled_plugins_revision(out)
 
 
 def is_global_disable_protected(package: str) -> bool:

@@ -175,6 +175,7 @@ class LogsData(BaseModel):
 
 class PluginGovernanceRuntimeData(BaseModel):
     global_disable: bool = False
+    global_disable_revision: str = ""
     help_hidden: bool = False
     global_disable_protected: bool = False
     help_ignored: bool = False
@@ -199,6 +200,7 @@ class PluginGovernanceBody(BaseModel):
     command_permission_overrides: dict[str, str] = Field(default_factory=dict)
     command_limit_overrides: dict[str, int] = Field(default_factory=dict)
     global_disable: bool = False
+    global_disable_revision: str | None = None
     help_hidden: bool = False
     blocked_user_ids: list[int] = Field(default_factory=list)
 

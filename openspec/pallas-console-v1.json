@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.2.2-7-gae9375c6-dirty",
+    "version": "v4.2.2-22-g25ca7b24-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -26074,6 +26074,11 @@
             "title": "Global Disable",
             "default": false
           },
+          "global_disable_revision": {
+            "type": "string",
+            "title": "Global Disable Revision",
+            "default": ""
+          },
           "help_hidden": {
             "type": "boolean",
             "title": "Help Hidden",
@@ -27943,6 +27948,19 @@
             "type": "array",
             "maxItems": 2000,
             "title": "Disabled Plugins"
+          },
+          "expected_revision": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Revision"
           }
         },
         "additionalProperties": false,

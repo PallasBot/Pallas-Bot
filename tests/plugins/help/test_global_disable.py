@@ -31,6 +31,13 @@ def test_save_and_load_global_disabled_plugins(tmp_path, monkeypatch):
     assert global_disable.load_global_disabled_plugins() == ["chat", "ollama"]
 
 
+def test_global_disabled_plugins_revision_changes_with_content():
+    first = global_disable.global_disabled_plugins_revision(["chat"])
+    second = global_disable.global_disabled_plugins_revision(["ollama"])
+    assert first != second
+    assert first == global_disable.global_disabled_plugins_revision(["chat"])
+
+
 def test_sync_remote_generation_invalidates_local_cache(tmp_path, monkeypatch):
     monkeypatch.setattr(global_disable, "plugin_data_dir", lambda _name: tmp_path)
     global_disable.save_global_disabled_plugins(["chat"])

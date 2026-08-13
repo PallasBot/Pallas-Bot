@@ -316,6 +316,7 @@ async def test_plugin_governance_put_omitted_fields_keep_existing_state(monkeypa
     assert payload["data"]["runtime"] == {
         "global_disable": True,
         "help_hidden": True,
+        "global_disable_revision": "b98e544aebedb29d",
     }
     assert audit_messages[-1:] == [
         (
