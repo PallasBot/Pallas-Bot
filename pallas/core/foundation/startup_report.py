@@ -13,9 +13,9 @@ from nonebot import get_driver, logger
 from .logging.bridge import format_plugin_event
 
 _ROLE_LABELS = {
-    "unified": "统一进程",
-    "hub": "Hub",
-    "worker": "Worker",
+    "unified": "单一运行时",
+    "hub": "分片 Hub",
+    "worker": "分片 Worker",
 }
 
 _FACT_LABELS = {
@@ -97,13 +97,25 @@ def register_startup_ready(component: str, detail: str | None = None) -> None:
     _collector.set_event(component, "已就绪", detail)
 
 
-def register_plugin_startup_ready(plugin: str, commands: list[str] | tuple[str, ...] | None = None) -> None:
-    """将插件的就绪事件并入启动摘要，避免逐插件启动刷屏。"""
+def register_plugin_startup_ready(
+    plugin: str,
+    commands: list[str] | tuple[str, ...] | None = None,
+    detail: str | None = None,
+) -> None:
+    """将插件的就绪事件并入启动摘要，避免逐插件启动刷屏。
+
+    ``detail`` 为运维中文叙事（如 ``MAA 远控 HTTP 路由已挂载``）；缺省时回退
+    ``Plugin [x] registered commands [...]``。
+    """
     plugin_id = str(plugin or "").strip()
-    if plugin_id:
+    if not plugin_id:
+        return
+    if detail is not None and str(detail).strip():
+        detail_text = str(detail).strip()
+    else:
         command_names = ", ".join(_command_log_name(command) for command in commands or ()) or "-"
-        detail = format_plugin_event("ready", f"Plugin [{plugin_id}] registered commands [{command_names}]")
-        _collector.set_event(plugin_id, "plugin_ready", detail)
+        detail_text = f"Plugin [{plugin_id}] registered commands [{command_names}]"
+    _collector.set_event(plugin_id, "plugin_ready", format_plugin_event("ready", detail_text))
 
 
 def _command_log_name(command: str) -> str:
@@ -193,9 +205,9 @@ def _format_plugins(raw: str) -> str:
         parts.append(f"额外目录 {extra}")
     text = f"已成功载入 {total} 个插件"
     if parts:
-        text += "：" + "，".join(parts)
+        text += "：" + " | ".join(parts)
     if "skip" in kv:
-        text += f"；配置跳过 {kv['skip']}"
+        text += f" | 配置跳过 {kv['skip']}"
         source_labels = {
             "local": "本地",
             "src": "内置",
@@ -210,7 +222,7 @@ def _format_plugins(raw: str) -> str:
             if separator and source in source_labels:
                 source_parts.append(f"{source_labels[source]} {count}")
         if source_parts:
-            text += "：" + "，".join(source_parts)
+            text += "：" + " | ".join(source_parts)
     return text
 
 
@@ -237,7 +249,7 @@ def _format_llm(raw: str) -> str:
         if leftover and leftover != "ok":
             bits.append(leftover)
         if len(bits) > 1:
-            return f"{bits[0]}：" + "，".join(bits[1:])
+            return f"{bits[0]}：" + " | ".join(bits[1:])
         return bits[0]
     return text
 
@@ -318,7 +330,7 @@ def _runtime_base_lines() -> list[str]:
     role = str(bot_role())
     lines = [
         f"版本：{get_pallas_bot_version_for_reporting()}",
-        f"角色：{_role_label(role)}",
+        f"进程：{_role_label(role)}",
     ]
 
     if is_sharded_worker():

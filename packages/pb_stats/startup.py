@@ -1,6 +1,6 @@
 from nonebot import get_driver, logger
 
-from pallas.api.logging import format_plugin_event
+from pallas.api.logging import register_plugin_startup_ready
 from pallas.core.platform.bot_runtime.roles import is_sharded_worker
 from pallas.product.community_stats.scheduler import start_community_stats_reporter
 from pallas.product.control_plane.bootstrap_client import ensure_control_plane_bootstrap
@@ -23,6 +23,6 @@ async def pb_stats_startup() -> None:
         logger.warning("corpus enroll: startup failed: {}", e)
     try:
         await start_community_stats_reporter()
-        logger.info(format_plugin_event("ready", "Scheduled community statistics reporting"))
+        register_plugin_startup_ready("pb_stats", detail="社区统计周期上报已调度")
     except Exception as e:
         logger.warning("pb_stats: startup failed: {}", e)

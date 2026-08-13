@@ -1,7 +1,7 @@
-from nonebot import get_driver, logger
+from nonebot import get_driver
 from nonebot_plugin_apscheduler import scheduler
 
-from pallas.api.logging import format_plugin_event
+from pallas.api.logging import register_plugin_startup_ready
 from pallas.core.foundation.config import BotConfig
 
 driver = get_driver()
@@ -16,7 +16,7 @@ async def fully_sober_up_all():
 async def drink_startup() -> None:
     if not scheduler.running:
         scheduler.start()
-    logger.info(format_plugin_event("ready", "Scheduled daily sober-up maintenance"))
+    register_plugin_startup_ready("drink", detail="每日清醒定时维护已调度")
 
 
 @driver.on_shutdown
