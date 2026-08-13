@@ -450,11 +450,12 @@ async def deliver_llm_callback_success(
         fallback = str(task.get("fallback_text") or "").strip()
         reply_text = fallback if fallback and fallback != reply_text else ""
     marker_intent = ""
-    if task_type == LLM_CHAT_TASK_TYPE and reply_text:
-        reply_text, marker_intent = extract_sticker_marker(reply_text)
     from pallas.product.llm.models import StructuredChatReply
     from pallas.product.llm.output_filter import profile_for_task_type, resolve_output_filtered_chat_reply
     from pallas.product.llm.structured_reply import parse_structured_reply
+
+    if reply_text and profile_for_task_type(task_type) is not None:
+        reply_text, marker_intent = extract_sticker_marker(reply_text)
 
     had_reply_before_filter = bool(reply_text)
     direct_candidate = str(task.get("semantic_style_direct_candidate") or "").strip()
@@ -463,10 +464,10 @@ async def deliver_llm_callback_success(
         structured_reply = parse_structured_reply(reply_text)
     structured_reply = resolve_output_filtered_chat_reply(task, structured_reply)
     reply_segments = list(structured_reply.reply_segments)
-    if task_type == LLM_CHAT_TASK_TYPE and len(reply_segments) == 1:
+    band = str(task.get("reply_total_length_band") or "").strip()
+    if band and len(reply_segments) == 1:
         from pallas.product.llm.reply_postprocess import split_short_reply_segments
 
-        band = str(task.get("reply_total_length_band") or "").strip()
         if band == "short":
             reply_segments = split_short_reply_segments(reply_segments[0])
         elif "\n" in reply_segments[0]:

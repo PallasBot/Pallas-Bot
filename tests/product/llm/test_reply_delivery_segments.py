@@ -70,6 +70,51 @@ async def test_delivery_splits_long_plain_short_reply_at_sentence_boundaries(
 
 
 @pytest.mark.asyncio
+async def test_drunk_reply_splits_into_bubbles_and_extracts_sticker(monkeypatch: pytest.MonkeyPatch) -> None:
+    sender = AsyncMock(
+        side_effect=[
+            type("Receipt", (), {"delivered": True, "message_id": 10})(),
+            type("Receipt", (), {"delivered": True, "message_id": 11})(),
+        ]
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
+        sender,
+    )
+    monkeypatch.setattr(
+        llm_delivery,
+        "get_llm_config",
+        lambda: LlmConfig(
+            llm_reply_trim_terminal_period_enabled=False,
+            llm_chat_sticker_enabled=False,
+        ),
+    )
+
+    reply_text, _text_delivered, _delivered = await llm_delivery.deliver_llm_callback_success(
+        "task-drunk-bubbles",
+        {
+            "task_type": "chat",
+            "bot_id": 99,
+            "group_id": 42,
+            "user_id": 7,
+            "reply_total_length_band": "short",
+        },
+        bot=object(),
+        group_id=42,
+        bot_id=99,
+        bot_id_str="99",
+        text="我真不行了\n再来一杯也行\n[表情：得意]",
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+        sleeper=lambda _delay: None,
+    )
+
+    assert [call.args[2] for call in sender.await_args_list] == ["我真不行了", "再来一杯也行"]
+    assert reply_text == "我真不行了\n再来一杯也行"
+
+
+@pytest.mark.asyncio
 async def test_delivery_keeps_complete_reply_as_one_bubble(monkeypatch: pytest.MonkeyPatch) -> None:
     sender = AsyncMock(return_value=type("Receipt", (), {"delivered": True, "message_id": 10})())
     monkeypatch.setattr(
