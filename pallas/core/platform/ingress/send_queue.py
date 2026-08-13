@@ -24,6 +24,9 @@ _STATS = {
     "sent": 0,
     "dropped": 0,
     "errors": 0,
+    "retries": 0,
+    "retry_dropped": 0,
+    "risk_cooldowns": 0,
     "depth": 0,
 }
 _ERROR_DIMENSION_LIMIT = 16
@@ -34,6 +37,9 @@ _ERRORS_BY_REASON: dict[str, int] = {}
 _LAST_ERROR: dict[str, Any] | None = None
 _LAST_ERROR_AT = 0.0
 _LAST_SEND_AT: dict[str, float] = {}
+_RISK_STREAK: dict[str, int] = {}
+_RISK_COOLDOWN_UNTIL: dict[str, float] = {}
+_RETRY_COUNTS: dict[str, int] = {}
 
 _HIGH_PRIORITY_APIS = frozenset({
     "send_group_msg",
@@ -56,6 +62,7 @@ class SendQueueItem:
     api: str
     data: dict[str, Any]
     future: asyncio.Future[Any]
+    attempt: int = 0
 
 
 def send_queue_enabled() -> bool:
@@ -108,6 +115,46 @@ def send_queue_enqueue_timeout_sec() -> float:
         return 2.0
 
 
+def send_queue_retry_max() -> int:
+    raw = repo_env_raw_value("PALLAS_SEND_RETRY_MAX")
+    if raw is None:
+        return 2
+    try:
+        return max(0, min(5, int(str(raw).strip())))
+    except ValueError:
+        return 2
+
+
+def send_queue_retry_backoff_base_sec() -> float:
+    raw = repo_env_raw_value("PALLAS_SEND_RETRY_BACKOFF_BASE_SEC")
+    if raw is None:
+        return 1.0
+    try:
+        return max(0.0, float(str(raw).strip()))
+    except ValueError:
+        return 1.0
+
+
+def send_queue_retry_risk_cooldown_sec() -> float:
+    raw = repo_env_raw_value("PALLAS_SEND_RETRY_RISK_COOLDOWN_SEC")
+    if raw is None:
+        return 30.0
+    try:
+        return max(0.0, float(str(raw).strip()))
+    except ValueError:
+        return 30.0
+
+
+def send_queue_retry_risk_latch_times() -> int:
+    raw = repo_env_raw_value("PALLAS_SEND_RETRY_RISK_LATCH_TIMES")
+    if raw is None:
+        return 3
+    try:
+        return max(1, min(10, int(str(raw).strip())))
+    except ValueError:
+        return 3
+
+
 def api_send_priority(api: str) -> int:
     if api in _HIGH_PRIORITY_APIS:
         return 0
@@ -138,6 +185,10 @@ def send_queue_status() -> dict[str, Any]:
         "max_depth": send_queue_max_depth(),
         "workers": send_queue_worker_count(),
         "min_interval_ms": send_queue_min_interval_sec() * 1000.0,
+        "retry_max": send_queue_retry_max(),
+        "retry_backoff_base_sec": send_queue_retry_backoff_base_sec(),
+        "retry_risk_cooldown_sec": send_queue_retry_risk_cooldown_sec(),
+        "risk_latch_times": send_queue_retry_risk_latch_times(),
         **dict(_STATS),
         "errors_by_api": dict(_ERRORS_BY_API),
         "errors_by_class": dict(_ERRORS_BY_CLASS),
@@ -162,6 +213,9 @@ def reset_send_queue_for_tests() -> None:
     _LAST_ERROR = None
     _LAST_ERROR_AT = 0.0
     _LAST_SEND_AT.clear()
+    _RISK_STREAK.clear()
+    _RISK_COOLDOWN_UNTIL.clear()
+    _RETRY_COUNTS.clear()
 
 
 def classify_send_queue_error(api: str, exc: Exception) -> str:
@@ -182,7 +236,6 @@ def classify_send_queue_error(api: str, exc: Exception) -> str:
 
 def record_send_queue_error(api: str, exc: Exception) -> None:
     global _LAST_ERROR, _LAST_ERROR_AT
-
     error_class = type(exc).__name__
     info = getattr(exc, "info", None)
     retcode = info.get("retcode") if isinstance(info, dict) else None
@@ -209,6 +262,63 @@ def record_send_queue_error(api: str, exc: Exception) -> None:
     _LAST_ERROR_AT = time.monotonic()
 
 
+def is_retryable_send_error(api: str, exc: Exception) -> bool:
+    from nonebot.adapters.onebot.v11 import ActionFailed
+
+    if isinstance(exc, ActionFailed):
+        reason = classify_send_queue_error(api, exc)
+        return reason == "media_download_failed"
+    from nonebot.adapters.onebot.v11 import NetworkError
+
+    return isinstance(exc, NetworkError)
+
+
+def is_risk_limited_send_error(api: str, exc: Exception) -> bool:
+    from nonebot.adapters.onebot.v11 import ActionFailed
+
+    if not isinstance(exc, ActionFailed):
+        return False
+    info = getattr(exc, "info", None)
+    if not isinstance(info, dict):
+        return False
+    retcode = info.get("retcode")
+    if retcode == 1201:
+        return True
+    detail = " ".join(str(info.get(key) or "") for key in ("message", "wording", "msg")).lower()
+    return any(word in detail for word in ("too frequently", "过于频繁", "频率过高", "message too often"))
+
+
+def send_error_retry_delay_sec(api: str, exc: Exception, attempt: int) -> float:
+    base = send_queue_retry_backoff_base_sec()
+    if is_risk_limited_send_error(api, exc):
+        return send_queue_retry_risk_cooldown_sec()
+    return base * (2 ** max(0, attempt - 1))
+
+
+def is_send_bot_in_risk_cooldown(bot_self_id: str) -> float:
+    until = _RISK_COOLDOWN_UNTIL.get(bot_self_id, 0.0)
+    return max(0.0, until - time.monotonic())
+
+
+def note_send_risk_failure(bot_self_id: str) -> None:
+    streak = _RISK_STREAK.get(bot_self_id, 0) + 1
+    latch_times = send_queue_retry_risk_latch_times()
+    if streak >= latch_times:
+        _RISK_STREAK[bot_self_id] = 0
+        _RISK_COOLDOWN_UNTIL[bot_self_id] = time.monotonic() + send_queue_retry_risk_cooldown_sec()
+        _STATS["risk_cooldowns"] += 1
+        log_rate_limited(
+            logger,
+            "warning",
+            f"send_queue.risk_cooldown.{bot_self_id}",
+            "Send queue risk cooldown armed for bot [{}] after [{}] consecutive rate-limit failures",
+            bot_self_id,
+            latch_times,
+        )
+    else:
+        _RISK_STREAK[bot_self_id] = streak
+
+
 async def _rate_limit_wait(bot_self_id: str) -> None:
     interval = send_queue_min_interval_sec()
     if interval <= 0:
@@ -221,14 +331,33 @@ async def _rate_limit_wait(bot_self_id: str) -> None:
     _LAST_SEND_AT[bot_self_id] = time.monotonic()
 
 
+async def _requeue_item_with_delay(item: SendQueueItem, delay: float) -> None:
+    await asyncio.sleep(delay)
+    queue = _QUEUE
+    if queue is None:
+        if not item.future.done():
+            item.future.set_exception(RuntimeError("send_queue stopped during retry"))
+        return
+    global _SEQ
+    _SEQ += 1
+    _STATS["depth"] += 1
+    queue.put_nowait((api_send_priority(item.api), _SEQ, item))
+
+
 async def _execute_queue_item(item: SendQueueItem) -> None:
     global _ORIGINAL_CALL_API
     if _ORIGINAL_CALL_API is None:
         item.future.set_exception(RuntimeError("send_queue original _call_api missing"))
         return
+    bot_self_id = str(getattr(item.bot, "self_id", ""))
+    cooldown_left = is_send_bot_in_risk_cooldown(bot_self_id)
+    if cooldown_left > 0:
+        _STATS["depth"] = max(0, _STATS["depth"] - 1)
+        asyncio.create_task(_requeue_item_with_delay(item, cooldown_left))
+        return
     token = _BYPASS.set(True)
     try:
-        await _rate_limit_wait(str(getattr(item.bot, "self_id", "")))
+        await _rate_limit_wait(bot_self_id)
         result = await _ORIGINAL_CALL_API(item.adapter, item.bot, item.api, **item.data)
         _STATS["sent"] += 1
         if not item.future.done():
@@ -236,6 +365,31 @@ async def _execute_queue_item(item: SendQueueItem) -> None:
     except Exception as exc:
         _STATS["errors"] += 1
         record_send_queue_error(item.api, exc)
+        retryable = is_retryable_send_error(item.api, exc) or is_risk_limited_send_error(item.api, exc)
+        if retryable and item.attempt < send_queue_retry_max():
+            item.attempt += 1
+            delay = send_error_retry_delay_sec(item.api, exc, item.attempt)
+            _STATS["retries"] += 1
+            if is_risk_limited_send_error(item.api, exc):
+                note_send_risk_failure(bot_self_id)
+            log_rate_limited(
+                logger,
+                "warning",
+                f"send_queue.retry.{item.api}",
+                format_business_event(
+                    "发送队列",
+                    "重试",
+                    bot=bot_self_id,
+                    api=item.api,
+                    attempt=item.attempt,
+                    delay_sec=round(delay, 2),
+                    error=exc,
+                ),
+            )
+            asyncio.create_task(_requeue_item_with_delay(item, delay))
+            return
+        if is_risk_limited_send_error(item.api, exc):
+            note_send_risk_failure(bot_self_id)
         log_rate_limited(
             logger,
             "warning",
@@ -243,7 +397,7 @@ async def _execute_queue_item(item: SendQueueItem) -> None:
             format_business_event(
                 "发送队列",
                 "失败",
-                bot=getattr(item.bot, "self_id", "?"),
+                bot=bot_self_id,
                 api=item.api,
                 error=exc,
             ),
