@@ -91,6 +91,12 @@ async def prepare_fire_roulette(
         shot_count = game.roulette_count[event.group_id]
         game.roulette_time[event.group_id] = int(time.time())
         game.roulette_player.append(event.user_id, event.group_id)
+        logger.info(
+            format_plugin_event(
+                "roulette_shot",
+                f"User [{event.user_id}] fired shot [{shot_count}/6] in group [{event.group_id}]",
+            )
+        )
 
         if shot_count == 6 and random.random() < 0.125:
             game.roulette_status[event.group_id] = 0

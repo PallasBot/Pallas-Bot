@@ -258,7 +258,6 @@ async def init_mongodb_db() -> None:
         if user or password:
             logger.warning("[DB] MONGO 用户名与密码须同时配置，将尝试无认证连接")
 
-    logger.info("[DB] 连接 MongoDB {}:{} db={}", host, port, db_name)
     mongo_client = AsyncMongoClient(
         connection_string,
         unicode_decode_error_handler="ignore",
@@ -275,6 +274,7 @@ async def init_mongodb_db() -> None:
                 f"或改用 DB_BACKEND=postgresql。原始错误: {err}"
             ) from exc
         raise
+    logger.info("[DB] MongoDB [{}] 已连接：地址 [{}:{}]", db_name, host, port)
     await init_beanie(
         database=mongo_client[db_name],
         document_models=[
@@ -426,8 +426,6 @@ async def init_postgresql_db() -> None:
     max_overflow = int(_cfg("PG_MAX_OVERFLOW", "20"))
     pool_recycle = int(_cfg("PG_POOL_RECYCLE", "1800"))
 
-    logger.info("[DB] 连接 PostgreSQL {}:{} db={}", host, port, db_name)
-
     if _cfg_bool("PG_AUTO_CREATE_DB", default=False):
         admin_engine = create_async_engine(f"{base_url}/postgres", isolation_level="AUTOCOMMIT")
         try:
@@ -472,10 +470,11 @@ async def init_postgresql_db() -> None:
     if _cfg_bool("PG_STAT_STATEMENTS_ENABLED"):
         await try_enable_pg_stat_statements(engine)
     logger.info(
-        "[DB] PostgreSQL {} 已连接 pool={}+{} recycle={}s",
+        "[DB] PostgreSQL [{}] 已连接：地址 [{}:{}] | 连接池 [{}] | 回收周期 [{}s]",
         db_name,
-        pool_size,
-        max_overflow,
+        host,
+        port,
+        f"{pool_size}+{max_overflow}",
         pool_recycle,
     )
     try:

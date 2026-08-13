@@ -33,7 +33,7 @@ def _send_queue_dropped(snap: dict) -> int:
 
 
 def _dispatch_stats_text(snap: dict) -> str:
-    """入站调度统计：一行叙事摘要 + 一行关键详情，次要指标见 WebUI。"""
+    """入站调度统计：单行摘要，次要指标见 WebUI。"""
     scheduler = snap.get("conversation_scheduler") or {}
     send_q = snap.get("send_queue") or {}
     hot = snap.get("hotpath") or {}
@@ -52,14 +52,13 @@ def _dispatch_stats_text(snap: dict) -> str:
     depth, max_depth = ints(send_q, "depth", "max_depth")
 
     return (
-        f"ingress_dispatch: processed [{group_messages}] group messages "
-        f"([{cmd}] commands, [{chat}] chat)\n"
-        f"  p95 [{ms(snap, 'ingress_duration_ms_p95')}]  full [{ms(snap, 'ingress_full_ms_p95')}]  "
-        f"overload [{overload}]  degraded [{chat_degraded}]\n"
-        f"  scheduler [{pending}/{scheduler.get('max_pending')}]  llm [{llm_active}/{llm_waiting}/{llm_reserved}]  "
-        f"send_q [{depth}/{max_depth}]\n"
-        f"  bundle [{ms(hot, 'bundle_ms_p95')}]  db_find [{ms(hot, 'db_find_ms_p95')}]  "
-        f"sql [{ms(hot, 'sql_total_ms_p95')}]"
+        f"ingress_dispatch：群消息 [{group_messages}]（命令 [{cmd}] / 闲聊 [{chat}]）"
+        f" | P95 [{ms(snap, 'ingress_duration_ms_p95')}] / 全程 [{ms(snap, 'ingress_full_ms_p95')}]"
+        f" | 过载 [{overload}] / 降级 [{chat_degraded}]"
+        f" | 调度 [{pending}/{scheduler.get('max_pending')}] / LLM [{llm_active}/{llm_waiting}/{llm_reserved}]"
+        f" / 发送 [{depth}/{max_depth}]"
+        f" | bundle [{ms(hot, 'bundle_ms_p95')}] / db [{ms(hot, 'db_find_ms_p95')}]"
+        f" / sql [{ms(hot, 'sql_total_ms_p95')}]"
     )
 
 

@@ -368,7 +368,7 @@ def bind_repeater_learn_lifecycle() -> None:
         await start_repeater_learn_worker()
         register_startup_ready(
             "复读学习队列",
-            f"workers={len(_worker_tasks)} queue_max={learn_queue_max_size()}",
+            f"worker [{len(_worker_tasks)}] | 队列上限 [{learn_queue_max_size()}]",
         )
 
     @driver.on_shutdown

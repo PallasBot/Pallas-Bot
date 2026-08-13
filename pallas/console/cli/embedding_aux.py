@@ -99,7 +99,6 @@ def stop_embed_aux(*, force: bool = False, dry_run: bool = False) -> None:
         stop_pid(pid, timeout_s=15.0, force=force)
         report_process_stop("embed", pid, time.monotonic() - started)
     clear_pid_file(PID_FILE)
-    print(f"  · embed 辅进程：{'已强制停止' if force else '已停止'}")
 
 
 def print_embed_aux_status() -> None:

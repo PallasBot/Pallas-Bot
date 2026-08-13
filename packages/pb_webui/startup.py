@@ -93,7 +93,7 @@ if not is_sharded_worker():
         webui_version = get_webui_dist_version() or get_installed_webui_version().get("tag", "")
         if plugin_config.pallas_webui_dev_mode:
             logger.warning("[WebUI] 当前为开发模式，登录鉴权已关闭")
-        logger.info("[WebUI] 前端栈={} static_root={}", frontend, public)
+        logger.info("[WebUI] 前端栈 [{}] | 静态资源 [{}]", frontend, public)
         set_console_meta({
             "static_root": str(public),
             "http_base": base,
@@ -265,7 +265,7 @@ if not is_sharded_worker():
             register_startup_scheduled("控制台静态资源", "task=bootstrap")
             asyncio.create_task(guarded("webui-dist-bootstrap", bootstrap_webui_dist))
         else:
-            register_startup_ready("控制台静态资源", f"frontend={frontend}")
+            register_startup_ready("控制台静态资源", f"前端栈 [{frontend}]")
         asyncio.create_task(guarded("release-version-check", background_release_checks))
         asyncio.create_task(guarded("console-read-cache-warm", warm_console_read_caches))
         asyncio.create_task(guarded("plugin-store-assets-warm", warm_plugin_store_assets))

@@ -235,7 +235,7 @@ uv run pre-commit run -a
 - 日志桥会按主仓业务模块、`packages.*`、`pallas_plugin_*` 与 `nonebot_plugin_*` 补充 `[WebUI]`、`[CLI]`、`[DB]`、`[Scrub]`、`[LLM]`、`[Learn]` 等方括号标签，后接一个空格；调用方已有 `[...]` 标签时不会重复添加。不要混用 `控制台:`、`Pallas-Bot 控制台:` 或裸 `Pallas CLI:`。
 - **运行态日志正文用英文叙事句**织入关键信息，值用 `[{}]` 内嵌（如 `Bot [{bot_id}] delivered a reply in group [{group_id}]`）；避免中文片段、裸 `key=value` 罗列与键名堆叠，仅键名（如 `keys [...]`）这类需脱敏的才保留「词 [值]」。
 - **管理/运维类低频日志**（配置保存、备份、迁移、登录、插件商店、Bot 更新等）用**中文叙事句**织入信息（如 `数据库备份完成，job [{}]、输出到 [{}]`），同样避免裸 `key=value`。
-- Bot / 群 / 用户标识使用 `[Bot {:>10}]`、`[群 {:>10}]`、`[用户 {:>10}]`，短 ID 右对齐以保持正文列一致；不要在同一条事件中混用裸 `Bot <id>` 或 `group=<id>`。
+- Bot / 群 / 用户标识使用 `Bot [{bot_id}] 群 [{group_id}] 用户 [{user_id}]`；入站消息镜像行通过 `logger.bind(display_name="Message")` 使用独立 `{Message}` 通道。不要在同一条事件中混用裸 `Bot <id>` 或 `group=<id>`。
 - 占位符使用 `{}` 或 f-string；避免 `logger.debug("msg %s", x)` 导致消息里仍显示 `%s`。异常应包含足以定位的 ID 与 `err={}`，需要堆栈时使用 `logger.exception`。
 - 每消息/每请求的高频路径（Redis、发送、审查、ACL 等）用 `log_rate_limited`（`pallas.core.foundation.logging`）限频，故障期按 key 周期输出一次，避免刷屏。
 

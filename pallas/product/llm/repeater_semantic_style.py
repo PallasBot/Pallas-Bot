@@ -1800,7 +1800,7 @@ def register_semantic_style_cache_startup_hook() -> None:
         _backfill_task = asyncio.create_task(_backfill_loop(), name="repeater_semantic_style_backfill")
         register_startup_scheduled(
             "语义风格回填",
-            f"delay={_SEMANTIC_STYLE_BACKFILL_START_DELAY_SEC}s interval={_SEMANTIC_STYLE_BACKFILL_INTERVAL_SEC}s",
+            f"首轮延迟 [{_SEMANTIC_STYLE_BACKFILL_START_DELAY_SEC}s] | 间隔 [{_SEMANTIC_STYLE_BACKFILL_INTERVAL_SEC}s]",
         )
 
     @driver.on_shutdown

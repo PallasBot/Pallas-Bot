@@ -64,8 +64,8 @@ async def start_corpus_cleanup_job() -> None:
         misfire_grace_time=600,
         next_run_time=datetime.now() + timedelta(seconds=300),
     )
-    logger.debug("语料污染扫库：周期 {}s", interval_sec)
-    register_startup_scheduled("语料污染扫库", f"interval={interval_sec}s")
+    logger.debug("语料污染扫库：周期 [{}s]", interval_sec)
+    register_startup_scheduled("语料污染扫库", f"间隔 [{interval_sec}s]")
 
 
 async def reload_corpus_cleanup_job() -> None:

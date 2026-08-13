@@ -133,7 +133,7 @@ def register_ingress_dispatch_runtime() -> None:
         config = get_ingress_dispatch_runtime_config()
         register_startup_ready(
             "入站调度",
-            f"scheduler={config.conversation_scheduler_concurrency} send_workers={config.send_queue_workers}",
+            f"调度并发 [{config.conversation_scheduler_concurrency}] | 发送 worker [{config.send_queue_workers}]",
         )
 
     @driver.on_shutdown

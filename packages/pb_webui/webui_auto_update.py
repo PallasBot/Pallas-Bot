@@ -910,7 +910,7 @@ def reschedule_webui_auto_update_job(config: Any | None = None) -> None:
             max_instances=1,
             misfire_grace_time=3600,
         )
-        logger.info("[WebUI] 自动更新已调度 cron={:02d}:{:02d}", hour, minute)
+        logger.info("[WebUI] 自动更新已调度 cron [{:02d}:{:02d}]", hour, minute)
         return
 
     hours = int(getattr(cfg, "pallas_webui_auto_update_interval_hours", 6) or 6)
@@ -925,4 +925,4 @@ def reschedule_webui_auto_update_job(config: Any | None = None) -> None:
         max_instances=1,
         misfire_grace_time=3600,
     )
-    logger.info("[WebUI] 自动更新已调度 interval={}h", hours)
+    logger.info("[WebUI] 自动更新已调度 interval [{}h]", hours)

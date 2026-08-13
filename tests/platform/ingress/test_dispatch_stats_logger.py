@@ -122,15 +122,15 @@ def test_dispatch_stats_text_groups_sections_with_header() -> None:
 
     text = _dispatch_stats_text(snap)
 
-    lines = text.splitlines()
-    assert len(lines) == 4
-    assert lines[0] == "ingress_dispatch: processed [753] group messages ([4] commands, [749] chat)"
-    assert lines[1] == "  p95 [7614.81ms]  full [-]  overload [8509]  degraded [606]"
-    assert lines[2] == "  scheduler [0/1024]  llm [0/0/6]  send_q [0/256]"
-    assert lines[3] == "  bundle [182.332ms]  db_find [142.211ms]  sql [107.898ms]"
+    assert "\n" not in text
+    assert "ingress_dispatch：群消息 [753]（命令 [4] / 闲聊 [749]）" in text
+    assert "P95 [7614.81ms] / 全程 [-]" in text
+    assert "过载 [8509] / 降级 [606]" in text
+    assert "调度 [0/1024] / LLM [0/0/6] / 发送 [0/256]" in text
+    assert "bundle [182.332ms] / db [142.211ms] / sql [107.898ms]" in text
 
 
 def test_dispatch_stats_text_omits_missing_ms_values() -> None:
     text = _dispatch_stats_text({"group_messages": 1})
-    assert "p95 [-]" in text
+    assert "P95 [-]" in text
     assert "bundle [-]" in text

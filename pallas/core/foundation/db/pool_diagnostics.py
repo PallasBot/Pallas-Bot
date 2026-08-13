@@ -191,7 +191,7 @@ async def emit_pool_diagnostics_tick() -> None:
     activity = await collect_pg_activity_snapshot()
     wait_s = wait_summary(activity)
 
-    slow_top = ", ".join(f"{k}={v}" for k, v in _slow_by_caller.most_common(3))
+    slow_top = ", ".join(f"{k} [{v}]" for k, v in _slow_by_caller.most_common(3))
     if not slow_top:
         slow_top = "-"
 
@@ -209,11 +209,10 @@ async def emit_pool_diagnostics_tick() -> None:
     )
     diag_log = logger.info if notable else logger.debug
     diag_log(
-        "pg pool diag: checked_out={}/{} util={} idle_in_tx={} pg_wait=[{}] "
-        "remote_skip_pressure={} remote_skip_busy={} mirror_skip={} "
-        "slow_sessions={} slow_max_ms={:.0f} learn_q={} learn_pool_wait={} slow_top=[{}]",
-        live.get("checked_out", "?"),
-        live.get("capacity", budget.get("capacity", "?")),
+        "pg pool diag：占用 [{}] | 利用率 [{}] | 空闲事务 [{}] | 等待 [{}] "
+        "| 远程压力跳过 [{}] | 远程忙跳过 [{}] | 镜像跳过 [{}] "
+        "| 慢会话 [{}] 最慢 [{:.0f}ms] | 学习队列 [{}] 池等待 [{}] | 慢TOP [{}]",
+        f"{live.get('checked_out', '?')}/{live.get('capacity', budget.get('capacity', '?'))}",
         util_pct,
         idle_tx if idle_tx is not None else "?",
         wait_s,

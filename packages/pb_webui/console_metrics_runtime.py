@@ -149,7 +149,7 @@ def _ensure_log_sink() -> None:
     if _INIT_LOG_SINK:
         return
     _INIT_LOG_SINK = True
-    logger.info("[WebUI] 日志环已接入 /pallas/api/logs")
+    logger.info("[WebUI] 日志环已接入 [/pallas/api/logs]")
 
 
 def _gpu_metrics() -> dict[str, Any]:

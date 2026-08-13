@@ -210,7 +210,7 @@ def stop_pid(
 
 
 def report_process_stop(name: str, pid: int, elapsed_s: float) -> None:
-    """辅进程停止后上报耗时（控制台打印 + Bot 停止日志）。"""
+    """辅进程停止后经统一日志上报耗时与终止方式。"""
     forced = elapsed_s >= 14.0
     outcome = "SIGKILL 强制结束" if forced else "已停止"
     try:
@@ -225,7 +225,6 @@ def report_process_stop(name: str, pid: int, elapsed_s: float) -> None:
         )
     except Exception:
         pass
-    print(f"  · {name} 辅进程：{outcome}（{elapsed_s:.1f}s）")
 
 
 def _windows_stop_pid(pid: int, *, force: bool, timeout_s: float) -> None:

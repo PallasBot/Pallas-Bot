@@ -81,7 +81,6 @@ def stop_work_aux(*, force: bool = False, dry_run: bool = False) -> None:
         stop_pid(pid, timeout_s=15.0, force=force)
         report_process_stop("work", pid, time.monotonic() - started)
     clear_pid_file(PID_FILE)
-    print(f"  · work 辅进程：{'已强制停止' if force else '已停止'}")
 
 
 def print_work_aux_status() -> None:
