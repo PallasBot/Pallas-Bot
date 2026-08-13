@@ -120,6 +120,7 @@ async def handle_drunk_chat(bot: Bot, event: GroupMessageEvent):
             "task_type": CHAT_DRUNK_TASK_TYPE,
             "start_time": time.time(),
             "want_tts": want_tts,
+            "reply_total_length_band": "short",
         },
     )
 

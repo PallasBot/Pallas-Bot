@@ -3,17 +3,25 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from nonebot import logger
 
 from pallas.core.foundation.db import make_group_config_repository
 from pallas.product.persona.compile_persona_prompt import load_base_system_prompt
 from pallas.product.persona.expression_habits import build_expression_habits_suffix
+from pallas.product.persona.model import ResolvedPersona
 
+from .assembler.chat_prompt import ChatPromptAssembler
 from .config import LlmConfig, get_llm_config
 from .knowledge.inject import enrich_system_with_knowledge_sources
 from .memory.inject import enrich_system_with_memory_context, enrich_system_with_relationship_context
 from .persona_context import build_persona_llm_context
+from .reply_shape import resolve_reply_shape
+from .turn_policy import TurnPolicy
+
+if TYPE_CHECKING:
+    from pallas.product.persona.group_expression_profile import GroupExpressionProfile
 
 
 @dataclass(frozen=True)
@@ -21,6 +29,18 @@ class DrunkChatSubmitContext:
     system_prompt: str
     token_count: int | None
     temperature: float | None = None
+    reply_total_length_band: str = "short"
+
+
+DRUNK_CHAT_TURN_POLICY = TurnPolicy(
+    reply_target="emotion",
+    seriousness="casual",
+    social_action="none",
+    allow_teasing=True,
+    allow_affection=True,
+    needs_tool=False,
+    needs_grounding=False,
+)
 
 
 def resolve_llm_chat_custom_system_path() -> str | None:
@@ -59,6 +79,7 @@ async def build_drunk_chat_system_prompt(
     temperature: float | None = None
     token_count: int | None = None
     system_prompt = ""
+    group_expression_profile: GroupExpressionProfile | None = None
 
     try:
         bundle, temperature, token_count = await build_persona_llm_context(
@@ -69,6 +90,9 @@ async def build_drunk_chat_system_prompt(
             base_system_path=resolved_path,
         )
         system_prompt = bundle.system.strip()
+        persona_raw = bundle.metadata.persona
+        if isinstance(persona_raw, dict):
+            group_expression_profile = ResolvedPersona(**persona_raw).group_expression_profile
     except Exception:
         logger.exception("build_drunk_chat_system_prompt: compile persona failed bot={} group={}", bot_id, group_id)
 
@@ -109,8 +133,14 @@ async def build_drunk_chat_system_prompt(
     if expression_suffix:
         system_prompt = f"{system_prompt.rstrip()}\n{expression_suffix}"
 
+    reply_shape = resolve_reply_shape(DRUNK_CHAT_TURN_POLICY, group_expression_profile)
+    reply_shape_block = ChatPromptAssembler.reply_shape_block(reply_shape)
+    if reply_shape_block:
+        system_prompt = f"{system_prompt.rstrip()}\n\n{reply_shape_block}"
+
     return DrunkChatSubmitContext(
         system_prompt=system_prompt,
         token_count=token_count,
         temperature=temperature,
+        reply_total_length_band=reply_shape.total_length_band,
     )

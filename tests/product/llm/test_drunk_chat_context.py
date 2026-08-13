@@ -52,5 +52,8 @@ async def test_build_drunk_chat_system_prompt_applies_drunk_overlay(monkeypatch:
     assert ctx is not None
     assert "基础牛格" in ctx.system_prompt
     assert "【醉酒状态】" in ctx.system_prompt
+    assert "【回复形状与输出契约】" in ctx.system_prompt
+    assert "用换行分隔成短气泡" in ctx.system_prompt
+    assert ctx.reply_total_length_band == "short"
     assert ctx.temperature is None
     assert ctx.token_count == 96
