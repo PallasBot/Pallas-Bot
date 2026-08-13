@@ -183,6 +183,7 @@ def record_route_candidate_safe(
     command_traffic: bool,
     resolution: RouteResolution | None,
     duration_ms: float,
+    full_duration_ms: float | None = None,
     matchers_considered: int,
     matchers_selected: int,
     matchers_run: int,
@@ -221,6 +222,7 @@ def record_route_candidate_safe(
             direct_visible_actions=visible_actions,
             direct_effect_actions=effect_actions,
             duration_ms=duration_ms,
+            full_duration_ms=full_duration_ms,
             runtime_stages_ms=direct_outcome.runtime_stages_ms if direct_outcome is not None else (),
         )
     except Exception:
@@ -320,12 +322,14 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
             apply_dispatch = isinstance(event, GroupMessageEvent)
             resolution = resolve_route_for_event(event) if apply_dispatch else None
             command_traffic = event_command_traffic(event, state, resolution=resolution) if apply_dispatch else True
+            dispatch_duration_ms = None
             if apply_dispatch:
                 direct_matcher_exclude_modules = frozenset()
                 direct_outcome = None
                 direct_runtime = direct_runtime_for_group(int(getattr(event, "group_id", 0) or 0))
                 if direct_runtime is not None:
                     try:
+                        dispatch_duration_ms = (time.perf_counter() - ingress_started) * 1000.0
                         direct_context = message_runtime_context(
                             bot,
                             event,
@@ -338,8 +342,10 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                     else:
                         if direct_outcome.handled and not direct_outcome.fallback_to_matcher:
                             if not direct_outcome.continue_matcher:
+                                full_duration_ms = (time.perf_counter() - ingress_started) * 1000.0
                                 record_group_message_ingress(
-                                    duration_ms=(time.perf_counter() - ingress_started) * 1000.0,
+                                    duration_ms=dispatch_duration_ms or 0.0,
+                                    full_duration_ms=full_duration_ms,
                                     command_traffic=command_traffic,
                                     matchers_considered=0,
                                     matchers_selected=0,
@@ -348,7 +354,8 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                                 record_route_candidate_safe(
                                     command_traffic=command_traffic,
                                     resolution=resolution,
-                                    duration_ms=(time.perf_counter() - ingress_started) * 1000.0,
+                                    duration_ms=dispatch_duration_ms or 0.0,
+                                    full_duration_ms=full_duration_ms,
                                     matchers_considered=0,
                                     matchers_selected=0,
                                     matchers_run=0,
@@ -370,8 +377,10 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                 if stale_message_drop_needed(event):
                     # 积压补推的旧消息：只处理命令，跳过闲聊与复读
                     record_stale_message_dropped()
+                    elapsed_ms = (time.perf_counter() - ingress_started) * 1000.0
                     record_group_message_ingress(
-                        duration_ms=(time.perf_counter() - ingress_started) * 1000.0,
+                        duration_ms=elapsed_ms,
+                        full_duration_ms=elapsed_ms,
                         command_traffic=False,
                         matchers_considered=0,
                         matchers_selected=0,
@@ -382,8 +391,10 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                 if is_overloaded() or in_cold_start_window():
                     if is_overloaded() and chat_drop_on_overload_enabled():
                         record_chatter_overload_dropped()
+                        elapsed_ms = (time.perf_counter() - ingress_started) * 1000.0
                         record_group_message_ingress(
-                            duration_ms=(time.perf_counter() - ingress_started) * 1000.0,
+                            duration_ms=elapsed_ms,
+                            full_duration_ms=elapsed_ms,
                             command_traffic=False,
                             matchers_considered=0,
                             matchers_selected=0,
@@ -422,6 +433,8 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         selected = select_overload_chatter_matchers(selected)
                     return exclude_direct_matchers(selected, direct_matcher_exclude_modules)
 
+                if dispatch_duration_ms is None:
+                    dispatch_duration_ms = (time.perf_counter() - ingress_started) * 1000.0
                 matcher_result = await _matcher_adapter.execute(
                     bot=bot,
                     event=event,
@@ -452,7 +465,8 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                 if apply_dispatch:
                     ingress_duration_ms = (time.perf_counter() - ingress_started) * 1000.0
                     record_group_message_ingress(
-                        duration_ms=ingress_duration_ms,
+                        duration_ms=dispatch_duration_ms or 0.0,
+                        full_duration_ms=ingress_duration_ms,
                         command_traffic=command_traffic,
                         matchers_considered=total_considered,
                         matchers_selected=total_selected,
@@ -461,7 +475,8 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                     record_route_candidate_safe(
                         command_traffic=command_traffic,
                         resolution=resolution,
-                        duration_ms=ingress_duration_ms,
+                        duration_ms=dispatch_duration_ms or 0.0,
+                        full_duration_ms=ingress_duration_ms,
                         matchers_considered=total_considered,
                         matchers_selected=total_selected,
                         matchers_run=matchers_run,

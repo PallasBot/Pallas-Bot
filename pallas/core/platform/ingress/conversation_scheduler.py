@@ -71,6 +71,7 @@ class ConversationScheduler:
         self._backpressure_waits = 0
         self._per_key_backpressure_waits = 0
         self._wait_samples_ms: deque[float] = deque(maxlen=256)
+        self._run_samples_ms: deque[float] = deque(maxlen=256)
         self._stopping = False
         self._condition = asyncio.Condition()
 
@@ -201,6 +202,11 @@ class ConversationScheduler:
         if ordered:
             index = max(0, min(len(ordered) - 1, int(len(ordered) * 0.95)))
             wait_p95 = round(ordered[index], 2)
+        run_ordered = sorted(self._run_samples_ms)
+        run_p95 = None
+        if run_ordered:
+            index = max(0, min(len(run_ordered) - 1, int(len(run_ordered) * 0.95)))
+            run_p95 = round(run_ordered[index], 2)
         return {
             "concurrency": self.concurrency,
             "llm_reserved": self.llm_reserved,
@@ -216,6 +222,7 @@ class ConversationScheduler:
             "per_key_pending_limit": self.per_key_pending,
             "active_keys": len(self._pending_by_key),
             "wait_ms_p95": wait_p95,
+            "run_ms_p95": run_p95,
             "backpressure_waits": self._backpressure_waits,
             "per_key_backpressure_waits": self._per_key_backpressure_waits,
         }
@@ -294,8 +301,9 @@ class ConversationScheduler:
             task.add_done_callback(self._tasks.discard)
 
     async def _run_one(self, key: ConversationKey, item: ConversationWork) -> None:
+        started = time.monotonic()
         try:
-            self._wait_samples_ms.append((time.monotonic() - item.queued_at) * 1000.0)
+            self._wait_samples_ms.append((started - item.queued_at) * 1000.0)
             try:
                 await item.work()
             except asyncio.CancelledError:
@@ -309,6 +317,7 @@ class ConversationScheduler:
                 if not item.future.done():
                     item.future.set_result(None)
         finally:
+            self._run_samples_ms.append((time.monotonic() - started) * 1000.0)
             async with self._condition:
                 if item is not None:
                     self._release_pending_locked(key)
@@ -480,6 +489,7 @@ def conversation_scheduler_status() -> dict[str, int | float | bool | None]:
             "per_key_pending_limit": config.conversation_scheduler_per_key_pending,
             "active_keys": 0,
             "wait_ms_p95": None,
+            "run_ms_p95": None,
             "backpressure_waits": 0,
             "per_key_backpressure_waits": 0,
         }

@@ -4,6 +4,7 @@ import time
 from collections import deque
 from typing import Any
 
+from pallas.core.foundation.config.repo_settings import repo_env_raw_value
 from pallas.core.platform.ingress.route_candidate_metrics import route_candidate_metrics_snapshot
 from pallas.core.platform.ingress.snapshot_health import ingress_snapshot_health
 
@@ -28,11 +29,23 @@ _COUNTERS = (
 )
 _state: dict[str, int] = dict.fromkeys(_COUNTERS, 0)
 _day_key = ""
-_ingress_ms_samples: deque[float] = deque(maxlen=256)
+_INGRESS_SAMPLE_WINDOW_SEC = 600.0
+_ingress_ms_samples: deque[tuple[float, float]] = deque()
+_ingress_full_ms_samples: deque[tuple[float, float]] = deque()
 
 
 def _today_key() -> str:
     return time.strftime("%Y-%m-%d", time.localtime())
+
+
+def ingress_sample_window_sec() -> float:
+    raw = repo_env_raw_value("PALLAS_INGRESS_P95_WINDOW_SEC")
+    if raw is None:
+        return _INGRESS_SAMPLE_WINDOW_SEC
+    try:
+        return max(60.0, float(str(raw).strip()))
+    except ValueError:
+        return _INGRESS_SAMPLE_WINDOW_SEC
 
 
 def _rollover_if_needed() -> None:
@@ -44,6 +57,7 @@ def _rollover_if_needed() -> None:
     for key in _COUNTERS:
         _state[key] = 0
     _ingress_ms_samples.clear()
+    _ingress_full_ms_samples.clear()
 
 
 def clear_dispatch_metrics_for_tests() -> None:
@@ -52,11 +66,13 @@ def clear_dispatch_metrics_for_tests() -> None:
     for key in _COUNTERS:
         _state[key] = 0
     _ingress_ms_samples.clear()
+    _ingress_full_ms_samples.clear()
 
 
 def record_group_message_ingress(
     *,
     duration_ms: float,
+    full_duration_ms: float | None = None,
     command_traffic: bool,
     matchers_considered: int,
     matchers_selected: int,
@@ -71,8 +87,11 @@ def record_group_message_ingress(
     _state["matchers_considered"] += max(0, matchers_considered)
     _state["matchers_selected"] += max(0, matchers_selected)
     _state["matchers_run"] += max(0, matchers_run)
+    now = time.monotonic()
     if duration_ms >= 0:
-        _ingress_ms_samples.append(float(duration_ms))
+        _ingress_ms_samples.append((now, float(duration_ms)))
+    if full_duration_ms is not None and full_duration_ms >= 0:
+        _ingress_full_ms_samples.append((now, float(full_duration_ms)))
 
 
 def record_preprocessor_dropped() -> None:
@@ -127,12 +146,29 @@ def record_prefetch_paused() -> None:
     _state["prefetch_paused"] += 1
 
 
-def ingress_duration_p95_ms() -> float | None:
-    if not _ingress_ms_samples:
+def _samples_within_window(samples: deque[tuple[float, float]]) -> list[float]:
+    if not samples:
+        return []
+    cutoff = time.monotonic() - ingress_sample_window_sec()
+    return [ms for ts, ms in samples if ts >= cutoff]
+
+
+def _percentile(ms_values: list[float], ratio: float) -> float | None:
+    if not ms_values:
         return None
-    ordered = sorted(_ingress_ms_samples)
-    idx = max(0, min(len(ordered) - 1, int(len(ordered) * 0.95)))
+    ordered = sorted(ms_values)
+    idx = max(0, min(len(ordered) - 1, int(len(ordered) * ratio)))
     return round(float(ordered[idx]), 2)
+
+
+def ingress_duration_p95_ms() -> float | None:
+    """调度分发阶段（matcher 执行前）p95。"""
+    return _percentile(_samples_within_window(_ingress_ms_samples), 0.95)
+
+
+def ingress_full_duration_p95_ms() -> float | None:
+    """全链路（含 matcher/handler 执行）p95。"""
+    return _percentile(_samples_within_window(_ingress_full_ms_samples), 0.95)
 
 
 def lane_wait_avg_ms() -> float | None:
@@ -171,6 +207,7 @@ def dispatch_metrics_snapshot() -> dict[str, Any]:
     from pallas.core.platform.work_jobs.observability import work_aux_status
 
     p95 = ingress_duration_p95_ms()
+    full_p95 = ingress_full_duration_p95_ms()
     pool = pool_budget_status()
     pg_util = pool.get("utilization")
     counters = {key: int(_state[key]) for key in _COUNTERS}
@@ -178,6 +215,7 @@ def dispatch_metrics_snapshot() -> dict[str, Any]:
         day_key=_day_key or _today_key(),
         counters=counters,
         ingress_duration_ms_p95=p95,
+        ingress_full_ms_p95=full_p95,
         send_queue=send_queue_status(),
         pool_budget=pool,
         pg_util=pg_util if isinstance(pg_util, float) else None,
@@ -195,6 +233,7 @@ def build_dispatch_metrics_payload(
     day_key: str,
     counters: dict[str, int],
     ingress_duration_ms_p95: float | None,
+    ingress_full_ms_p95: float | None = None,
     send_queue: dict[str, Any],
     pool_budget: dict[str, Any],
     pg_util: float | None,
@@ -219,6 +258,7 @@ def build_dispatch_metrics_payload(
         **{key: int(counters.get(key) or 0) for key in _COUNTERS},
         "lane_wait_ms_avg": lane_wait_avg,
         "ingress_duration_ms_p95": ingress_duration_ms_p95,
+        "ingress_full_ms_p95": ingress_full_ms_p95,
         "send_queue": send_queue,
         "pool_budget": pool_budget,
         "hotpath": hotpath or {},
@@ -301,10 +341,12 @@ def merge_conversation_scheduler_snapshots(rows: list[dict[str, Any]]) -> dict[s
         "per_key_pending_limit": 0,
         "active_keys": 0,
         "wait_ms_p95": None,
+        "run_ms_p95": None,
         "backpressure_waits": 0,
         "per_key_backpressure_waits": 0,
     }
     waits: list[float] = []
+    runs: list[float] = []
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -324,8 +366,13 @@ def merge_conversation_scheduler_snapshots(rows: list[dict[str, Any]]) -> dict[s
         wait = row.get("wait_ms_p95")
         if isinstance(wait, (int, float)):
             waits.append(float(wait))
+        run = row.get("run_ms_p95")
+        if isinstance(run, (int, float)):
+            runs.append(float(run))
     if waits:
         merged["wait_ms_p95"] = round(max(waits), 2)
+    if runs:
+        merged["run_ms_p95"] = round(max(runs), 2)
     return merged
 
 
@@ -385,6 +432,7 @@ def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         return dispatch_metrics_snapshot()
     counters = dict.fromkeys(_COUNTERS, 0)
     p95_values: list[float] = []
+    full_p95_values: list[float] = []
     send_rows: list[dict[str, Any]] = []
     pool_rows: list[dict[str, Any]] = []
     hotpath_rows: list[dict[str, Any]] = []
@@ -402,6 +450,9 @@ def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         p95 = row.get("ingress_duration_ms_p95")
         if isinstance(p95, (int, float)):
             p95_values.append(float(p95))
+        full_p95 = row.get("ingress_full_ms_p95")
+        if isinstance(full_p95, (int, float)):
+            full_p95_values.append(float(full_p95))
         send = row.get("send_queue")
         if isinstance(send, dict):
             send_rows.append(send)
@@ -424,6 +475,7 @@ def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         if isinstance(route_candidates, list):
             route_candidate_rows.append(route_candidates)
     p95_cluster = round(max(p95_values), 2) if p95_values else None
+    full_p95_cluster = round(max(full_p95_values), 2) if full_p95_values else None
     pool_merged = merge_pool_budget_snapshots(pool_rows)
     pg_util = pool_merged.get("utilization")
     from pallas.core.platform.ingress.hotpath_metrics import merge_hotpath_metrics
@@ -432,6 +484,7 @@ def merge_dispatch_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         day_key=day_key or _today_key(),
         counters=counters,
         ingress_duration_ms_p95=p95_cluster,
+        ingress_full_ms_p95=full_p95_cluster,
         send_queue=merge_send_queue_snapshots(send_rows),
         pool_budget=pool_merged,
         pg_util=pg_util if isinstance(pg_util, float) else None,
@@ -491,10 +544,17 @@ def merge_route_candidate_snapshots(rows: list[list[dict[str, object]]]) -> list
                     float(target.get("ingress_duration_ms_p95") or 0.0),
                     max(0.0, float(p95)),
                 )
+            full_p95 = raw.get("ingress_full_ms_p95")
+            if isinstance(full_p95, (int, float)) and not isinstance(full_p95, bool):
+                target["ingress_full_ms_p95"] = max(
+                    float(target.get("ingress_full_ms_p95") or 0.0),
+                    max(0.0, float(full_p95)),
+                )
     result = list(merged.values())
     for row in result:
         messages = int(row["messages"])
         row.setdefault("ingress_duration_ms_p95", None)
+        row.setdefault("ingress_full_ms_p95", None)
         row["eligible"] = (
             len(row["route_modules"]) == 1
             and int(row["matcher_handled"]) > 0

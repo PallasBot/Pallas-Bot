@@ -26,6 +26,7 @@ class RouteCandidateMetrics:
     direct_visible_actions: int = 0
     direct_effect_actions: int = 0
     durations_ms: deque[float] = field(default_factory=lambda: deque(maxlen=256))
+    full_durations_ms: deque[float] = field(default_factory=lambda: deque(maxlen=256))
     outcomes: dict[str, RouteOutcomeMetrics] = field(default_factory=dict)
     runtime_stages_ms: dict[str, deque[float]] = field(
         default_factory=lambda: {name: deque(maxlen=256) for name in _RUNTIME_STAGE_NAMES}
@@ -86,6 +87,7 @@ def record_route_candidate(
     direct_visible_actions: int | None,
     direct_effect_actions: int | None,
     duration_ms: float,
+    full_duration_ms: float | None = None,
     runtime_stages_ms: tuple[tuple[str, float], ...] = (),
 ) -> None:
     rollover_if_needed()
@@ -114,6 +116,8 @@ def record_route_candidate(
         row.direct_effect_actions += max(0, direct_effect_actions)
     if duration_ms >= 0:
         row.durations_ms.append(float(duration_ms))
+    if full_duration_ms is not None and full_duration_ms >= 0:
+        row.full_durations_ms.append(float(full_duration_ms))
     for name, stage_ms in runtime_stages_ms:
         samples = row.runtime_stages_ms.get(name)
         if samples is not None and stage_ms >= 0:
@@ -163,6 +167,7 @@ def route_candidate_metrics_snapshot() -> list[dict[str, object]]:
                 for outcome, outcome_metrics in metrics.outcomes.items()
             },
             "ingress_duration_ms_p95": p95,
+            "ingress_full_ms_p95": duration_p95(metrics.full_durations_ms),
             "eligible": (
                 len(route) == 1
                 and metrics.matcher_handled > 0

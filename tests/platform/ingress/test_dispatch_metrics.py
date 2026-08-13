@@ -109,6 +109,7 @@ def test_merge_dispatch_metrics_aggregates_route_candidates() -> None:
             "direct_visible_actions": 0,
             "direct_effect_actions": 0,
             "ingress_duration_ms_p95": 20.0,
+            "ingress_full_ms_p95": None,
             "eligible": True,
         }
     ]

@@ -79,6 +79,7 @@ def test_aggregates_normalized_route_and_exact_counters() -> None:
             "commit": {"samples": 1, "p95_ms": 2.0},
         },
         "ingress_duration_ms_p95": 20.0,
+        "ingress_full_ms_p95": None,
         "eligible": False,
     }
 
@@ -131,5 +132,6 @@ def test_snapshot_has_privacy_allowlisted_fields_only() -> None:
         "outcomes",
         "runtime_stages",
         "ingress_duration_ms_p95",
+        "ingress_full_ms_p95",
         "eligible",
     }

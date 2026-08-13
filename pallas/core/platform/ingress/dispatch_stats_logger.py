@@ -54,7 +54,8 @@ def _dispatch_stats_text(snap: dict) -> str:
     return (
         f"ingress_dispatch: processed [{group_messages}] group messages "
         f"([{cmd}] commands, [{chat}] chat)\n"
-        f"  p95 [{ms(snap, 'ingress_duration_ms_p95')}]  overload [{overload}]  degraded [{chat_degraded}]\n"
+        f"  p95 [{ms(snap, 'ingress_duration_ms_p95')}]  full [{ms(snap, 'ingress_full_ms_p95')}]  "
+        f"overload [{overload}]  degraded [{chat_degraded}]\n"
         f"  scheduler [{pending}/{scheduler.get('max_pending')}]  llm [{llm_active}/{llm_waiting}/{llm_reserved}]  "
         f"send_q [{depth}/{max_depth}]\n"
         f"  bundle [{ms(hot, 'bundle_ms_p95')}]  db_find [{ms(hot, 'db_find_ms_p95')}]  "

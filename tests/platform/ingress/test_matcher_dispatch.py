@@ -109,6 +109,7 @@ def test_route_candidate_helper_records_native_action_counts(monkeypatch: pytest
             "direct_visible_actions": 1,
             "direct_effect_actions": 2,
             "duration_ms": 12.0,
+            "full_duration_ms": None,
             "runtime_stages_ms": (),
         }
     ]

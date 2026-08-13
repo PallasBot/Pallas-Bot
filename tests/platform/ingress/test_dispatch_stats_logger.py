@@ -125,7 +125,7 @@ def test_dispatch_stats_text_groups_sections_with_header() -> None:
     lines = text.splitlines()
     assert len(lines) == 4
     assert lines[0] == "ingress_dispatch: processed [753] group messages ([4] commands, [749] chat)"
-    assert lines[1] == "  p95 [7614.81ms]  overload [8509]  degraded [606]"
+    assert lines[1] == "  p95 [7614.81ms]  full [-]  overload [8509]  degraded [606]"
     assert lines[2] == "  scheduler [0/1024]  llm [0/0/6]  send_q [0/256]"
     assert lines[3] == "  bundle [182.332ms]  db_find [142.211ms]  sql [107.898ms]"
 
