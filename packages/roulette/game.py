@@ -303,25 +303,22 @@ async def is_drink_msg(bot: Bot, event: GroupMessageEvent) -> bool:
     return False
 
 
-async def is_rescue_or_judgment(bot: Bot, event: GroupMessageEvent) -> bool:
-    """检测是否为救一下或补一枪的消息"""
-    plaintext = event.get_plaintext().strip()
-    if not await bot_is_group_admin(bot, event):
-        return False
-    if plaintext.startswith("牛牛补一枪"):
-        return len(ban_players.get_user_ids(event.group_id)) > 0
-    return plaintext.startswith("牛牛救一下")
-
-
 async def rescue_or_judgment_handler(bot: Bot, event: GroupMessageEvent):
     """救一下/补一枪 的统一处理函数"""
     plaintext = event.get_plaintext().strip()
     is_rescue = plaintext.startswith("牛牛救一下")
     cfg = RESCUE_CFG if is_rescue else JUDGMENT_CFG
     current_group_id = event.group_id
+    action_name = "rescue" if is_rescue else "judgment"
 
     if random.random() < cfg.fail_prob:
         await bot.send(event, cfg.fail_msg)
+        logger.info(
+            format_plugin_event(
+                "resolve_judgment",
+                f"Bot [{event.self_id}] {action_name} roll failed in group [{current_group_id}]",
+            )
+        )
         return
 
     # judgment 仅在喝酒时触发，且概率独立
@@ -349,12 +346,26 @@ async def rescue_or_judgment_handler(bot: Bot, event: GroupMessageEvent):
             kicked_users[event.group_id].add(event.user_id)
             await bot.call_api("set_group_kick", user_id=event.user_id, group_id=event.group_id)
             await bot.send(event, cfg.self_punish_msg)
+            logger.info(
+                format_plugin_event(
+                    "resolve_judgment",
+                    f"Bot [{event.self_id}] kicked requester [{event.user_id}] in group "
+                    f"[{current_group_id}] as {action_name} self-punishment",
+                )
+            )
         else:
             # 牛牛是群主才能禁言管理员，否则只能禁言普通成员
             duration = cfg.self_ban_duration()
             await bot.call_api("set_group_ban", user_id=event.user_id, group_id=event.group_id, duration=duration)
             ban_players.append(event.user_id, event.group_id)
             await bot.send(event, cfg.self_punish_msg)
+            logger.info(
+                format_plugin_event(
+                    "resolve_judgment",
+                    f"Bot [{event.self_id}] muted requester [{event.user_id}] in group "
+                    f"[{current_group_id}] for [{duration}s] as {action_name} self-punishment",
+                )
+            )
         return
 
     # @ 目标处理
@@ -386,6 +397,13 @@ async def rescue_or_judgment_handler(bot: Bot, event: GroupMessageEvent):
                 )
                 processed_users.append(target_user_id)
                 ban_players.find_and_refresh(target_user_id, current_group_id)
+                logger.info(
+                    format_plugin_event(
+                        "resolve_judgment",
+                        f"Bot [{event.self_id}] {action_name}d user [{target_user_id}] in group "
+                        f"[{current_group_id}] with ban duration [{duration}s]",
+                    )
+                )
             except Exception as e:
                 logger.error(
                     format_plugin_event(
@@ -420,6 +438,13 @@ async def rescue_or_judgment_handler(bot: Bot, event: GroupMessageEvent):
             await bot.call_api("set_group_ban", user_id=user_id, group_id=current_group_id, duration=duration)
             affected_users.append(user_id)
             ban_players.find_and_refresh(user_id, current_group_id)
+            logger.info(
+                format_plugin_event(
+                    "resolve_judgment",
+                    f"Bot [{event.self_id}] {action_name}d all muted users in group "
+                    f"[{current_group_id}] with ban duration [{duration}s]",
+                )
+            )
         except Exception as e:
             logger.error(
                 format_plugin_event(

@@ -6,13 +6,16 @@ from pallas.api.runtime import (
     completion_effect,
     matcher_fallback,
     register_exact_command_handler,
+    register_prefix_command_handler,
 )
+from pallas.core.platform.multi_bot.dedup import try_claim_group_message_once
 
 from . import game, service
 from .game import bot_is_group_admin, can_roulette_start, parse_roulette_start_command
 
 MODE_COMMANDS = ("牛牛轮盘踢人", "牛牛踢人轮盘", "牛牛轮盘禁言", "牛牛禁言轮盘")
 DRINK_COMMANDS = ("牛牛喝酒", "牛牛干杯", "牛牛继续喝")
+ROULETTE_RESCUE_PLUGIN = "roulette_rescue"
 
 
 async def start(context: DirectCommandContext) -> DirectCommandResult:
@@ -60,6 +63,27 @@ async def join_drink(context: DirectCommandContext) -> DirectCommandResult:
     return DirectCommandResult(effects=(completion_effect("roulette.join", run),), continue_matcher=True)
 
 
+async def resolve_judgment(context: DirectCommandContext) -> DirectCommandResult:
+    if not context.command_text.startswith(("牛牛救一下", "牛牛补一枪")):
+        return matcher_fallback("unknown_command")
+    if not await bot_is_group_admin(context.bot, context.event):
+        return matcher_fallback("bot_not_group_admin")
+    if not await try_claim_group_message_once(
+        ROULETTE_RESCUE_PLUGIN,
+        context.group_id,
+        context.event.user_id,
+        context.command_text,
+        context.event.time,
+        include_message_time=True,
+    ):
+        return matcher_fallback("rescue_claim_lost")
+
+    async def run() -> None:
+        await game.rescue_or_judgment_handler(context.bot, context.event)
+
+    return DirectCommandResult(effects=(completion_effect("roulette.resolve", run),))
+
+
 START_DECLARATION = register_exact_command_handler(
     handler_id="roulette.start.direct",
     module="roulette",
@@ -88,4 +112,18 @@ DRINK_DECLARATION = register_exact_command_handler(
     command_id="roulette.shot",
     execute=join_drink,
     continue_matcher=True,
+)
+RESCUE_DECLARATION = register_prefix_command_handler(
+    handler_id="roulette.rescue.direct",
+    module="roulette",
+    prefixes=("牛牛救一下",),
+    command_id="roulette.rescue",
+    execute=resolve_judgment,
+)
+JUDGMENT_DECLARATION = register_prefix_command_handler(
+    handler_id="roulette.punish.direct",
+    module="roulette",
+    prefixes=("牛牛补一枪",),
+    command_id="roulette.punish",
+    execute=resolve_judgment,
 )

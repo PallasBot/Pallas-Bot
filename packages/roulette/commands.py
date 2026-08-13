@@ -12,14 +12,12 @@ from pallas.api.perm import group_message_permission_for_command
 
 from .game import (
     is_drink_msg,
-    is_rescue_or_judgment,
     is_roulette_msg,
     is_roulette_type_msg,
     is_set_group_admin,
     is_shot_msg,
     kicked_users,
     parse_roulette_start_command,
-    rescue_or_judgment_handler,
     sync_role_cache,
 )
 from .service import fire_roulette, join_active_roulette, start_roulette
@@ -104,16 +102,3 @@ drink_msg = on_message(
 @drink_msg.handle()
 async def _(event: GroupMessageEvent):
     await join_active_roulette(event)
-
-
-rescue_or_judgment = on_message(
-    priority=4,
-    block=False,
-    rule=Rule(is_rescue_or_judgment),
-    permission=permission.GROUP,
-)
-
-
-@rescue_or_judgment.handle()
-async def _(bot: Bot, event: GroupMessageEvent):
-    await rescue_or_judgment_handler(bot, event)

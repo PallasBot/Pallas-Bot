@@ -21,6 +21,7 @@ def _stub_roulette_plugin(monkeypatch) -> None:
                             "牛牛禁言轮盘",
                             "牛牛开枪",
                         ],
+                        "prefixes": ["牛牛救一下", "牛牛补一枪"],
                     }
                 }
             ),
@@ -36,9 +37,9 @@ def test_roulette_fanout_policy_commands(monkeypatch) -> None:
     assert text_matches_plugin_fanout("牛牛轮盘踢人", "roulette")
     assert text_matches_plugin_fanout("牛牛轮盘禁言", "roulette")
     assert text_matches_plugin_fanout("牛牛开枪", "roulette")
-    assert not text_matches_plugin_fanout("牛牛救一下", "roulette")
-    assert not text_matches_plugin_fanout("牛牛救一下 @某人", "roulette")
-    assert not text_matches_plugin_fanout("牛牛补一枪", "roulette")
-    assert not text_matches_plugin_fanout("牛牛补一枪 @某人", "roulette")
+    assert text_matches_plugin_fanout("牛牛救一下", "roulette")
+    assert text_matches_plugin_fanout("牛牛救一下 @某人", "roulette")
+    assert text_matches_plugin_fanout("牛牛补一枪", "roulette")
+    assert text_matches_plugin_fanout("牛牛补一枪 @某人", "roulette")
     assert not text_matches_plugin_fanout("牛牛", "roulette")
     assert not text_matches_plugin_fanout("参与轮盘", "roulette")

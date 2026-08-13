@@ -53,6 +53,7 @@ __plugin_meta__ = PluginMetadata(
                 "牛牛禁言轮盘",
                 "牛牛开枪",
             ],
+            "prefixes": ["牛牛救一下", "牛牛补一枪"],
         },
         "command_permissions": command_perm_list(
             command_perm_row("roulette.start", "牛牛轮盘"),
