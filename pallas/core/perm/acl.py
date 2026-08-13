@@ -55,13 +55,16 @@ _DECISION_CACHE: dict[tuple[str, str, int | None, int | None, int | None], tuple
 _DECISION_CACHE_TTL_SEC = 60.0
 _DECISION_CACHE_MAX = 50_000
 
-# 规则列表缓存（按 action+target，避免 list_all）
+# 规则列表缓存（按 action+target，避免 list_all）；规则由 WebUI 写入后走
+# invalidate_acl_rules_cache 清缓存，TTL 可放宽到分钟级
 _RULES_CACHE: dict[tuple[str, str | None], tuple[float, list[Any]]] = {}
-_RULES_CACHE_TTL_SEC = 30.0
+_RULES_CACHE_TTL_SEC = 180.0
+_RULES_CACHE_EMPTY_TTL_SEC = 600.0
 _RULES_CACHE_MAX = 1024
 
 # admin_members 的 user_id 缓存（按 bot_id 二元组缓存）
 _ADMIN_BOT_ID_CACHE: dict[tuple, tuple[float, set[int]]] = {}
+_ADMIN_CACHE_TTL_SEC = 180.0
 _CACHE_KEY_ALL = (None, "admin_user_ids_all")
 
 _ADMINS_RESPECT_BLACKLIST = os.getenv("PALLAS_ADMINS_RESPECT_BLACKLIST", "").lower() in ("1", "true", "yes")
@@ -131,7 +134,7 @@ async def _load_admin_member_user_ids(bot_id: int | None) -> set[int]:
     out = set(uids)
     if len(_ADMIN_BOT_ID_CACHE) >= 64:
         _ADMIN_BOT_ID_CACHE.clear()
-    _ADMIN_BOT_ID_CACHE[cache_key] = (now + 30.0, out)
+    _ADMIN_BOT_ID_CACHE[cache_key] = (now + _ADMIN_CACHE_TTL_SEC, out)
     return out
 
 
@@ -170,7 +173,8 @@ async def _load_rules_for(action: str, target: str | None) -> list[Any]:
         if len(_RULES_CACHE) >= _RULES_CACHE_MAX:
             for k in list(_RULES_CACHE.keys())[: _RULES_CACHE_MAX // 2]:
                 _RULES_CACHE.pop(k, None)
-    _RULES_CACHE[key] = (now + _RULES_CACHE_TTL_SEC, rules)
+    ttl = _RULES_CACHE_EMPTY_TTL_SEC if not rules else _RULES_CACHE_TTL_SEC
+    _RULES_CACHE[key] = (now + ttl, rules)
     return rules
 
 
