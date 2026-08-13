@@ -44,6 +44,18 @@ def env_for_nested_project(
     return out
 
 
+def _linux_pid_state(pid: int) -> str | None:
+    """读取 ``/proc/<pid>/stat`` 的进程状态字符；非 Linux 或不可读返回 None。"""
+    try:
+        raw = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    try:
+        return raw.split(") ", 1)[1].split()[0]
+    except IndexError:
+        return None
+
+
 def pid_alive(pid: int) -> bool:
     if pid <= 0:
         return False
@@ -57,7 +69,9 @@ def pid_alive(pid: int) -> bool:
         return True
     except OSError:
         return False
-    return True
+    # 僵尸进程是已退出但未被 wait 回收的残留，os.kill 仍会命中，须视为已死，
+    # 否则 stop_pid 会一直等到超时（如 uv 包装进程退出后残留为 Z）。
+    return _linux_pid_state(pid) != "Z"
 
 
 def _windows_pid_alive(pid: int) -> bool:

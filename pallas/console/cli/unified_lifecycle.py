@@ -51,11 +51,15 @@ def start_aux_services() -> int:
 
 
 def stop_aux_services() -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
     from pallas.console.cli.embedding_aux import stop_embed_aux
     from pallas.console.cli.work_aux import stop_work_aux
 
-    stop_embed_aux()
-    stop_work_aux()
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [pool.submit(stop_embed_aux), pool.submit(stop_work_aux)]
+        for future in futures:
+            future.result()
 
 
 def print_aux_services_status() -> None:
