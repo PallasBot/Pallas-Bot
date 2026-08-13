@@ -1103,7 +1103,11 @@ async def cached_reply_query_snapshot(
     from pallas.core.foundation.db.pool_budget import is_pg_pool_timeout_error, pg_pool_under_pressure
     from pallas.core.platform.ingress.hotpath_metrics import record_reply_snapshot
     from pallas.product.corpus.find_cache import mark_reply_db_fail, reply_db_fail_active
-    from pallas.product.corpus.reply_perf_config import reply_snapshot_max_entries, reply_snapshot_ttl_sec
+    from pallas.product.corpus.reply_perf_config import (
+        reply_snapshot_max_entries,
+        reply_snapshot_query_timeout_sec,
+        reply_snapshot_ttl_sec,
+    )
 
     key = (keywords or "").strip()
     if not key:
@@ -1143,7 +1147,14 @@ async def cached_reply_query_snapshot(
             record_reply_snapshot(hit=True)
 
     try:
-        ctx = await asyncio.shield(task)
+        ctx = await asyncio.wait_for(asyncio.shield(task), timeout=reply_snapshot_query_timeout_sec())
+    except TimeoutError:
+        async with _reply_query_snapshot_lock:
+            if _reply_query_snapshot_inflight.get(key) is task:
+                _reply_query_snapshot_inflight.pop(key, None)
+        record_reply_snapshot(hit=False)
+        logger.debug("reply_query_snapshot.timeout kw_len={}", len(key))
+        return None
     except Exception as exc:
         async with _reply_query_snapshot_lock:
             if _reply_query_snapshot_inflight.get(key) is task:

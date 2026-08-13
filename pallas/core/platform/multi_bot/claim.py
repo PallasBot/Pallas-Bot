@@ -12,6 +12,7 @@ from pathlib import Path
 from pallas.core.foundation.paths import plugin_data_dir
 
 _CLAIM_MAX_AGE_SEC = 86400
+_PERSISTENT_CLAIM_TIMEOUT_SEC = 2.5
 _PRUNE_MAX_FILES = 500
 _PRUNE_MIN_INTERVAL_SEC = 120.0
 _PRUNE_FORCE_ENTRY_COUNT = 2500
@@ -167,8 +168,20 @@ def take_claim_message_sync(plugin: str, group_id: int, message_id: int, bot_id:
 
 
 async def try_claim_message(plugin: str, group_id: int, message_id: int, bot_id: int) -> bool:
-    return await asyncio.to_thread(try_claim_message_sync, plugin, group_id, message_id, bot_id)
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(try_claim_message_sync, plugin, group_id, message_id, bot_id),
+            timeout=_PERSISTENT_CLAIM_TIMEOUT_SEC,
+        )
+    except TimeoutError:
+        return False
 
 
 async def take_claim_message(plugin: str, group_id: int, message_id: int, bot_id: int) -> bool:
-    return await asyncio.to_thread(take_claim_message_sync, plugin, group_id, message_id, bot_id)
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(take_claim_message_sync, plugin, group_id, message_id, bot_id),
+            timeout=_PERSISTENT_CLAIM_TIMEOUT_SEC,
+        )
+    except TimeoutError:
+        return False

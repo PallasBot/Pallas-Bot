@@ -27,6 +27,7 @@ _WIN_CACHE_TTL_SEC = float(os.getenv("PALLAS_FEDERATE_WIN_CACHE_SEC", "8"))
 _WIN_CACHE_MAX = 20_000
 _CANDIDATE_WAIT_SEC = 0.15
 _INFLIGHT_CLAIM_WAIT_SEC = 0.5
+_REDIS_CLAIM_TIMEOUT_SEC = float(os.getenv("PALLAS_FEDERATE_REDIS_CLAIM_TIMEOUT_SEC", "3.0"))
 _win_cache: dict[tuple[str, tuple[int, int, str] | tuple[int, int, str, int], str], float] = {}
 _inflight_claims: dict[
     tuple[str, tuple[int, int, str] | tuple[int, int, str, int], str],
@@ -215,16 +216,32 @@ async def claim_federate_group_message_ingress(
         return won
 
     try:
-        won = await try_claim_cross_federate_message(
-            plugin,
-            int(event.group_id),
-            int(event.user_id),
-            body,
-            event.time,
-            deployment_id,
-            use_plaintext=True,
-            include_message_time=include_message_time,
+        won = await asyncio.wait_for(
+            try_claim_cross_federate_message(
+                plugin,
+                int(event.group_id),
+                int(event.user_id),
+                body,
+                event.time,
+                deployment_id,
+                use_plaintext=True,
+                include_message_time=include_message_time,
+            ),
+            timeout=_REDIS_CLAIM_TIMEOUT_SEC,
         )
+    except TimeoutError:
+        async with _win_lock:
+            future = _inflight_claims.pop(cache_key, None)
+        if future is not None and not future.done():
+            future.set_result(False)
+        timer.finish(
+            outcome="claim_timeout",
+            cache_hit=False,
+            group_id=int(event.group_id),
+            user_id=int(event.user_id),
+        )
+        record_federate_ingress_audit(capability=candidate_capability, outcome="claim_timeout")
+        return False
     except BaseException as exc:
         async with _win_lock:
             future = _inflight_claims.pop(cache_key, None)

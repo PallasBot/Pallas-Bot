@@ -33,6 +33,7 @@ _REPLY_PERF_FIELD_NAMES: tuple[str, ...] = (
     "find_cache_max",
     "reply_snapshot_ttl_sec",
     "reply_snapshot_max",
+    "reply_query_timeout_sec",
 )
 
 _BACKFILL_FIELD_NAMES: tuple[str, ...] = (
@@ -66,6 +67,7 @@ _PERF_FIELD_TO_ENV: dict[str, str] = {
     "find_cache_max": "PALLAS_CORPUS_FIND_CACHE_MAX",
     "reply_snapshot_ttl_sec": "PALLAS_CORPUS_REPLY_SNAPSHOT_SEC",
     "reply_snapshot_max": "PALLAS_CORPUS_REPLY_SNAPSHOT_MAX",
+    "reply_query_timeout_sec": "PALLAS_CORPUS_REPLY_QUERY_TIMEOUT_SEC",
 }
 
 _FIELD_TO_ENV_ALL: dict[str, str] = {**_FIELD_TO_ENV, **_PERF_FIELD_TO_ENV}

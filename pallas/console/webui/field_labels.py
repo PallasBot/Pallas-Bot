@@ -359,6 +359,7 @@ FIELD_LABELS: dict[str, str] = {
     "repeat_threshold": "复读触发次数",
     "reply_answers_cap": "接话候选条数上限",
     "reply_messages_cap": "接话历史条数上限",
+    "reply_query_timeout_sec": "接话查询超时（秒）",
     "reply_snapshot_max": "接话快照条数上限",
     "reply_snapshot_ttl_sec": "接话快照保留秒数",
     "reply_with_same_emoji": "跟回应用相同表情",

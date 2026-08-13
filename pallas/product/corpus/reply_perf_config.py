@@ -81,6 +81,16 @@ class CorpusReplyPerfConfig(BaseModel):
             "仅覆盖接话热路径；热点群多时可调高，代价是更多内存",
         ),
     )
+    reply_query_timeout_sec: float = Field(
+        default=2.0,
+        ge=0.5,
+        le=30.0,
+        description=field_help(
+            "接话 PG 查询单次超时秒数",
+            "慢查询超时后走短负缓存，避免热群慢 SQL 拖住接话",
+            "与 PALLAS_REPEATER_BUNDLE_TIMEOUT_SEC 一样作用于接话读库",
+        ),
+    )
 
 
 @lru_cache(maxsize=1)
@@ -92,6 +102,7 @@ def get_corpus_reply_perf_config() -> CorpusReplyPerfConfig:
         find_cache_max=_int_read("PALLAS_CORPUS_FIND_CACHE_MAX", 50000, min_v=1000, max_v=200000),
         reply_snapshot_ttl_sec=_int_read("PALLAS_CORPUS_REPLY_SNAPSHOT_SEC", 5, min_v=1, max_v=60),
         reply_snapshot_max=_int_read("PALLAS_CORPUS_REPLY_SNAPSHOT_MAX", 20000, min_v=1000, max_v=100000),
+        reply_query_timeout_sec=_int_read("PALLAS_CORPUS_REPLY_QUERY_TIMEOUT_SEC", 2, min_v=1, max_v=30),
     )
 
 
@@ -121,6 +132,10 @@ def reply_snapshot_ttl_sec() -> float:
 
 def reply_snapshot_max_entries() -> int:
     return get_corpus_reply_perf_config().reply_snapshot_max
+
+
+def reply_snapshot_query_timeout_sec() -> float:
+    return float(get_corpus_reply_perf_config().reply_query_timeout_sec)
 
 
 def reply_query_caps(keywords: str) -> tuple[int, int]:
