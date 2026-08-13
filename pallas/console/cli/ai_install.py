@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -266,6 +267,46 @@ def probe_ai_repo_update(
     return result
 
 
+def _parse_submodule_urls(gitmodules: Path) -> dict[str, str]:
+    """从 .gitmodules 文件解析 submodule 名 → url（用户可能改成镜像源）。"""
+    urls: dict[str, str] = {}
+    cp = subprocess.run(
+        ["git", "config", "-f", str(gitmodules), "--get-regexp", r"^submodule\..*\.url$"],
+        check=False,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    if cp.returncode != 0:
+        return urls
+    for line in (cp.stdout or "").splitlines():
+        key, _, value = line.partition(" ")
+        parts = key.split(".")
+        if len(parts) == 3 and parts[0] == "submodule" and parts[2] == "url" and value:
+            urls[parts[1]] = value.strip()
+    return urls
+
+
+def _restore_submodule_urls(ai_root: Path, urls: dict[str, str]) -> list[str]:
+    """把用户自定义的子模块 URL（镜像源）写回 .git/config，保持 .gitmodules 干净。
+
+    返回无法还原的 submodule 名（上游已移除或写入失败）。
+    """
+    missing: list[str] = []
+    for name, url in urls.items():
+        current = _git_run(ai_root, "config", "-f", ".gitmodules", f"submodule.{name}.url")
+        if current.returncode != 0:
+            missing.append(name)
+            continue
+        if (current.stdout or "").strip() == url:
+            continue
+        set_cp = _git_run(ai_root, "config", f"submodule.{name}.url", url)
+        if set_cp.returncode != 0:
+            missing.append(name)
+    return missing
+
+
 def update_ai_repo(*, ai_root: Path | None = None) -> dict[str, Any]:
     """托管目录 ``git pull --ff-only``（含 submodule）；非托管 / Docker 远端禁止。"""
     from pallas.console.cli.ai_supervisor import is_managed_ai_root, mark_ai_root_managed
@@ -286,6 +327,25 @@ def update_ai_repo(*, ai_root: Path | None = None) -> dict[str, Any]:
         raise RuntimeError(f"缺少 {_AI_BOOTSTRAP}")
     if not shutil.which("git"):
         raise RuntimeError("未找到 git，无法更新")
+
+    # 托管目录更新前先复位工作区 .gitmodules（常见是用户改成镜像 URL，或上次更新遗留的
+    # 冲突标记），备份其 URL 覆盖，更新后定向写回 .git/config，避免 stash 在 .gitmodules 上冲突。
+    gm_user_urls: dict[str, str] = {}
+    gm_backup: Path | None = None
+    gm_file = root / ".gitmodules"
+    if gm_file.exists():
+        dirty = _git_run(root, "status", "--porcelain", "--untracked-files=no", "--", ".gitmodules")
+        if dirty.returncode == 0 and (dirty.stdout or "").strip():
+            if gm_file.is_file():
+                gm_backup = gm_file.with_name(f"{gm_file.name}.pallas.bak.{int(time.time())}")
+                shutil.copy2(gm_file, gm_backup)
+                gm_user_urls = _parse_submodule_urls(gm_backup)
+            reset = _git_run(root, "checkout", "HEAD", "--", ".gitmodules")
+            if reset.returncode != 0:
+                raise RuntimeError(
+                    f"无法复位 .gitmodules（备份于 {gm_backup.name if gm_backup else '无'}）: "
+                    f"{(reset.stderr or reset.stdout or '').strip()}"
+                )
 
     before = _git_run(root, "rev-parse", "HEAD")
     if before.returncode != 0:
@@ -318,6 +378,19 @@ def update_ai_repo(*, ai_root: Path | None = None) -> dict[str, Any]:
     sub = _git_run(root, "submodule", "update", "--init", "--recursive")
     mark_ai_root_managed(root)
 
+    gm_notes: list[str] = []
+    if gm_backup is not None and gm_user_urls:
+        lost = _restore_submodule_urls(root, gm_user_urls)
+        if lost:
+            gm_notes.append(f"{len(lost)} 个子模块自定义 URL 未能还原（上游已移除）: {', '.join(sorted(lost))}")
+        else:
+            gm_notes.append("已保留用户自定义的子模块 URL（镜像源）到本地 git 配置")
+    if gm_backup is not None and gm_backup.is_file():
+        try:
+            gm_backup.unlink()
+        except OSError:
+            pass
+
     chunks = [
         fetch.stdout or "",
         fetch.stderr or "",
@@ -335,6 +408,8 @@ def update_ai_repo(*, ai_root: Path | None = None) -> dict[str, Any]:
         "output_tail": "".join(chunks)[-4000:],
         "submodule_ok": sub.returncode == 0,
     }
+    if gm_notes:
+        result["gitmodules_notes"] = gm_notes
     if sub.returncode != 0:
         result["submodule_error"] = (sub.stderr or sub.stdout or "").strip() or f"exit {sub.returncode}"
     return result

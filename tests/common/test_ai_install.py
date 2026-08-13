@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -193,6 +195,94 @@ def test_update_ai_repo_rejects_unmanaged(tmp_path, monkeypatch: pytest.MonkeyPa
     )
     with pytest.raises(PermissionError, match="托管"):
         ai_install.update_ai_repo(ai_root=root)
+
+
+def test_update_ai_repo_recovers_dirty_gitmodules(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """脏 .gitmodules（镜像 URL）不阻塞更新；冲突标记被清除，URL 覆盖写回本地 git 配置。"""
+    git = shutil.which("git")
+    if not git:
+        pytest.skip("git 不可用")
+
+    def _git(*args: str, cwd: Path | None = None, check: bool = True) -> str:
+        cp = subprocess.run(
+            [git, *args],
+            cwd=str(cwd) if cwd else None,
+            check=check,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        return cp.stdout.strip()
+
+    sub_src = tmp_path / "sub-src"
+    subprocess.run([git, "init", "-q", "-b", "main", str(sub_src)], check=True)
+    _git("config", "user.email", "t@t", cwd=sub_src)
+    _git("config", "user.name", "t", cwd=sub_src)
+    _git("commit", "-q", "--allow-empty", "-m", "sub", cwd=sub_src)
+    sub_sha = _git("rev-parse", "HEAD", cwd=sub_src)
+    sub_bare = tmp_path / "sub-bare.git"
+    subprocess.run([git, "clone", "-q", "--bare", str(sub_src), str(sub_bare)], check=True)
+    upstream = tmp_path / "upstream"
+    subprocess.run([git, "init", "-q", "-b", "main", str(upstream)], check=True)
+    _git("config", "user.email", "t@t", cwd=upstream)
+    _git("config", "user.name", "t", cwd=upstream)
+    _git("commit", "-q", "--allow-empty", "-m", "base", cwd=upstream)
+    (upstream / ".gitmodules").write_text(
+        f'[submodule "engine"]\n\tpath = engine\n\turl = {sub_bare}\n',
+        encoding="utf-8",
+    )
+    _git("add", ".gitmodules", cwd=upstream)
+    subprocess.run(
+        [git, "update-index", "--add", "--cacheinfo", f"160000,{sub_sha},engine"],
+        cwd=upstream,
+        check=True,
+    )
+    _git("commit", "-q", "-m", "add engine", cwd=upstream)
+
+    root = tmp_path / "managed-ai"
+    subprocess.run([git, "clone", "-q", str(upstream), str(root)], check=True)
+    (root / "scripts").mkdir()
+    (root / "scripts" / "ai_bootstrap.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    # 测试环境无 HTTP 远端，放行 file:// 让子模块克隆走本地裸仓
+    monkeypatch.setenv("GIT_CONFIG_COUNT", "1")
+    monkeypatch.setenv("GIT_CONFIG_KEY_0", "protocol.file.allow")
+    monkeypatch.setenv("GIT_CONFIG_VALUE_0", "always")
+
+    (root / ".gitmodules").write_text(
+        '[submodule "engine"]\n\tpath = engine\n\turl = https://mirror.example/engine.git\n',
+        encoding="utf-8",
+    )
+    (upstream / ".gitmodules").write_text(
+        f'[submodule "engine"]\n\tpath = engine\n\turl = {sub_bare}\n'
+        f'[submodule "engine2"]\n\tpath = engine2\n\turl = {sub_bare}\n',
+        encoding="utf-8",
+    )
+    _git("add", ".gitmodules", cwd=upstream)
+    subprocess.run(
+        [git, "update-index", "--add", "--cacheinfo", f"160000,{sub_sha},engine2"],
+        cwd=upstream,
+        check=True,
+    )
+    _git("commit", "-q", "-m", "add engine2", cwd=upstream)
+
+    monkeypatch.setattr(ai_install, "resolve_ai_repo_root", lambda: root.resolve())
+    monkeypatch.setattr(ai_install, "forbid_ai_clone", lambda **_: False)
+    monkeypatch.setattr(ai_install.shutil, "which", lambda _: git)
+    monkeypatch.setattr("pallas.console.cli.ai_supervisor.is_managed_ai_root", lambda _p: True)
+    monkeypatch.setattr("pallas.console.cli.ai_supervisor.mark_ai_root_managed", lambda _p: None)
+
+    result = ai_install.update_ai_repo(ai_root=root)
+
+    assert result["changed"] is True
+    assert result["submodule_ok"] is True
+    assert "gitmodules_notes" in result
+    assert ".gitmodules" not in _git("status", "--porcelain", cwd=root)
+    gm = (root / ".gitmodules").read_text(encoding="utf-8")
+    assert "<<<<<<<" not in gm
+    assert "mirror.example" not in gm
+    assert _git("config", "submodule.engine.url", cwd=root) == "https://mirror.example/engine.git"
+    assert not list(root.glob(".gitmodules.pallas.bak.*"))
 
 
 def test_ai_install_status_can_update(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
