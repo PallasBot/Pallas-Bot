@@ -66,6 +66,12 @@ async def try_claim_cross_federate_message(
 
     if not federate_ingress_active():
         return True
+    from pallas.core.platform.federate.peer_bots import get_federate_peer_bot_ids
+
+    # 无联邦对手时无需跨部署抢占，避免不稳定的协调 Redis 丢单条消息
+    # （如决斗 QTE 答案这类本机状态依赖的聊天消息）。
+    if not get_federate_peer_bot_ids():
+        return True
     if not await try_claim_cross_federate_message_memory(
         plugin,
         group_id,
