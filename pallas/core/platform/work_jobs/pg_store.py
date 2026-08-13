@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 import uuid
 
-from sqlalchemy import func, or_, select, tuple_, update
+from sqlalchemy import case, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from .models import WorkJob
@@ -181,6 +181,7 @@ class PostgresWorkJobStore:
         kinds: frozenset[str] | None = None,
         exclude_kinds: frozenset[str] | None = None,
         bot_owner_ids: frozenset[int] | None = None,
+        priority_kinds: frozenset[str] | None = None,
     ) -> list[WorkJob]:
         from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
 
@@ -196,7 +197,14 @@ class PostgresWorkJobStore:
             stmt = stmt.where(BackgroundJobRow.kind.not_in(tuple(exclude_kinds)))
         if bot_owner_ids is not None:
             stmt = stmt.where(BackgroundJobRow.payload["bot_qq"].astext.in_([str(int(q)) for q in bot_owner_ids]))
-        stmt = stmt.order_by(BackgroundJobRow.created_at).with_for_update(skip_locked=True).limit(max(1, int(limit)))
+        if priority_kinds:
+            stmt = stmt.order_by(
+                case((BackgroundJobRow.kind.in_(tuple(priority_kinds)), 0), else_=1),
+                BackgroundJobRow.created_at,
+            )
+        else:
+            stmt = stmt.order_by(BackgroundJobRow.created_at)
+        stmt = stmt.with_for_update(skip_locked=True).limit(max(1, int(limit)))
         async with get_session() as session:
             rows = (await session.execute(stmt)).scalars().all()
             for row in rows:

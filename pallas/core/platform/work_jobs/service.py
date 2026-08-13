@@ -61,6 +61,7 @@ async def run_work_service(
     handlers: dict[str, WorkJobHandler],
     *,
     exclude_kinds: frozenset[str] | None = None,
+    priority_kinds: frozenset[str] | None = None,
 ) -> None:
     from pallas.core.foundation.db import init_db
 
@@ -80,14 +81,16 @@ async def run_work_service(
             batch_size=batch_size,
             metrics=metrics,
             exclude_kinds=exclude_kinds,
+            priority_kinds=priority_kinds,
         )
         for index, batch_size in enumerate(batch_sizes)
     ]
     logger.info(
-        "work aux started handlers={} consumers={} exclude_kinds={}",
+        "work aux started handlers={} consumers={} exclude_kinds={} priority_kinds={}",
         sorted(handlers),
         concurrency,
         sorted(exclude_kinds) if exclude_kinds else None,
+        sorted(priority_kinds) if priority_kinds else None,
     )
     await asyncio.gather(
         *(run_work_consumer(worker) for worker in workers),

@@ -27,6 +27,7 @@ class WorkJobStore(Protocol):
         kinds: frozenset[str] | None = None,
         exclude_kinds: frozenset[str] | None = None,
         bot_owner_ids: frozenset[int] | None = None,
+        priority_kinds: frozenset[str] | None = None,
     ) -> WorkJob | None: ...
 
     async def claim_many(
@@ -38,6 +39,7 @@ class WorkJobStore(Protocol):
         kinds: frozenset[str] | None = None,
         exclude_kinds: frozenset[str] | None = None,
         bot_owner_ids: frozenset[int] | None = None,
+        priority_kinds: frozenset[str] | None = None,
     ) -> list[WorkJob]: ...
 
     async def renew(self, *, job_id: str, owner: str, lease_id: str, lease_sec: float) -> bool: ...
@@ -110,10 +112,12 @@ class MemoryWorkJobStore:
         kinds: frozenset[str] | None = None,
         exclude_kinds: frozenset[str] | None = None,
         bot_owner_ids: frozenset[int] | None = None,
+        priority_kinds: frozenset[str] | None = None,
     ) -> WorkJob | None:
         now = time.monotonic()
         async with self._lock:
-            for job_id, job in self._jobs.items():
+            ordered = _sort_claimable_jobs(self._jobs, priority_kinds=priority_kinds)
+            for job_id, job in ordered:
                 if not _job_matches(job, kinds=kinds, exclude_kinds=exclude_kinds, bot_owner_ids=bot_owner_ids):
                     continue
                 if (
@@ -141,11 +145,13 @@ class MemoryWorkJobStore:
         kinds: frozenset[str] | None = None,
         exclude_kinds: frozenset[str] | None = None,
         bot_owner_ids: frozenset[int] | None = None,
+        priority_kinds: frozenset[str] | None = None,
     ) -> list[WorkJob]:
         now = time.monotonic()
         claimed: list[WorkJob] = []
         async with self._lock:
-            for job_id, job in self._jobs.items():
+            ordered = _sort_claimable_jobs(self._jobs, priority_kinds=priority_kinds)
+            for job_id, job in ordered:
                 if len(claimed) >= max(1, int(limit)):
                     break
                 if not _job_matches(job, kinds=kinds, exclude_kinds=exclude_kinds, bot_owner_ids=bot_owner_ids):
@@ -258,3 +264,12 @@ def _job_matches(
         if owner not in bot_owner_ids:
             return False
     return True
+
+
+def _sort_claimable_jobs(jobs: dict[str, object], *, priority_kinds: frozenset[str] | None) -> list[tuple[str, object]]:
+    ordered = list(jobs.items())
+    if priority_kinds:
+        ordered.sort(key=lambda item: (0 if item[1].kind in priority_kinds else 1, item[1].created_at))
+    else:
+        ordered.sort(key=lambda item: item[1].created_at)
+    return ordered

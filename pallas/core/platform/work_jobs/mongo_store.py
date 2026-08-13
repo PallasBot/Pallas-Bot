@@ -91,6 +91,7 @@ class MongoWorkJobStore:
         kinds: frozenset[str] | None = None,
         exclude_kinds: frozenset[str] | None = None,
         bot_owner_ids: frozenset[int] | None = None,
+        priority_kinds: frozenset[str] | None = None,
     ) -> WorkJob | None:
         from pallas.core.foundation.db.modules import BackgroundJob
 
@@ -132,6 +133,7 @@ class MongoWorkJobStore:
         kinds: frozenset[str] | None = None,
         exclude_kinds: frozenset[str] | None = None,
         bot_owner_ids: frozenset[int] | None = None,
+        priority_kinds: frozenset[str] | None = None,
     ) -> list[WorkJob]:
         jobs: list[WorkJob] = []
         for _ in range(max(1, int(limit))):
@@ -141,6 +143,7 @@ class MongoWorkJobStore:
                 kinds=kinds,
                 exclude_kinds=exclude_kinds,
                 bot_owner_ids=bot_owner_ids,
+                priority_kinds=priority_kinds,
             )
             if job is None:
                 break

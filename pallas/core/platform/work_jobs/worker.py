@@ -35,6 +35,7 @@ class WorkJobWorker:
         kinds: frozenset[str] | None = None,
         exclude_kinds: frozenset[str] | None = None,
         bot_owner_ids: frozenset[int] | None = None,
+        priority_kinds: frozenset[str] | None = None,
     ) -> None:
         self.store = store
         self.owner = str(owner)
@@ -46,6 +47,7 @@ class WorkJobWorker:
         self._kinds = frozenset(kinds) if kinds is not None else None
         self._exclude_kinds = frozenset(exclude_kinds) if exclude_kinds is not None else None
         self._bot_owner_ids = frozenset(int(q) for q in bot_owner_ids) if bot_owner_ids is not None else None
+        self._priority_kinds = frozenset(priority_kinds) if priority_kinds is not None else None
         self.metrics = metrics or WorkAuxRuntimeMetrics()
         if result_committer is None:
             from .result_committer import WorkResultCommitter
@@ -61,6 +63,8 @@ class WorkJobWorker:
             filters["exclude_kinds"] = self._exclude_kinds
         if self._bot_owner_ids is not None:
             filters["bot_owner_ids"] = self._bot_owner_ids
+        if self._priority_kinds is not None:
+            filters["priority_kinds"] = self._priority_kinds
         return filters
 
     async def run_once(self) -> bool:
