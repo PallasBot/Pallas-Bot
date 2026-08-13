@@ -20,10 +20,9 @@ async def test_insert_image_buffers_durable_capture_job_under_ingress_pressure(m
     job = mod.image_capture_queue().get_nowait()
     assert job.kind == "image_cache.capture"
     assert job.idempotency_key.startswith("image_cache.capture:100:42:99:")
-    assert job.payload == {
-        "cq_code": "[CQ:image,file=x.image]",
-        "url": "https://example.com/x.png",
-    }
+    assert job.payload["cq_code"] == "[CQ:image,file=x.image]"
+    assert job.payload["url"] == "https://example.com/x.png"
+    assert float(job.payload["created_at"] or 0) > 0
 
     await mod.reset_image_cache_runtime_state_for_tests()
 

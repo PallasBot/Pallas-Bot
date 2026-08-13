@@ -28,6 +28,7 @@ _IMAGE_CAPTURE_QUEUE_MAX = 1024
 _IMAGE_CAPTURE_MIN_INTERVAL_SEC = 2.0
 _IMAGE_CAPTURE_GLOBAL_RATE_PER_SEC = 4
 _IMAGE_CAPTURE_GLOBAL_WINDOW_SEC = 1.0
+_IMAGE_CAPTURE_MAX_AGE_SEC = 600.0
 _IMAGE_CAPTURE_BOUND = False
 
 
@@ -91,7 +92,17 @@ async def handle_image_cache_capture(payload: dict[str, object]) -> None:
     if not cq_code:
         raise ValueError("image cache capture cq_code is required")
     if not is_valid_image_http_url(url):
-        raise ValueError("image cache capture url must use a valid http or https URL")
+        raise ValueError("image cache capture url must use a valid http or HTTPS url")
+    created_at = float(payload.get("created_at") or 0)
+    if created_at > 0 and time.time() - created_at > _IMAGE_CAPTURE_MAX_AGE_SEC:
+        log_rate_limited(
+            logger,
+            "info",
+            "image_cache.capture.stale",
+            "image cache capture skipped stale after [{}]s",
+            int(time.time() - created_at),
+        )
+        return
     cache = await image_cache_repo.find_by_cq_code(cq_code)
     if cache is None:
         rsp = await HTTPXClient.get(url, raise_for_status=False)
@@ -205,6 +216,7 @@ async def insert_image(
             )
         return
     cq_hash = hashlib.sha256(payload["cq_code"].encode()).hexdigest()[:16]
+    payload["created_at"] = time.time()
     job = WorkJob.create(
         kind="image_cache.capture",
         payload=payload,
