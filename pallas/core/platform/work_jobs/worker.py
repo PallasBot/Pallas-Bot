@@ -32,6 +32,9 @@ class WorkJobWorker:
         max_attempts: int = 8,
         metrics: WorkAuxRuntimeMetrics | None = None,
         result_committer: WorkResultCommitter | None = None,
+        kinds: frozenset[str] | None = None,
+        exclude_kinds: frozenset[str] | None = None,
+        bot_owner_ids: frozenset[int] | None = None,
     ) -> None:
         self.store = store
         self.owner = str(owner)
@@ -40,15 +43,33 @@ class WorkJobWorker:
         self.retry_after_sec = max(0.0, float(retry_after_sec))
         self.batch_size = max(1, int(batch_size))
         self.max_attempts = max(1, int(max_attempts))
+        self._kinds = frozenset(kinds) if kinds is not None else None
+        self._exclude_kinds = frozenset(exclude_kinds) if exclude_kinds is not None else None
+        self._bot_owner_ids = frozenset(int(q) for q in bot_owner_ids) if bot_owner_ids is not None else None
         self.metrics = metrics or WorkAuxRuntimeMetrics()
         if result_committer is None:
             from .result_committer import WorkResultCommitter
 
-            result_committer = WorkResultCommitter()
+            result_committer = WorkResultCommitter(store=store)
         self.result_committer = result_committer
 
+    def _claim_filters(self) -> dict[str, frozenset]:
+        filters: dict[str, frozenset] = {}
+        if self._kinds is not None:
+            filters["kinds"] = self._kinds
+        if self._exclude_kinds is not None:
+            filters["exclude_kinds"] = self._exclude_kinds
+        if self._bot_owner_ids is not None:
+            filters["bot_owner_ids"] = self._bot_owner_ids
+        return filters
+
     async def run_once(self) -> bool:
-        jobs = await self.store.claim_many(owner=self.owner, lease_sec=self.lease_sec, limit=self.batch_size)
+        jobs = await self.store.claim_many(
+            owner=self.owner,
+            lease_sec=self.lease_sec,
+            limit=self.batch_size,
+            **self._claim_filters(),
+        )
         if not jobs:
             return False
         logger.debug(
@@ -82,6 +103,7 @@ class WorkJobWorker:
                         owner=self.owner,
                         lease_sec=self.lease_sec,
                         limit=available_slots,
+                        **self._claim_filters(),
                     )
                     tasks.update({asyncio.create_task(self._run_job(job)): job for job in next_jobs})
             return True

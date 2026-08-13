@@ -19,9 +19,26 @@ class WorkJobStore(Protocol):
 
     async def enqueue_many(self, jobs: list[WorkJob]) -> list[WorkJob]: ...
 
-    async def claim(self, *, owner: str, lease_sec: float) -> WorkJob | None: ...
+    async def claim(
+        self,
+        *,
+        owner: str,
+        lease_sec: float,
+        kinds: frozenset[str] | None = None,
+        exclude_kinds: frozenset[str] | None = None,
+        bot_owner_ids: frozenset[int] | None = None,
+    ) -> WorkJob | None: ...
 
-    async def claim_many(self, *, owner: str, lease_sec: float, limit: int) -> list[WorkJob]: ...
+    async def claim_many(
+        self,
+        *,
+        owner: str,
+        lease_sec: float,
+        limit: int,
+        kinds: frozenset[str] | None = None,
+        exclude_kinds: frozenset[str] | None = None,
+        bot_owner_ids: frozenset[int] | None = None,
+    ) -> list[WorkJob]: ...
 
     async def renew(self, *, job_id: str, owner: str, lease_id: str, lease_sec: float) -> bool: ...
 
@@ -85,10 +102,20 @@ class MemoryWorkJobStore:
     async def enqueue_many(self, jobs: list[WorkJob]) -> list[WorkJob]:
         return [await self.enqueue(job) for job in jobs]
 
-    async def claim(self, *, owner: str, lease_sec: float) -> WorkJob | None:
+    async def claim(
+        self,
+        *,
+        owner: str,
+        lease_sec: float,
+        kinds: frozenset[str] | None = None,
+        exclude_kinds: frozenset[str] | None = None,
+        bot_owner_ids: frozenset[int] | None = None,
+    ) -> WorkJob | None:
         now = time.monotonic()
         async with self._lock:
             for job_id, job in self._jobs.items():
+                if not _job_matches(job, kinds=kinds, exclude_kinds=exclude_kinds, bot_owner_ids=bot_owner_ids):
+                    continue
                 if (
                     job_id in self._completed
                     or job_id in self._dead_lettered
@@ -105,13 +132,24 @@ class MemoryWorkJobStore:
                 return replace(claimed, lease_id=lease_id)
         return None
 
-    async def claim_many(self, *, owner: str, lease_sec: float, limit: int) -> list[WorkJob]:
+    async def claim_many(
+        self,
+        *,
+        owner: str,
+        lease_sec: float,
+        limit: int,
+        kinds: frozenset[str] | None = None,
+        exclude_kinds: frozenset[str] | None = None,
+        bot_owner_ids: frozenset[int] | None = None,
+    ) -> list[WorkJob]:
         now = time.monotonic()
         claimed: list[WorkJob] = []
         async with self._lock:
             for job_id, job in self._jobs.items():
                 if len(claimed) >= max(1, int(limit)):
                     break
+                if not _job_matches(job, kinds=kinds, exclude_kinds=exclude_kinds, bot_owner_ids=bot_owner_ids):
+                    continue
                 if (
                     job_id in self._completed
                     or job_id in self._dead_lettered
@@ -198,3 +236,25 @@ class MemoryWorkJobStore:
                 "oldest_pending_age_sec": round(now - oldest_created, 3) if oldest_created is not None else None,
                 "max_attempts": max((job.attempts for job in self._jobs.values()), default=0),
             }
+
+
+def _job_matches(
+    job,
+    *,
+    kinds: frozenset[str] | None,
+    exclude_kinds: frozenset[str] | None,
+    bot_owner_ids: frozenset[int] | None,
+) -> bool:
+    if kinds is not None and job.kind not in kinds:
+        return False
+    if exclude_kinds is not None and job.kind in exclude_kinds:
+        return False
+    if bot_owner_ids is not None:
+        raw = job.payload.get("bot_qq")
+        try:
+            owner = int(raw)
+        except (TypeError, ValueError):
+            return False
+        if owner not in bot_owner_ids:
+            return False
+    return True

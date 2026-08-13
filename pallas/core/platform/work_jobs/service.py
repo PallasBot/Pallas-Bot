@@ -57,7 +57,11 @@ async def run_work_status_publisher(store, *, consumers: int, metrics) -> None:
         await asyncio.sleep(5.0)
 
 
-async def run_work_service(handlers: dict[str, WorkJobHandler]) -> None:
+async def run_work_service(
+    handlers: dict[str, WorkJobHandler],
+    *,
+    exclude_kinds: frozenset[str] | None = None,
+) -> None:
     from pallas.core.foundation.db import init_db
 
     await init_db()
@@ -75,10 +79,16 @@ async def run_work_service(handlers: dict[str, WorkJobHandler]) -> None:
             handlers=handlers,
             batch_size=batch_size,
             metrics=metrics,
+            exclude_kinds=exclude_kinds,
         )
         for index, batch_size in enumerate(batch_sizes)
     ]
-    logger.info("work aux started handlers={} consumers={}", sorted(handlers), concurrency)
+    logger.info(
+        "work aux started handlers={} consumers={} exclude_kinds={}",
+        sorted(handlers),
+        concurrency,
+        sorted(exclude_kinds) if exclude_kinds else None,
+    )
     await asyncio.gather(
         *(run_work_consumer(worker) for worker in workers),
         run_work_status_publisher(store, consumers=concurrency, metrics=metrics),

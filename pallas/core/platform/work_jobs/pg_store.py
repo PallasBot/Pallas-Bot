@@ -172,28 +172,33 @@ class PostgresWorkJobStore:
             row.id, row.kind, dict(row.payload or {}), row.idempotency_key, row.created_at, row.attempts, row.lease_id
         )
 
-    async def claim_many(self, *, owner: str, lease_sec: float, limit: int) -> list[WorkJob]:
+    async def claim_many(
+        self,
+        *,
+        owner: str,
+        lease_sec: float,
+        limit: int,
+        kinds: frozenset[str] | None = None,
+        exclude_kinds: frozenset[str] | None = None,
+        bot_owner_ids: frozenset[int] | None = None,
+    ) -> list[WorkJob]:
         from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
 
         now = time.time()
+        stmt = select(BackgroundJobRow).where(
+            BackgroundJobRow.finished_at.is_(None),
+            BackgroundJobRow.available_at <= now,
+            or_(BackgroundJobRow.status == "pending", BackgroundJobRow.leased_until < now),
+        )
+        if kinds is not None:
+            stmt = stmt.where(BackgroundJobRow.kind.in_(tuple(kinds)))
+        if exclude_kinds is not None:
+            stmt = stmt.where(BackgroundJobRow.kind.not_in(tuple(exclude_kinds)))
+        if bot_owner_ids is not None:
+            stmt = stmt.where(BackgroundJobRow.payload["bot_qq"].astext.in_([str(int(q)) for q in bot_owner_ids]))
+        stmt = stmt.order_by(BackgroundJobRow.created_at).with_for_update(skip_locked=True).limit(max(1, int(limit)))
         async with get_session() as session:
-            rows = (
-                (
-                    await session.execute(
-                        select(BackgroundJobRow)
-                        .where(
-                            BackgroundJobRow.finished_at.is_(None),
-                            BackgroundJobRow.available_at <= now,
-                            or_(BackgroundJobRow.status == "pending", BackgroundJobRow.leased_until < now),
-                        )
-                        .order_by(BackgroundJobRow.created_at)
-                        .with_for_update(skip_locked=True)
-                        .limit(max(1, int(limit)))
-                    )
-                )
-                .scalars()
-                .all()
-            )
+            rows = (await session.execute(stmt)).scalars().all()
             for row in rows:
                 row.status = "leased"
                 row.lease_owner = str(owner)

@@ -83,17 +83,32 @@ class MongoWorkJobStore:
     async def enqueue_many(self, jobs: list[WorkJob]) -> list[WorkJob]:
         return [await self.enqueue(job) for job in jobs]
 
-    async def claim(self, *, owner: str, lease_sec: float) -> WorkJob | None:
+    async def claim(
+        self,
+        *,
+        owner: str,
+        lease_sec: float,
+        kinds: frozenset[str] | None = None,
+        exclude_kinds: frozenset[str] | None = None,
+        bot_owner_ids: frozenset[int] | None = None,
+    ) -> WorkJob | None:
         from pallas.core.foundation.db.modules import BackgroundJob
 
         now = time.time()
         collection = BackgroundJob.get_pymongo_collection()
+        query: dict = {
+            "finished_at": None,
+            "available_at": {"$lte": now},
+            "$or": [{"status": "pending"}, {"leased_until": {"$lt": now}}],
+        }
+        if kinds is not None:
+            query["kind"] = {"$in": list(kinds)}
+        if exclude_kinds is not None:
+            query["kind"] = {"$nin": list(exclude_kinds)}
+        if bot_owner_ids is not None:
+            query["payload.bot_qq"] = {"$in": [int(q) for q in bot_owner_ids]}
         raw = await collection.find_one_and_update(
-            {
-                "finished_at": None,
-                "available_at": {"$lte": now},
-                "$or": [{"status": "pending"}, {"leased_until": {"$lt": now}}],
-            },
+            query,
             {
                 "$set": {
                     "status": "leased",
@@ -108,10 +123,25 @@ class MongoWorkJobStore:
         )
         return work_job_from_mongo(BackgroundJob.model_validate(raw)) if raw else None
 
-    async def claim_many(self, *, owner: str, lease_sec: float, limit: int) -> list[WorkJob]:
+    async def claim_many(
+        self,
+        *,
+        owner: str,
+        lease_sec: float,
+        limit: int,
+        kinds: frozenset[str] | None = None,
+        exclude_kinds: frozenset[str] | None = None,
+        bot_owner_ids: frozenset[int] | None = None,
+    ) -> list[WorkJob]:
         jobs: list[WorkJob] = []
         for _ in range(max(1, int(limit))):
-            job = await self.claim(owner=owner, lease_sec=lease_sec)
+            job = await self.claim(
+                owner=owner,
+                lease_sec=lease_sec,
+                kinds=kinds,
+                exclude_kinds=exclude_kinds,
+                bot_owner_ids=bot_owner_ids,
+            )
             if job is None:
                 break
             jobs.append(job)

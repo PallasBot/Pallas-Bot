@@ -1,4 +1,9 @@
-"""提交 durable work handler 返回的结构化 Bot 动作。"""
+"""提交 durable work handler 返回的结构化 Bot 动作。
+
+work aux 不持有 bot 连接，无法直接发送；这里把 result action 转成 DB outbox 里的
+发送任务（``bot_action.send``），由持有目标 bot 的消息进程领取并本地执行。这样确认
+回复不依赖协调 Redis，单机无 Redis 部署同样可用。
+"""
 
 from __future__ import annotations
 
@@ -6,34 +11,23 @@ from typing import TYPE_CHECKING
 
 from nonebot import logger
 
-if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
-    from typing import Any
+from .models import WorkJob
 
+if TYPE_CHECKING:
     from pallas.api.runtime import DirectWorkResult
 
-    type BotActionDispatcher = Callable[[str, int, dict[str, Any]], Awaitable[tuple[bool, Any]]]
+    from .store import WorkJobStore
+
+SEND_JOB_KIND = "bot_action.send"
 
 
 class WorkResultCommitError(RuntimeError):
     committed = True
 
 
-async def dispatch_bot_action(
-    action: str,
-    target_bot_id: int,
-    payload: dict,
-    *,
-    timeout_sec: float,
-) -> tuple[bool, object]:
-    from pallas.core.platform.shard.coord.bot_action import invoke_bot_action
-
-    return await invoke_bot_action(action, target_bot_id, payload, timeout_sec=timeout_sec)
-
-
 class WorkResultCommitter:
-    def __init__(self, *, dispatcher=dispatch_bot_action) -> None:
-        self._dispatcher = dispatcher
+    def __init__(self, *, store: WorkJobStore) -> None:
+        self._store = store
 
     async def commit(
         self,
@@ -44,6 +38,7 @@ class WorkResultCommitter:
     ) -> bool:
         if not result.actions:
             return False
+        jobs: list[WorkJob] = []
         for action in result.actions:
             try:
                 action.validate()
@@ -57,19 +52,17 @@ class WorkResultCommitter:
                     exc,
                 )
                 raise WorkResultCommitError(str(exc)) from exc
-            ok, _response = await self._dispatcher(
-                action.action,
-                action.target_bot_id,
-                action.payload,
-                timeout_sec=action.timeout_sec,
-            )
-            if not ok:
-                logger.warning(
-                    "work aux: result action [{}] for bot [{}] was not accepted while committing job [{}] of kind [{}]",
-                    action.action,
-                    action.target_bot_id,
-                    job_id,
-                    job_kind,
+            jobs.append(
+                WorkJob.create(
+                    kind=SEND_JOB_KIND,
+                    payload={
+                        "action": action.action,
+                        "bot_qq": action.target_bot_id,
+                        "payload": dict(action.payload),
+                        "timeout_sec": action.timeout_sec,
+                    },
+                    idempotency_key=f"send:{job_kind}:{job_id}:{action.action}:{action.target_bot_id}",
                 )
-                raise WorkResultCommitError(f"work result action was not accepted: {action.action}")
+            )
+        await self._store.enqueue_many(jobs)
         return True

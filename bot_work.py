@@ -72,7 +72,9 @@ def load_work_handlers():
 def main() -> None:
     apply_repo_settings_to_environ()
     install_uvloop()
-    asyncio.run(run_work_service(load_work_handlers()))
+    from pallas.core.platform.work_jobs.result_committer import SEND_JOB_KIND
+
+    asyncio.run(run_work_service(load_work_handlers(), exclude_kinds=frozenset({SEND_JOB_KIND})))
 
 
 if __name__ == "__main__":

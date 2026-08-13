@@ -75,6 +75,9 @@ def boot() -> nonebot.Driver:
         from pallas.core.platform.shard.coord.bot_action import start_bot_action_redis_listener
 
         start_bot_action_redis_listener()
+        from pallas.core.platform.work_jobs.bot_action_send import start_bot_action_send_consumer
+
+        start_bot_action_send_consumer()
 
     @driver.on_shutdown
     async def shutdown() -> None:
