@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import re
+import time
 from datetime import date, datetime, timedelta
 from urllib.parse import urlparse
 
@@ -20,8 +21,35 @@ image_cache_repo = make_image_cache_repository()
 _image_capture_queue: asyncio.Queue[WorkJob] | None = None
 _image_capture_tasks: list[asyncio.Task[None]] = []
 _image_capture_dropped: int = 0
+_image_capture_rate_limited: int = 0
+_image_capture_rate_stamps: dict[tuple[int, int], float] = {}
+_image_capture_global_window: list[float] = []
 _IMAGE_CAPTURE_QUEUE_MAX = 1024
+_IMAGE_CAPTURE_MIN_INTERVAL_SEC = 2.0
+_IMAGE_CAPTURE_GLOBAL_RATE_PER_SEC = 4
+_IMAGE_CAPTURE_GLOBAL_WINDOW_SEC = 1.0
 _IMAGE_CAPTURE_BOUND = False
+
+
+def _image_capture_rate_pass(bot_id: int, group_id: int) -> bool:
+    """每群每 bot 间隔 + 全局滑动窗口限流，避免群图洪峰打爆 work 队列。"""
+    key = (int(bot_id), int(group_id))
+    now = time.monotonic()
+    last = _image_capture_rate_stamps.get(key)
+    if last is not None and now - last < _IMAGE_CAPTURE_MIN_INTERVAL_SEC:
+        return False
+    window = _image_capture_global_window
+    while window and now - window[0] >= _IMAGE_CAPTURE_GLOBAL_WINDOW_SEC:
+        window.pop(0)
+    if len(window) >= _IMAGE_CAPTURE_GLOBAL_RATE_PER_SEC:
+        return False
+    window.append(now)
+    _image_capture_rate_stamps[key] = now
+    if len(_image_capture_rate_stamps) > 8192:
+        cutoff = now - 60.0
+        for k in [k for k, v in _image_capture_rate_stamps.items() if v < cutoff]:
+            _image_capture_rate_stamps.pop(k, None)
+    return True
 
 
 def image_capture_queue() -> asyncio.Queue[WorkJob]:
@@ -164,9 +192,17 @@ async def insert_image(
     group_id: int = 0,
     message_id: int = 0,
 ) -> None:
-    global _image_capture_dropped
+    global _image_capture_dropped, _image_capture_rate_limited
     payload = image_capture_payload(image_seg)
     if payload is None:
+        return
+    if not _image_capture_rate_pass(bot_id, group_id):
+        _image_capture_rate_limited += 1
+        if _image_capture_rate_limited == 1 or _image_capture_rate_limited % 200 == 0:
+            logger.info(
+                "image cache capture rate limited, skipped={}",
+                _image_capture_rate_limited,
+            )
         return
     cq_hash = hashlib.sha256(payload["cq_code"].encode()).hexdigest()[:16]
     job = WorkJob.create(
