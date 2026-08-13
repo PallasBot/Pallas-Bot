@@ -40,6 +40,7 @@ def test_ingress_history_aggregates_counter_deltas_and_peak_gauges(tmp_path, mon
         {
             "at": 90,
             "ingress_p95_ms": 1_400.0,
+            "ingress_full_p95_ms": 0.0,
             "scheduler_wait_p95_ms": 900.0,
             "scheduler_pending": 7,
             "scheduler_active": 4,
@@ -54,6 +55,7 @@ def test_ingress_history_aggregates_counter_deltas_and_peak_gauges(tmp_path, mon
         {
             "at": 120,
             "ingress_p95_ms": 600.0,
+            "ingress_full_p95_ms": 0.0,
             "scheduler_wait_p95_ms": 240.0,
             "scheduler_pending": 1,
             "scheduler_active": 2,

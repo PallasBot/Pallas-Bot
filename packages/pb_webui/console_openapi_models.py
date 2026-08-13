@@ -256,6 +256,7 @@ class IngressDispatchData(BaseModel):
 class IngressDispatchHistoryPoint(BaseModel):
     at: int
     ingress_p95_ms: float
+    ingress_full_p95_ms: float = 0.0
     scheduler_wait_p95_ms: float
     scheduler_pending: int
     scheduler_active: int

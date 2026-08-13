@@ -93,6 +93,9 @@ def _sanitize_route_candidates(raw: Any) -> list[dict[str, Any]]:
         p95 = item.get("ingress_duration_ms_p95")
         if isinstance(p95, (int, float)) and not isinstance(p95, bool) and math.isfinite(float(p95)):
             row["ingress_duration_ms_p95"] = max(0.0, float(p95))
+        full_p95 = item.get("ingress_full_ms_p95")
+        if isinstance(full_p95, (int, float)) and not isinstance(full_p95, bool) and math.isfinite(float(full_p95)):
+            row["ingress_full_ms_p95"] = max(0.0, float(full_p95))
         if isinstance(item.get("eligible"), bool):
             row["eligible"] = item["eligible"]
         runtime_stages = item.get("runtime_stages")
@@ -147,6 +150,7 @@ def _sample(snapshot: dict[str, Any], *, ts: int) -> dict[str, Any]:
     row = {
         "ts": int(ts),
         "ingress_p95_ms": _number(snapshot.get("ingress_duration_ms_p95")),
+        "ingress_full_p95_ms": _number(snapshot.get("ingress_full_ms_p95")),
         "scheduler_wait_p95_ms": _number(scheduler.get("wait_ms_p95")),
         "scheduler_pending": int(scheduler.get("pending") or 0),
         "scheduler_active": int(scheduler.get("active") or 0),
@@ -223,6 +227,12 @@ def _apply_candidate_delta(
             total["ingress_duration_ms_p95"] = max(
                 float(total.get("ingress_duration_ms_p95") or 0.0),
                 float(p95),
+            )
+        full_p95 = row.get("ingress_full_ms_p95")
+        if isinstance(full_p95, (int, float)):
+            total["ingress_full_ms_p95"] = max(
+                float(total.get("ingress_full_ms_p95") or 0.0),
+                float(full_p95),
             )
         outcomes = row.get("outcomes")
         prior_outcomes = prior.get("outcomes") if prior is not None else None
@@ -451,6 +461,7 @@ def read_ingress_metrics_history(*, window_sec: int, bucket_sec: int, now: int |
             {
                 "at": at,
                 "ingress_p95_ms": 0.0,
+                "ingress_full_p95_ms": 0.0,
                 "scheduler_wait_p95_ms": 0.0,
                 "scheduler_pending": 0,
                 "scheduler_active": 0,
@@ -460,7 +471,7 @@ def read_ingress_metrics_history(*, window_sec: int, bucket_sec: int, now: int |
                 **dict.fromkeys(_COUNTER_KEYS, 0),
             },
         )
-        for key in ("ingress_p95_ms", "scheduler_wait_p95_ms"):
+        for key in ("ingress_p95_ms", "ingress_full_p95_ms", "scheduler_wait_p95_ms"):
             point[key] = max(float(point[key]), float(row.get(key) or 0))
         for key in ("scheduler_pending", "scheduler_active", "scheduler_capacity", "work_pending", "work_leased"):
             point[key] = max(int(point[key]), int(row.get(key) or 0))

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.2.0-31-gdc5123dd-dirty",
+    "version": "v4.2.2-7-gae9375c6-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -25174,6 +25174,11 @@
           "ingress_p95_ms": {
             "type": "number",
             "title": "Ingress P95 Ms"
+          },
+          "ingress_full_p95_ms": {
+            "type": "number",
+            "title": "Ingress Full P95 Ms",
+            "default": 0.0
           },
           "scheduler_wait_p95_ms": {
             "type": "number",
