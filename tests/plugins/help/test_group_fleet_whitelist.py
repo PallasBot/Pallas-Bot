@@ -98,7 +98,7 @@ def test_sync_remote_generation_invalidates_local_cache(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_collect_disabled_applies_group_fleet_whitelist(beanie_fixture, tmp_path, monkeypatch):
+async def test_collect_disabled_applies_group_fleet_whitelist(tmp_path, monkeypatch):
     monkeypatch.setattr(global_disable, "plugin_data_dir", lambda _name: tmp_path)
     monkeypatch.setattr(group_fleet_whitelist, "plugin_data_dir", lambda _name: tmp_path)
     global_disable.save_global_disabled_plugins(["ollama"])

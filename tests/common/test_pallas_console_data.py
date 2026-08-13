@@ -147,16 +147,17 @@ def test_group_config_to_public_includes_style_profile_snapshot() -> None:
         style_profile={
             "updated_at": 1_700_000_000,
             "derived": {
-                "length_pref": "short",
-                "reply_bias_mul": 1.05,
-                "chaos_bias": 0.12,
+                "reply_bias_mul": 1.2,
+                "chaos_bias": 0.2,
             },
-            "raw": {"avg_plain_len": 8.0},
+            "raw": {"avg_plain_len": 8.0, "msgs_per_hour_active": 12},
             "sample": {"message_count": 40},
         },
     )
     payload = group_config_to_public(row)
     snapshot = payload["style_profile_snapshot"]
     assert snapshot["ready"] is True
-    assert snapshot["signals"]["length_pref"] == "short"
+    assert snapshot["signals"]["reply_bias_mul"] == 1.2
+    assert snapshot["signals"]["chaos_bias"] == 0.2
+    assert snapshot["signals"]["msgs_per_hour_active"] == 12
     assert snapshot["hints"]
