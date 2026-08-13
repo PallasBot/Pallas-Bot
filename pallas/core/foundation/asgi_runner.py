@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
 import time
 from typing import Any
 
@@ -16,6 +17,9 @@ from nonebot import logger
 
 _EXECUTOR_TIMEOUT = 5.0
 _GRACEFUL_SHUTDOWN_TIMEOUT = 8.0
+
+# uvloop 的默认 executor 线程名为 ThreadPoolExecutor-N_x（非 asyncio_x）
+_EXECUTOR_THREAD_PREFIXES = ("asyncio_", "ThreadPoolExecutor-")
 
 
 def _uvicorn_log_config() -> dict[str, Any]:
@@ -35,13 +39,45 @@ def _uvicorn_log_config() -> dict[str, Any]:
     }
 
 
+def _executor_worker_threads() -> list[threading.Thread]:
+    """返回默认 executor 的工作线程（asyncio / uvloop 命名）。"""
+    return [
+        thread
+        for thread in threading.enumerate()
+        if (thread.name or "").startswith(_EXECUTOR_THREAD_PREFIXES) and thread.is_alive()
+    ]
+
+
 def _drain_executor(loop: asyncio.AbstractEventLoop, *, executor_timeout: float) -> bool:
-    """限时关闭默认线程池；超时返回 True，并断开 executor 避免 loop.close() 无超时 join。"""
+    """限时关闭默认线程池；超时返回 True，并断开 executor 避免 loop.close() 无超时 join。
+
+    uvloop 的 ``_default_executor`` 是 Cython 私有属性，getattr 拿不到，须走
+    ``shutdown_default_executor(timeout=…)`` 统一排干，超时后靠残留线程判定。
+    """
+    deadline = time.monotonic() + executor_timeout
+
+    def _worker_threads_alive() -> bool:
+        return bool(
+            thread
+            for thread in threading.enumerate()
+            if (thread.name or "").startswith(_EXECUTOR_THREAD_PREFIXES) and thread.is_alive()
+        )
+
     executor = getattr(loop, "_default_executor", None)
     if executor is None:
-        return False
+        # uvloop：官方入口内部 await 排干，timeout 参数只作用于事后 join，
+        # 须用 wait_for 外层限时；正常排干则返回，超时后 shutdown(wait=False)
+        # 已中断等待，只能靠残留工作线程判定是否真的排干。
+        shutdown_default_executor = getattr(loop, "shutdown_default_executor", None)
+        if shutdown_default_executor is None:
+            return False
+        try:
+            loop.run_until_complete(asyncio.wait_for(shutdown_default_executor(timeout=1.0), timeout=executor_timeout))
+            return False
+        except TimeoutError:
+            return _worker_threads_alive()
+
     executor.shutdown(wait=False)
-    deadline = time.monotonic() + executor_timeout
     timed_out = False
     for thread in list(getattr(executor, "_threads", ())):
         remaining = deadline - time.monotonic()
