@@ -40,6 +40,11 @@ from pallas.console.web.bot_web import (
         ),
         (
             "pallas",
+            "Bot [1] 群 [2] 用户 [3]: hi",
+            "message",
+        ),
+        (
+            "pallas",
             "[Bot 1] [群 2] [用户 3] hi",
             "message",
         ),

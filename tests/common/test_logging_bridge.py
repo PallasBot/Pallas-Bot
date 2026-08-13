@@ -92,14 +92,24 @@ def test_repo_console_log_template_colors_leading_message_tag() -> None:
     assert record["extra"]["raw_message"] == "[Ready] pb_webui 就绪"
 
 
-def test_repo_console_log_template_keeps_bot_bracket_untouched() -> None:
-    record = {"name": "packages.repeater.fanout", "extra": {}, "message": "[Bot 1001] [群 20002] 普通消息正文"}
+def test_repo_console_log_template_uses_bound_display_name_without_label() -> None:
+    record = {
+        "name": "pallas.core.platform.ingress.matcher_dispatch",
+        "extra": {"display_name": "Message"},
+        "message": "Bot [1001] 群 [20002]: 普通消息正文",
+    }
 
     template = format_repo_console_log(record)
 
-    assert "[Bot 1001]" not in template
-    assert "{message}\n{exception}" in template
-    assert record["message"] == "[Bot 1001] [群 20002] 普通消息正文"
+    assert "[Platform]" not in template
+    assert record["message"] == "Bot [1001] 群 [20002]: 普通消息正文"
+
+    plain = {
+        "name": "pallas.core.platform.ingress.matcher_dispatch",
+        "extra": {},
+        "message": "Bot [1001] 群 [20002]: 普通消息正文",
+    }
+    assert "[Platform]" in format_repo_console_log(plain)
 
 
 def test_display_name_color_is_stable_and_bound() -> None:
@@ -152,7 +162,7 @@ def test_repo_console_log_renders_colors_in_terminal_and_plain_elsewhere() -> No
         patched.warning("work aux: some event happened")
         patched.info("[Ready] pb_webui 就绪")
         patched.info("[初始化] 插件载入中")
-        patched.info("[Bot 1001] [群 20002] 普通消息正文")
+        patched.info("Bot [1001] 群 [20002]: 普通消息正文")
 
     colored = io.StringIO()
     handler_id = logger.add(colored, level=0, colorize=True, format=format_repo_console_log)
@@ -400,7 +410,7 @@ def test_compact_group_message_log_uses_readable_fields() -> None:
         user_id=2879693316,
         message="就是屁股根那里",
     )
-    assert out == "[Bot 3879348674] [群 1103771828] [用户 2879693316] 就是屁股根那里"
+    assert out == "Bot [3879348674] 群 [1103771828] 用户 [2879693316]: 就是屁股根那里"
 
 
 def test_compact_group_message_log_aligns_id_fields_to_ten_digits() -> None:
@@ -411,7 +421,7 @@ def test_compact_group_message_log_aligns_id_fields_to_ten_digits() -> None:
         message="正文",
     )
 
-    assert out == "[Bot          1] [群         22] [用户        333] 正文"
+    assert out == "Bot [         1] 群 [        22] 用户 [       333]: 正文"
 
 
 def test_inbound_log_with_angle_brackets_survives_loguru_colorizer() -> None:

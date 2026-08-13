@@ -78,6 +78,7 @@ _BUSINESS_LOG_LABELS = (
     ("pallas.product.persona", "Persona"),
     ("pallas.product.corpus", "Corpus"),
     ("pallas.product.message_scrub", "Scrub"),
+    ("pallas.product.community_stats", "Stats"),
     ("pallas.product", "Product"),
     ("pallas.core.platform.ai_callback", "AICallback"),
     ("pallas.core.foundation.db", "DB"),
@@ -184,6 +185,8 @@ def display_log_name(logger_name: str) -> str:
     if name.startswith("pallas.product."):
         if name == "pallas.product.llm" or name.startswith("pallas.product.llm."):
             return "LLMChat"
+        if name == "pallas.product.community_stats" or name.startswith("pallas.product.community_stats."):
+            return "PbStats"
         return _pascal_case(name.split(".", 3)[2])
     if name.startswith("pallas.console."):
         return "Console"
@@ -246,6 +249,8 @@ def _log_prefix_label(logger_name: str, message: str) -> str:
 
 
 _RAW_MESSAGE_EXTRA_KEY = "raw_message"
+# 调用方可用 ``logger.bind(display_name=...)`` 覆盖通道名，同时抑制模块业务标签注入
+_DISPLAY_NAME_EXTRA_KEY = "display_name"
 
 # 消息行首业务标签：字母/中文/连字符/点/下划线，词间允许单空格；不含数字，
 # 避免误拆 ``[Bot 1111]``/``[群 123]``/``[用户发送了 3 张图片]`` 等正文
@@ -264,8 +269,9 @@ def _leading_business_tag(message: str) -> tuple[str, str]:
 def _compose_repo_log_template(record: dict[str, Any], *, console: bool) -> str:
     """动态拼接日志模板：模块名与业务前缀按来源稳定配色。"""
     name = record_source_module_name(record)
-    display = display_log_name(name)
-    record["extra"]["display_name"] = display
+    override = str(record["extra"].get(_DISPLAY_NAME_EXTRA_KEY) or "").strip()
+    display = override or display_log_name(name)
+    record["extra"][_DISPLAY_NAME_EXTRA_KEY] = display
     color = _display_name_color(display)
     raw = record["extra"].get(_RAW_MESSAGE_EXTRA_KEY)
     if raw is None:
@@ -275,9 +281,11 @@ def _compose_repo_log_template(record: dict[str, Any], *, console: bool) -> str:
     if tag:
         record["message"] = body
         prefix = f"{color}[{tag}]</> " if console else f"[{tag}] "
-    else:
+    elif not override:
         label = _log_prefix_label(name, raw)
         prefix = f"{color}[{label}]</> " if console and label else f"[{label}] " if label else ""
+    else:
+        prefix = ""
     if console:
         display_part = color + "{{{extra[display_name]:<8}}}</>"
         return (

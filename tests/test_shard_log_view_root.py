@@ -28,10 +28,10 @@ def test_parse_shard_prefixed_line():
 def test_parse_embedded_shard_scope_from_prefix_log_source():
     """历史 prefix_log_source 把来源嵌进 scope：``| [worker-1] mod:lineno -``。"""
     e = parse_nonebot_log_line(
-        "05-21 22:44:15 | INFO | [worker-1] pallas:208 - pg pool diag: hello",
+        "05-21 22:44:15 | INFO | [worker-1] pallas:208 - pg pool diag：hello",
     )
     assert e["scope"] == "worker-1/pallas"
-    assert e["message"] == "pg pool diag: hello"
+    assert e["message"] == "pg pool diag：hello"
     assert e["level"] == "info"
 
 
@@ -107,14 +107,14 @@ def test_parse_nonebot_bracket_line():
     assert e["level"] == "success"
 
 
-def test_parse_aligned_brace_source_line():
+def test_parse_brace_source_line():
     e = parse_nonebot_log_line(
-        "05-22 00:38:12 [SUCCESS ] {pallas      } [Bot 1] [群 2] [用户 3] hello",
+        "05-22 00:38:12 [SUCCESS ] {Message    } Bot [         1] 群 [         2] 用户 [         3]: hello",
     )
     assert e["time"]
-    assert e["scope"] == "pallas"
+    assert e["scope"] == "Message"
     assert e["level"] == "success"
-    assert e["message"] == "[Bot 1] [群 2] [用户 3] hello"
+    assert e["message"] == "Bot [         1] 群 [         2] 用户 [         3]: hello"
 
 
 def test_parse_double_shard_prefix_bracket_line():
