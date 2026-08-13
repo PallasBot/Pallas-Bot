@@ -51,7 +51,7 @@ class ChatPromptAssembler:
             self._group_expression_block(group_expression),
             self._group_behavior_reference_block(group_expression),
             self._tool_context_block(tool_context),
-            self._reply_shape_block(reply_shape),
+            self.reply_shape_block(reply_shape),
         ]
         return self._join_unique(sections)
 
@@ -121,7 +121,7 @@ class ChatPromptAssembler:
         return "\n".join(lines)
 
     @staticmethod
-    def _reply_shape_block(policy: ReplyShapePolicy) -> str:
+    def reply_shape_block(policy: ReplyShapePolicy) -> str:
         lines = [
             "【回复形状与输出契约】",
             (
