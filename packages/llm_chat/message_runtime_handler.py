@@ -28,6 +28,11 @@ class LlmChatDirectHandler:
             and not str(event.get_message()).strip()
         ):
             return HandlingOutcome(handled=False, fallback_to_matcher=True, fallback_reason="empty_direct_mention")
+        # 「不可以」/「不可以发这个」禁言命令交给 NoneBot matcher（撤回 + 禁言），
+        # 不要当作 LLM 闲聊吞掉，否则撤回与禁言都不会发生。
+        plain = context.plain_text.strip()
+        if plain == "不可以发这个" or ("不可以" in plain and getattr(event, "reply", None)):
+            return HandlingOutcome(handled=False, fallback_to_matcher=True, fallback_reason="ban_reply_command")
         messages: list[object] = []
 
         async def send_message(message: object) -> None:
