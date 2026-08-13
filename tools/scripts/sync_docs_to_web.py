@@ -57,6 +57,9 @@ FILE_MAP: dict[str, str] = {
     "developer/architecture/shard-runtime.md": "developer/architecture/shard-runtime.md",
     "developer/architecture/llm-output-path.md": "developer/architecture/llm-output-path.md",
     "developer/architecture/agent-lifecycle.md": "developer/architecture/agent-lifecycle.md",
+    "developer/architecture/plugin-event-logging.md": (
+        "developer/architecture/plugin-event-logging.md"
+    ),
     "developer/plugin-development/getting-started.md": (
         "developer/plugin-development/getting-started.md"
     ),
@@ -85,6 +88,7 @@ FILE_MAP: dict[str, str] = {
     "developer/plugin-development/testing.md": "developer/plugin-development/testing.md",
     "developer/plugin-development/publishing.md": "developer/plugin-development/publishing.md",
     "developer/reference/repo-layout.md": "developer/reference/repo-layout.md",
+    "developer/reference/pallas-api.md": "developer/reference/pallas-api.md",
     "developer/reference/platform-api.md": "developer/reference/platform-api.md",
     "developer/reference/internal-api.md": "developer/reference/internal-api.md",
     "developer/reference/console-api-response.md": "developer/reference/console-api-response.md",
@@ -258,6 +262,9 @@ def transform_for_vitepress(text: str) -> str:
     )
     # 误写的绝对路径兜底（cmd_perm 在 common，不在 plugins）
     text = re.sub(r"\]\(/plugins/cmd_perm([^)]*)\)", r"](/common/cmd_perm\1)", text)
+    # 站内目录式链接去尾斜杠（common/corpus、plugins/help 同步为单文件页）
+    text = re.sub(r"\]\(/common/corpus/([^)]*)\)", r"](/common/corpus\1)", text)
+    text = re.sub(r"\]\(/plugins/help/([^)]*)\)", r"](/plugins/help\1)", text)
     # plugins/<name>/README.md 内互链：../peer/README.md（须在 common 同级变换之后）
     text = re.sub(
         r"\]\(\.\./([a-z0-9_]+)/README\.md([^)]*)\)",
@@ -565,6 +572,17 @@ def sync(dest_root: Path) -> int:
             "sync assets/message-runtime-architecture.svg -> "
             "src/public/assets/message-runtime-architecture.svg"
         )
+    llm_src = DOCS / "assets" / "llm-output-path.svg"
+    llm_dst = src_root / "public" / "assets" / "llm-output-path.svg"
+    if llm_src.is_file():
+        llm_dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(llm_src, llm_dst)
+        print("sync assets/llm-output-path.svg -> src/public/assets/llm-output-path.svg")
+    for asset in sorted((DOCS / "assets").glob("*.png")):
+        dst = src_root / "public" / "assets" / asset.name
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(asset, dst)
+        print(f"sync assets/{asset.name} -> src/public/assets/{asset.name}")
     for rel_src, rel_dst in FILE_MAP.items():
         source = DOCS / rel_src
         if not source.is_file():
