@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections import deque
 from typing import TYPE_CHECKING
 
 from nonebot import logger
@@ -24,12 +25,18 @@ _chat_sem: asyncio.Semaphore | None = None
 _chat_sem_limit: int | None = None
 _skipped_busy: int = 0
 _skipped_pressure: int = 0
+_chat_waiters: deque[asyncio.Future[bool]] = deque()
+_queue_dropped: int = 0
+_queue_timeouts: int = 0
 
 
 def clear_llm_chat_governance_state() -> None:
-    global _chat_sem, _chat_sem_limit
+    global _chat_sem, _chat_sem_limit, _queue_dropped, _queue_timeouts
     _chat_sem = None
     _chat_sem_limit = None
+    _chat_waiters.clear()
+    _queue_dropped = 0
+    _queue_timeouts = 0
 
 
 def parse_group_id_set(raw: str | None) -> set[int]:
@@ -113,7 +120,12 @@ class LlmChatSlot:
         self.acquired = False
 
 
-async def try_acquire_llm_chat_slot(*, wait: bool = False, cfg: LlmConfig | None = None) -> LlmChatSlot | None:
+async def try_acquire_llm_chat_slot(
+    *,
+    wait: bool = False,
+    queue: bool = False,
+    cfg: LlmConfig | None = None,
+) -> LlmChatSlot | None:
     global _skipped_busy
     c = cfg or get_llm_config()
     if not c.llm_governance_enabled:
@@ -128,13 +140,42 @@ async def try_acquire_llm_chat_slot(*, wait: bool = False, cfg: LlmConfig | None
         slot = LlmChatSlot()
         slot.acquired = True
         return slot
-    if sem.locked():
-        _skipped_busy += 1
+    if not sem.locked():
+        await sem.acquire()
+        slot = LlmChatSlot()
+        slot.acquired = True
+        return slot
+    if queue and c.llm_chat_queue_enabled:
+        granted = await _wait_in_chat_queue(c)
+        if granted:
+            slot = LlmChatSlot()
+            slot.acquired = True
+            return slot
         return None
-    await sem.acquire()
-    slot = LlmChatSlot()
-    slot.acquired = True
-    return slot
+    _skipped_busy += 1
+    return None
+
+
+async def _wait_in_chat_queue(c: LlmConfig) -> bool:
+    global _queue_dropped, _queue_timeouts
+    loop = asyncio.get_running_loop()
+    waiter: asyncio.Future[bool] = loop.create_future()
+    while len(_chat_waiters) >= c.llm_chat_queue_max:
+        oldest = _chat_waiters.popleft()
+        if oldest.done():
+            continue
+        oldest.set_result(False)
+        _queue_dropped += 1
+    _chat_waiters.append(waiter)
+    try:
+        return await asyncio.wait_for(waiter, timeout=c.llm_chat_queue_wait_sec)
+    except TimeoutError:
+        _queue_timeouts += 1
+        try:
+            _chat_waiters.remove(waiter)
+        except ValueError:
+            pass
+        return False
 
 
 def release_llm_chat_slot(slot: LlmChatSlot | None) -> None:
@@ -144,19 +185,33 @@ def release_llm_chat_slot(slot: LlmChatSlot | None) -> None:
     if not c.llm_governance_enabled:
         slot.acquired = False
         return
+    while _chat_waiters:
+        next_waiter = _chat_waiters.popleft()
+        if next_waiter.done():
+            continue
+        next_waiter.set_result(True)
+        slot.acquired = False
+        return
     llm_chat_sem().release()
     slot.acquired = False
 
 
 class LlmChatGovernance:
-    def __init__(self, *, wait: bool = False, cfg: LlmConfig | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        wait: bool = False,
+        queue: bool = False,
+        cfg: LlmConfig | None = None,
+    ) -> None:
         self._wait = wait
+        self._queue = queue
         self._cfg = cfg
         self._slot: LlmChatSlot | None = None
         self.skipped = False
 
     async def __aenter__(self) -> LlmChatGovernance:
-        self._slot = await try_acquire_llm_chat_slot(wait=self._wait, cfg=self._cfg)
+        self._slot = await try_acquire_llm_chat_slot(wait=self._wait, queue=self._queue, cfg=self._cfg)
         if self._slot is None:
             self.skipped = True
         return self

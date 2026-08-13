@@ -245,6 +245,9 @@ class LlmConfig(BaseModel):
     llm_chat_cooldown_sec: int = Field(default=3, ge=0, le=3600)
     llm_chat_max_concurrency: int = Field(default=2, ge=1, le=64)
     llm_shared_max_concurrency: int = Field(default=4, ge=1, le=64)
+    llm_chat_queue_enabled: bool = Field(default=True)
+    llm_chat_queue_max: int = Field(default=8, ge=1, le=64)
+    llm_chat_queue_wait_sec: float = Field(default=20.0, ge=0.1, le=120.0)
     llm_chat_char_budget: int = Field(default=12000, ge=0, le=200000)
     llm_chat_disabled_group_ids: list[int] = Field(default_factory=list)
     llm_repeater_feedback_enabled: bool = Field(default=True)
@@ -459,6 +462,9 @@ def get_llm_config() -> LlmConfig:
             llm_chat_cooldown_sec=_env_int("LLM_CHAT_COOLDOWN_SEC", 3),
             llm_chat_max_concurrency=_env_int("LLM_CHAT_MAX_CONCURRENCY", 2),
             llm_shared_max_concurrency=_env_int("LLM_SHARED_MAX_CONCURRENCY", 4),
+            llm_chat_queue_enabled=_env_bool("LLM_CHAT_QUEUE_ENABLED", True),
+            llm_chat_queue_max=_env_int("LLM_CHAT_QUEUE_MAX", 8),
+            llm_chat_queue_wait_sec=_env_float("LLM_CHAT_QUEUE_WAIT_SEC", 20.0),
             llm_chat_char_budget=_env_int("LLM_CHAT_CHAR_BUDGET", 12000),
             llm_chat_disabled_group_ids=_env_group_id_list("LLM_CHAT_DISABLED_GROUP_IDS"),
             llm_repeater_feedback_enabled=_env_bool("LLM_REPEATER_FEEDBACK_ENABLED", True),

@@ -231,7 +231,7 @@ async def submit_kernel_llm_chat_task(
     message_count: int,
     cfg: LlmConfig,
 ) -> ChatSubmitResult:
-    async with LlmChatGovernance(wait=False, cfg=cfg) as gov:
+    async with LlmChatGovernance(wait=False, queue=request.priority == "explicit", cfg=cfg) as gov:
         if gov.skipped:
             timer.finish(status="skipped_busy", request_id=request.request_id)
             return ChatSubmitResult(status="busy", ok=False)

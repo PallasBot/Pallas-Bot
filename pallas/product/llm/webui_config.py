@@ -517,6 +517,34 @@ class LlmWebuiConfig(BaseModel):
             "与频率限制配合；关闭后高峰期请求量会明显上升",
         ),
     )
+    llm_chat_queue_enabled: bool = Field(
+        default=True,
+        description=field_help(
+            "高峰并发占满时，@ 对话要不要进入有界等待队列而非直接跳过",
+            "开=显式 @ 请求排队等空位（超时或队满仍可能放弃）；关=维持旧行为，满并发直接不理",
+            "与「对话并发上限」配合；被动/复读等低优先级始终不排队",
+        ),
+    )
+    llm_chat_queue_max: int = Field(
+        default=8,
+        ge=1,
+        le=64,
+        description=field_help(
+            "排队等待的 @ 对话最多允许多少个",
+            "默认 8。高峰并发占满时，超出的新请求会挤掉排队最久的旧请求",
+            "每个分片 worker 各自计数；太大可能让回复延迟明显",
+        ),
+    )
+    llm_chat_queue_wait_sec: float = Field(
+        default=20.0,
+        ge=0.1,
+        le=120.0,
+        description=field_help(
+            "排队等空位最多等几秒，超时放弃本次回复",
+            "默认 20 秒。等太久用户体验差，等太短等于没排队",
+            "只对显式 @ 对话生效",
+        ),
+    )
     llm_output_filter_enabled: bool = Field(
         default=True,
         description=field_help(
@@ -956,6 +984,9 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_current_turn_decision_enabled=cfg.llm_current_turn_decision_enabled,
         llm_current_turn_decision_model=cfg.llm_current_turn_decision_model,
         llm_chat_queue_merge=cfg.llm_chat_queue_merge,
+        llm_chat_queue_enabled=cfg.llm_chat_queue_enabled,
+        llm_chat_queue_max=cfg.llm_chat_queue_max,
+        llm_chat_queue_wait_sec=cfg.llm_chat_queue_wait_sec,
         llm_output_filter_enabled=cfg.llm_output_filter_enabled,
         llm_output_filter_chat_hard_phrases=cfg.llm_output_filter_chat_hard_phrases,
         llm_output_filter_chat_soft_phrases=cfg.llm_output_filter_chat_soft_phrases,
