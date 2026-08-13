@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 
 from nonebot import get_driver, logger
 
-from .logging.bridge import format_plugin_event
+from .logging.bridge import display_log_name, format_plugin_event
 
 _ROLE_LABELS = {
     "unified": "单一运行时",
@@ -394,7 +394,14 @@ def emit_startup_summary() -> None:
     _collector.emitted = True
 
     info_lines, warning_lines = build_startup_summary_lines()
+    ready_details = {event.detail for event in _collector.events.values() if event.state == "plugin_ready"}
     for line in info_lines:
+        if line in ready_details:
+            continue
         logger.info("{}", line)
+    for component, event in _collector.events.items():
+        if event.state == "plugin_ready":
+            display = display_log_name(str(component)) or "Plugin"
+            logger.bind(display_name=display).info("{}", event.detail)
     for line in warning_lines:
         logger.warning("{}", line)

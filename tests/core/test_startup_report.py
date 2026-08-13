@@ -155,6 +155,23 @@ def test_plugin_ready_uses_custom_ops_detail() -> None:
     assert warning_lines == []
 
 
+def test_emit_plugin_ready_uses_plugin_channel(monkeypatch) -> None:
+    from unittest.mock import MagicMock
+
+    import pallas.core.foundation.startup_report as startup_report
+
+    startup_report.reset_startup_report_for_tests()
+    startup_report.register_plugin_startup_ready("arcana", detail="arcana 就绪")
+    mock_logger = MagicMock()
+    monkeypatch.setattr(startup_report, "logger", mock_logger)
+    monkeypatch.setattr(startup_report, "build_startup_summary_lines", lambda **_: ([], []))
+
+    startup_report.emit_startup_summary()
+
+    assert any(call.kwargs.get("display_name") == "Arcana" for call in mock_logger.bind.call_args_list)
+    mock_logger.bind(display_name="Arcana").info.assert_called_once()
+
+
 def test_startup_summary_lists_failed_and_slow_plugins() -> None:
     import pallas.core.foundation.startup_report as startup_report
 

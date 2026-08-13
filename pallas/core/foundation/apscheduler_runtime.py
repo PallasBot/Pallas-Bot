@@ -24,7 +24,6 @@ def ensure_apscheduler_running() -> None:
     except Exception:
         logger.exception("APScheduler 启动失败")
         raise
-    logger.info("APScheduler 已启动")
     register_startup_fact("scheduler", "ready")
 
 
