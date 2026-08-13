@@ -20,7 +20,7 @@ from pallas.core.foundation.logging import (
     resolve_repo_log_level,
 )
 from pallas.core.foundation.paths import plugin_data_dir
-from pallas.core.foundation.startup_report import emit_startup_summary
+from pallas.core.foundation.startup_report import emit_startup_banner, emit_startup_summary
 from pallas.core.platform.bot_runtime import load_plugins_for_role
 from pallas.core.shared.adapters import register_onebot_v11_custom_events
 from pallas.core.shared.utils.voice_downloader import schedule_ensure_voices
@@ -99,6 +99,7 @@ def boot() -> nonebot.Driver:
 
     @driver.on_startup
     async def emit_startup_summary_on_startup() -> None:
+        emit_startup_banner()
         emit_startup_summary()
 
     return driver

@@ -52,7 +52,7 @@ from pallas.core.foundation.logging import (
     install_startup_log_noise_patcher,
 )
 from pallas.core.foundation.loop import install_uvloop
-from pallas.core.foundation.startup_report import emit_startup_summary
+from pallas.core.foundation.startup_report import emit_startup_banner, emit_startup_summary
 from pallas.core.shared.adapters import register_onebot_v11_custom_events
 from pallas.core.shared.utils.voice_downloader import schedule_ensure_voices
 from pallas.product.ban_gate.snapshot import start_ban_gate_snapshot, stop_ban_gate_snapshot
@@ -136,6 +136,7 @@ load_plugins_for_role()
 
 @driver.on_startup
 async def emit_startup_summary_on_startup():
+    emit_startup_banner()
     emit_startup_summary()
 
 

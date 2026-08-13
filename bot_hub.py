@@ -38,7 +38,7 @@ from pallas.core.foundation.logging import (
     install_startup_log_noise_patcher,
 )
 from pallas.core.foundation.loop import install_uvloop
-from pallas.core.foundation.startup_report import emit_startup_summary
+from pallas.core.foundation.startup_report import emit_startup_banner, emit_startup_summary
 from pallas.core.platform.bot_runtime import load_plugins_for_role
 from pallas.core.platform.shard.logs.process import install_shard_process_logging
 from pallas.core.platform.shard.registry import get_shard_registry
@@ -103,6 +103,7 @@ load_plugins_for_role()
 
 @driver.on_startup
 async def emit_startup_summary_on_startup():
+    emit_startup_banner()
     emit_startup_summary()
 
 

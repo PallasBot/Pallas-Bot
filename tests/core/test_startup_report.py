@@ -8,6 +8,28 @@ if TYPE_CHECKING:
     import pytest
 
 
+def test_emit_startup_banner_outputs_ascii_logo(monkeypatch: pytest.MonkeyPatch) -> None:
+    import io
+
+    import pallas.core.foundation.startup_report as startup_report
+
+    buf = io.StringIO()
+    monkeypatch.setattr("sys.stdout", buf)
+    startup_report.emit_startup_banner()
+    out = buf.getvalue()
+    assert "██" in out
+    assert out.strip().startswith("█")
+    assert "-" not in startup_report._BANNER
+
+
+def test_render_banner_is_plain_text() -> None:
+    import pallas.core.foundation.startup_report as startup_report
+
+    rendered = startup_report._render_banner()
+    assert rendered == startup_report._BANNER
+    assert "\x1b[" not in rendered
+
+
 def test_emit_startup_summary_logs_runtime_and_facts(monkeypatch: pytest.MonkeyPatch) -> None:
     import pallas.core.foundation.startup_report as startup_report
 

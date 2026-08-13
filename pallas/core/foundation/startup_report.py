@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+import sys
 from collections import OrderedDict
 from dataclasses import dataclass, field
 
@@ -64,6 +65,24 @@ class StartupFactCollector:
 
 
 _collector = StartupFactCollector()
+
+_BANNER = """\
+██████╗  █████╗ ██╗     ██╗      █████╗ ███████╗
+██╔══██╗██╔══██╗██║     ██║     ██╔══██╗██╔════╝
+██████╔╝███████║██║     ██║     ███████║███████╗
+██╔═══╝ ██╔══██║██║     ██║     ██╔══██║╚════██║
+██║     ██║  ██║███████╗███████╗██║  ██║███████║
+╚═╝     ╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝╚══════╝"""
+
+
+def _render_banner() -> str:
+    """返回纯白 block 字横幅，避免不同终端的颜色差异。"""
+    return _BANNER
+
+
+def emit_startup_banner() -> None:
+    sys.stdout.write("\n" + _render_banner() + "\n")
+    sys.stdout.flush()
 
 
 def register_startup_fact(key: str, value: str | None) -> None:
