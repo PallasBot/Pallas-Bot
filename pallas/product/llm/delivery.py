@@ -412,17 +412,29 @@ def semantic_source_matches_delivery(
     )
 
 
+def resolve_llm_reply_route(task: dict) -> str:
+    """把 llm_chat 任务映射到回复路径桶：@直出 / 别名感知 / 主动发言 / 续聊。"""
+    from pallas.product.llm.repeater_feedback import normalize_feedback_llm_route
+
+    llm_route = normalize_feedback_llm_route(task.get("llm_route"))
+    if llm_route and llm_route != "plain_llm_chat":
+        return llm_route
+    trigger = str(task.get("speak_trigger") or "").strip().lower()
+    if trigger in {"alias", "mention"}:
+        return "alias"
+    if trigger == "ambient":
+        return "ambient"
+    if trigger == "followup":
+        return "followup"
+    return "plain_llm_chat"
+
+
 def track_llm_callback(task: dict, event: str) -> None:
     task_type = str(task.get("task_type") or "").strip()
     if task_type in _TRACKED_LLM_TASKS:
         record_bot_llm_task(task_type, event)
         if event == "callback_ok":
-            from pallas.product.llm.repeater_feedback import normalize_feedback_llm_route
-
-            record_bot_llm_route(
-                task_type,
-                normalize_feedback_llm_route(task.get("llm_route")),
-            )
+            record_bot_llm_route(task_type, resolve_llm_reply_route(task))
 
 
 async def deliver_llm_callback_success(

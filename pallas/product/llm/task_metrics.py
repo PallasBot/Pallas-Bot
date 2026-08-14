@@ -57,6 +57,9 @@ _EVENTS = frozenset({
 })
 _ROUTE_BUCKETS = frozenset({
     "plain_llm_chat",
+    "alias",
+    "ambient",
+    "followup",
 })
 
 _lock = threading.Lock()

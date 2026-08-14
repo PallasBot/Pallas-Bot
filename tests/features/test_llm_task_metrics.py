@@ -60,6 +60,25 @@ def test_track_llm_callback_records_explicit_llm_chat_route() -> None:
     clear_llm_task_metrics_for_tests()
 
 
+def test_track_llm_callback_splits_reply_route_by_trigger() -> None:
+    from pallas.product.llm.delivery import track_llm_callback
+
+    clear_llm_task_metrics_for_tests()
+    track_llm_callback({"task_type": "llm_chat", "speak_trigger": "to_me"}, "callback_ok")
+    track_llm_callback({"task_type": "llm_chat", "speak_trigger": "alias"}, "callback_ok")
+    track_llm_callback({"task_type": "llm_chat", "speak_trigger": "mention"}, "callback_ok")
+    track_llm_callback({"task_type": "llm_chat", "speak_trigger": "ambient"}, "callback_ok")
+    track_llm_callback({"task_type": "llm_chat", "speak_trigger": "followup"}, "callback_ok")
+    snap = llm_task_metrics_snapshot()
+    assert snap["by_task"]["llm_chat"]["route_counts"] == {
+        "plain_llm_chat": 1,
+        "alias": 2,
+        "ambient": 1,
+        "followup": 1,
+    }
+    clear_llm_task_metrics_for_tests()
+
+
 def test_merge_llm_task_snapshots() -> None:
     merged = merge_llm_task_snapshots([
         {
