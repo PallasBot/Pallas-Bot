@@ -60,6 +60,7 @@ _ROUTE_BUCKETS = frozenset({
     "alias",
     "ambient",
     "followup",
+    "corpus_select",
 })
 
 _lock = threading.Lock()

@@ -23,6 +23,7 @@ from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.core.platform.bot_runtime.send_unavailable import BOT_SEND_UNAVAILABLE_ERRORS, log_bot_send_unavailable
 from pallas.core.platform.multi_bot.dedup import try_claim_group_message_once
 from pallas.core.platform.shard import context as shard_ctx
+from pallas.product.llm.task_metrics import record_bot_llm_route
 
 from .config import get_repeater_config
 from .model import Chat, ChatData
@@ -264,6 +265,15 @@ async def send_repeater_answers(bot_id: int, group_id: int, answers, *, fanout: 
 
         return
 
+    route_recorded = False
+
+    async def record_route_once() -> None:
+        nonlocal route_recorded
+        if route_recorded:
+            return
+        route_recorded = True
+        record_bot_llm_route("repeater", "corpus_select")
+
     async for item in answers:
         msg = await post_proc(item, bot_id, group_id)
         if not msg:
@@ -294,6 +304,7 @@ async def send_repeater_answers(bot_id: int, group_id: int, answers, *, fanout: 
                     f"Bot [{bot_id}] replied in group [{group_id}]: {msg}",
                 )
             )
+            await record_route_once()
 
             from .sticker_followup import maybe_send_repeater_sticker_followup
 

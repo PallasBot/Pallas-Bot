@@ -159,3 +159,49 @@ async def test_send_repeater_answers_skips_empty_post_processed_message(monkeypa
     await fanout_reply.send_repeater_answers(111, 222, answers())
 
     assert bot.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_send_repeater_answers_records_corpus_route_once(monkeypatch):
+    import packages.repeater as repeater
+    from packages.repeater import sticker_followup
+    from pallas.product.llm.task_metrics import clear_llm_task_metrics_for_tests, llm_task_metrics_snapshot
+
+    class FakeConfig:
+        async def refresh_cooldown(self, _key: str) -> None:
+            return None
+
+    class FakeBot:
+        calls = 0
+
+        async def send_group_msg(self, **_kwargs):
+            self.calls += 1
+
+    async def answers():
+        yield "first"
+        yield "second"
+
+    async def pass_proc(item, *_args):
+        return item
+
+    async def no_sleep(_delay):
+        return None
+
+    async def no_sticker_followup(*_args, **_kwargs):
+        return False
+
+    bot = FakeBot()
+    monkeypatch.setattr(fanout_reply, "BotConfig", lambda *_args, **_kwargs: FakeConfig())
+    monkeypatch.setattr(fanout_reply, "get_bot", lambda _bot_id: bot)
+    monkeypatch.setattr(fanout_reply.asyncio, "sleep", no_sleep)
+    monkeypatch.setattr(repeater, "post_proc", pass_proc)
+    monkeypatch.setattr(sticker_followup, "maybe_send_repeater_sticker_followup", no_sticker_followup)
+
+    clear_llm_task_metrics_for_tests()
+    try:
+        await fanout_reply.send_repeater_answers(111, 222, answers())
+        assert bot.calls == 2
+        snap = llm_task_metrics_snapshot()
+        assert snap["by_task"]["other"]["route_counts"] == {"corpus_select": 1}
+    finally:
+        clear_llm_task_metrics_for_tests()
