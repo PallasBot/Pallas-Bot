@@ -31,10 +31,13 @@
 
 ## ✨ 特性
 
-- **学习型复读**：记住群友说话，在合适时机复读出来；可选接社区共享语料
-- **复读优先**：可选接入 [LLM](https://PallasBot.github.io/Pallas-Bot-Docs/guide/llm-and-repeater)，回复仍以群友语料为主
-- **WebUI 控制台**：浏览器管理配置、插件、命令权限与消息审查
+- **学习型复读**：从群聊语料学习，自动接话、跟复读与贴表情；接话积极度与复读频率可调
+- **语料联邦**：可选接入社区共享语料池，扩充接话短句来源；多部署可共池互认，按群归属与消息抢占去重，避免重复回复
+- **语义风格指导**：由复读引擎按账号与群维度学习「什么场合常说什么」，作为群表达指导注入 LLM 对话；同群不同账号互不干扰
+- **LLM 对话**：明确 `@` 时经 Bot Provider 多轮对话，支持群内长期记忆、人物观察、知识检索、联网搜索与工具调用；输出受账号人格与本群表达风格约束
+- **WebUI 控制台**：浏览器管理配置、插件、命令权限与消息审查，并内置 LLM / AI 观测与运维面板
 - **插件生态**：可从内置商店安装插件，原生支持 NoneBot 插件
+- **高并发消息处理**：后台任务可靠投递，慢操作不阻塞消息主路径；多 worker 分片横向扩展
 - **可选能力**：[![唱歌](https://img.shields.io/badge/唱歌-6A5ACD)](https://github.com/PallasBot/Pallas-Bot-AI) [![TTS](https://img.shields.io/badge/TTS-6A5ACD)](https://github.com/PallasBot/Pallas-Bot-AI) [![MAA 远控](https://img.shields.io/badge/MAA%20远控-FE7D37)](https://PallasBot.github.io/Pallas-Bot-Docs/plugins/maa)
 
 ## 🚀 快速开始
