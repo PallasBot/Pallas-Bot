@@ -63,7 +63,7 @@ DATASETS = {
             label="后台任务",
             objects=("background_job", "background_jobs"),
             risk="medium",
-            default_policy=LifecyclePolicy(False, 30, 2 * GIB),
+            default_policy=LifecyclePolicy(True, 30, 2 * GIB),
         ),
     )
 }
