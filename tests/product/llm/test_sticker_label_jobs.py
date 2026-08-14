@@ -242,6 +242,22 @@ def test_parse_visual_label_requires_strict_json_schema() -> None:
     assert parse_sticker_visual_label("不是 JSON") is None
 
 
+def test_parse_visual_label_tolerates_markdown_fence_and_wrap_text() -> None:
+    from pallas.product.llm.sticker_label_jobs import parse_sticker_visual_label
+
+    raw = (
+        '好的，以下是判断结果：\n```json\n{"is_sticker":true,"emotions":["开心"],"actions":["挥手"],'
+        '"tones":["可爱"],"intensity":2,"usage":["打招呼"],"avoid":[],"caption":"挥手小猫",'
+        '"confidence":0.8}\n```\n希望对你有帮助。'
+    )
+    label = parse_sticker_visual_label(raw)
+
+    assert label is not None
+    assert label["is_sticker"] is True
+    assert label["emotions"] == ("开心",)
+    assert label["confidence"] == 0.8
+
+
 def test_parse_visual_label_accepts_partial_and_extra_fields() -> None:
     from pallas.product.llm.sticker_label_jobs import parse_sticker_visual_label
 
@@ -647,3 +663,51 @@ async def test_parse_error_does_not_open_circuit(monkeypatch: pytest.MonkeyPatch
 
     assert sticker_label_jobs.sticker_label_circuit_open() is False
     sticker_label_jobs.reset_sticker_label_runtime_state_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_label_vision_downscales_image_and_caps_output_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
+    from io import BytesIO
+
+    from PIL import Image
+
+    from pallas.product.llm import sticker_label_jobs
+
+    endpoint = SimpleNamespace(
+        model="vision-model",
+        base_url="https://vision.test",
+        api_key="key",
+        request_method="POST",
+        capabilities=["image"],
+        provider_id="provider-1",
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.providers_store.resolve_endpoint_for_task", lambda *_args, **_kwargs: endpoint
+    )
+
+    async def fake_complete(messages, **kwargs):
+        captured["messages"] = messages
+        captured["options"] = kwargs.get("options")
+        return {"content": '{"is_sticker":true,"confidence":0.9}'}
+
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        "pallas.product.llm.provider_client.complete_chat_message", AsyncMock(side_effect=fake_complete)
+    )
+
+    source = BytesIO()
+    Image.new("RGB", (1024, 768), "white").save(source, format="JPEG")
+    image_bytes = source.getvalue()
+
+    label, _provider, _model = await sticker_label_jobs.label_sticker_with_vision(image_bytes)
+
+    assert label is not None
+    assert captured["options"] == {"temperature": 0.1, "max_tokens": 200}
+    content = captured["messages"][0]["content"]
+    data_uri = content[1]["image_url"]["url"]
+    _, encoded = data_uri.split(",", 1)
+    import base64
+
+    resized = Image.open(BytesIO(base64.b64decode(encoded)))
+    assert max(resized.size) <= 384
+    assert resized.size == (384, 288)

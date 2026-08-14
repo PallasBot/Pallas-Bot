@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import base64
-import json
 import re
 import time
 from dataclasses import replace
@@ -24,6 +23,8 @@ STICKER_LABEL_MIN_CONFIDENCE = 0.6
 STICKER_LABEL_TIMEOUT_SEC = 15.0
 STICKER_LABEL_CIRCUIT_FAILURES = 3
 STICKER_LABEL_CIRCUIT_COOLDOWN_SEC = 60.0
+STICKER_LABEL_IMAGE_MAX_SIDE = 384
+STICKER_LABEL_MAX_OUTPUT_TOKENS = 200
 _STICKER_LABEL_SEMAPHORE = asyncio.Semaphore(1)
 _REQUIRED_RESPONSE_FIELDS_MAX_ITEMS = 5
 
@@ -87,9 +88,11 @@ def _parse_label_array_field(raw: object) -> tuple[str, ...]:
 
 
 def parse_sticker_visual_label(raw: str) -> dict[str, object] | None:
+    from pallas.product.llm.memory.graph.json_parse import parse_llm_json
+
     try:
-        value = json.loads(str(raw or ""))
-    except json.JSONDecodeError:
+        value = parse_llm_json(str(raw or ""))
+    except ValueError:
         return None
     if not isinstance(value, dict):
         return None
@@ -177,6 +180,7 @@ async def enqueue_sticker_label_candidate(*, cache_key: str, content: bytes, sou
 
 
 async def label_sticker_with_vision(content: bytes) -> tuple[StickerSemanticLabel | None, str, str]:
+    from pallas.product.llm.delivery import prepare_sticker_image
     from pallas.product.llm.provider_client import complete_chat_message
     from pallas.product.llm.providers_store import resolve_endpoint_for_task
     from pallas.product.llm.vision_messages import openai_vision_user_content
@@ -196,12 +200,18 @@ async def label_sticker_with_vision(content: bytes) -> tuple[StickerSemanticLabe
                 {
                     "role": "user",
                     "content": openai_vision_user_content(
-                        prompt, [f"data:image/jpeg;base64,{base64.b64encode(content).decode('ascii')}"]
+                        prompt,
+                        [
+                            "data:image/jpeg;base64,"
+                            + base64.b64encode(
+                                prepare_sticker_image(content, max_side=STICKER_LABEL_IMAGE_MAX_SIDE)
+                            ).decode("ascii")
+                        ],
                     ),
                 }
             ],
             model=endpoint.model,
-            options={"temperature": 0.1, "max_tokens": 300},
+            options={"temperature": 0.1, "max_tokens": STICKER_LABEL_MAX_OUTPUT_TOKENS},
             base_url=endpoint.base_url,
             api_key=endpoint.api_key,
             request_method=endpoint.request_method,
