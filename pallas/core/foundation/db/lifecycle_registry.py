@@ -18,7 +18,7 @@ DATASETS = {
             label="消息历史",
             objects=("message",),
             risk="high",
-            default_policy=LifecyclePolicy(False, 180, 40 * GIB),
+            default_policy=LifecyclePolicy(True, 90, 25 * GIB),
         ),
         LifecycleDatasetDefinition(
             dataset_id="repeater_context",
@@ -63,7 +63,7 @@ DATASETS = {
             label="后台任务",
             objects=("background_job", "background_jobs"),
             risk="medium",
-            default_policy=LifecyclePolicy(True, 30, 2 * GIB),
+            default_policy=LifecyclePolicy(True, 3, GIB),
         ),
     )
 }

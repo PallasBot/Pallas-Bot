@@ -17,7 +17,8 @@ def settings_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 def test_missing_settings_return_registry_defaults(settings_path: Path) -> None:
     policies = lifecycle_policy_store.load_lifecycle_policies()
 
-    assert policies["message_history"] == LifecyclePolicy(False, 180, 40 * 1024**3)
+    assert policies["message_history"] == LifecyclePolicy(True, 90, 25 * 1024**3)
+    assert policies["background_jobs"] == LifecyclePolicy(True, 3, 1024**3)
     assert policies["llm_memory"] == LifecyclePolicy(False, None, None)
 
 
