@@ -108,6 +108,7 @@ def register_extended_api(
     from .common_config_api import register_common_config_router
     from .db_api import register_db_router
     from .extended_common import check_pallas_write_token
+    from .file_manager_api import register_file_manager_router
     from .instances_configs_api import register_instances_configs_router
     from .llm_ops_api import register_llm_ops_router
     from .llm_product_api import register_llm_product_router
@@ -163,6 +164,7 @@ def register_extended_api(
     register_llm_product_router(router, x=x, plugin_config=plugin_config)
     register_logs_router(router, x=x, plugin_config=plugin_config)
     register_db_router(router, x=x, plugin_config=plugin_config)
+    register_file_manager_router(router, x=x, plugin_config=plugin_config)
     register_instances_configs_router(router, x=x, plugin_config=plugin_config)
     register_ai_extension_router(router, x=x, plugin_config=plugin_config)
     register_social_router(router, x=x, plugin_config=plugin_config)
