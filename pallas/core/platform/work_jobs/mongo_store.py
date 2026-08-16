@@ -168,21 +168,10 @@ class MongoWorkJobStore:
             return 0
         from pallas.core.foundation.db.modules import BackgroundJob
 
-        now = time.time()
-        result = await BackgroundJob.get_pymongo_collection().update_many(
-            {"$or": [{"job_id": job.id, "lease_owner": owner, "lease_id": job.lease_id} for job in jobs]},
-            {
-                "$set": {
-                    "status": "done",
-                    "lease_owner": None,
-                    "lease_id": None,
-                    "leased_until": None,
-                    "finished_at": now,
-                    "available_at": now,
-                }
-            },
-        )
-        return int(result.modified_count)
+        result = await BackgroundJob.get_pymongo_collection().delete_many({
+            "$or": [{"job_id": job.id, "lease_owner": owner, "lease_id": job.lease_id} for job in jobs]
+        })
+        return int(result.deleted_count)
 
     async def fail(self, *, job_id: str, owner: str, lease_id: str, retry_after_sec: float) -> bool:
         return await self._release(
@@ -211,16 +200,21 @@ class MongoWorkJobStore:
     ) -> bool:
         from pallas.core.foundation.db.modules import BackgroundJob
 
+        collection = BackgroundJob.get_pymongo_collection()
+        if completed:
+            # 已完成任务即时删除，避免集合无限膨胀
+            result = await collection.delete_one({"job_id": job_id, "lease_owner": owner, "lease_id": lease_id})
+            return bool(result.deleted_count)
         now = time.time()
-        result = await BackgroundJob.get_pymongo_collection().update_one(
+        result = await collection.update_one(
             {"job_id": job_id, "lease_owner": owner, "lease_id": lease_id},
             {
                 "$set": {
-                    "status": "done" if completed else "pending",
+                    "status": "pending",
                     "lease_owner": None,
                     "lease_id": None,
                     "leased_until": None,
-                    "finished_at": now if completed else None,
+                    "finished_at": None,
                     "available_at": now + max(0.0, retry_after_sec),
                 }
             },

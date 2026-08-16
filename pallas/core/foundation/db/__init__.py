@@ -494,6 +494,13 @@ async def init_postgresql_db() -> None:
     except Exception:
         pass
 
+    try:
+        from .image_cache_migration import ensure_image_cache_blob_migration_started
+
+        await ensure_image_cache_blob_migration_started()
+    except Exception:
+        pass
+
 
 def install_pg_shutdown_hook() -> None:
     """尽早注册 PG 关闭钩子，保证依赖数据库的 on_shutdown 先于其执行。

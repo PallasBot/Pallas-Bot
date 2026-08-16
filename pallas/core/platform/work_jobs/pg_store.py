@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 import uuid
 
-from sqlalchemy import case, func, or_, select, tuple_, update
+from sqlalchemy import case, delete, func, or_, select, tuple_, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from .models import WorkJob
@@ -253,18 +253,13 @@ class PostgresWorkJobStore:
             return 0
         from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
 
-        now = time.time()
         async with get_session() as session:
             result = await session.execute(
-                update(BackgroundJobRow)
-                .where(
+                delete(BackgroundJobRow).where(
                     BackgroundJobRow.lease_owner == owner,
                     tuple_(BackgroundJobRow.id, BackgroundJobRow.lease_id).in_([
                         (job.id, job.lease_id) for job in jobs
                     ]),
-                )
-                .values(
-                    status="done", lease_owner=None, lease_id=None, leased_until=None, finished_at=now, available_at=now
                 )
             )
             await session.commit()
@@ -298,25 +293,34 @@ class PostgresWorkJobStore:
     ) -> bool:
         from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
 
-        now = time.time()
-        values = {
-            "status": "done" if completed else "pending",
-            "lease_owner": None,
-            "lease_id": None,
-            "leased_until": None,
-            "finished_at": now if completed else None,
-            "available_at": now + max(0.0, retry_after_sec),
-        }
         async with get_session() as session:
-            result = await session.execute(
-                update(BackgroundJobRow)
-                .where(
-                    BackgroundJobRow.id == job_id,
-                    BackgroundJobRow.lease_owner == owner,
-                    BackgroundJobRow.lease_id == lease_id,
+            if completed:
+                # 已完成任务即时删除，避免表无限膨胀；幂等防重由 enqueue 的 idempotency 唯一约束承担
+                result = await session.execute(
+                    delete(BackgroundJobRow).where(
+                        BackgroundJobRow.id == job_id,
+                        BackgroundJobRow.lease_owner == owner,
+                        BackgroundJobRow.lease_id == lease_id,
+                    )
                 )
-                .values(**values)
-            )
+            else:
+                now = time.time()
+                result = await session.execute(
+                    update(BackgroundJobRow)
+                    .where(
+                        BackgroundJobRow.id == job_id,
+                        BackgroundJobRow.lease_owner == owner,
+                        BackgroundJobRow.lease_id == lease_id,
+                    )
+                    .values(
+                        status="pending",
+                        lease_owner=None,
+                        lease_id=None,
+                        leased_until=None,
+                        finished_at=None,
+                        available_at=now + max(0.0, retry_after_sec),
+                    )
+                )
             await session.commit()
         return bool(result.rowcount)
 
