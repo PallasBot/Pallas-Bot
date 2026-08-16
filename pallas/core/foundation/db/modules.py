@@ -300,9 +300,10 @@ class BaseImageCache(Document):
 class ImageCache(BaseImageCache):
     cq_code: str = Field(...)
     content_hash: str | None = None
-    # 原生二进制 blob（PG BYTEA / Mongo Binary）。在 PG 后端通过 SQLAlchemy LargeBinary 映射；
-    # 这里只声明语义类型，具体 DDL 由各 repository 的 ORM 模型负责。
+    # 原生二进制已落文件（data/image_cache_blobs），DB 只留相对路径与字节数；blob_data 仅迁移期兼容旧行。
     blob_data: bytes | None = None
+    blob_path: str | None = None
+    blob_size: int | None = None
     ref_times: int = 1
 
     class Settings(BaseImageCache.Settings):

@@ -36,6 +36,15 @@ DATASETS = {
             default_policy=LifecyclePolicy(True, 90, 20 * GIB),
         ),
         LifecycleDatasetDefinition(
+            dataset_id="image_cache_files",
+            label="图片缓存文件",
+            objects=("image_cache_blobs",),
+            risk="low",
+            default_policy=LifecyclePolicy(True, None, None),
+            supports_retention=False,
+            supports_max_bytes=False,
+        ),
+        LifecycleDatasetDefinition(
             dataset_id="llm_chat",
             label="LLM 对话",
             objects=("llm_chat_message",),

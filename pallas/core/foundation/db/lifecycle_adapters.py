@@ -9,6 +9,8 @@ from typing import Any, Protocol
 
 from sqlalchemy import text
 
+from pallas.core.foundation.db.blob_store import delete_image_blob, iter_image_blob_files
+
 from .lifecycle_models import LifecycleObjectStat, LifecyclePolicy
 from .lifecycle_registry import classify_object
 
@@ -34,6 +36,11 @@ class LifecycleAdapter(Protocol):
     async def prune_dataset(self, dataset_id: str, policy: LifecyclePolicy) -> tuple[int, int]: ...
 
 
+def orphan_image_cache_files(referenced: set[str]) -> list[tuple[str, int]]:
+    """找出 data/image_cache_blobs 中 DB 无引用（content_hash 不在集合）的孤儿文件。"""
+    return [(content_hash, size) for content_hash, size in iter_image_blob_files() if content_hash not in referenced]
+
+
 PG_DATASET_RULES = {
     "message_history": ("message", "id", "time", None),
     "repeater_context": ("context", "id", "time", None),
@@ -56,11 +63,17 @@ class PostgresLifecycleAdapter:
         async with self.session_factory(read_only=True) as session:
             result = await session.execute(text(POSTGRES_DISCOVERY_SQL))
             rows = result.mappings().all()
-        return [object_stat(str(row["name"]), row.get("row_count"), row.get("size_bytes")) for row in rows]
+        objects = [object_stat(str(row["name"]), row.get("row_count"), row.get("size_bytes")) for row in rows]
+        blob_files = list(iter_image_blob_files())
+        if blob_files:
+            objects.append(object_stat("image_cache_blobs", len(blob_files), sum(size for _, size in blob_files)))
+        return objects
 
     async def preview_dataset(self, dataset_id: str, policy: LifecyclePolicy) -> tuple[int, int]:
         if dataset_id == "image_cache":
             return await self.preview_image_cache(policy)
+        if dataset_id == "image_cache_files":
+            return await self.preview_image_cache_files()
         if dataset_id == "llm_memory":
             return await self.preview_llm_memory()
         rule = PG_DATASET_RULES.get(dataset_id)
@@ -76,6 +89,8 @@ class PostgresLifecycleAdapter:
     async def prune_dataset(self, dataset_id: str, policy: LifecyclePolicy) -> tuple[int, int]:
         if dataset_id == "image_cache":
             return await self.prune_image_cache(policy)
+        if dataset_id == "image_cache_files":
+            return await self.prune_image_cache_files()
         if dataset_id == "llm_memory":
             return await self.prune_llm_memory()
         candidate_rows, candidate_bytes = await self.preview_dataset(dataset_id, policy)
@@ -116,7 +131,7 @@ class PostgresLifecycleAdapter:
         async with self.session_factory(read_only=True) as session:
             result = await session.execute(
                 text(
-                    "SELECT date, ref_times, COALESCE(octet_length(blob_data), 0) AS bytes "
+                    "SELECT date, ref_times, COALESCE(blob_size, octet_length(blob_data), 0) AS bytes "
                     "FROM image_cache ORDER BY CASE WHEN ref_times <= 1 THEN 0 ELSE 1 END, date, id"
                 )
             )
@@ -131,6 +146,23 @@ class PostgresLifecycleAdapter:
 
         result = await make_image_cache_repository().prune(image_cache_prune_policy(policy))
         return result.deleted_rows, result.deleted_blob_bytes
+
+    async def _image_cache_referenced_hashes(self) -> set[str]:
+        async with self.session_factory(read_only=True) as session:
+            result = await session.execute(
+                text("SELECT content_hash FROM image_cache WHERE blob_path IS NOT NULL AND content_hash IS NOT NULL")
+            )
+            return {str(row[0]) for row in result}
+
+    async def preview_image_cache_files(self) -> tuple[int, int]:
+        orphans = orphan_image_cache_files(await self._image_cache_referenced_hashes())
+        return len(orphans), sum(size for _, size in orphans)
+
+    async def prune_image_cache_files(self) -> tuple[int, int]:
+        orphans = orphan_image_cache_files(await self._image_cache_referenced_hashes())
+        for content_hash, _size in orphans:
+            delete_image_blob(content_hash)
+        return len(orphans), sum(size for _, size in orphans)
 
     async def preview_llm_memory(self) -> tuple[int, int]:
         now = int(time.time())
@@ -177,12 +209,17 @@ class MongoLifecycleAdapter:
                 objects.append(object_stat(name, stats.get("count"), stats.get("storageSize")))
             except Exception as exc:  # noqa: BLE001
                 objects.append(object_stat(name, None, None, error=str(exc)))
+        blob_files = list(iter_image_blob_files())
+        if blob_files:
+            objects.append(object_stat("image_cache_blobs", len(blob_files), sum(size for _, size in blob_files)))
         return objects
 
     async def preview_dataset(self, dataset_id: str, policy: LifecyclePolicy) -> tuple[int, int]:
         database = self.get_database()
         if dataset_id == "image_cache":
             return await self.preview_image_cache(policy)
+        if dataset_id == "image_cache_files":
+            return await self.preview_image_cache_files()
         collection_name, time_column, extra_filter = mongo_rule(dataset_id)
         query = dict(extra_filter)
         if dataset_id == "llm_memory":
@@ -208,6 +245,8 @@ class MongoLifecycleAdapter:
         database = self.get_database()
         if dataset_id == "image_cache":
             return await self.prune_image_cache(policy)
+        if dataset_id == "image_cache_files":
+            return await self.prune_image_cache_files()
         if dataset_id == "llm_memory":
             now = int(time.time())
             result = await database["llm_memory_entry"].delete_many({"expires_at": {"$gt": 0, "$lt": now}})
@@ -249,6 +288,26 @@ class MongoLifecycleAdapter:
 
         result = await make_image_cache_repository().prune(image_cache_prune_policy(policy))
         return result.deleted_rows, result.deleted_blob_bytes
+
+    async def preview_image_cache_files(self) -> tuple[int, int]:
+        from pallas.core.foundation.db.modules import ImageCache
+
+        collection = ImageCache.get_pymongo_collection()
+        cursor = collection.find({"blob_path": {"$nin": [None, ""]}}, {"content_hash": 1})
+        referenced = {str(row.get("content_hash")) for row in await cursor.to_list(None) if row.get("content_hash")}
+        orphans = orphan_image_cache_files(referenced)
+        return len(orphans), sum(size for _, size in orphans)
+
+    async def prune_image_cache_files(self) -> tuple[int, int]:
+        from pallas.core.foundation.db.modules import ImageCache
+
+        collection = ImageCache.get_pymongo_collection()
+        cursor = collection.find({"blob_path": {"$nin": [None, ""]}}, {"content_hash": 1})
+        referenced = {str(row.get("content_hash")) for row in await cursor.to_list(None) if row.get("content_hash")}
+        orphans = orphan_image_cache_files(referenced)
+        for content_hash, _size in orphans:
+            delete_image_blob(content_hash)
+        return len(orphans), sum(size for _, size in orphans)
 
 
 def object_stat(

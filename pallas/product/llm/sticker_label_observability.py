@@ -245,7 +245,12 @@ async def list_unlabeled_content_hashes(*, limit: int = 64) -> list[str]:
     if is_postgresql_backend():
         from sqlalchemy import select
 
-        from pallas.core.foundation.db.repository_pg import ImageCacheRow, StickerLabelRow, get_session
+        from pallas.core.foundation.db.repository_pg import (
+            ImageCacheRow,
+            StickerLabelRow,
+            get_session,
+            image_cache_has_blob_clause,
+        )
 
         async with get_session(read_only=True) as session:
             rows = (
@@ -253,8 +258,7 @@ async def list_unlabeled_content_hashes(*, limit: int = 64) -> list[str]:
                     select(ImageCacheRow.content_hash)
                     .where(
                         ImageCacheRow.content_hash.is_not(None),
-                        ImageCacheRow.blob_data.is_not(None),
-                        ImageCacheRow.blob_data != b"",
+                        image_cache_has_blob_clause(),
                         ~ImageCacheRow.content_hash.in_(
                             select(StickerLabelRow.content_hash).where(StickerLabelRow.content_hash.is_not(None))
                         ),
@@ -284,6 +288,7 @@ async def backfill_sticker_labels_batch(
     if remaining <= 0:
         return {"queued": 0, "skipped": 0, "missing_cache": 0, "budget_exhausted": True, "used": used}
 
+    image_repo = image_cache_repository or make_image_cache_repository()
     image_repo = image_cache_repository or make_image_cache_repository()
     jobs = work_job_store or build_work_job_store()
     content_hashes = await list_unlabeled_content_hashes(limit=min(int(batch_limit), remaining))

@@ -10,6 +10,7 @@ from nonebot import get_driver, logger
 from nonebot.adapters.onebot.v11 import MessageSegment
 
 from pallas.core.foundation.db import ImageCache, make_image_cache_repository
+from pallas.core.foundation.db.blob_store import read_image_blob_at
 from pallas.core.foundation.db.repository import ImageCachePrunePolicy, ImageCachePruneResult
 from pallas.core.foundation.db.runtime import is_postgresql_backend
 from pallas.core.foundation.logging.throttle import log_rate_limited
@@ -235,12 +236,21 @@ async def insert_image(
             )
 
 
+def _read_cache_blob(cache: ImageCache | None) -> bytes | None:
+    """优先 repo 已填充的 blob，否则读文件；迁移期旧行 blob_data 仍在 DB 时直接用。"""
+    if not cache:
+        return None
+    if cache.blob_data:
+        return cache.blob_data
+    if cache.blob_path:
+        return read_image_blob_at(cache.blob_path)
+    return None
+
+
 async def get_image(cq_code) -> bytes | None:
     """按 cq_code 取出缓存的二进制图片；没有缓存或缓存为空时返回 None。"""
     cache = await image_cache_repo.find_by_cq_code(cq_code)
-    if not cache:
-        return None
-    return cache.blob_data
+    return await asyncio.to_thread(_read_cache_blob, cache)
 
 
 async def bind_image_content_hash(cq_code: str, content: bytes) -> str:
@@ -251,18 +261,23 @@ async def bind_image_content_hash(cq_code: str, content: bytes) -> str:
 
 async def get_image_by_content_hash(content_hash: str) -> bytes | None:
     cache = await image_cache_repo.find_by_content_hash(content_hash)
-    return bytes(cache.blob_data) if cache and cache.blob_data else None
+    return await asyncio.to_thread(_read_cache_blob, cache)
 
 
 async def get_latest_image() -> bytes | None:
     """取最近一张可发送的缓存图片。"""
     cache = await image_cache_repo.find_latest_with_blob()
-    return cache.blob_data if cache else None
+    return await asyncio.to_thread(_read_cache_blob, cache)
 
 
 async def get_recent_images(limit: int) -> list[tuple[str, bytes]]:
     rows = await image_cache_repo.find_recent_with_blob(limit)
-    return [(row.cq_code, bytes(row.blob_data)) for row in rows if row.blob_data]
+    images: list[tuple[str, bytes]] = []
+    for row in rows:
+        data = await asyncio.to_thread(_read_cache_blob, row)
+        if data:
+            images.append((row.cq_code, data))
+    return images
 
 
 async def clear_image_cache(days: int = 5, times: int = 3):

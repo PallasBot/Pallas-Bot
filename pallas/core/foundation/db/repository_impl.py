@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any
 
 from beanie.operators import Or
 
+from pallas.core.foundation.db.blob_store import (
+    blob_sha256,
+    delete_image_blob,
+    image_blob_rel_path,
+    read_image_blob_at,
+    write_image_blob,
+)
 from pallas.core.foundation.db.modules import (
     AdminMember,
     Answer,
@@ -312,14 +320,47 @@ class MongoConfigRepository:
         clear_model_cache(self._module_class)
 
 
+def image_cache_persist_blob(cache: ImageCache) -> None:
+    """blob_data 有值时写文件并改为文件元数据，不再落 Mongo Binary。"""
+    data = cache.blob_data
+    if not data:
+        return
+    content_hash = cache.content_hash or blob_sha256(data)
+    write_image_blob(content_hash, data)
+    cache.content_hash = content_hash
+    cache.blob_path = str(image_blob_rel_path(content_hash))
+    cache.blob_size = len(data)
+    cache.blob_data = None
+
+
+async def image_cache_cleanup_blobs(hashes: list[str | None]) -> None:
+    present = {h for h in hashes if h}
+    if not present:
+        return
+    collection = ImageCache.get_pymongo_collection()
+    rows = await collection.find({"content_hash": {"$in": list(present)}}, {"content_hash": 1}).to_list(None)
+    referenced = {row["content_hash"] for row in rows}
+    for content_hash in present - referenced:
+        delete_image_blob(content_hash)
+
+
+async def image_cache_fill_blob(cache: ImageCache | None) -> ImageCache | None:
+    if cache is None or cache.blob_data or not cache.blob_path:
+        return cache
+    cache.blob_data = await asyncio.to_thread(read_image_blob_at, cache.blob_path)
+    return cache
+
+
 class MongoImageCacheRepository:
     """MongoDB 版 ImageCacheRepository 实现"""
 
     async def find_by_cq_code(self, cq_code: str) -> ImageCache | None:
-        return await ImageCache.find_one(ImageCache.cq_code == cq_code)
+        cache = await ImageCache.find_one(ImageCache.cq_code == cq_code)
+        return await image_cache_fill_blob(cache)
 
     async def find_by_content_hash(self, content_hash: str) -> ImageCache | None:
-        return await ImageCache.find_one(ImageCache.content_hash == content_hash)
+        cache = await ImageCache.find_one(ImageCache.content_hash == content_hash)
+        return await image_cache_fill_blob(cache)
 
     async def bind_content_hash(self, cq_code: str, content_hash: str) -> None:
         await ImageCache.get_pymongo_collection().update_one(
@@ -327,23 +368,22 @@ class MongoImageCacheRepository:
         )
 
     async def find_latest_with_blob(self) -> ImageCache | None:
-        cache = await ImageCache.find({"blob_data": {"$nin": [None, b""]}}).sort("-date", "-id").first_or_none()
-        if cache and cache.blob_data:
-            cache.blob_data = bytes(cache.blob_data)
-        return cache
+        query = {"$or": [{"blob_path": {"$nin": [None, ""]}}, {"blob_data": {"$nin": [None, b""]}}]}
+        cache = await ImageCache.find(query).sort("-date", "-id").first_or_none()
+        return await image_cache_fill_blob(cache)
 
     async def find_recent_with_blob(self, limit: int) -> list[ImageCache]:
-        query = ImageCache.find({"blob_data": {"$nin": [None, b""]}}).sort("-date", "-id")
-        rows = await query.limit(max(1, int(limit))).to_list()
-        for row in rows:
-            if row.blob_data:
-                row.blob_data = bytes(row.blob_data)
-        return rows
+        query = {"$or": [{"blob_path": {"$nin": [None, ""]}}, {"blob_data": {"$nin": [None, b""]}}]}
+        rows = await ImageCache.find(query).sort("-date", "-id").limit(max(1, int(limit))).to_list()
+        caches = [await image_cache_fill_blob(row) for row in rows]
+        return [cache for cache in caches if cache]
 
     async def insert(self, cache: ImageCache) -> None:
+        image_cache_persist_blob(cache)
         await cache.insert()
 
     async def save(self, cache: ImageCache) -> None:
+        image_cache_persist_blob(cache)
         await cache.save()
 
     async def touch(self, cq_code: str, *, date: int) -> None:
@@ -353,10 +393,24 @@ class MongoImageCacheRepository:
         )
 
     async def delete_old(self, before_date: int) -> None:
-        await ImageCache.find(ImageCache.date < before_date).delete()
+        while True:
+            rows = await ImageCache.find(ImageCache.date < before_date).sort("+id").limit(1000).to_list()
+            if not rows:
+                break
+            await ImageCache.get_pymongo_collection().delete_many({"_id": {"$in": [row.id for row in rows]}})
+            await image_cache_cleanup_blobs([row.content_hash for row in rows])
+            if len(rows) < 1000:
+                break
 
     async def delete_low_ref(self, ref_threshold: int) -> None:
-        await ImageCache.find(ImageCache.ref_times < ref_threshold).delete()
+        while True:
+            rows = await ImageCache.find(ImageCache.ref_times < ref_threshold).sort("+id").limit(1000).to_list()
+            if not rows:
+                break
+            await ImageCache.get_pymongo_collection().delete_many({"_id": {"$in": [row.id for row in rows]}})
+            await image_cache_cleanup_blobs([row.content_hash for row in rows])
+            if len(rows) < 1000:
+                break
 
     async def prune(self, policy: ImageCachePrunePolicy) -> ImageCachePruneResult:
         from pallas.core.foundation.db.repository import ImageCachePruneResult
@@ -367,9 +421,12 @@ class MongoImageCacheRepository:
         deleted_rows = 0
         deleted_blob_bytes = 0
 
+        async def blob_size_of(row: dict[str, Any]) -> int:
+            return int(row.get("blob_size") or 0) or len(row.get("blob_data") or b"")
+
         async def total_blob_bytes() -> int:
             pipeline = [
-                {"$project": {"size": {"$binarySize": {"$ifNull": ["$blob_data", b""]}}}},
+                {"$project": {"size": {"$ifNull": ["$blob_size", {"$binarySize": {"$ifNull": ["$blob_data", b""]}}]}}},
                 {"$group": {"_id": None, "total": {"$sum": "$size"}}},
             ]
             try:
@@ -377,26 +434,30 @@ class MongoImageCacheRepository:
                 return int(rows[0]["total"]) if rows else 0
             except Exception:
                 total = 0
-                async for row in collection.find({}, {"blob_data": 1}):
-                    total += len(row.get("blob_data") or b"")
+                async for row in collection.find({}, {"blob_data": 1, "blob_size": 1}):
+                    total += await blob_size_of(row)
                 return total
 
         async def delete_batch(query: dict[str, Any], *, size_limit: int | None = None) -> tuple[int, int]:
-            cursor = collection.find(query, {"_id": 1, "blob_data": 1}).sort([("date", 1), ("_id", 1)])
+            cursor = collection.find(query, {"_id": 1, "content_hash": 1, "blob_data": 1, "blob_size": 1}).sort([
+                ("date", 1),
+                ("_id", 1),
+            ])
             rows = await cursor.to_list(length=batch_size)
             if size_limit is not None:
                 selected = []
                 selected_bytes = 0
                 for row in rows:
                     selected.append(row)
-                    selected_bytes += len(row.get("blob_data") or b"")
+                    selected_bytes += await blob_size_of(row)
                     if selected_bytes >= size_limit:
                         break
                 rows = selected
             if not rows:
                 return 0, 0
             result = await collection.delete_many({"_id": {"$in": [row["_id"] for row in rows]}})
-            return int(result.deleted_count), sum(len(row.get("blob_data") or b"") for row in rows)
+            await image_cache_cleanup_blobs([row.get("content_hash") for row in rows])
+            return int(result.deleted_count), sum(await asyncio.gather(*(blob_size_of(row) for row in rows)))
 
         expired = {
             "$or": [

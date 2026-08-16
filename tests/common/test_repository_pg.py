@@ -1109,6 +1109,8 @@ async def test_image_cache_content_hash_lookup_selects_one_row_when_cache_keys_s
         cq_code="[CQ:image,file=latest-private.image,user_id=10087]",
         content_hash="a" * 64,
         blob_data=b"same-sticker-bytes",
+        blob_path=None,
+        blob_size=None,
         ref_times=1,
         date=20260811,
     )

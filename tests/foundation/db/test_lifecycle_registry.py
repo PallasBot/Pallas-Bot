@@ -10,6 +10,7 @@ def test_registry_contains_the_initial_datasets_with_unique_membership() -> None
         "message_history",
         "repeater_context",
         "image_cache",
+        "image_cache_files",
         "llm_chat",
         "llm_memory",
         "background_jobs",

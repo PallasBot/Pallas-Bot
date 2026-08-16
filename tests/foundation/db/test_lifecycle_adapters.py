@@ -41,7 +41,11 @@ async def fake_session_factory(*, read_only: bool = False) -> AsyncIterator[Fake
 
 
 @pytest.mark.asyncio
-async def test_postgres_discovers_registered_and_unknown_tables() -> None:
+async def test_postgres_discovers_registered_and_unknown_tables(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "pallas.core.foundation.db.lifecycle_adapters.iter_image_blob_files",
+        lambda: [],
+    )
     objects = await PostgresLifecycleAdapter(session_factory=fake_session_factory).discover_objects()
 
     assert [(item.name, item.row_count, item.size_bytes) for item in objects] == [
@@ -52,6 +56,20 @@ async def test_postgres_discovers_registered_and_unknown_tables() -> None:
     assert objects[0].protected is False
     assert objects[1].dataset_id is None
     assert objects[1].protected is True
+
+
+@pytest.mark.asyncio
+async def test_discover_appends_image_cache_blobs_files(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "pallas.core.foundation.db.lifecycle_adapters.iter_image_blob_files",
+        lambda: [("a" * 64, 100), ("b" * 64, 200)],
+    )
+    objects = await PostgresLifecycleAdapter(session_factory=fake_session_factory).discover_objects()
+
+    blob = next(item for item in objects if item.name == "image_cache_blobs")
+    assert blob.dataset_id == "image_cache_files"
+    assert blob.row_count == 2
+    assert blob.size_bytes == 300
 
 
 class FakeMongoDatabase:
@@ -66,7 +84,11 @@ class FakeMongoDatabase:
 
 
 @pytest.mark.asyncio
-async def test_mongo_keeps_collection_when_stats_fail() -> None:
+async def test_mongo_keeps_collection_when_stats_fail(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "pallas.core.foundation.db.lifecycle_adapters.iter_image_blob_files",
+        lambda: [],
+    )
     objects = await MongoLifecycleAdapter(database=FakeMongoDatabase()).discover_objects()
 
     assert [item.name for item in objects] == ["message", "plugin_events"]
