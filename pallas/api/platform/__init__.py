@@ -1,6 +1,6 @@
 """平台级协作钩子：多 Bot 去重/舰队、分片在线态、AI callback 注册、Bot 角色与发送。
 
-仅官方/内置插件使用；社区插件一般不依赖此模块。
+公开的 Bot 发送与平台协作 API 供官方及社区插件使用。
 """
 
 # ── AI callback ──
@@ -102,6 +102,7 @@ from pallas.core.platform.shard.context import (
 from pallas.core.platform.shard.coord.bot_action import (
     get_member_card_as_bot,
     invoke_bot_action,
+    send_group_forward_message_as_bot,
     send_group_message_as_bot,
     send_private_msg_as_bot,
     set_group_card_as_bot,
@@ -205,6 +206,7 @@ __all__ = [
     # 跨分片 Bot 操作
     "get_member_card_as_bot",
     "invoke_bot_action",
+    "send_group_forward_message_as_bot",
     "send_group_message_as_bot",
     "send_private_msg_as_bot",
     "set_group_card_as_bot",

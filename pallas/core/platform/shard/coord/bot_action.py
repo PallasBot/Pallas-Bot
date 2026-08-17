@@ -121,15 +121,32 @@ def _message_from_payload(payload: dict[str, Any]) -> Message | str:
     image_b64 = payload.get("image_b64")
     cq_text = str(msg) if isinstance(msg, Message) else str(msg)
     if isinstance(image_b64, str) and image_b64 and "[CQ:image" not in cq_text:
-        try:
-            raw = base64.b64decode(image_b64.encode("ascii"))
-            if isinstance(msg, Message):
-                msg = msg + Message(MessageSegment.image(raw))
-            else:
-                msg = Message(msg) + Message(MessageSegment.image(raw))
-        except Exception:
-            pass
+        msg = _append_image(msg, image_b64)
+    image_b64_list = payload.get("image_b64_list")
+    if isinstance(image_b64_list, list):
+        for item in image_b64_list:
+            if isinstance(item, str) and item:
+                msg = _append_image(msg, item)
     return msg
+
+
+def _append_image(msg: Message | str, image_b64: str) -> Message:
+    try:
+        raw = base64.b64decode(image_b64.encode("ascii"))
+        if isinstance(msg, Message):
+            return msg + Message(MessageSegment.image(raw))
+        return Message(msg) + Message(MessageSegment.image(raw))
+    except Exception:
+        return msg if isinstance(msg, Message) else Message(msg)
+
+
+def _put_image_bytes(payload: dict[str, Any], image_bytes: bytes | list[bytes] | None) -> None:
+    if isinstance(image_bytes, list):
+        encoded = [base64.b64encode(b).decode("ascii") for b in image_bytes if b]
+        if encoded:
+            payload["image_b64_list"] = encoded
+    elif image_bytes:
+        payload["image_b64"] = base64.b64encode(image_bytes).decode("ascii")
 
 
 async def _execute_local(action: str, bot_qq: int, payload: dict[str, Any]) -> tuple[bool, Any]:
@@ -145,6 +162,15 @@ async def _execute_local(action: str, bot_qq: int, payload: dict[str, Any]) -> t
                 return False, None
             msg = _message_from_payload(payload)
             await inst.send_group_msg(group_id=int(gid), message=msg)
+            return True, None
+        if action == "send_group_forward_msg":
+            if gid is None or not isinstance(payload.get("messages"), list):
+                return False, None
+            await inst.call_api(
+                "send_group_forward_msg",
+                group_id=int(gid),
+                messages=payload["messages"],
+            )
             return True, None
         if action == "send_private_msg":
             uid = payload.get("user_id")
@@ -267,7 +293,7 @@ async def send_private_msg_as_bot(
     user_id: int,
     message: Message | str,
     *,
-    image_bytes: bytes | None = None,
+    image_bytes: bytes | list[bytes] | None = None,
     timeout_sec: float = _DEFAULT_TIMEOUT,
 ) -> bool:
     payload: dict[str, Any] = {
@@ -275,8 +301,7 @@ async def send_private_msg_as_bot(
         "message_cq": str(message) if isinstance(message, Message) else "",
         "message_text": str(message) if not isinstance(message, Message) else "",
     }
-    if image_bytes:
-        payload["image_b64"] = base64.b64encode(image_bytes).decode("ascii")
+    _put_image_bytes(payload, image_bytes)
     ok, _ = await invoke_bot_action(
         "send_private_msg",
         bot_qq,
@@ -291,7 +316,7 @@ async def send_group_message_as_bot(
     group_id: int,
     message: Message | str,
     *,
-    image_bytes: bytes | None = None,
+    image_bytes: bytes | list[bytes] | None = None,
     timeout_sec: float = _DEFAULT_TIMEOUT,
 ) -> bool:
     payload: dict[str, Any] = {
@@ -299,12 +324,51 @@ async def send_group_message_as_bot(
         "message_cq": str(message) if isinstance(message, Message) else "",
         "message_text": str(message) if not isinstance(message, Message) else "",
     }
-    if image_bytes:
-        payload["image_b64"] = base64.b64encode(image_bytes).decode("ascii")
+    _put_image_bytes(payload, image_bytes)
     ok, _ = await invoke_bot_action(
         "send_group_msg",
         bot_qq,
         payload,
+        timeout_sec=timeout_sec,
+    )
+    return ok
+
+
+async def send_group_forward_message_as_bot(
+    bot_qq: int,
+    group_id: int,
+    messages: list[dict[str, Any]],
+    *,
+    timeout_sec: float = _DEFAULT_TIMEOUT,
+) -> bool:
+    nodes = []
+    for node in messages:
+        if not isinstance(node, dict):
+            continue
+        data = node.get("data")
+        if not isinstance(data, dict):
+            continue
+        content = data.get("content", "")
+        if isinstance(content, Message):
+            content = str(content)
+        elif not isinstance(content, (str, list)):
+            continue
+        nodes.append(
+            {
+                "type": "node",
+                "data": {
+                    "name": str(data.get("name") or "Pallas"),
+                    "uin": str(data.get("uin") or bot_qq),
+                    "content": content,
+                },
+            }
+        )
+    if not nodes:
+        return False
+    ok, _ = await invoke_bot_action(
+        "send_group_forward_msg",
+        bot_qq,
+        {"group_id": int(group_id), "messages": nodes},
         timeout_sec=timeout_sec,
     )
     return ok

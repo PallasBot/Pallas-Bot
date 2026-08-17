@@ -1,11 +1,66 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import time
 
 import pytest
 
 from pallas.core.platform.shard.coord import bot_action as mod
+
+
+def test_message_from_payload_appends_multiple_images() -> None:
+    payload = {
+        "message_text": "album",
+        "image_b64_list": [
+            base64.b64encode(b"one").decode("ascii"),
+            base64.b64encode(b"two").decode("ascii"),
+        ],
+    }
+
+    message = mod._message_from_payload(payload)
+
+    assert isinstance(message, mod.Message)
+    assert str(message).count("[CQ:image") == 2
+
+
+def test_put_image_bytes_keeps_legacy_single_image_payload() -> None:
+    payload: dict[str, object] = {}
+
+    mod._put_image_bytes(payload, b"one")
+
+    assert "image_b64" in payload
+    assert "image_b64_list" not in payload
+
+
+def test_put_image_bytes_uses_list_payload_for_multiple_images() -> None:
+    payload: dict[str, object] = {}
+
+    mod._put_image_bytes(payload, [b"one", b"two"])
+
+    assert "image_b64" not in payload
+    assert len(payload["image_b64_list"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_send_group_forward_message_normalizes_message_content(monkeypatch) -> None:
+    seen: dict[str, object] = {}
+
+    async def fake_invoke(action, bot_qq, payload, *, timeout_sec):
+        seen.update(action=action, bot_qq=bot_qq, payload=payload, timeout_sec=timeout_sec)
+        return True, None
+
+    monkeypatch.setattr(mod, "invoke_bot_action", fake_invoke)
+
+    ok = await mod.send_group_forward_message_as_bot(
+        300,
+        733291779,
+        [{"data": {"name": "B站动态", "content": mod.Message("text")}}],
+    )
+
+    assert ok is True
+    assert seen["action"] == "send_group_forward_msg"
+    assert seen["payload"]["messages"][0]["data"]["content"] == "text"
 
 
 def test_start_bot_action_redis_listener_starts_when_coord_enabled(fake_coord_redis, monkeypatch):
