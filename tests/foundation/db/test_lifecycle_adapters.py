@@ -170,8 +170,8 @@ async def test_postgres_background_job_prune_keeps_pending_rows_outside_candidat
     adapter.preview_dataset = one_candidate  # type: ignore[method-assign]
     await adapter.prune_dataset("background_jobs", LifecyclePolicy(True, 30, None))
 
-    assert "finished_at IS NOT NULL" in statements[0]
-    assert "status = 'done'" in statements[0]
+    assert "COALESCE(finished_at, created_at) IS NOT NULL" in statements[0]
+    assert "status IN ('done', 'dead_letter')" in statements[0]
     assert "finished_at < :cutoff" not in statements[0]
 
 

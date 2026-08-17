@@ -45,7 +45,12 @@ PG_DATASET_RULES = {
     "message_history": ("message", "id", "time", None),
     "repeater_context": ("context", "id", "time", None),
     "llm_chat": ("llm_chat_message", "id", "created_at", None),
-    "background_jobs": ("background_job", "id", "finished_at", "status = 'done'"),
+    "background_jobs": (
+        "background_job",
+        "id",
+        "COALESCE(finished_at, created_at)",
+        "status IN ('done', 'dead_letter')",
+    ),
 }
 
 
@@ -429,7 +434,7 @@ def mongo_rule(dataset_id: str) -> tuple[str, str, dict[str, object]]:
         "repeater_context": ("context", "time", {}),
         "image_cache": ("image_cache", "date", {}),
         "llm_chat": ("llm_chat_message", "created_at", {}),
-        "background_jobs": ("background_jobs", "finished_at", {"status": "done"}),
+        "background_jobs": ("background_jobs", "created_at", {"status": {"$in": ["done", "dead_letter"]}}),
         "llm_memory": ("llm_memory_entry", "expires_at", {"expires_at": {"$gt": 0}}),
     }
     try:
