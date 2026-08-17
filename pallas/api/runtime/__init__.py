@@ -75,10 +75,7 @@ class DirectBotAction:
             target_id = 0
         if target_id <= 0:
             raise ValueError(f"{target_key} must be positive")
-        if not any(
-            self.payload.get(key)
-            for key in ("message_text", "message_cq", "image_b64", "image_b64_list")
-        ):
+        if not any(self.payload.get(key) for key in ("message_text", "message_cq", "image_b64", "image_b64_list")):
             raise ValueError("message payload is required")
 
 

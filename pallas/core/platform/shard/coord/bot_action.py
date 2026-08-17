@@ -353,16 +353,14 @@ async def send_group_forward_message_as_bot(
             content = str(content)
         elif not isinstance(content, (str, list)):
             continue
-        nodes.append(
-            {
-                "type": "node",
-                "data": {
-                    "name": str(data.get("name") or "Pallas"),
-                    "uin": str(data.get("uin") or bot_qq),
-                    "content": content,
-                },
-            }
-        )
+        nodes.append({
+            "type": "node",
+            "data": {
+                "name": str(data.get("name") or "Pallas"),
+                "uin": str(data.get("uin") or bot_qq),
+                "content": content,
+            },
+        })
     if not nodes:
         return False
     ok, _ = await invoke_bot_action(
