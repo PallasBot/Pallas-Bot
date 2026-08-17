@@ -44,6 +44,43 @@ LLM、唱歌和画图都不是首次启动的前置条件。先让 Bot 正常上
 
 首次只看到控制台、还没有 QQ 消息是正常的：这说明 Bot 本体已经运行，但协议端尚未连接。
 
+## 持久化部署
+
+临时运行可以直接使用 `uv run pallas`；需要关闭终端后仍保持运行时，使用 CLI 守护：
+
+```bash
+uv run pallas daemon
+```
+
+它会启动 unified Bot，定时探活控制台，连续失败后自动重启。Windows、macOS 和 Linux 都可以使用。Linux 服务器建议交给 systemd：
+
+```ini
+[Unit]
+Description=Pallas-Bot
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=pallas
+WorkingDirectory=/opt/Pallas-Bot
+ExecStart=/home/pallas/.local/bin/uv run pallas daemon
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+保存为 `/etc/systemd/system/pallas-bot.service` 后执行：
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now pallas-bot
+sudo journalctl -u pallas-bot -f
+```
+
+systemd 日志用于查看守护进程状态；Bot 业务日志仍按自身配置写入 `data/bot/`，控制台也可以查看日志。
+
 ## 第 3 步：连接 QQ 并完成验收
 
 打开 [连接 QQ](connect-qq.md)，在协议端管理页新建 NapCat 实例并扫码登录。

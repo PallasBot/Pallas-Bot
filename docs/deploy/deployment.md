@@ -185,7 +185,7 @@ After=network.target postgresql.service
 Type=simple
 User=pallas
 WorkingDirectory=/opt/Pallas-Bot
-ExecStart=/home/pallas/.local/bin/uv run pallas
+ExecStart=/home/pallas/.local/bin/uv run pallas daemon
 Restart=on-failure
 RestartSec=10
 
@@ -195,7 +195,7 @@ WantedBy=multi-user.target
 
 启用：`sudo systemctl enable --now pallas-bot.service`。状态：`systemctl status pallas-bot`。
 
-`tools/scripts/bot_watchdog.py` 探活 `/pallas/api/health`；Bot 已由 systemd 启动时须加 **`--no-spawn`**，避免重复占用端口。
+`pallas daemon` 会探活 `/pallas/api/health`，连续失败后自动重启 unified Bot。它本身以前台进程运行，适合交给 systemd 管理；Bot 的业务日志仍写入 `data/bot/`。
 
 ### 备份与安全
 
@@ -219,17 +219,15 @@ WantedBy=multi-user.target
 
 ---
 
-## 进程守护脚本（可选）
+## CLI 守护（可选）
 
-`tools/scripts/bot_watchdog.py`：请求 `/pallas/api/health`，连续失败后重启子进程或 Docker 容器。
+`pallas daemon`：请求 `/pallas/api/health`，连续失败后重启 unified Bot。命令使用纯 Python 实现，Windows、macOS 和 Linux 均可运行。
 
-| 场景 | 用法 |
-| --- | --- |
-| 由脚本拉起 Bot | `uv run python tools/scripts/bot_watchdog.py` |
-| Bot 已由 systemd/Docker 运行 | 加 **`--no-spawn`** |
-| 监护容器 | `--docker-container <名> --no-spawn` |
+```bash
+uv run pallas daemon
+```
 
-`HOST`/`PORT` 从环境变量或 `pallas.toml` `[bootstrap]` 读取。参数：`uv run python tools/scripts/bot_watchdog.py --help`。
+默认每 15 秒探活，连续失败 3 次后重启。可用 `--interval`、`--timeout`、`--fail-threshold` 和 `--cooldown` 调整参数。该命令只守护 unified，分片部署请使用对应的 systemd/Docker 编排。
 
 ---
 

@@ -22,4 +22,3 @@
 /tools/scripts/backup_pg.cmd
 /tools/scripts/backup_pg.py
 /tools/scripts/backup_pg.sh
-/tools/scripts/bot_watchdog.py

@@ -58,7 +58,6 @@
 | 脚本 | 说明 |
 | --- | --- |
 | `sync_docs_to_web.py` | 主仓 `docs/` → Pallas-Bot-Docs |
-| `bot_watchdog.py` | `/pallas/api/health` 探活重启 |
 | `backup_database.py` / `backup_pg.py` | 数据库备份 |
 | `backup_pg.sh` | PostgreSQL 备份的 shell 入口 |
 
