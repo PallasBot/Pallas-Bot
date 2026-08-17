@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 import pytest
 
 from pallas.product.llm.corpus_contamination import (
@@ -129,3 +132,83 @@ async def test_run_mongo_corpus_contamination_cleanup(beanie_fixture, monkeypatc
     assert found is not None
     assert found.answers[0].messages == ["好的"]
     assert await Message.find(Message.plain_text == "希望每个庆典都能顺利举行").count() == 0
+
+
+@pytest.mark.asyncio
+async def test_run_pg_corpus_contamination_cleanup_caps_per_round_delete(monkeypatch) -> None:
+    """单轮删除量必须被 max_delete 限制，剩余候选留待下一轮，避免长事务与死元组堆积。"""
+    from pallas.product.llm import corpus_contamination as mod
+
+    async def fake_ready(_backend: str) -> bool:
+        return True
+
+    async def fake_ensure(_backend: str) -> None:
+        return None
+
+    executed: list[str] = []
+
+    class FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        async def execute(self, stmt, *_params):
+            return SimpleNamespace(rowcount=0)
+
+        async def commit(self) -> None:
+            return None
+
+    class FakeRow:
+        def __getitem__(self, _idx: int):
+            return 1
+
+    class FakeSelect:
+        def __init__(self, rows: list[FakeRow]) -> None:
+            self._rows = rows
+
+        def all(self):
+            return self._rows
+
+    class FakeWriteSession(FakeSession):
+        def __init__(self) -> None:
+            self.deleted_total = 0
+
+        async def execute(self, stmt, params=None):
+            executed.append(str(stmt)[:60])
+            sql = str(stmt)
+            if "DELETE FROM message" in sql:
+                ids = (params or {}).get("ids") or []
+                self.deleted_total += len(ids)
+                return SimpleNamespace(rowcount=len(ids))
+            return SimpleNamespace(rowcount=0)
+
+    class FakeReadSession(FakeSession):
+        async def execute(self, stmt, *_params):
+            sql = str(stmt)
+            if "context_answer_message" in sql:
+                return FakeSelect([])
+            return FakeSelect([FakeRow() for _ in range(250)])
+
+    write_session = FakeWriteSession()
+
+    def fake_get_session(*_args, **_kwargs):
+        return write_session if not _kwargs.get("read_only") else FakeReadSession()
+
+    monkeypatch.setattr("pallas.core.foundation.db.ensure_runtime_storage_ready", fake_ensure)
+    monkeypatch.setattr("pallas.core.foundation.db.is_postgresql_backend", lambda: True)
+    monkeypatch.setattr(mod, "corpus_cleanup_max_delete_per_round", lambda: 120)
+    monkeypatch.setattr(mod, "corpus_cleanup_message_history_enabled", lambda: True)
+    monkeypatch.setattr("pallas.core.foundation.db.repository_pg.get_session", fake_get_session)
+    monkeypatch.setattr("pallas.core.foundation.db.repository_pg.vacuum_message_table", AsyncMock())
+    monkeypatch.setattr(
+        "pallas.core.foundation.db.repository_pg.clear_reply_query_snapshot_cache",
+        AsyncMock(),
+    )
+
+    report = await mod.run_pg_corpus_contamination_cleanup(apply=True, preview_limit=0)
+
+    assert write_session.deleted_total == 120  # 250 条候选被上限压到只删 120 条
+    assert report.deleted_message_history == 120
+    assert report.deleted_answer_messages == 0

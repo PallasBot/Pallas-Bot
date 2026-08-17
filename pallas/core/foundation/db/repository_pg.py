@@ -2703,3 +2703,17 @@ class PgImageCacheRepository:
             deleted_blob_bytes=deleted_blob_bytes,
             remaining_blob_bytes=remaining_blob_bytes,
         )
+
+
+async def vacuum_message_table() -> None:
+    """语料扫库批量删除后回收 message 表死元组，缓解 autovacuum 滞后导致的索引膨胀。
+
+    VACUUM 不能运行在事务块内，需借用 AUTOCOMMIT 连接；失败仅降级不影响主流程。
+    """
+    if _engine is None:
+        return
+    try:
+        async with _engine.connect() as conn:
+            await conn.execution_options(isolation_level="AUTOCOMMIT").exec_driver_sql("VACUUM message")
+    except Exception as exc:
+        logger.warning("vacuum message failed, degraded: {}", exc)

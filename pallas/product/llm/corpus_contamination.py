@@ -170,6 +170,12 @@ def corpus_cleanup_message_history_enabled() -> bool:
     return bool(get_llm_config().llm_corpus_cleanup_message_history_enabled)
 
 
+def corpus_cleanup_max_delete_per_round() -> int:
+    from pallas.product.llm.config import get_llm_config
+
+    return int(get_llm_config().llm_corpus_cleanup_max_delete_per_round)
+
+
 def match_corpus_learn_block(text: str) -> CorpusContaminationHit | None:
     plain = str(text or "").strip()
     if not plain:
@@ -460,7 +466,11 @@ async def run_pg_corpus_contamination_cleanup(
     clean_message_history: bool | None = None,
 ) -> CorpusCleanupReport:
     from pallas.core.foundation.db import ensure_runtime_storage_ready, is_postgresql_backend
-    from pallas.core.foundation.db.repository_pg import clear_reply_query_snapshot_cache, get_session
+    from pallas.core.foundation.db.repository_pg import (
+        clear_reply_query_snapshot_cache,
+        get_session,
+        vacuum_message_table,
+    )
 
     if not is_postgresql_backend():
         return CorpusCleanupReport(0, 0, 0, 0, 0, 0)
@@ -537,6 +547,13 @@ async def run_pg_corpus_contamination_cleanup(
     if not apply or (not answer_ids and not message_rows):
         return report
 
+    # 单轮删除量上限：污染消息可能累计数十万条，一次性全删会让单事务过长、
+    # 死元组瞬间堆积拖垮 autovacuum 与并发读，限制后剩余留到下一轮扫库。
+    max_delete = max(100, corpus_cleanup_max_delete_per_round())
+    answer_ids = answer_ids[:max_delete]
+    if message_rows:
+        message_rows = message_rows[:max_delete]
+
     deleted_messages = 0
     deleted_answers = 0
     deleted_history = 0
@@ -576,6 +593,9 @@ async def run_pg_corpus_contamination_cleanup(
                 deleted_history += int(result.rowcount or 0)
 
         await session.commit()
+
+    if deleted_history:
+        await vacuum_message_table()
 
     try:
         await clear_reply_query_snapshot_cache(None)
