@@ -192,7 +192,7 @@ git clone --depth 1 --branch 6.3 https://github.com/PallasBot/DDSP-SVC.git app/w
 | 项 | 路径 / 说明 |
 | --- | --- |
 | 引擎子模块 | `app/workers/sing/RVC`（[RVC WebUI](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI)） |
-| 薄入口 | `app/workers/sing/rvc/infer_rvc.py` |
+| 薄入口 | `app/workers/sing/rvc_launcher/infer_rvc.py` |
 | 音色目录 | `resource/sing/models/<id>/*.pth`，可选同 stem 或唯一一个 `*.index` |
 | 共享资产 | `resource/sing/models/pretrain/rvc/hubert_base/`、`rmvpe.pt`（[lj1995/VoiceConversionWebUI](https://huggingface.co/lj1995/VoiceConversionWebUI)） |
 
