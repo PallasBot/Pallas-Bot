@@ -79,6 +79,31 @@ def test_browse_backup_directories(tmp_path, monkeypatch) -> None:
     assert any(entry["name"] == "nested" for entry in data["entries"])
 
 
+def test_browse_allowed_with_symlinked_default_parent(tmp_path, monkeypatch) -> None:
+    external = tmp_path / "external_backups"
+    external.mkdir()
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "backups").symlink_to(external, target_is_directory=True)
+    monkeypatch.setattr(mod, "PROJECT_ROOT", project)
+    data = mod.browse_backup_directories(path=None)
+    assert data["current"] == str(external.resolve())
+    assert data["parent"] == str(tmp_path.resolve())
+
+
+def test_browse_rejects_unrelated_dir_with_symlinked_default(tmp_path, monkeypatch) -> None:
+    external = tmp_path / "external_backups"
+    external.mkdir()
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "backups").symlink_to(external, target_is_directory=True)
+    monkeypatch.setattr(mod, "PROJECT_ROOT", project)
+    unrelated = tmp_path / "unrelated"
+    unrelated.mkdir()
+    with pytest.raises(ValueError, match="不在允许范围"):
+        mod.browse_backup_directories(path=str(unrelated))
+
+
 def test_normalize_pg_tables_rejects_invalid() -> None:
     with pytest.raises(ValueError, match="无效"):
         mod.normalize_pg_tables(["bad-name"])

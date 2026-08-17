@@ -270,19 +270,29 @@ def normalize_mongo_collections(collections: list[str] | None) -> list[str] | No
     return out or None
 
 
+def _browse_allowed_roots() -> list[Path]:
+    """浏览允许的根：项目根，以及符号链接解析后的默认备份父目录（可能指向外部挂载）。"""
+    roots = [PROJECT_ROOT.resolve()]
+    default_parent = default_backup_parent()
+    if default_parent != roots[0]:
+        roots.append(default_parent)
+    return roots
+
+
 def is_browse_allowed(path: Path) -> bool:
     resolved = path.resolve()
-    project = PROJECT_ROOT.resolve()
-    try:
-        resolved.relative_to(project)
-        return True
-    except ValueError:
-        pass
-    try:
-        project.relative_to(resolved)
-        return True
-    except ValueError:
-        return False
+    for root in _browse_allowed_roots():
+        try:
+            resolved.relative_to(root)
+            return True
+        except ValueError:
+            pass
+        try:
+            root.relative_to(resolved)
+            return True
+        except ValueError:
+            pass
+    return False
 
 
 def browse_backup_directories(*, path: str | None = None) -> dict[str, Any]:
