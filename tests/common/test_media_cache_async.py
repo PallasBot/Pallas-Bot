@@ -98,7 +98,10 @@ async def test_image_capture_work_handler_does_not_retry_http_failure(monkeypatc
     })
 
     repo.insert.assert_not_awaited()
-    get.assert_awaited_once_with("https://multimedia.nt.qq.com.cn/download?file=expired", raise_for_status=False)
+    get.assert_awaited_once()
+    assert get.await_args.args[0] == "https://multimedia.nt.qq.com.cn/download?file=expired"
+    assert get.await_args.kwargs["raise_for_status"] is False
+    assert get.await_args.kwargs["timeout"] == mod._IMAGE_CAPTURE_DOWNLOAD_TIMEOUT
 
 
 @pytest.mark.asyncio

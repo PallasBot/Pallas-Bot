@@ -30,6 +30,7 @@ _IMAGE_CAPTURE_MIN_INTERVAL_SEC = 2.0
 _IMAGE_CAPTURE_GLOBAL_RATE_PER_SEC = 4
 _IMAGE_CAPTURE_GLOBAL_WINDOW_SEC = 1.0
 _IMAGE_CAPTURE_MAX_AGE_SEC = 600.0
+_IMAGE_CAPTURE_DOWNLOAD_TIMEOUT = httpx.Timeout(20.0, connect=10.0)
 _IMAGE_CAPTURE_BOUND = False
 
 
@@ -106,7 +107,11 @@ async def handle_image_cache_capture(payload: dict[str, object]) -> None:
         return
     cache = await image_cache_repo.find_by_cq_code(cq_code)
     if cache is None:
-        rsp = await HTTPXClient.get(url, raise_for_status=False)
+        rsp = await HTTPXClient.get(
+            url,
+            raise_for_status=False,
+            timeout=_IMAGE_CAPTURE_DOWNLOAD_TIMEOUT,
+        )
         if not rsp or rsp.status_code != httpx.codes.OK:
             status = getattr(rsp, "status_code", None)
             log_rate_limited(
