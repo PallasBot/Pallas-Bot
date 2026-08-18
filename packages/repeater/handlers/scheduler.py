@@ -114,7 +114,16 @@ async def prune_runtime_caches() -> None:
         return
     removed = await prune_repeater_runtime_caches()
     if any(int(value) > 0 for value in removed.values()):
-        logger.info("repeater.runtime_cache_pruned {}", removed)
+        logger.info(
+            "Runtime cache pruned: message groups [{}], message records [{}], "
+            "reply groups [{}], reply bot buckets [{}], reply records [{}], recent topic groups [{}]",
+            removed["message_groups_removed"],
+            removed["message_records_removed"],
+            removed["reply_groups_removed"],
+            removed["reply_bot_buckets_removed"],
+            removed["reply_records_removed"],
+            removed["recent_topics_groups_removed"],
+        )
 
 
 @scheduler.scheduled_job("interval", minutes=10)
