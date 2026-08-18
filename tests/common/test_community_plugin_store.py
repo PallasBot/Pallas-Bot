@@ -371,7 +371,7 @@ async def test_install_community_plugin_uses_rewritten_clone_url(monkeypatch, tm
 
 
 @pytest.mark.asyncio
-async def test_update_community_plugin_uses_git_instead_of_for_proxy(monkeypatch, tmp_path) -> None:
+async def test_update_community_plugin_fetches_mirror_url(monkeypatch, tmp_path) -> None:
     from pallas.console.webui import community_plugin_install as cpi
     from pallas.core.shared.utils import git_mirror as gm
 
@@ -393,10 +393,12 @@ async def test_update_community_plugin_uses_git_instead_of_for_proxy(monkeypatch
 
     async def fake_run_git_command(_timeout_s: float, *args: str, cwd: str | None = None):
         git_calls.append(args)
-        if args[-3:] == ("reset", "--hard", "origin/main"):
-            return 0, "reset ok", ""
-        if args[-3:] == ("fetch", "origin", "main"):
+        if args[:2] == ("remote", "get-url"):
+            return 0, "https://github.com/example/demo.git", ""
+        if args[:2] == ("fetch", "https://ghproxy.vip/https://github.com/example/demo.git"):
             return 0, "fetched", ""
+        if args[:2] == ("reset", "--hard") and args[2] == "FETCH_HEAD":
+            return 0, "reset ok", ""
         return 1, "", "fail"
 
     monkeypatch.setattr(cpi, "run_git_command", fake_run_git_command)
@@ -404,7 +406,5 @@ async def test_update_community_plugin_uses_git_instead_of_for_proxy(monkeypatch
     result = await cpi.update_community_plugin("demo", ref="main")
 
     assert result["installed"] is True
-    assert any(
-        args[:2] == ("-c", "url.https://ghproxy.vip/https://github.com/.insteadOf=https://github.com/")
-        for args in git_calls
-    )
+    assert ("fetch", "https://ghproxy.vip/https://github.com/example/demo.git", "main") in git_calls
+    assert ("reset", "--hard", "FETCH_HEAD") in git_calls

@@ -12,8 +12,10 @@ from nonebot import logger
 from pallas.console.cli.bot_process import bot_lifecycle_available
 from pallas.core.foundation.paths import PROJECT_ROOT
 from pallas.core.shared.utils.git_mirror import (
-    git_instead_of_args,
+    BUILTIN_MIRRORS,
+    canonical_github_https_url,
     iter_mirrors_for_failover,
+    mirror_by_id,
     rewrite_github_url,
 )
 
@@ -215,57 +217,58 @@ async def update_community_plugin(
     if not local_plugin_installed(pid):
         raise CommunityPluginInstallError(f"local/plugins/{pid} 未安装，无法更新")
     logger.info("[WebUI] 更新社区插件 id={} ref={}", pid, branch)
+    code, remote_url, err = await run_git_command(
+        INSTALL_TIMEOUT_S,
+        "remote",
+        "get-url",
+        "origin",
+        cwd=str(dest),
+    )
+    if code != 0 or not remote_url:
+        raise CommunityPluginInstallError(
+            f"无法读取 git origin：{tail_output(err or '无 remote')}",
+            status_code=502,
+        )
+    canonical = canonical_github_https_url(remote_url)
+    # origin 可能是镜像 URL（WebUI 镜像切换改写），git insteadOf 无法把它还原；
+    # 统一 canonical 化后逐镜像生成显式 fetch URL，保证 failover 对任意形态 origin 都生效。
+    if canonical is None:
+        base_mirror = mirror_by_id("github") or BUILTIN_MIRRORS[0]
+        mirrors = [base_mirror]
+    else:
+        mirrors = list(iter_mirrors_for_failover("community"))
     last_detail = ""
-    last_stage = "fetch"
     update_ok = False
     out = ""
-    for mirror in iter_mirrors_for_failover("community"):
-        extra = git_instead_of_args(mirror)
+    for mirror in mirrors:
+        fetch_url = rewrite_github_url(canonical or remote_url, mirror)
         _report(on_progress, 25, "git fetch…")
         code, out, err = await run_git_command(
             INSTALL_TIMEOUT_S,
-            *extra,
             "fetch",
-            "origin",
+            fetch_url,
             branch,
             cwd=str(dest),
         )
         if code != 0:
             last_detail = err or out or "(无输出)"
-            last_stage = "fetch"
             continue
         _report(on_progress, 55, "同步到最新提交…")
         code, out, err = await run_git_command(
             INSTALL_TIMEOUT_S,
-            *extra,
             "reset",
             "--hard",
-            f"origin/{branch}",
+            "FETCH_HEAD",
             cwd=str(dest),
         )
         if code != 0:
-            code, out, err = await run_git_command(
-                INSTALL_TIMEOUT_S,
-                *extra,
-                "pull",
-                "--ff-only",
-                "origin",
-                branch,
-                cwd=str(dest),
-            )
-        if code == 0:
-            update_ok = True
-            break
-        last_detail = err or out or "(无输出)"
-        last_stage = "update"
+            last_detail = err or out or "(无输出)"
+            continue
+        update_ok = True
+        break
     if not update_ok:
-        if last_stage == "fetch":
-            raise CommunityPluginInstallError(
-                f"git fetch 失败：{tail_output(last_detail)}",
-                status_code=502,
-            )
         raise CommunityPluginInstallError(
-            f"git 更新失败：{tail_output(last_detail)}",
+            f"git fetch 失败：{tail_output(last_detail)}",
             status_code=502,
         )
     _report(on_progress, 85, "校验插件包…")
