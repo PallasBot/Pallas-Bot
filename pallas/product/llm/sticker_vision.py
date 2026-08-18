@@ -502,7 +502,6 @@ async def dispatch_sticker_vision_delivery_once() -> bool:
         await save_sticker_vision_delivery(job_id, payload, state="failed", error="发送目标或图片不可用")
         return True
     from pallas.core.shared.utils.media_cache import get_image
-    from pallas.product.llm.delivery import prepare_sticker_image
     from pallas.product.llm.sticker_followup import note_repeater_image_sent, should_send_repeater_image
     from pallas.product.llm.sticker_labels import content_hash_for_bytes
 
@@ -524,7 +523,7 @@ async def dispatch_sticker_vision_delivery_once() -> bool:
         ):
             await save_sticker_vision_delivery(job_id, payload, state="failed", error="表情图发送条件已失效")
             return True
-        message += MessageSegment.image(file=prepare_sticker_image(cached))
+        message += MessageSegment.image(file=cached)
     try:
         await bot.call_api("send_group_msg", group_id=int(delivery.get("group_id") or 0), message=message)
     except Exception as exc:

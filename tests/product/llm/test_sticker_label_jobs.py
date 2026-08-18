@@ -702,8 +702,9 @@ async def test_label_vision_downscales_image_and_caps_output_tokens(monkeypatch:
     label, _provider, _model = await sticker_label_jobs.label_sticker_with_vision(image_bytes)
 
     assert label is not None
-    assert captured["options"] == {"temperature": 0.1, "max_tokens": 200}
-    content = captured["messages"][0]["content"]
+    assert captured["options"] == {"temperature": 0.1, "max_tokens": 512}
+    assert captured["messages"][0]["role"] == "system"
+    content = captured["messages"][1]["content"]
     data_uri = content[1]["image_url"]["url"]
     _, encoded = data_uri.split(",", 1)
     import base64

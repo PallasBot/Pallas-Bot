@@ -15,7 +15,14 @@ from nonebot import logger
 from pallas.core.platform.work_jobs.models import WorkJob
 from pallas.core.platform.work_jobs.runtime import build_work_job_store
 from pallas.product.llm import sticker_label_runtime_state
-from pallas.product.llm.sticker_labels import StickerSemanticLabel, content_hash_for_bytes, needs_relabel
+from pallas.product.llm.sticker_labels import (
+    ACTION_VOCABULARY,
+    EMOTION_VOCABULARY,
+    TONE_VOCABULARY,
+    StickerSemanticLabel,
+    content_hash_for_bytes,
+    needs_relabel,
+)
 
 STICKER_LABEL_JOB_KIND = "sticker.label.visual"
 STICKER_LABEL_PROMPT_VERSION = 1
@@ -24,7 +31,7 @@ STICKER_LABEL_TIMEOUT_SEC = 15.0
 STICKER_LABEL_CIRCUIT_FAILURES = 3
 STICKER_LABEL_CIRCUIT_COOLDOWN_SEC = 60.0
 STICKER_LABEL_IMAGE_MAX_SIDE = 384
-STICKER_LABEL_MAX_OUTPUT_TOKENS = 200
+STICKER_LABEL_MAX_OUTPUT_TOKENS = 512
 _STICKER_LABEL_SEMAPHORE = asyncio.Semaphore(1)
 _REQUIRED_RESPONSE_FIELDS_MAX_ITEMS = 5
 
@@ -189,14 +196,20 @@ async def label_sticker_with_vision(content: bytes) -> tuple[StickerSemanticLabe
     if endpoint is None or "image" not in endpoint.capabilities:
         raise RuntimeError("no sticker vision endpoint")
     prompt = (
-        "判断图片是否适合作为聊天表情。只输出严格 JSON，字段必须且只能是 "
-        "is_sticker, emotions, actions, tones, intensity, usage, avoid, caption, confidence。"
-        "is_sticker 为布尔值；emotions/actions/tones/usage/avoid 为字符串数组；"
-        "intensity 为 0-3 整数；caption 为字符串；confidence 为 0-1 数字。"
+        "判断这张图片能否在群聊里当作表情/反应图使用。普通照片、聊天截图、游戏截图等"
+        "只要画面传达明确情绪、适合接梗或回怼，都算适合；只有纯信息图、纯风景、无情绪指向的随手拍才算不适合。"
+        "只输出严格 JSON 对象，不要任何前缀、解释或 markdown 围栏。"
+        "字段必须且只能是 is_sticker, emotions, actions, tones, intensity, usage, avoid, caption, confidence。"
+        f"emotions 只能从词表选 0-3 个：{','.join(EMOTION_VOCABULARY)}。"
+        f"actions 只能从词表选 0-3 个：{','.join(ACTION_VOCABULARY)}。"
+        f"tones 只能从词表选 0-3 个：{','.join(TONE_VOCABULARY)}。"
+        "is_sticker 为布尔值；intensity 为 0-3 整数；usage/avoid 各 0-3 个字符串（每条≤12字）；"
+        "caption 为一句话≤30字；confidence 为 0-1 数字。"
     )
     response = await asyncio.wait_for(
         complete_chat_message(
             [
+                {"role": "system", "content": "你只输出 JSON，不加任何其他文字。"},
                 {
                     "role": "user",
                     "content": openai_vision_user_content(
@@ -208,7 +221,7 @@ async def label_sticker_with_vision(content: bytes) -> tuple[StickerSemanticLabe
                             ).decode("ascii")
                         ],
                     ),
-                }
+                },
             ],
             model=endpoint.model,
             options={"temperature": 0.1, "max_tokens": STICKER_LABEL_MAX_OUTPUT_TOKENS},

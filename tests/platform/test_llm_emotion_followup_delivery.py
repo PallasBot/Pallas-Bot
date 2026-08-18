@@ -14,20 +14,20 @@ from pallas.product.llm import delivery
 
 def test_prepare_sticker_image_shrinks_large_png_without_upscaling_small_png() -> None:
     large = BytesIO()
-    Image.new("RGBA", (400, 200), "red").save(large, format="PNG")
+    Image.new("RGBA", (640, 320), "red").save(large, format="PNG")
     small = BytesIO()
     Image.new("RGBA", (80, 40), "blue").save(small, format="PNG")
 
     resized = delivery.prepare_sticker_image(large.getvalue())
 
     with Image.open(BytesIO(resized)) as image:
-        assert image.size == (160, 80)
+        assert image.size == (320, 160)
     assert delivery.prepare_sticker_image(small.getvalue()) == small.getvalue()
 
 
 def test_prepare_sticker_image_preserves_animated_gif_frames_and_duration() -> None:
-    first = Image.new("RGBA", (320, 160), "red")
-    second = Image.new("RGBA", (320, 160), "blue")
+    first = Image.new("RGBA", (640, 320), "red")
+    second = Image.new("RGBA", (640, 320), "blue")
     source = BytesIO()
     first.save(source, format="GIF", save_all=True, append_images=[second], duration=[80, 120], loop=0)
 
@@ -35,7 +35,7 @@ def test_prepare_sticker_image_preserves_animated_gif_frames_and_duration() -> N
 
     with Image.open(BytesIO(resized)) as image:
         frames = [frame.copy() for frame in ImageSequence.Iterator(image)]
-        assert image.size == (160, 80)
+        assert image.size == (320, 160)
         assert image.n_frames == 2
         assert [frame.info["duration"] for frame in frames] == [80, 120]
 

@@ -26,7 +26,8 @@ from pallas.product.llm.kernel.memory_governance import can_write_runtime_state_
 from pallas.product.llm.session_store import append_llm_message, compact_user_llm_history_with_summary
 from pallas.product.llm.task_metrics import record_bot_llm_route, record_bot_llm_task
 
-STICKER_IMAGE_MAX_SIDE = 160
+STICKER_IMAGE_MAX_SIDE = 320
+_STICKER_JPEG_QUALITY = 90
 
 _STICKER_MARKER_RE = re.compile(r"\[表情[：:]\s*([^\]\n]{1,24})\]\s*$")
 
@@ -110,9 +111,20 @@ def prepare_sticker_image(image_bytes: bytes, *, max_side: int = STICKER_IMAGE_M
                 return output.getvalue()
             output = BytesIO()
             resized = image.resize(size, Image.Resampling.LANCZOS)
-            if image.format == "JPEG" and resized.mode == "RGBA":
-                resized = resized.convert("RGB")
-            resized.save(output, format=image.format)
+            if image.format == "JPEG":
+                if resized.mode == "RGBA":
+                    resized = resized.convert("RGB")
+                resized.save(
+                    output,
+                    format="JPEG",
+                    quality=_STICKER_JPEG_QUALITY,
+                    subsampling=0,
+                    optimize=True,
+                )
+            elif image.format == "PNG":
+                resized.save(output, format="PNG", optimize=True)
+            else:
+                resized.save(output, format=image.format)
             return output.getvalue()
     except (OSError, UnidentifiedImageError):
         return image_bytes
@@ -210,7 +222,7 @@ async def send_repeater_emotion_image(
         cached = await get_image(str(segment))
         if not cached:
             return False
-        message += MessageSegment.image(file=prepare_sticker_image(cached))
+        message += MessageSegment.image(file=cached)
     try:
         await bot.call_api("send_group_msg", message=message, group_id=int(group_id))
     except Exception as e:
@@ -286,7 +298,7 @@ async def send_cached_sticker_image(bot: Any, group_id: int) -> bool:
     try:
         await bot.call_api(
             "send_group_msg",
-            message=MessageSegment.image(file=prepare_sticker_image(cached)),
+            message=MessageSegment.image(file=cached),
             group_id=int(group_id),
         )
     except Exception as e:
