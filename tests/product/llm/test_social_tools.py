@@ -84,7 +84,7 @@ def test_master_in_group(monkeypatch) -> None:
     result = asyncio.run(handle_master_info({}, make_context()))
     assert result["ok"] is True
     payload = result["result"]
-    assert payload["in_group"] is True
+    assert payload["master_in_group"] is True
     assert len(payload["masters"]) == 1
     assert payload["masters"][0]["qq"] == MASTER_QQ
     assert payload["masters"][0]["name"] == "老板"
@@ -97,7 +97,7 @@ def test_master_not_in_group_keeps_privacy(monkeypatch) -> None:
     result = asyncio.run(handle_master_info({}, make_context()))
     assert result["ok"] is True
     payload = result["result"]
-    assert payload["in_group"] is False
+    assert payload["master_in_group"] is False
     assert payload["masters"] == []
     raw = str(result)
     assert "3023094357" not in raw

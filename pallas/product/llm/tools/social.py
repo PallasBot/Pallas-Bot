@@ -198,7 +198,7 @@ async def handle_master_info(arguments: dict[str, Any], context: ToolInvokeConte
         )
         return {
             "ok": True,
-            "result": {"in_group": False, "masters": []},
+            "result": {"master_in_group": False, "masters": []},
             "summary": "主人不在本群，不要透露主人身份或 QQ，如实说主人不在这个群。",
         }
     logger.info(
@@ -211,7 +211,8 @@ async def handle_master_info(arguments: dict[str, Any], context: ToolInvokeConte
     return {
         "ok": True,
         "result": {
-            "in_group": True,
+            "master_in_group": True,
+            "master_names": [item["name"] for item in masters],
             "masters": masters,
             "hint": "想 @ 主人时在回复中写对应的 [[@key]]（如 [[@master_0]]），不想 @ 就只提名字。",
         },
@@ -277,6 +278,7 @@ async def handle_member_find(arguments: dict[str, Any], context: ToolInvokeConte
         "ok": True,
         "result": {
             "matches": matches,
+            "member_names": [item["name"] for item in matches],
             "hint": "想 @ 某成员时在回复中写对应的 [[@key]]（如 [[@member_0]]），不想 @ 就只提名字。",
         },
     }
