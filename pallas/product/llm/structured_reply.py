@@ -22,6 +22,8 @@ _BAD_TOKEN_CHARS = frozenset("<>{}|｜▁")
 _ALLOWED_ASCII_PUNCT = frozenset(".,?!;:'\"()-_~`@#&+*=%^/\n\t \r")
 _EMPTY_MEM_TOKENS = frozenset({"无", "none", "n/a", "null", "无内容", "无可记"})
 _STANDALONE_CHAT_RE = re.compile(r"^[？?]$")
+# 受控提及占位符：delivery 校验授权后替换为 CQ at，字符守卫放行整段
+_MENTION_PLACEHOLDER_RE = re.compile(r"\[\[@[a-zA-Z0-9_]+\]\]")
 
 
 StructuredReply = StructuredChatReply
@@ -161,24 +163,37 @@ def validate_reply_chars(text: str) -> tuple[bool, str]:
         return False, f"too long ({len(plain)})"
     cjk_count = 0
     letter_count = 0
-    for ch in plain:
+    index = 0
+    length = len(plain)
+    while index < length:
+        placeholder = _MENTION_PLACEHOLDER_RE.match(plain, index)
+        if placeholder:
+            index = placeholder.end()
+            continue
+        ch = plain[index]
         code = ord(ch)
         if ch in _BAD_TOKEN_CHARS:
             return False, f"bad token char {ch!r}"
         if 0x4E00 <= code <= 0x9FFF or 0x3400 <= code <= 0x4DBF:
             cjk_count += 1
+            index += 1
             continue
         if 0x3000 <= code <= 0x303F:
+            index += 1
             continue
         if 0xFF00 <= code <= 0xFFEF:
+            index += 1
             continue
         if code == 0x2026:  # 中文省略号 …
+            index += 1
             continue
         if ch in _ALLOWED_ASCII_PUNCT:
+            index += 1
             continue
         if code < 0x80 and ch.isalnum():
             if ch.isalpha():
                 letter_count += 1
+            index += 1
             continue
         return False, f"unexpected char {ch!r}"
     if cjk_count == 0 and letter_count == 0:
