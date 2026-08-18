@@ -345,6 +345,7 @@ async def complete_with_tool_loop(
     if schema_names and working and str(working[0].get("role") or "") == "system":
         from pallas.product.llm.assembler import ChatPromptAssembler, ToolPromptContext
 
+        mention_tokens_enabled = any(str(name).startswith("social.") for name in schema_names)
         working[0] = {
             **working[0],
             "content": ChatPromptAssembler.with_tool_context(
@@ -353,6 +354,7 @@ async def complete_with_tool_loop(
                     action_tools_enabled=True,
                     ask_before_call=ask_before_call or selection_source == "soft_recall",
                     missing_required_params=dict(meta.get("missing_required_params") or {}),
+                    mention_tokens_enabled=mention_tokens_enabled,
                 ),
             ),
         }

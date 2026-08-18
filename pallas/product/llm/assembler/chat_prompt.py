@@ -26,6 +26,7 @@ class ToolPromptContext:
     action_tools_enabled: bool = False
     ask_before_call: bool = False
     missing_required_params: dict[str, object] = field(default_factory=dict)
+    mention_tokens_enabled: bool = False
 
 
 class ChatPromptAssembler:
@@ -172,4 +173,11 @@ class ChatPromptAssembler:
             if not lines:
                 lines.append("【工具上下文】")
             lines.append("- 必填参数不足时先自然追问，本轮不要调用动作工具或编造已执行。")
+        if context.mention_tokens_enabled:
+            if not lines:
+                lines.append("【工具上下文】")
+            lines.extend([
+                "- 工具结果里的 [[@key]] 是「@ 某群友」的占位符：需要 @ 对应的人时在回复中原样保留，别改成纯文字名字。",
+                "- 未拿到占位符（如主人不在本群、没找到该成员）时不要 @ 任何人，如实说明即可。",
+            ])
         return "\n".join(lines)
