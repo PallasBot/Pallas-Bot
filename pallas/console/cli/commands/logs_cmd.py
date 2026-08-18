@@ -85,7 +85,10 @@ def run_logs(args: argparse.Namespace) -> int:
         print("  实时跟随中（Ctrl+C 退出）…")
         try:
             for label, line in stream_log_targets(targets, lines=lines):
-                print(f"[{colorize_source(label)}] {colorize_line(line)}", flush=True)
+                if args.all:
+                    print(f"[{colorize_source(label)}] {colorize_line(line)}", flush=True)
+                else:
+                    print(colorize_line(line), flush=True)
         except KeyboardInterrupt:
             print("\n已停止实时日志。")
     return 0
