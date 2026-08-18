@@ -9,6 +9,8 @@ from pallas.console.cli.log_paths import (
     SHARD_LOG_DIR,
     list_default_log_targets,
     read_log_tail,
+    resolve_follow_targets,
+    stream_log_targets,
 )
 from pallas.console.cli.runtime_mode import resolve_bot_mode, runtime_instance_summary
 
@@ -33,6 +35,12 @@ def register(sub: argparse._SubParsersAction) -> None:
         help="每个目标打印末尾行数（0=仅路径）",
     )
     parser.add_argument(
+        "-f",
+        "--follow",
+        action="store_true",
+        help="实时跟随日志输出（先补打末尾 N 行，随后持续输出新增行；Ctrl+C 退出）",
+    )
+    parser.add_argument(
         "--paths-only",
         action="store_true",
         help="只列路径，不读内容",
@@ -43,6 +51,7 @@ def register(sub: argparse._SubParsersAction) -> None:
 def run_logs(args: argparse.Namespace) -> int:
     mode = resolve_bot_mode(args.mode)
     lines = 0 if args.paths_only else max(0, int(args.lines))
+    follow = getattr(args, "follow", False) and not args.paths_only
     summary = runtime_instance_summary(mode)
     print(f"Pallas · 运行日志 · {summary['label']} · 实例 {summary['running_instances']}")
     for label, path in list_default_log_targets(mode=mode):
@@ -51,7 +60,7 @@ def run_logs(args: argparse.Namespace) -> int:
             continue
         exists = "有" if path.is_file() else "无"
         print(f"  · {label}: {path} [{exists}]")
-        if lines <= 0:
+        if lines <= 0 or follow:
             continue
         body = read_log_tail(path, lines=lines)
         if not body:
@@ -64,4 +73,14 @@ def run_logs(args: argparse.Namespace) -> int:
     if mode == "shard":
         print(f"  · 消息实例进阶日志目录: {SHARD_LOG_DIR}/worker-*.log")
         print("    需要账号级排障时再打开对应消息实例日志。", file=sys.stderr)
+    if follow:
+        print("  实时跟随中（Ctrl+C 退出）…")
+        try:
+            for label, line in stream_log_targets(
+                resolve_follow_targets(mode=mode),
+                lines=lines,
+            ):
+                print(f"[{label}] {line}", flush=True)
+        except KeyboardInterrupt:
+            print("\n已停止实时日志。")
     return 0

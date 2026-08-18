@@ -140,6 +140,14 @@ def test_parse_maintenance_run():
     assert args.no_restart is False
 
 
+def test_parse_logs_follow():
+    parser = build_parser()
+    args = parser.parse_args(["logs", "-f", "--lines", "10"])
+    assert args.follow is True
+    assert args.lines == 10
+    assert args.paths_only is False
+
+
 def test_module_invocation():
     proc = subprocess.run(
         [sys.executable, "-m", "pallas.console.cli", "--version"],

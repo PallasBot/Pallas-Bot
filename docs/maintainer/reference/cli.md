@@ -44,6 +44,7 @@ uv run pallas sync              # 包装 uv sync（redis 已在主依赖）
 ```bash
 uv run pallas status               # Bot + embed 辅进程折叠展示
 uv run pallas logs                 # 默认日志路径与尾部（不强迫记 worker-N）
+uv run pallas logs -f              # 实时跟随日志输出（后台运行在前台观测；Ctrl+C 退出）
 uv run pallas restart
 uv run pallas stop
 uv run pallas run unified          # 推荐默认

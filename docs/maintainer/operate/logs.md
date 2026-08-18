@@ -4,6 +4,7 @@
 
 ```bash
 uv run pallas logs          # 默认 Bot + embed 辅进程；分片时给 hub
+uv run pallas logs -f       # 实时跟随（后台运行在前台观测完整日志；Ctrl+C 退出）
 uv run pallas status
 ```
 
