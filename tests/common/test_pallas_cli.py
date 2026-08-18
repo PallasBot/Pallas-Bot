@@ -146,6 +146,14 @@ def test_parse_logs_follow():
     assert args.follow is True
     assert args.lines == 10
     assert args.paths_only is False
+    assert args.all is False
+
+
+def test_parse_logs_follow_all():
+    parser = build_parser()
+    args = parser.parse_args(["logs", "-f", "--all"])
+    assert args.follow is True
+    assert args.all is True
 
 
 def test_module_invocation():

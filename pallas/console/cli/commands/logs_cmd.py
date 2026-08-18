@@ -5,9 +5,11 @@ from __future__ import annotations
 import argparse  # noqa: TC003
 import sys
 
+from pallas.console.cli.log_color import colorize_line, colorize_source
 from pallas.console.cli.log_paths import (
     SHARD_LOG_DIR,
     list_default_log_targets,
+    primary_follow_target,
     read_log_tail,
     resolve_follow_targets,
     stream_log_targets,
@@ -38,7 +40,12 @@ def register(sub: argparse._SubParsersAction) -> None:
         "-f",
         "--follow",
         action="store_true",
-        help="实时跟随日志输出（先补打末尾 N 行，随后持续输出新增行；Ctrl+C 退出）",
+        help="实时跟随日志输出（默认只跟主日志；先补打末尾 N 行再持续输出；Ctrl+C 退出）",
+    )
+    parser.add_argument(
+        "--all",
+        action="store_true",
+        help="跟随全部目标（主日志 + work/embed 辅进程等）",
     )
     parser.add_argument(
         "--paths-only",
@@ -74,13 +81,11 @@ def run_logs(args: argparse.Namespace) -> int:
         print(f"  · 消息实例进阶日志目录: {SHARD_LOG_DIR}/worker-*.log")
         print("    需要账号级排障时再打开对应消息实例日志。", file=sys.stderr)
     if follow:
+        targets = resolve_follow_targets(mode=mode) if args.all else [primary_follow_target(mode=mode)]
         print("  实时跟随中（Ctrl+C 退出）…")
         try:
-            for label, line in stream_log_targets(
-                resolve_follow_targets(mode=mode),
-                lines=lines,
-            ):
-                print(f"[{label}] {line}", flush=True)
+            for label, line in stream_log_targets(targets, lines=lines):
+                print(f"[{colorize_source(label)}] {colorize_line(line)}", flush=True)
         except KeyboardInterrupt:
             print("\n已停止实时日志。")
     return 0

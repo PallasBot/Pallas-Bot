@@ -89,6 +89,17 @@ def resolve_follow_targets(*, mode: str = "auto") -> list[tuple[str, FollowTarge
     return targets
 
 
+def primary_follow_target(*, mode: str = "auto") -> tuple[str, FollowTarget]:
+    """默认实时跟随目标：unified 跟 Bot 业务日志，分片跟 hub。"""
+    resolved = resolve_bot_mode(mode)
+    if resolved == "shard":
+        return ("hub", SHARD_HUB_LOG)
+    targets = resolve_follow_targets(mode=mode)
+    if targets:
+        return targets[0]
+    return ("启动器日志", latest_unified_launcher_log)
+
+
 @dataclass
 class _FollowState:
     path: Path | None = None

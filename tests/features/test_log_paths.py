@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from pallas.console.cli.log_paths import (
     EMBED_AUX_LOG,
     list_default_log_targets,
+    primary_follow_target,
     read_log_tail,
     stream_log_targets,
 )
@@ -128,3 +129,20 @@ def test_stream_log_targets_skips_missing_then_picks_up(tmp_path) -> None:
     assert next(gen) == ("Seed", "s1")
     path.write_text("late\n", encoding="utf-8")
     assert next(gen) == ("Bot", "late")
+
+
+def test_primary_follow_target_unified(monkeypatch, tmp_path) -> None:
+    from pallas.console.cli import log_paths
+
+    monkeypatch.setattr(log_paths, "BOT_LOG_DIR", tmp_path)
+    bot_log = tmp_path / "nonebot_2026-08-04_18-00-00.log"
+    bot_log.write_text("x", encoding="utf-8")
+    assert primary_follow_target(mode="unified") == ("Bot 业务日志", bot_log)
+
+
+def test_primary_follow_target_shard_uses_hub() -> None:
+    from pallas.console.cli import log_paths
+
+    label, path = primary_follow_target(mode="shard")
+    assert label == "hub"
+    assert path == log_paths.SHARD_HUB_LOG
