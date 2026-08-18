@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 _MENTION_GRANT_TTL_SEC = 300.0
 # 提及占位符：LLM 可能输出单/双括号或裸 @key；带括号的未授权项会被删除
-_MENTION_PLACEHOLDER_RE = re.compile(r"(?:\[{1,2}|【|（|\(|「)?@([a-zA-Z0-9_]+)(?:\]{1,2}|】|）|\)|」)?")
+_MENTION_PLACEHOLDER_RE = re.compile(r"(?:\[{1,2}|【|（|\(|「)?\s*@([a-zA-Z0-9_]+)\s*(?:\]{1,2}|】|）|\)|」)?")
 
 _grants_lock = threading.Lock()
 _grants: dict[tuple[int, int], dict[str, tuple[int, float]]] = {}

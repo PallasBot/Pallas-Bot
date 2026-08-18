@@ -574,9 +574,13 @@ def tool_metadata_for_chat(
         domains = {str(d) for item in catalog.tools for d in (item.domains or [])}
         prefer_plugin = bool(sources) and sources <= {LlmToolSource.PLUGIN_COMMAND.value}
         prefer_web = "web" in domains or bool(tool_names.intersection({"web.search", "web.fetch"}))
+        prefer_social = "social" in domains
         if catalog.selection.selective_enabled and prefer_plugin:
             payload["tool_choice_prefer"] = "required"
         elif catalog.selection.selective_enabled and prefer_web:
+            payload["tool_choice_prefer"] = "required"
+        elif catalog.selection.selective_enabled and prefer_social:
+            # 群内社交：避免 LLM 凭直觉答「没有主人/没这个人」而不调工具
             payload["tool_choice_prefer"] = "required"
         elif source.startswith("soft_recall") and prefer_plugin:
             # 与硬域同等：软召回已命中且参数可填时，禁止空口答应

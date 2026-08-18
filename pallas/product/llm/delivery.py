@@ -560,6 +560,7 @@ async def deliver_llm_callback_success(
                 replace_mention_tokens(segment, bot_id=int(bot_id), group_id=int(group_id))
                 for segment in delivery_segments
             ]
+            reply_text = "\n".join(delivery_segments)
     sticker_intent = str(structured_reply.sticker_intent or "")
     if marker_intent and sticker_intent in ("", "none"):
         sticker_intent = marker_to_sticker_tokens(marker_intent)
