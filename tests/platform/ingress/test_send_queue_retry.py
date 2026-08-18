@@ -21,7 +21,7 @@ def reset_send_queue() -> None:
 def test_is_retryable_classifies_network_and_media_errors() -> None:
     from nonebot.adapters.onebot.v11 import ActionFailed, NetworkError
 
-    assert send_queue.is_retryable_send_error("send_group_msg", NetworkError("boom")) is True
+    assert send_queue.is_retryable_send_error("send_group_msg", NetworkError("connection reset")) is True
     assert (
         send_queue.is_retryable_send_error(
             "send_group_msg",
@@ -36,6 +36,15 @@ def test_is_retryable_classifies_network_and_media_errors() -> None:
         )
         is False
     )
+
+
+def test_websocket_timeout_is_not_retryable() -> None:
+    from nonebot.adapters.onebot.v11 import NetworkError
+
+    timeout = NetworkError("WebSocket call api send_group_msg timeout")
+    assert send_queue.is_ambiguous_send_timeout(timeout) is True
+    assert send_queue.is_retryable_send_error("send_group_msg", timeout) is False
+    assert send_queue.is_retryable_send_error("send_group_msg", NetworkError("boom")) is True
 
 
 def test_is_risk_limited_detects_rate_limit_codes_and_wording() -> None:
@@ -160,6 +169,31 @@ async def test_non_retryable_error_fails_immediately(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.asyncio
+async def test_websocket_timeout_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    from nonebot.adapters.onebot.v11 import NetworkError
+
+    calls = {"count": 0}
+
+    async def timeout_original(adapter, bot, api, **data):
+        calls["count"] += 1
+        raise NetworkError("WebSocket call api send_group_msg timeout")
+
+    monkeypatch.setattr(send_queue, "_ORIGINAL_CALL_API", timeout_original)
+    monkeypatch.setattr(send_queue, "send_queue_retry_max", lambda: 2)
+    monkeypatch.setattr(send_queue, "send_queue_min_interval_sec", lambda: 0.0)
+    await send_queue.start_send_queue_workers()
+
+    with pytest.raises(NetworkError):
+        await send_queue.enqueue_call_api(MagicMock(), MagicMock(self_id="123"), "send_group_msg", message="hi")
+
+    assert calls["count"] == 1
+    status = send_queue.send_queue_status()
+    assert status["retries"] == 0
+    assert status["errors"] == 1
+    await send_queue.stop_send_queue_workers()
+
+
+@pytest.mark.asyncio
 async def test_retries_exhausted_then_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     from nonebot.adapters.onebot.v11 import NetworkError
 
@@ -167,7 +201,7 @@ async def test_retries_exhausted_then_fails(monkeypatch: pytest.MonkeyPatch) -> 
 
     async def always_fail(adapter, bot, api, **data):
         calls["count"] += 1
-        raise NetworkError("boom")
+        raise NetworkError("connection reset")
 
     monkeypatch.setattr(send_queue, "_ORIGINAL_CALL_API", always_fail)
     monkeypatch.setattr(send_queue, "send_queue_retry_max", lambda: 2)

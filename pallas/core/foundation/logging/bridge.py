@@ -377,6 +377,11 @@ def format_business_event(action: str, result: str, /, **fields: object) -> str:
         )
     if action == "发送队列" and result == "失败":
         return f"[SendQueue] Bot [{fields.get('bot')}] failed {fields.get('api')}: {fields.get('error')}"
+    if action == "发送队列" and result == "可能已投递":
+        return (
+            f"[SendQueue] Bot [{fields.get('bot')}] send {fields.get('api')} timed out, "
+            f"message may have been delivered: {fields.get('error')}"
+        )
 
     subject = _BUSINESS_EVENT_ACTIONS.get(action, action)
     outcome = _BUSINESS_EVENT_RESULTS.get(result, result)

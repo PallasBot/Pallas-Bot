@@ -262,6 +262,11 @@ def record_send_queue_error(api: str, exc: Exception) -> None:
     _LAST_ERROR_AT = time.monotonic()
 
 
+def is_ambiguous_send_timeout(exc: Exception) -> bool:
+    """请求已写入 socket 但回执超时：消息可能已投递，重试会重复发送。"""
+    return "timeout" in str(exc or "").lower()
+
+
 def is_retryable_send_error(api: str, exc: Exception) -> bool:
     from nonebot.adapters.onebot.v11 import ActionFailed
 
@@ -270,7 +275,10 @@ def is_retryable_send_error(api: str, exc: Exception) -> bool:
         return reason == "media_download_failed"
     from nonebot.adapters.onebot.v11 import NetworkError
 
-    return isinstance(exc, NetworkError)
+    if not isinstance(exc, NetworkError):
+        return False
+    # WebSocket 超时说明请求已发送但回执丢失，消息可能已投递，重试会导致重复音频/消息
+    return not is_ambiguous_send_timeout(exc)
 
 
 def is_risk_limited_send_error(api: str, exc: Exception) -> bool:
@@ -390,13 +398,14 @@ async def _execute_queue_item(item: SendQueueItem) -> None:
             return
         if is_risk_limited_send_error(item.api, exc):
             note_send_risk_failure(bot_self_id)
+        ambiguous = is_ambiguous_send_timeout(exc)
         log_rate_limited(
             logger,
             "warning",
             f"send_queue.error.{item.api}",
             format_business_event(
                 "发送队列",
-                "失败",
+                "可能已投递" if ambiguous else "失败",
                 bot=bot_self_id,
                 api=item.api,
                 error=exc,

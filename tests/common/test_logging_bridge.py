@@ -314,6 +314,9 @@ def test_format_business_event_writes_action_tagged_narratives() -> None:
         )
         == "[SendQueue] Bot [10001] failed set_msg_emoji_like: ActionFailed(already set)"
     )
+    assert format_business_event(
+        "发送队列", "可能已投递", bot=10001, api="send_group_msg", error="WebSocket timeout"
+    ) == ("[SendQueue] Bot [10001] send send_group_msg timed out, message may have been delivered: WebSocket timeout")
     assert format_business_event("语料回填批次", "已跳过", reason=None) == "Corpus backfill batch skipped"
 
 
