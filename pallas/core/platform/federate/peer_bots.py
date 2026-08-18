@@ -20,7 +20,11 @@ from pallas.core.platform.federate.config import (
     federate_redis_prefix,
 )
 from pallas.core.platform.federate.redis_settings import get_federate_redis_client
-from pallas.core.platform.ingress.plugin_command_plaintext import extract_command_prefixes_from_menu_data
+from pallas.core.platform.ingress.plugin_command_plaintext import (
+    _extract_literal_prefix,
+    _iter_trigger_parts,
+    extract_command_prefixes_from_menu_data,
+)
 from pallas.core.platform.ingress.route_index import (
     extract_exact_plaintexts_from_menu_data,
     extract_explicit_route_strings,
@@ -30,7 +34,7 @@ from pallas.product.community_stats.store import load_or_create_deployment_id
 
 _PEER_KEY_SEGMENT = "peer_bots"
 _PRESENT_GROUPS_KEY_SEGMENT = "present_groups"
-COMMAND_CAPABILITY_PROTOCOL_VERSION = 1
+COMMAND_CAPABILITY_PROTOCOL_VERSION = 2
 INGRESS_PROTOCOL_VERSION = 2
 _PUBLISH_TTL_SEC = max(60, int(os.getenv("PALLAS_FEDERATE_PEER_BOT_TTL_SEC", "180")))
 _REFRESH_INTERVAL_SEC = max(15.0, float(os.getenv("PALLAS_FEDERATE_PEER_BOT_REFRESH_SEC", "60")))
@@ -45,6 +49,8 @@ _cache_ids: frozenset[int] = frozenset()
 _cache_deployment_ids: frozenset[str] = frozenset()
 # None = 对端未宣告（旧版），视为全能；frozenset = 明确能力集
 _cache_deployment_capabilities: dict[str, frozenset[str] | None] = {}
+# None = 对端未宣告命令权限等级（旧版），视为 everyone 兼容
+_cache_deployment_permission_levels: dict[str, dict[str, str] | None] = {}
 # None = 旧端未声明命令能力协议版本。
 _cache_deployment_capability_protocols: dict[str, int | None] = {}
 _cache_deployment_ingress_capabilities: dict[str, frozenset[str] | None] = {}
@@ -55,6 +61,10 @@ _cache_deployment_rosters: dict[str, FederatePeerBotRoster] = {}
 _cache_local_roster: FederatePeerBotRoster | None = None
 _local_present_groups: dict[int, float] = {}
 _local_public_online_nickname_cache: dict[int, tuple[float, str]] = {}
+# 本地命令元数据收集缓存：插件加载/热载时失效
+_local_command_capabilities_cache: frozenset[str] | None = None
+_local_command_permission_levels_cache: dict[str, str] | None = None
+_local_command_plaintext_to_id_cache: dict[str, str] | None = None
 _cache_updated_mono: float = 0.0
 _sync_task: asyncio.Task[None] | None = None
 _last_incompatible_capability_peers: tuple[str, ...] = ()
@@ -80,10 +90,14 @@ def clear_federate_peer_bot_cache_for_tests() -> None:
         _cache_deployment_ingress_protocols, \
         _cache_deployment_ids, \
         _cache_deployment_present_groups, \
+        _cache_deployment_permission_levels, \
         _cache_deployment_rosters, \
         _cache_local_roster, \
         _cache_ids, \
         _local_public_online_nickname_cache, \
+        _local_command_capabilities_cache, \
+        _local_command_permission_levels_cache, \
+        _local_command_plaintext_to_id_cache, \
         _cache_updated_mono, \
         _local_present_groups, \
         _sync_task, \
@@ -96,14 +110,29 @@ def clear_federate_peer_bot_cache_for_tests() -> None:
     _cache_deployment_ingress_capabilities = {}
     _cache_deployment_ingress_protocols = {}
     _cache_deployment_present_groups = {}
+    _cache_deployment_permission_levels = {}
     _cache_deployment_rosters = {}
     _cache_local_roster = None
     _local_present_groups = {}
     _local_public_online_nickname_cache = {}
+    _local_command_capabilities_cache = None
+    _local_command_permission_levels_cache = None
+    _local_command_plaintext_to_id_cache = None
     _cache_updated_mono = 0.0
     _sync_task = None
     _last_incompatible_capability_peers = ()
     _last_incompatible_ingress_peers = ()
+
+
+def clear_local_federate_metadata_cache() -> None:
+    """插件加载/热载后失效本地命令元数据收集缓存。"""
+    global \
+        _local_command_capabilities_cache, \
+        _local_command_permission_levels_cache, \
+        _local_command_plaintext_to_id_cache
+    _local_command_capabilities_cache = None
+    _local_command_permission_levels_cache = None
+    _local_command_plaintext_to_id_cache = None
 
 
 def federate_peer_redis_key(deployment_id: str) -> str:
@@ -122,6 +151,9 @@ def collect_local_federate_command_capabilities() -> frozenset[str]:
     含 ``extra.command_prefixes`` / ``exact_plaintexts``（如唱歌音频映射自定义前缀），
     不仅 menu_data，避免「一歌唱歌」等未进入能力环而被他机夺走。
     """
+    global _local_command_capabilities_cache
+    if _local_command_capabilities_cache is not None:
+        return _local_command_capabilities_cache
     try:
         from nonebot import get_loaded_plugins
     except Exception:
@@ -149,7 +181,67 @@ def collect_local_federate_command_capabilities() -> frozenset[str]:
             text = str(item).strip()
             if text:
                 caps.add(text)
-    return frozenset(caps)
+    result = frozenset(caps)
+    _local_command_capabilities_cache = result
+    return result
+
+
+def collect_local_command_permission_levels() -> dict[str, str]:
+    """本机已加载命令的当前权限等级（默认 + WebUI 覆盖），供协同心跳宣告。"""
+    global _local_command_permission_levels_cache
+    if _local_command_permission_levels_cache is not None:
+        return _local_command_permission_levels_cache
+    from pallas.core.perm.config import get_cmd_perm_config
+    from pallas.core.perm.registry import resolved_level
+    from pallas.core.perm.schema import merged_default_levels
+
+    overrides = get_cmd_perm_config().command_permission_overrides
+    levels = {cid: resolved_level(cid, overrides) for cid in merged_default_levels()}
+    _local_command_permission_levels_cache = levels
+    return levels
+
+
+def collect_local_command_plaintext_to_id() -> dict[str, str]:
+    """本机 menu_data 声明的命令明文（exact / prefix）到 command_id 映射。
+
+    供归属判定把消息明文解析为命令 ID，进而比较各部署的权限等级。
+    """
+    global _local_command_plaintext_to_id_cache
+    if _local_command_plaintext_to_id_cache is not None:
+        return _local_command_plaintext_to_id_cache
+    from nonebot import get_loaded_plugins
+
+    mapping: dict[str, str] = {}
+    try:
+        plugins = get_loaded_plugins()
+    except Exception:
+        return mapping
+    for plugin in plugins:
+        meta = getattr(plugin, "metadata", None)
+        extra = getattr(meta, "extra", None) if meta is not None else None
+        if not isinstance(extra, dict):
+            continue
+        menu_data = extra.get("menu_data")
+        if not isinstance(menu_data, list):
+            continue
+        for item in menu_data:
+            command_id = str(item.get("command_permission") or item.get("command_id") or "").strip()
+            if not command_id:
+                continue
+            trigger = str(item.get("trigger_condition") or "").strip()
+            if not trigger:
+                continue
+            for part in _iter_trigger_parts(trigger):
+                text = part.strip()
+                if not text or any(ch in text for ch in "〈<[@+"):
+                    continue
+                if len(text) >= 2 and text not in mapping:
+                    mapping[text] = command_id
+                prefix = _extract_literal_prefix(part)
+                if prefix and prefix not in mapping:
+                    mapping[prefix] = command_id
+    _local_command_plaintext_to_id_cache = mapping
+    return mapping
 
 
 def local_federate_deployment_name() -> str:
@@ -291,6 +383,10 @@ def get_federate_peer_command_capability_protocol(deployment_id: str) -> int | N
     return _cache_deployment_capability_protocols.get(deployment_id.strip().lower())
 
 
+def get_federate_peer_command_permission_levels(deployment_id: str) -> dict[str, str] | None:
+    return _cache_deployment_permission_levels.get(deployment_id.strip().lower())
+
+
 def get_incompatible_federate_command_capability_peers() -> tuple[str, ...]:
     return tuple(
         sorted(
@@ -413,6 +509,7 @@ def publish_local_federate_peer_bot_ids_sync(
             frozenset(public_ids),
         )
     capabilities = sorted(collect_local_federate_command_capabilities())
+    permission_levels = collect_local_command_permission_levels()
     present_groups = collect_local_present_group_ids()
     payload_obj: dict[str, Any] = {
         "deployment_id": deployment_id,
@@ -434,6 +531,9 @@ def publish_local_federate_peer_bot_ids_sync(
     # 插件尚未加载时能力为空：不写字段，避免被当成「零能力」抢走全部命令归属
     if capabilities:
         payload_obj["command_capabilities"] = capabilities
+    # 权限等级全量宣告：旧端（无该字段）视为 everyone 兼容，不破坏既有部署
+    if permission_levels:
+        payload_obj["command_permission_levels"] = dict(sorted(permission_levels.items()))
 
     payload = json.dumps(
         payload_obj,
@@ -465,6 +565,19 @@ def _parse_command_capability_protocol(data: dict[str, Any]) -> int | None:
     except (TypeError, ValueError):
         return None
     return version if version > 0 else None
+
+
+def _parse_command_permission_levels(data: dict[str, Any]) -> dict[str, str] | None:
+    """解析对端宣告的命令权限等级；未宣告（旧版）返回 None。"""
+    raw = data.get("command_permission_levels")
+    if not isinstance(raw, dict):
+        return None
+    levels: dict[str, str] = {}
+    for cid, level in raw.items():
+        text = str(level).strip().lower()
+        if text:
+            levels[str(cid).strip()] = text
+    return levels or None
 
 
 def _parse_ingress_capabilities(data: dict[str, Any]) -> frozenset[str] | None:
@@ -531,6 +644,7 @@ def refresh_federate_peer_bot_ids_sync() -> frozenset[int]:
         _cache_deployment_ingress_capabilities, \
         _cache_deployment_ingress_protocols, \
         _cache_deployment_ids, \
+        _cache_deployment_permission_levels, \
         _cache_deployment_present_groups, \
         _cache_deployment_rosters, \
         _cache_ids, \
@@ -544,6 +658,7 @@ def refresh_federate_peer_bot_ids_sync() -> frozenset[int]:
         _cache_deployment_capabilities = {}
         _cache_deployment_ingress_capabilities = {}
         _cache_deployment_ingress_protocols = {}
+        _cache_deployment_permission_levels = {}
         _cache_deployment_present_groups = {}
         _cache_deployment_rosters = {}
         _cache_updated_mono = time.monotonic()
@@ -552,6 +667,7 @@ def refresh_federate_peer_bot_ids_sync() -> frozenset[int]:
     peer_ids: set[int] = set()
     peer_capabilities: dict[str, frozenset[str] | None] = {}
     peer_protocols: dict[str, int | None] = {}
+    peer_permission_levels: dict[str, dict[str, str] | None] = {}
     peer_ingress_capabilities: dict[str, frozenset[str] | None] = {}
     peer_ingress_protocols: dict[str, int | None] = {}
     peer_present: dict[str, frozenset[int] | None] = {}
@@ -577,6 +693,7 @@ def refresh_federate_peer_bot_ids_sync() -> frozenset[int]:
                 peer_deployment_ids.add(payload_deployment_id)
                 peer_capabilities[payload_deployment_id] = _parse_command_capabilities(data)
                 peer_protocols[payload_deployment_id] = _parse_command_capability_protocol(data)
+                peer_permission_levels[payload_deployment_id] = _parse_command_permission_levels(data)
                 peer_ingress_capabilities[payload_deployment_id] = _parse_ingress_capabilities(data)
                 peer_ingress_protocols[payload_deployment_id] = _parse_ingress_protocol(data)
                 peer_present[payload_deployment_id] = _parse_present_group_ids(data)
@@ -599,6 +716,7 @@ def refresh_federate_peer_bot_ids_sync() -> frozenset[int]:
     _cache_deployment_ids = frozenset(peer_deployment_ids)
     _cache_deployment_capabilities = peer_capabilities
     _cache_deployment_capability_protocols = peer_protocols
+    _cache_deployment_permission_levels = peer_permission_levels
     _cache_deployment_ingress_capabilities = peer_ingress_capabilities
     _cache_deployment_ingress_protocols = peer_ingress_protocols
     _cache_deployment_present_groups = peer_present
@@ -786,6 +904,90 @@ def _present_owner_ring(capable: list[str], *, group_id: int, mine: str) -> list
     return capable
 
 
+_PERMISSION_LEVEL_ORDER: tuple[str, ...] = (
+    "everyone",
+    "staff",
+    "group_moderator",
+    "bot_moderator",
+    "superuser",
+)
+
+
+def _permission_level_rank(level: str) -> int:
+    """权限宽松度排序：everyone 最宽松（所有人可用），superuser 最严格。"""
+    text = (level or "everyone").strip().lower()
+    try:
+        return _PERMISSION_LEVEL_ORDER.index(text)
+    except ValueError:
+        return 0
+
+
+def _command_permission_level_for_dep(dep: str, command_id: str, *, mine: str) -> str:
+    """取某部署对某命令的权限等级；本机用本地生效等级，对端用宣告值，缺失视为 everyone。"""
+    if dep == mine:
+        return collect_local_command_permission_levels().get(command_id, "everyone")
+    peer_levels = get_federate_peer_command_permission_levels(dep)
+    if not peer_levels:
+        return "everyone"
+    return peer_levels.get(command_id, "everyone")
+
+
+def _plaintext_to_command_id(text: str) -> str:
+    """把消息明文解析为命令 ID：先精确，再按最长前缀。"""
+    mapping = collect_local_command_plaintext_to_id()
+    if not mapping or not text:
+        return ""
+    if text in mapping:
+        return mapping[text]
+    for key in sorted(mapping, key=len, reverse=True):
+        if text[: len(key)].casefold() == key.casefold():
+            return mapping[key]
+    return ""
+
+
+def _permission_owner_ring(
+    active: list[str],
+    *,
+    mine: str,
+    plain: str | None,
+) -> list[str]:
+    """在能力环内再按命令权限等级筛归属：等级最宽松的部署独占，严格端让位。
+
+    场景：本机 bot_status.status=everyone、对端=bot_moderator 时，普通用户发「牛牛在吗」
+    只有本机能执行；若取模轮到对端，对端会权限校验失败并落入 llm_chat 兜底。
+    因此只保留权限最宽松的部署，宽松端永远能执行，严格端只在并列时才参与取模。
+
+    兼容：环内任一部署未宣告权限等级（旧版）时不启用该过滤，保持旧取模行为，
+    避免旧端被误判为 everyone 后抢走严格命令。
+    """
+    if len(active) <= 1:
+        return active
+    for dep in active:
+        if dep == mine:
+            continue
+        if get_federate_peer_command_permission_levels(dep) is None:
+            return active
+    text = (plain or "").strip()
+    if not text:
+        return active
+    command_id = _plaintext_to_command_id(text)
+    if not command_id:
+        return active
+    best_rank = len(_PERMISSION_LEVEL_ORDER) + 1
+    loosest: list[str] = []
+    for dep in active:
+        level = _command_permission_level_for_dep(dep, command_id, mine=mine)
+        rank = _permission_level_rank(level)
+        if rank < best_rank:
+            best_rank = rank
+            loosest = [dep]
+        elif rank == best_rank:
+            loosest.append(dep)
+    if not loosest:
+        return active
+    return loosest
+
+
 def federate_group_owner_deployment(
     group_id: int,
     *,
@@ -800,6 +1002,7 @@ def federate_group_owner_deployment(
         return deployment_id
     local_caps = collect_local_federate_command_capabilities()
     capable = _capable_owner_ring(active, mine=deployment_id, plain=plain, local_caps=local_caps)
+    capable = _permission_owner_ring(capable, mine=deployment_id, plain=plain)
     ring = _present_owner_ring(capable, group_id=int(group_id), mine=deployment_id)
     if federate_prefer_local_owner() and deployment_id in ring:
         return deployment_id

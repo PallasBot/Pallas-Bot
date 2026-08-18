@@ -63,19 +63,22 @@ def test_peer_roster_publishes_and_reads_deployment_status(monkeypatch):
 
     assert mod.publish_local_federate_peer_bot_ids_sync(public_bot_ids=frozenset({10001})) is True
     _, payload = client.set.call_args.args[:2]
-    assert json.loads(payload) == {
+    published = json.loads(payload)
+    assert published == {
         "deployment_id": "dep-local",
         "deployment_name": "部署 A",
         "bot_ids": [10001],
         "online_bot_ids": [10001],
         "public_bot_ids": [10001],
         "public_online_bot_names": {"10001": "本机一号"},
-        "updated_at": json.loads(payload)["updated_at"],
+        "updated_at": published["updated_at"],
         "present_group_ids": [],
         "command_capability_protocol": mod.COMMAND_CAPABILITY_PROTOCOL_VERSION,
         "ingress_protocol": mod.INGRESS_PROTOCOL_VERSION,
         "ingress_capabilities": ["command", "hosted_activity", "llm_alias"],
+        "command_permission_levels": published["command_permission_levels"],
     }
+    assert isinstance(published["command_permission_levels"], dict)
 
     mod.refresh_federate_peer_bot_ids_sync()
     peer = mod.get_federate_peer_bot_roster("dep-b")
@@ -623,3 +626,160 @@ def test_collect_local_federate_command_capabilities_includes_explicit_command_p
     assert "咲希唱歌" in caps
     assert "牛牛唱歌" in caps
     assert "牛牛在吗" in caps
+
+
+def test_permission_owner_ring_prefers_loosest_local_over_strict_peer(monkeypatch):
+    """本机 everyone、对端 bot_moderator 时，「牛牛在吗」归属只落本机。"""
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
+    monkeypatch.setattr(mod, "federate_owner_rotate_sec", lambda: 0)
+    monkeypatch.setattr(mod, "federate_prefer_local_owner", lambda: False)
+    monkeypatch.setattr(
+        mod,
+        "collect_local_federate_command_capabilities",
+        lambda: frozenset({"牛牛在吗", "牛牛报数"}),
+    )
+    monkeypatch.setattr(
+        mod,
+        "collect_local_command_plaintext_to_id",
+        lambda: {"牛牛在吗": "bot_status.status", "牛牛报数": "bot_status.count"},
+    )
+    monkeypatch.setattr(
+        mod,
+        "collect_local_command_permission_levels",
+        lambda: {"bot_status.status": "everyone", "bot_status.count": "everyone"},
+    )
+    mod._cache_deployment_ids = frozenset({"dep-peer"})
+    mod._cache_deployment_capabilities = {"dep-peer": frozenset({"牛牛在吗"})}
+    mod._cache_deployment_permission_levels = {"dep-peer": {"bot_status.status": "bot_moderator"}}
+
+    for gid in (733291779, 1, 2, 99):
+        assert mod.federate_group_owner_deployment(gid, plain="牛牛在吗") == "dep-local"
+        assert mod.should_process_federate_group_on_current_deployment(gid, plain="牛牛在吗") is True
+
+
+def test_permission_owner_ring_prefers_loosest_peer_over_strict_local(monkeypatch):
+    """本机 bot_moderator、对端 everyone 时，归属让给对端，本机不处理。"""
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
+    monkeypatch.setattr(mod, "federate_owner_rotate_sec", lambda: 0)
+    monkeypatch.setattr(mod, "federate_prefer_local_owner", lambda: False)
+    monkeypatch.setattr(
+        mod,
+        "collect_local_federate_command_capabilities",
+        lambda: frozenset({"牛牛在吗"}),
+    )
+    monkeypatch.setattr(
+        mod,
+        "collect_local_command_plaintext_to_id",
+        lambda: {"牛牛在吗": "bot_status.status"},
+    )
+    monkeypatch.setattr(
+        mod,
+        "collect_local_command_permission_levels",
+        lambda: {"bot_status.status": "bot_moderator"},
+    )
+    mod._cache_deployment_ids = frozenset({"dep-peer"})
+    mod._cache_deployment_capabilities = {"dep-peer": frozenset({"牛牛在吗"})}
+    mod._cache_deployment_permission_levels = {"dep-peer": {"bot_status.status": "everyone"}}
+
+    for gid in (733291779, 1, 2, 99):
+        assert mod.federate_group_owner_deployment(gid, plain="牛牛在吗") == "dep-peer"
+        assert mod.should_process_federate_group_on_current_deployment(gid, plain="牛牛在吗") is False
+
+
+def test_permission_owner_ring_keeps_legacy_peer_without_levels_in_ring(monkeypatch):
+    """对端未宣告权限等级（旧版）时权限过滤不介入，保持旧取模行为。
+
+    避免旧端被误判为 everyone 后抢走本机的严格命令（回归防护）。
+    """
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
+    monkeypatch.setattr(mod, "federate_owner_rotate_sec", lambda: 0)
+    monkeypatch.setattr(mod, "federate_prefer_local_owner", lambda: False)
+    monkeypatch.setattr(
+        mod,
+        "collect_local_federate_command_capabilities",
+        lambda: frozenset({"牛牛在吗"}),
+    )
+    monkeypatch.setattr(
+        mod,
+        "collect_local_command_plaintext_to_id",
+        lambda: {"牛牛在吗": "bot_status.status"},
+    )
+    monkeypatch.setattr(
+        mod,
+        "collect_local_command_permission_levels",
+        lambda: {"bot_status.status": "bot_moderator"},
+    )
+    mod._cache_deployment_ids = frozenset({"dep-legacy"})
+    mod._cache_deployment_capabilities = {"dep-legacy": frozenset({"牛牛在吗"})}
+    mod._cache_deployment_permission_levels = {"dep-legacy": None}
+
+    # 有旧端在场 → 权限过滤不启用，回到能力环取模
+    assert mod.federate_group_owner_deployment(733291779, plain="牛牛在吗") in {"dep-local", "dep-legacy"}
+    assert mod.federate_group_owner_deployment(2, plain="牛牛在吗") in {"dep-local", "dep-legacy"}
+
+
+def test_permission_owner_ring_tie_keeps_both_in_ring(monkeypatch):
+    """等级并列时仍回到全员取模，不因权限差异改变原有负载均衡。"""
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-a")
+    monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
+    monkeypatch.setattr(mod, "federate_owner_rotate_sec", lambda: 0)
+    monkeypatch.setattr(mod, "federate_prefer_local_owner", lambda: False)
+    monkeypatch.setattr(
+        mod,
+        "collect_local_federate_command_capabilities",
+        lambda: frozenset({"牛牛在吗"}),
+    )
+    monkeypatch.setattr(
+        mod,
+        "collect_local_command_plaintext_to_id",
+        lambda: {"牛牛在吗": "bot_status.status"},
+    )
+    monkeypatch.setattr(
+        mod,
+        "collect_local_command_permission_levels",
+        lambda: {"bot_status.status": "everyone"},
+    )
+    mod._cache_deployment_ids = frozenset({"dep-b"})
+    mod._cache_deployment_capabilities = {"dep-b": frozenset({"牛牛在吗"})}
+    mod._cache_deployment_permission_levels = {"dep-b": {"bot_status.status": "everyone"}}
+
+    # 两者都是 everyone → ring=[dep-a, dep-b]，按群号取模
+    assert mod.federate_group_owner_deployment(733291779, plain="牛牛在吗") in {"dep-a", "dep-b"}
+    assert mod.federate_group_owner_deployment(2, plain="牛牛在吗") in {"dep-a", "dep-b"}
+
+
+def test_permission_owner_ring_ignores_non_command_chat_plaintext(monkeypatch):
+    """闲聊明文解析不出 command_id 时，权限环不介入（保持原有行为）。"""
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-a")
+    monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
+    monkeypatch.setattr(mod, "federate_owner_rotate_sec", lambda: 0)
+    monkeypatch.setattr(mod, "federate_prefer_local_owner", lambda: False)
+    monkeypatch.setattr(
+        mod,
+        "collect_local_federate_command_capabilities",
+        lambda: frozenset({"牛牛在吗"}),
+    )
+    monkeypatch.setattr(
+        mod,
+        "collect_local_command_plaintext_to_id",
+        lambda: {"牛牛在吗": "bot_status.status"},
+    )
+    monkeypatch.setattr(
+        mod,
+        "collect_local_command_permission_levels",
+        lambda: {"bot_status.status": "bot_moderator"},
+    )
+    mod._cache_deployment_ids = frozenset({"dep-b"})
+    mod._cache_deployment_capabilities = {"dep-b": frozenset({"牛牛在吗"})}
+    mod._cache_deployment_permission_levels = {"dep-b": {"bot_status.status": "everyone"}}
+
+    # 闲聊「今天天气不错」解析不出命令 → 仍按原能力环取模，不被权限环改变
+    assert mod.federate_group_owner_deployment(733291779, plain="今天天气不错") in {"dep-a", "dep-b"}

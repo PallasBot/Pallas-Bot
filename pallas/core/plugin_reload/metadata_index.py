@@ -9,10 +9,12 @@ from pallas.core.plugin_reload.metadata import ReloadPolicy, reload_policy_from_
 def reload_plugin_metadata_index() -> None:
     from packages.help.plugin_manager import clear_help_cache
     from pallas.core.perm.schema import clear_merged_defaults_cache
+    from pallas.core.platform.federate.peer_bots import clear_local_federate_metadata_cache
     from pallas.core.platform.ingress.plugin_command_plaintext import clear_plugin_command_plaintext_cache
     from pallas.core.storage.schema import clear_plugin_storage_registry_cache
 
     clear_plugin_command_plaintext_cache()
+    clear_local_federate_metadata_cache()
     clear_plugin_storage_registry_cache()
     clear_merged_defaults_cache()
     clear_help_cache()
