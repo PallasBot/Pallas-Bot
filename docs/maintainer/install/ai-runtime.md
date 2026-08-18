@@ -155,7 +155,7 @@ Remove-Item -Recurse -Force app\workers\sing\DDSP-SVC-6.3 -ErrorAction SilentlyC
 git clone --depth 1 --branch 6.3 https://ghproxy.net/https://github.com/PallasBot/DDSP-SVC.git app/workers/sing/DDSP-SVC-6.3
 ```
 
-镜像不可用时可换：`gh-proxy.com`、`github.akams.cn`（写法同为 `https://<镜像>/https://github.com/PallasBot/DDSP-SVC.git`）。装 **6.1** 时把分支改成 `--branch 6.1`、目录改成 `app/workers/sing/DDSP-SVC-6.1`。
+镜像不可用时可换：`gh-proxy.com`、`ghproxy.vip`、`ghproxy.net`（写法同为 `https://<镜像>/https://github.com/PallasBot/DDSP-SVC.git`）。装 **6.1** 时把分支改成 `--branch 6.1`、目录改成 `app/workers/sing/DDSP-SVC-6.1`。
 
 Linux / macOS 示例：
 
