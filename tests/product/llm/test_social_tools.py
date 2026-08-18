@@ -146,4 +146,17 @@ def test_replace_mention_tokens_unknown_group_deletes(monkeypatch) -> None:
 def test_social_domain_inference() -> None:
     assert "social" in infer_tool_domains("把你的主人@出来")
     assert "social" in infer_tool_domains("群里有没有叫泰坦的人")
+    assert "social" in infer_tool_domains("牛牛叫星乃海獭獭出来一下")
+    assert "social" in infer_tool_domains("把泰坦叫出来")
     assert "social" not in infer_tool_domains("今天天气怎么样")
+
+
+def test_social_tools_injected_when_domain_hits(monkeypatch) -> None:
+    from pallas.product.llm.tools.registry import ensure_tools_loaded, tool_catalog_for_chat
+
+    ensure_tools_loaded()
+    for text in ("把你的主人@出来", "你把你的主人艾特出来"):
+        catalog = tool_catalog_for_chat(task="llm_chat", user_text=text)
+        assert catalog is not None
+        names = {entry.name for entry in catalog.tools}
+        assert "social.master.info" in names

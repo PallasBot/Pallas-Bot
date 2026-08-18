@@ -264,8 +264,9 @@ def filter_specs_for_chat_visibility(
     *,
     user_text: str = "",
     activated_names: frozenset[str] | None = None,
+    matched_domains: frozenset[str] | None = None,
 ) -> tuple[LlmToolSpec, ...]:
-    """visible 随域注入；deferred 仅 hints 命中或已被 activate。"""
+    """visible 随域注入；deferred 仅 hints 命中、已被 activate 或所在域命中。"""
     from pallas.product.llm.tools.select import deferred_tools_matched_by_hints
 
     activated = activated_names or frozenset()
@@ -277,6 +278,9 @@ def filter_specs_for_chat_visibility(
             out.append(spec)
             continue
         if spec.name in activated or spec.name in hint_hits:
+            out.append(spec)
+            continue
+        if matched_domains and spec.domains.intersection(matched_domains):
             out.append(spec)
     return tuple(out)
 
@@ -346,6 +350,7 @@ def tool_catalog_for_chat(
                 iter_eligible_tool_specs(domains=domains),
                 user_text=user_text,
                 activated_names=activated_names,
+                matched_domains=domains,
             )
         )
     if inventory and cfg.llm_tools_selective:
