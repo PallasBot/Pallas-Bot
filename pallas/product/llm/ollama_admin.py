@@ -105,14 +105,14 @@ async def pull_ollama_model(base_url: str, model: str, *, timeout_sec: float = 6
     name = str(model or "").strip()
     if not name:
         return
-    logger.info("ollama pull model={}", name)
+    logger.info("Ollama pull started for model [{}]", name)
     async with httpx.AsyncClient(timeout=httpx.Timeout(timeout_sec)) as client:
         async with client.stream("POST", f"{root}/api/pull", json={"name": name}) as response:
             if response.status_code >= 400:
                 raise LlmProviderError(f"HTTP {response.status_code}", status=response.status_code)
             async for _line in response.aiter_lines():
                 pass
-    logger.info("ollama pull finished model={}", name)
+    logger.info("Ollama pull finished for model [{}]", name)
 
 
 async def unload_ollama_model(base_url: str, model: str, *, timeout_sec: float = 60.0) -> None:
@@ -127,4 +127,4 @@ async def unload_ollama_model(base_url: str, model: str, *, timeout_sec: float =
         )
     if response.status_code >= 400:
         raise LlmProviderError(f"HTTP {response.status_code}", status=response.status_code)
-    logger.info("ollama unloaded model={}", name)
+    logger.info("Ollama unloaded model [{}]", name)

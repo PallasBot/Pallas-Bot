@@ -46,7 +46,7 @@ async def list_gallery_posts(*, limit: int = 48, mine: bool = False) -> dict[str
                     return data
             except Exception as e:  # noqa: BLE001
                 last_err = e
-                logger.debug("community gallery list failed url={} err={}", url, e)
+                logger.debug("Community gallery listing failed for URL [{}]: [{}]", url, e)
     raise RuntimeError(f"gallery list failed: {last_err}")
 
 
@@ -101,7 +101,7 @@ async def create_gallery_post(
                     return payload
             except Exception as e:  # noqa: BLE001
                 last_err = e
-                logger.debug("community gallery create failed url={} err={}", url, e)
+                logger.debug("Community gallery creation failed for URL [{}]: [{}]", url, e)
     raise RuntimeError(f"gallery create failed: {last_err}")
 
 
@@ -126,5 +126,5 @@ async def delete_gallery_post(post_id: str) -> dict[str, Any]:
                     return payload
             except Exception as e:  # noqa: BLE001
                 last_err = e
-                logger.debug("community gallery delete failed url={} err={}", url, e)
+                logger.debug("Community gallery deletion failed for URL [{}]: [{}]", url, e)
     raise RuntimeError(f"gallery delete failed: {last_err}")

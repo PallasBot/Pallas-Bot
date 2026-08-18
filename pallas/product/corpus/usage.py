@@ -88,7 +88,7 @@ async def _fetch_corpus_community_usage_uncached() -> dict[str, Any] | None:
                         resp = await client.get(usage_url, headers=headers)
                     except httpx.HTTPError as e:
                         last_error = str(e)
-                        logger.debug("corpus usage fetch failed api_base={}: {}", base, e)
+                        logger.debug("Corpus usage fetch failed for API base [{}]: [{}]", base, e)
                         continue
                     if resp.status_code == 401:
                         from pallas.product.corpus.enroll import maybe_refresh_corpus_enrollment_on_auth_failure
@@ -115,6 +115,6 @@ async def _fetch_corpus_community_usage_uncached() -> dict[str, Any] | None:
         last_error = str(e)
         logger.debug("corpus usage fetch failed: {}", e)
     if last_error:
-        logger.debug("corpus usage: no endpoint succeeded last_error={}", last_error)
+        logger.debug("Corpus usage fetch exhausted all endpoints; last error was [{}]", last_error)
     async with _usage_lock:
         return remember_corpus_usage_cache(None)

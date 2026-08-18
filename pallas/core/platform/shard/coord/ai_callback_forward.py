@@ -55,14 +55,14 @@ async def forward_ai_callback_to_worker(
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(url, data=data, files=files)
     except httpx.HTTPError as err:
-        logger.warning("ai_callback forward task_id={} port={}: {}", task_id, port, err)
+        logger.warning("AI callback forwarding failed for task [{}] on port [{}]: [{}].", task_id, port, err)
         raise HTTPException(status_code=502, detail="分片节点回调不可达") from err
 
     if resp.status_code == 404:
         raise HTTPException(status_code=404, detail="分片节点上未找到任务")
     if resp.status_code >= 400:
         logger.warning(
-            "ai_callback forward task_id={} port={} status={} body={}",
+            "AI callback forwarding for task [{}] on port [{}] returned status [{}] with body [{}].",
             task_id,
             port,
             resp.status_code,

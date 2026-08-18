@@ -93,11 +93,13 @@ async def ensure_corpus_community_enrolled(*, force: bool = False) -> bool:
                         resp = await client.post(endpoint, json=payload, headers=headers)
                     except httpx.HTTPError as e:
                         last_error = str(e)
-                        logger.warning(f"corpus enroll failed endpoint={endpoint}: {e}")
+                        logger.warning("Corpus enrollment failed for endpoint [{}]: [{}]", endpoint, e)
                         continue
                     if resp.status_code != 200:
                         last_error = f"HTTP {resp.status_code}: {(resp.text or '')[:200]}"
-                        logger.warning(f"corpus enroll HTTP {resp.status_code} endpoint={endpoint}")
+                        logger.warning(
+                            "Corpus enrollment returned HTTP [{}] from endpoint [{}]", resp.status_code, endpoint
+                        )
                         continue
                     data = resp.json()
                     if not isinstance(data, dict):
@@ -128,7 +130,7 @@ async def ensure_corpus_community_enrolled(*, force: bool = False) -> bool:
                     clear_corpus_config_cache()
                     invalidate_shared_context_repository()
                     logger.info(
-                        "corpus enroll: ok deployment_id={} api_base={}",
+                        "Corpus enrollment succeeded for deployment [{}] at API base [{}]",
                         deployment_id,
                         api_base,
                     )
@@ -138,7 +140,7 @@ async def ensure_corpus_community_enrolled(*, force: bool = False) -> bool:
         logger.warning(f"corpus enroll failed: {e}")
 
     if last_error:
-        logger.debug("corpus enroll: no endpoint succeeded last_error={}", last_error)
+        logger.debug("Corpus enrollment exhausted all endpoints; last error was [{}]", last_error)
     return corpus_community_enrollment_valid(state)
 
 

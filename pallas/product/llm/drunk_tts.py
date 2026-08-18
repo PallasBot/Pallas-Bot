@@ -75,7 +75,7 @@ async def should_attach_drunk_tts(
     try:
         level = await BotConfig(int(bot_id), int(group_id)).drunkenness()
     except Exception:
-        logger.exception("drunk tts read drunkenness failed bot={} group={}", bot_id, group_id)
+        logger.exception("Drunk TTS could not read drunkenness for bot [{}] and group [{}]", bot_id, group_id)
         return False
     return level >= drunk_tts_min_drunkenness(c)
 
@@ -119,7 +119,7 @@ async def enqueue_ai_drunk_tts(
             timeout=wait,
         )
     except Exception:
-        logger.exception("drunk tts request failed: url={}", url)
+        logger.exception("Drunk TTS request failed for URL [{}]", url)
         await TaskManager.remove_task(request_id)
         return False
     if not response:
@@ -128,14 +128,14 @@ async def enqueue_ai_drunk_tts(
     try:
         body = response.json()
     except Exception:
-        logger.warning("drunk tts invalid json: url={}", url)
+        logger.warning("Drunk TTS response contained invalid JSON for URL [{}]", url)
         await TaskManager.remove_task(request_id)
         return False
     if not isinstance(body, dict) or not str(body.get("task_id") or "").strip():
         await TaskManager.remove_task(request_id)
         return False
     logger.info(
-        "drunk tts enqueued request_id={} bot_id={} group_id={} chars={}",
+        "Drunk TTS enqueued request [{}] for bot [{}] and group [{}] with [{}] characters",
         request_id,
         bot_id,
         group_id,

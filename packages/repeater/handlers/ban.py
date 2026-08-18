@@ -188,7 +188,9 @@ async def handle_ban_recalled(bot: Bot, event: GroupRecallNoticeEvent, state: T_
     try:
         msg = await bot.get_msg(message_id=event.message_id)
     except ActionFailed:
-        logger.warning(format_business_event("禁言目标读取", "失败", bot=event.self_id, message_id=event.message_id))
+        logger.warning(
+            "[Repeater] Failed to read mute target for bot [{}] and message [{}]", event.self_id, event.message_id
+        )
         return
 
     raw_message = ban_raw_from_recalled_api_payload(msg["message"])
@@ -224,7 +226,9 @@ async def handle_ban_latest(bot: Bot, event: GroupMessageEvent, state: T_State):
     try:
         await bot.delete_msg(message_id=event.reply.message_id)  # type: ignore
     except ActionFailed:
-        logger.warning(format_business_event("禁言目标撤回", "失败", bot=event.self_id, group=event.group_id))
+        logger.warning(
+            "[Repeater] Failed to recall mute target for bot [{}] in group [{}]", event.self_id, event.group_id
+        )
 
     if await Chat.ban(event.group_id, event.self_id, "", str(event.user_id)):
         logger.info(

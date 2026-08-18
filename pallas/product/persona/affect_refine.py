@@ -196,7 +196,7 @@ async def refine_group_style_affect(
 
     refine = affect_refine_from_ai_response(body)
     logger.debug(
-        "affect refine merged group={} confidence={} warmth_delta={} assertiveness_delta={}",
+        "Affect refinement merged group [{}] with confidence [{}], warmth delta [{}], and assertiveness delta [{}]",
         group_id,
         refine.get("confidence"),
         refine.get("warmth_delta"),

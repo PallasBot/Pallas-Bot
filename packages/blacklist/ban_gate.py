@@ -91,7 +91,7 @@ async def _sync_acl_user_banned(user_id: int, banned: bool) -> None:
                 target="*",
             )
     except Exception:
-        logger.exception("ban_gate: failed to mirror user ban into ACL uid={}", user_id)
+        logger.exception("Ban gate failed to mirror user ban into ACL for user [{}]", user_id)
 
 
 async def _sync_acl_group_banned(group_id: int, banned: bool) -> None:
@@ -126,7 +126,7 @@ async def _sync_acl_group_banned(group_id: int, banned: bool) -> None:
                 target=ACL_TARGET_GROUP_BAN,
             )
     except Exception:
-        logger.exception("ban_gate: failed to mirror group ban into ACL gid={}", group_id)
+        logger.exception("Ban gate failed to mirror group ban into ACL for group [{}]", group_id)
 
 
 async def _sync_acl_group_blocked_users(group_id: int, user_ids: list[int]) -> None:
@@ -181,7 +181,7 @@ async def _sync_acl_group_blocked_users(group_id: int, user_ids: list[int]) -> N
                 target=target_prefix,
             )
     except Exception:
-        logger.exception("ban_gate: failed to mirror group blocked users into ACL gid={}", group_id)
+        logger.exception("Ban gate failed to mirror blocked users into ACL for group [{}]", group_id)
 
 
 async def invalidate_user_ban_gate_cache(uids: int | Iterable[int]) -> None:
@@ -254,12 +254,12 @@ async def _fetch_user_banned_db(user_id: int) -> bool:
             timeout=_IS_BANNED_DB_TIMEOUT_SEC,
         )
     except TimeoutError:
-        logger.warning("user ban gate: is_banned timeout uid={}", user_id)
+        logger.warning("User ban gate is_banned timed out for user [{}]", user_id)
         return False
     except asyncio.CancelledError:
         raise
     except Exception:
-        logger.exception("user ban gate: is_banned failed uid={}", user_id)
+        logger.exception("User ban gate is_banned failed for user [{}]", user_id)
         return False
 
 
@@ -329,12 +329,12 @@ async def _fetch_group_blocked_ids_db(group_id: int) -> frozenset[int]:
         )
         return frozenset(ids_list)
     except TimeoutError:
-        logger.warning("group ban gate: blocked_user_ids timeout gid={}", group_id)
+        logger.warning("Group ban gate blocked_user_ids timed out for group [{}]", group_id)
         return frozenset()
     except asyncio.CancelledError:
         raise
     except Exception:
-        logger.exception("group ban gate: blocked_user_ids failed gid={}", group_id)
+        logger.exception("Group ban gate blocked_user_ids failed for group [{}]", group_id)
         return frozenset()
 
 
@@ -399,12 +399,12 @@ async def _fetch_group_banned_db(group_id: int) -> bool:
             timeout=_IS_BANNED_DB_TIMEOUT_SEC,
         )
     except TimeoutError:
-        logger.warning("group self ban gate: is_banned timeout gid={}", group_id)
+        logger.warning("Group self ban gate is_banned timed out for group [{}]", group_id)
         return False
     except asyncio.CancelledError:
         raise
     except Exception:
-        logger.exception("group self ban gate: is_banned failed gid={}", group_id)
+        logger.exception("Group self ban gate is_banned failed for group [{}]", group_id)
         return False
 
 

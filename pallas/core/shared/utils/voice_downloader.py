@@ -71,7 +71,7 @@ async def download_voices() -> bool:
                     break
 
             except (httpx.HTTPStatusError, httpx.RequestError, Exception) as e:
-                logger.warning("[语音] 下载失败 source={} err={}", source, e)
+                logger.warning("Voice download failed for source [{}]: [{}].", source, e)
                 continue
 
         if not download_success:

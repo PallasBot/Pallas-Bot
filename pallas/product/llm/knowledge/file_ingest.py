@@ -98,7 +98,7 @@ def load_file_knowledge_decl(*, root: Path | None = None) -> KnowledgeSourceDecl
         try:
             text = path.read_text(encoding="utf-8")
         except OSError as exc:
-            logger.warning("knowledge ingest read failed path={} err={}", path, exc)
+            logger.warning("Knowledge ingest could not read path [{}]: [{}]", path, exc)
             continue
         stem = path.stem
         if suffix == ".md":
@@ -132,7 +132,7 @@ def ensure_file_knowledge_registered(*, cfg: LlmConfig | None = None, force: boo
 
         register_builtin_knowledge_source(source_id=decl.source_id, decl=decl)
     except Exception as exc:
-        logger.warning("knowledge file ingest register failed err={}", exc)
+        logger.warning("Knowledge file ingest registration failed: [{}]", exc)
         return False
     _registered = True
     return True

@@ -71,7 +71,7 @@ class MessageRuntime:
         except Exception as exc:
             error_class = type(exc).__name__
             logger.warning(
-                "MessageRuntime direct handler failed handler_id={} error_class={}",
+                "MessageRuntime direct handler [{}] failed with error class [{}].",
                 handler.handler_id,
                 error_class,
             )

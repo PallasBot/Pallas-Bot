@@ -208,7 +208,7 @@ def _maybe_register_emoji_fit(emoji_code: str) -> None:
             persona_fit=True,
         )
     except Exception:
-        logger.debug("sticker fit register skipped emoji={}", emoji_code)
+        logger.debug("Sticker fit registration skipped for emoji [{}]", emoji_code)
 
 
 def _maybe_feedback_emoji_fit(emoji_code: str, *, score: int) -> None:
@@ -220,7 +220,7 @@ def _maybe_feedback_emoji_fit(emoji_code: str, *, score: int) -> None:
             return
         record_sticker_feedback(StickerFitStore(), sticker_id=f"face:{emoji_code}", score=score)
     except Exception:
-        logger.debug("sticker fit feedback skipped emoji={}", emoji_code)
+        logger.debug("Sticker fit feedback skipped for emoji [{}]", emoji_code)
 
 
 sent_reactions: dict[str, dict[int, float]] = {}

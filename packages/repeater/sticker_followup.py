@@ -56,7 +56,7 @@ async def maybe_send_repeater_sticker_followup(
     try:
         candidates = await get_recent_images(8)
     except Exception as exc:
-        logger.info("repeater sticker followup cache lookup skipped group={}: {}", group_id, exc)
+        logger.info("Repeater sticker follow-up cache lookup skipped for group [{}]: [{}]", group_id, exc)
         return False
     if not candidates:
         return False

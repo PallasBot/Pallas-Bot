@@ -86,7 +86,8 @@ async def run_work_service(
         for index, batch_size in enumerate(batch_sizes)
     ]
     logger.info(
-        "work aux started handlers={} consumers={} exclude_kinds={} priority_kinds={}",
+        "Work auxiliary service started with handlers [{}], consumers [{}], excluded kinds [{}], "
+        "and priority kinds [{}].",
         sorted(handlers),
         concurrency,
         sorted(exclude_kinds) if exclude_kinds else None,

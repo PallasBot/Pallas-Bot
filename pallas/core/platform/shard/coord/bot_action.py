@@ -214,7 +214,7 @@ async def _execute_local(action: str, bot_qq: int, payload: dict[str, Any]) -> t
                         await asyncio.sleep(delay_sec)
                     await run_repeater_reply_for_bot(int(bot_qq), payload)
                 except Exception as err:
-                    logger.warning("repeater_fanout remote bot={} failed: {}", int(bot_qq), err)
+                    logger.warning("Repeater fanout to remote bot [{}] failed: [{}].", int(bot_qq), err)
 
             asyncio.create_task(
                 repeater_job(),
@@ -274,7 +274,7 @@ async def invoke_bot_action(
         return False, None
     # 分片：presence 明确无目标牛则快速失败；非分片（unified 主进程+辅助进程）交给协调通道，由持有目标 Bot 的进程裁决
     if shard_ctx.sharding_active() and not bot_has_cluster_connection(qq):
-        logger.debug(f"bot_action skip: qq={qq} action={action} not connected in cluster")
+        logger.debug("Bot action [{}] was skipped because bot [{}] is not connected in the cluster.", action, qq)
         return False, None
 
     request_id = await asyncio.to_thread(

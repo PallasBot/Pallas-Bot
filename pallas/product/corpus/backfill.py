@@ -196,7 +196,7 @@ async def run_corpus_backfill_round() -> None:
             pushed += await push_context_to_community(context, community)
         except Exception as e:
             skipped += 1
-            logger.warning("corpus backfill item failed keywords={}: {}", context.keywords, e)
+            logger.warning("Corpus backfill item failed for keywords [{}]: [{}]", context.keywords, e)
             continue
         last_keywords = context.keywords
 

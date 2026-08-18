@@ -120,7 +120,7 @@ class WorkJobWorker:
     async def _run_job(self, job) -> str | None:
         handler = self.handlers.get(job.kind)
         if handler is None:
-            logger.error("work aux: unknown job kind={} id={}", job.kind, job.id)
+            logger.error("Work auxiliary service received unknown job kind [{}] with ID [{}].", job.kind, job.id)
             await self._fail_or_dead_letter(job, f"unknown job kind: {job.kind}")
             return None
         lease_task = asyncio.create_task(self._renew_lease(job), name=f"work_job_lease:{job.id}")
@@ -151,7 +151,7 @@ class WorkJobWorker:
                     self.metrics.record_retried()
                 return None
         except Exception as exc:
-            logger.warning("work aux: job failed kind={} id={}: {}", job.kind, job.id, exc)
+            logger.warning("Work auxiliary job of kind [{}] with ID [{}] failed: [{}].", job.kind, job.id, exc)
             self.metrics.record_failed()
             if getattr(exc, "committed", False):
                 dead_lettered = await self.store.dead_letter(
@@ -202,5 +202,5 @@ class WorkJobWorker:
                 lease_sec=self.lease_sec,
             ):
                 continue
-            logger.warning("work aux: lease lost id={} owner={}", job.id, self.owner)
+            logger.warning("Work auxiliary lease for job [{}] was lost by owner [{}].", job.id, self.owner)
             return

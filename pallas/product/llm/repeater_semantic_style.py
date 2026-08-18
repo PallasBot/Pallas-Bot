@@ -472,7 +472,7 @@ async def collect_semantic_style_backfill_candidates(
                 limit=_SEMANTIC_STYLE_BACKFILL_GROUP_LIMIT,
             )
         except Exception as exc:
-            logger.warning("repeater semantic style backfill list groups failed bot={}: {}", bot_id, exc)
+            logger.warning("Repeater semantic style backfill could not list groups for bot [{}]: [{}]", bot_id, exc)
             continue
         for group_id in group_ids:
             gid = int(group_id)
@@ -481,7 +481,7 @@ async def collect_semantic_style_backfill_candidates(
             try:
                 answers = await list_answers(gid, cutoff)
             except Exception as exc:
-                logger.warning("repeater semantic style backfill list answers failed group={}: {}", gid, exc)
+                logger.warning("Repeater semantic style backfill could not list answers for group [{}]: [{}]", gid, exc)
                 continue
             reply_samples = semantic_style_answer_samples(answers)
             if not reply_samples:
@@ -495,7 +495,9 @@ async def collect_semantic_style_backfill_candidates(
                         limit=_SEMANTIC_STYLE_BACKFILL_PAGE_SIZE,
                     )
                 except Exception as exc:
-                    logger.warning("repeater semantic style backfill list messages failed group={}: {}", gid, exc)
+                    logger.warning(
+                        "Repeater semantic style backfill could not list messages for group [{}]: [{}]", gid, exc
+                    )
                     break
                 ordered = list(messages)
                 if not ordered:
@@ -1692,7 +1694,7 @@ async def label_semantic_style_with_retry(
             if retry_index >= SEMANTIC_STYLE_LABEL_MAX_RETRIES:
                 logger.warning("repeater semantic style label dropped after retries: {}", exc)
                 return None
-            logger.debug("repeater semantic style label retry={} failed: {}", retry_index + 1, exc)
+            logger.debug("Repeater semantic style label retry [{}] failed: [{}]", retry_index + 1, exc)
     return None
 
 

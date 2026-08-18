@@ -1117,7 +1117,7 @@ async def sync_federate_peer_bot_roster() -> None:
     peer_ids = await asyncio.to_thread(refresh_federate_peer_bot_ids_sync)
     log_incompatible_federate_command_capability_peers()
     log_incompatible_federate_ingress_peers()
-    logger.debug("federate peer bots synced peers={}", len(peer_ids))
+    logger.debug("Federate peer bots synchronized [{}] peers.", len(peer_ids))
 
 
 async def run_federate_peer_bot_sync_loop() -> None:

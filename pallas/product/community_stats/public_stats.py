@@ -140,7 +140,7 @@ async def _fetch_from_urls(urls: list[str], *, timeout_sec: float) -> dict[str, 
                 from pallas.core.shared.utils.format_exception import format_exception_for_log
 
                 logger.debug(
-                    "community_stats: fetch stats failed url={}: {}",
+                    "Community statistics fetch failed for URL [{}]: [{}]",
                     stats_url,
                     format_exception_for_log(e),
                 )
@@ -244,7 +244,7 @@ async def fetch_community_public_stats() -> dict[str, Any]:
         raise ValueError("community stats fetch failed")
 
     logger.debug(
-        "community stats fetched: total={} online={} bots_sum={} url={}",
+        "Community statistics fetched [{}] total users, [{}] online users, [{}] bots, from URL [{}]",
         data["deployments_total"],
         data["deployments_online"],
         data["bots_online_sum"],
@@ -282,7 +282,7 @@ async def fetch_community_corpus_hot(
                 return body
             except (httpx.HTTPError, ValueError) as e:
                 last_err = e
-                logger.debug("community_stats: fetch corpus hot failed url={}: {}", url, e)
+                logger.debug("Community statistics could not fetch corpus hot data from URL [{}]: [{}]", url, e)
     if last_err is not None:
         raise last_err
     raise ValueError("community corpus hot fetch failed")

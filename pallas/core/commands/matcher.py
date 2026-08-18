@@ -66,7 +66,12 @@ class PluginCommand:
                     matcher=self.matcher,
                     plugin_tag=self.plugin_tag,
                 )
-                logger.debug("[plugin:{}] command={} user={}", self.plugin_tag, self.command_id, ctx.user_id)
+                logger.debug(
+                    "Plugin [{}] matched command [{}] from user [{}].",
+                    self.plugin_tag,
+                    self.command_id,
+                    ctx.user_id,
+                )
                 result = handler(ctx)
                 if inspect.isawaitable(result):
                     await result

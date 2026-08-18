@@ -56,7 +56,7 @@ async def fetch_federation_onboarding() -> dict[str, Any]:
                 return body
             except (httpx.HTTPError, ValueError) as e:
                 last_err = e
-                logger.debug("federation_onboarding: fetch failed url={}: {}", url, e)
+                logger.debug("Federation onboarding fetch failed for URL [{}]: [{}]", url, e)
     if last_err is not None:
         raise last_err
     raise ValueError("federation onboarding fetch failed")

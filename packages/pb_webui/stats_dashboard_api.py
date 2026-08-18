@@ -222,7 +222,7 @@ def register_stats_dashboard_router(
                 stale_sec=600.0,
             )
         except Exception as e:  # noqa: BLE001
-            logger.warning("[WebUI] 拉取联邦入池说明失败 err={}", e)
+            logger.warning("[WebUI] Failed to fetch federation onboarding details: [{}]", e)
             raise HTTPException(status_code=502, detail="无法从社区中心拉取联邦入池说明") from e
         return JSONResponse({"ok": True, "data": data})
 

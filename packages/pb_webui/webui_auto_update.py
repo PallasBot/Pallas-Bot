@@ -276,7 +276,7 @@ async def _run_webui_target(*, config: Any | None = None, force: bool = False) -
         check = await _load_webui_check(cfg)
     except Exception as e:  # noqa: BLE001
         err = format_exception_for_log(e)
-        logger.warning("[WebUI] WebUI 自动更新检查失败 err={}", err)
+        logger.warning("[WebUI] WebUI automatic update check failed: [{}]", err)
         _patch_target("webui", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
 
@@ -309,7 +309,7 @@ async def _run_webui_target(*, config: Any | None = None, force: bool = False) -
     asset = str(getattr(cfg, "pallas_webui_dist_zip_asset", "") or "dist.zip")
     tag = str(getattr(cfg, "pallas_webui_dist_zip_tag", "") or "").strip() or latest_tag
     logger.info(
-        "[WebUI] WebUI 自动更新开始 current={} target={}",
+        "[WebUI] WebUI automatic update started from [{}] to [{}]",
         current_tag or "(unknown)",
         tag,
     )
@@ -322,7 +322,7 @@ async def _run_webui_target(*, config: Any | None = None, force: bool = False) -
         )
     except WebuiUpdateError as e:
         err = e.detail
-        logger.warning("[WebUI] WebUI 自动更新失败 err={}", err)
+        logger.warning("[WebUI] WebUI automatic update failed: [{}]", err)
         _patch_target("webui", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
     except Exception as e:  # noqa: BLE001
@@ -357,7 +357,7 @@ async def _run_webui_target(*, config: Any | None = None, force: bool = False) -
         drop_read_cache(("update_check_webui:",))
     except Exception:  # noqa: BLE001
         pass
-    logger.info("[WebUI] WebUI 自动更新完成 tag={}", applied_tag)
+    logger.info("[WebUI] WebUI automatic update completed at tag [{}]", applied_tag)
     return {
         "result": "applied",
         "tag": applied_tag,
@@ -412,7 +412,7 @@ async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> 
         check = await _load_bot_check(cfg)
     except Exception as e:  # noqa: BLE001
         err = format_exception_for_log(e)
-        logger.warning("[WebUI] Bot 自动更新检查失败 err={}", err)
+        logger.warning("[WebUI] Bot automatic update check failed: [{}]", err)
         _patch_target("bot", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
 
@@ -442,7 +442,7 @@ async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> 
         return out
 
     logger.info(
-        "[WebUI] Bot 自动更新开始 track={} current={} target={}",
+        "[WebUI] Bot automatic update started on track [{}] from [{}] to [{}]",
         update_track,
         current_tag or "(unknown)",
         target_label or "(unknown)",
@@ -451,7 +451,7 @@ async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> 
         data = await apply_bot_update(restart=True)
     except BotGitUpdateError as e:
         err = e.detail
-        logger.warning("[WebUI] Bot 自动更新失败 err={}", err)
+        logger.warning("[WebUI] Bot automatic update failed: [{}]", err)
         _patch_target("bot", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
     except Exception as e:  # noqa: BLE001
@@ -486,7 +486,7 @@ async def _run_bot_target(*, config: Any | None = None, force: bool = False) -> 
         drop_read_cache(("update_check_bot:",))
     except Exception:  # noqa: BLE001
         pass
-    logger.info("[WebUI] Bot 自动更新完成 tag={}", applied_tag)
+    logger.info("[WebUI] Bot automatic update completed at tag [{}]", applied_tag)
     return {
         "result": "applied",
         "tag": applied_tag,
@@ -523,7 +523,7 @@ async def _run_plugins_target(*, config: Any | None = None, force: bool = False)
         snap = await refresh_plugin_update_snapshot()
     except Exception as e:  # noqa: BLE001
         err = format_exception_for_log(e)
-        logger.warning("[WebUI] 插件自动更新快照失败 err={}", err)
+        logger.warning("[WebUI] Plugin automatic update snapshot failed: [{}]", err)
         _patch_target("plugins", {"last_check_at": now, "last_check_result": "failed", "last_error": err})
         return {"result": "failed", "error": err}
 

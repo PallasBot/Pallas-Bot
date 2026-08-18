@@ -75,7 +75,7 @@ async def refresh_dirty_group_style_batch(
         try:
             ok = await refresh_group_style_profile(group_id, window_hours=window_hours)
         except Exception as exc:
-            logger.warning("group_style_refresh failed group={}: {}", group_id, exc)
+            logger.warning("Group style refresh failed for group [{}]: [{}]", group_id, exc)
             continue
         if ok:
             refreshed += 1
@@ -127,7 +127,7 @@ async def refresh_group_style_profile(
             ]
             learn_expressions_from_group_messages(gid, texts, bot_id=bot_id)
     except Exception as exc:
-        logger.debug("group expression observe skipped group={}: {}", gid, exc)
+        logger.debug("Group expression observation was skipped for group [{}]: [{}]", gid, exc)
     await repo.upsert_field(gid, "style_profile", profile)
     invalidate_persona_cache()
 

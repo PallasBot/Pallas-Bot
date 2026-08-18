@@ -86,14 +86,14 @@ async def run_ai_callback(
     try:
         bot = get_bot(bot_id_str)
     except Exception as e:
-        logger.warning("AI callback get_bot failed task={} bot_id={}: {}", task_id, bot_id_str, e)
+        logger.warning("AI callback failed to get bot [{}] for task [{}]: [{}].", bot_id_str, task_id, e)
     logger.info(
-        f"Bot [{bot_id_str or '<missing>'}] resolved AI task [id={task_id}], "
+        f"Bot [{bot_id_str or '<missing>'}] resolved AI task [{task_id}], "
         f"a [{str(task.get('task_type') or '').strip()}] request in group [{group_id}], status [{status}]"
     )
     logger.debug(
-        "AI callback resolved detail task={} has_text={} has_file={} song_id={} chunk_index={} "
-        "key={} history_summary={} history_keep_messages={} agent_trace={}",
+        "AI callback resolved task [{}] with text [{}], file [{}], song [{}], chunk [{}], "
+        "key [{}], history summary [{}], retained history messages [{}], and agent trace [{}].",
         task_id,
         bool(str(text or "").strip()),
         file is not None,
@@ -121,7 +121,7 @@ async def run_ai_callback(
             fail_msg = failure_reply_for_task(task)
             if fail_msg:
                 logger.info(
-                    "AI callback sending failure reply task={} bot_id={} group_id={} length={}",
+                    "AI callback is sending failure reply for task [{}] from bot [{}] to group [{}] with length [{}].",
                     task_id,
                     getattr(bot, "self_id", bot_id_str or "<missing>"),
                     group_id,
@@ -148,8 +148,8 @@ async def run_ai_callback(
         if file and group_id and bot is not None:
             file_bytes = await file.read()
             logger.debug(
-                "AI callback read file task={} bot_id={} group_id={} task_type={} "
-                "bytes={} song_id={} chunk_index={} key={}",
+                "AI callback read file for task [{}] from bot [{}] in group [{}]; type [{}], "
+                "bytes [{}], song [{}], chunk [{}], key [{}].",
                 task_id,
                 getattr(bot, "self_id", bot_id_str or "<missing>"),
                 group_id,
@@ -164,7 +164,7 @@ async def run_ai_callback(
                 at_user_id = int(at_user) if at_user is not None else None
                 logger.info(
                     f"Bot [{getattr(bot, 'self_id', bot_id_str or '<missing>')}] delivering a "
-                    f"[{task_type}] image [id={task_id}] to group [{group_id}], length [{len(file_bytes)}]"
+                    f"[{task_type}] image [{task_id}] to group [{group_id}], length [{len(file_bytes)}]"
                 )
                 delivered = (
                     await send_group_image(
@@ -180,7 +180,7 @@ async def run_ai_callback(
             elif task_type in VOICE_TASK_TYPES or (song_id is not None and chunk_index is not None):
                 logger.info(
                     f"Bot [{getattr(bot, 'self_id', bot_id_str or '<missing>')}] delivering a "
-                    f"[{task_type}] voice [id={task_id}] to group [{group_id}], length [{len(file_bytes)}]"
+                    f"[{task_type}] voice [{task_id}] to group [{group_id}], length [{len(file_bytes)}]"
                 )
                 delivered = await send_group_voice(bot, group_id, file_bytes) and delivered
                 if delivered and file_bytes:
@@ -211,10 +211,10 @@ async def run_ai_callback(
                         text=reply_text,
                     )
             except Exception:
-                logger.exception("enqueue drunk tts failed task={}", task_id)
+                logger.exception("Enqueuing drunk TTS failed for task [{}].", task_id)
 
         logger.info(
-            f"Bot [{bot_id_str or '<missing>'}] completed AI task [id={task_id}], "
+            f"Bot [{bot_id_str or '<missing>'}] completed AI task [{task_id}], "
             f"a [{str(task.get('task_type') or '').strip()}] request in group [{group_id}], delivered [{delivered}]"
         )
         return {"message": "ok" if delivered else "failed"}

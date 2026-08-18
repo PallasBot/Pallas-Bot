@@ -398,7 +398,7 @@ def schedule_feedback_trigger_backfill(*, limit_texts: int = 120, batch_size: in
             )
             if int(stats.get("filled") or 0) > 0 or int(stats.get("missing") or 0) > 0:
                 logger.info(
-                    "feedback trigger embedding backfill scanned={} missing={} filled={}",
+                    "Feedback trigger embedding backfill scanned [{}] entries, found [{}] missing, and filled [{}]",
                     stats.get("scanned"),
                     stats.get("missing"),
                     stats.get("filled"),

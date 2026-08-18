@@ -127,7 +127,7 @@ async def check_plugin_enabled(matcher: Matcher, bot: Bot, event: GroupMessageEv
         if acl_decision.source == "admin_bypass":
             return
         if acl_decision.source == "rule" and not acl_decision.allow:
-            logger.debug("bot [{}] plugin [{}] blocked for uid={} by acl", bot_id, plugin_name, uid)
+            logger.debug("Bot [{}] plugin [{}] was blocked by ACL for user [{}]", bot_id, plugin_name, uid)
             raise IgnoredException(f"Plugin {plugin_name} blocked for user")
 
     disabled_names = _blocked_events.get(event_id)

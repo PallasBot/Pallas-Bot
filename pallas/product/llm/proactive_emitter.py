@@ -44,7 +44,7 @@ def proactive_cooldown_remaining(source: str) -> float:
 async def emit_proactive(ctx: ProactiveEmitContext) -> bool:
     """单出口：与 governance 冷却共用限流键（按 source）。"""
     if proactive_cooldown_remaining(ctx.source) > 0:
-        logger.debug("proactive skipped cooldown source={}", ctx.source)
+        logger.debug("Proactive emission was skipped due to cooldown for source [{}]", ctx.source)
         return False
     payload = {
         "source": ctx.source,
@@ -56,7 +56,7 @@ async def emit_proactive(ctx: ProactiveEmitContext) -> bool:
         try:
             await handler(payload)
         except Exception:
-            logger.exception("proactive handler failed name={}", name)
+            logger.exception("Proactive handler failed for name [{}]", name)
     _last_emit_at[ctx.source] = time.monotonic()
     return True
 

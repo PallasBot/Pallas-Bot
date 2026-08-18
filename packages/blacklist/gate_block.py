@@ -77,12 +77,12 @@ async def block_globally_banned_users(bot: Bot, event: Event):
         )
         if _is_acl_decisive(group_decision):
             if not group_decision.allow:
-                logger.debug("drop event in group gid={} acl source={}", gid, group_decision.source)
+                logger.debug("Dropped event in group [{}] due to ACL source [{}]", gid, group_decision.source)
                 raise IgnoredException("banned group by acl")
         else:
             group_banned = await run_coro_with_shield(query_group_ban_status_for_gate(gid))
             if group_banned:
-                logger.debug("drop event in banned group gid={}", gid)
+                logger.debug("Dropped event in banned group [{}]", gid)
                 raise IgnoredException("banned group")
 
     # 2. 用户维度（全局封禁 / 群内黑名单）
@@ -126,12 +126,12 @@ async def _reject_or_ignore(
         try:
             await event.reject(bot)
         except Exception as e:
-            logger.warning("reject friend request from banned user uid={} failed: {}", uid, e)
+            logger.warning("Failed to reject friend request from banned user [{}]: [{}]", uid, e)
         raise IgnoredException("banned user")
     if isinstance(event, GroupRequestEvent) and getattr(event, "sub_type", "") == "invite":
         try:
             await event.reject(bot)
         except Exception as e:
-            logger.warning("reject group invite from banned user uid={} failed: {}", uid, e)
+            logger.warning("Failed to reject group invite from banned user [{}]: [{}]", uid, e)
         raise IgnoredException("banned user")
     raise IgnoredException("banned user")

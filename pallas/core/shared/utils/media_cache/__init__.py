@@ -150,13 +150,17 @@ async def run_image_capture_consumer() -> None:
                     break
             await build_work_job_store().enqueue_many(jobs)
         except Exception as e:
-            logger.warning("image cache capture outbox batch failed count={}: {}", len(jobs), e)
+            logger.warning("Image cache capture outbox batch with [{}] jobs failed: [{}].", len(jobs), e)
             while True:
                 await asyncio.sleep(0.2)
                 try:
                     await build_work_job_store().enqueue_many(jobs)
                 except Exception as retry_exc:
-                    logger.warning("image cache capture outbox retry failed count={}: {}", len(jobs), retry_exc)
+                    logger.warning(
+                        "Image cache capture outbox retry with [{}] jobs failed: [{}].",
+                        len(jobs),
+                        retry_exc,
+                    )
                     continue
                 break
         finally:
@@ -217,7 +221,7 @@ async def insert_image(
         _image_capture_rate_limited += 1
         if _image_capture_rate_limited == 1 or _image_capture_rate_limited % 200 == 0:
             logger.info(
-                "image cache capture rate limited, skipped={}",
+                "Image cache capture was rate limited and skipped [{}] items.",
                 _image_capture_rate_limited,
             )
         return
@@ -235,7 +239,7 @@ async def insert_image(
         _image_capture_dropped += 1
         if _image_capture_dropped == 1 or _image_capture_dropped % 200 == 0:
             logger.info(
-                "image cache capture queue full (max={}), dropped={}",
+                "Image cache capture queue reached maximum [{}] and dropped [{}] items.",
                 _IMAGE_CAPTURE_QUEUE_MAX,
                 _image_capture_dropped,
             )
@@ -304,7 +308,7 @@ async def prune_image_cache(*, today: date | None = None) -> ImageCachePruneResu
         )
     )
     logger.info(
-        "image cache pruned rows={} bytes={} remaining_bytes={}",
+        "Image cache pruned [{}] rows and [{}] bytes, leaving [{}] bytes.",
         result.deleted_rows,
         result.deleted_blob_bytes,
         result.remaining_blob_bytes,

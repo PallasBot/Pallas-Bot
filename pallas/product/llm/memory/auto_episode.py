@@ -40,7 +40,7 @@ async def _save_auto_episode(*, bot_id: int, group_id: int, content: str, source
     try:
         ok = await save_memory_entry(bot_id, group_id, content, source=source, cfg=cfg)
     except Exception as exc:
-        logger.warning("auto_episode save failed bot={} group={} err={}", bot_id, group_id, exc)
+        logger.warning("Auto episode save failed for bot [{}] and group [{}]: [{}]", bot_id, group_id, exc)
         return False
     if not ok:
         return False
@@ -50,7 +50,7 @@ async def _save_auto_episode(*, bot_id: int, group_id: int, content: str, source
 
         await maybe_extract_after_episode_write(bot_id=bot_id, group_id=group_id, text=content)
     except Exception as exc:  # noqa: BLE001
-        logger.warning("auto_episode extract hook failed bot={} group={} err={}", bot_id, group_id, exc)
+        logger.warning("Auto episode extract hook failed for bot [{}] and group [{}]: [{}]", bot_id, group_id, exc)
     return True
 
 
@@ -114,7 +114,7 @@ async def maybe_auto_save_group_episode(*, bot_id: int, group_id: int | None, cf
         try:
             turns = await list_group_ambient_messages(bid, gid, limit=12, cfg=c)
         except Exception as exc:
-            logger.warning("group episode history read failed bot={} group={} err={}", bid, gid, exc)
+            logger.warning("Group episode history read failed for bot [{}] and group [{}]: [{}]", bid, gid, exc)
             return False
         transcript = _group_episode_transcript(turns)
         if not transcript or _LAST_SUMMARY_SIGNATURE.get(key) == transcript:
@@ -131,7 +131,7 @@ async def maybe_auto_save_group_episode(*, bot_id: int, group_id: int | None, cf
                 cfg=c,
             )
         except Exception as exc:
-            logger.warning("group episode summary failed bot={} group={} err={}", bid, gid, exc)
+            logger.warning("Group episode summary failed for bot [{}] and group [{}]: [{}]", bid, gid, exc)
             return False
         summary = str(message.get("content") or "").strip() if isinstance(message, dict) else ""
         if summary in {"", "无", "无。"} or classify_memory_candidate(summary) != "episode_note":

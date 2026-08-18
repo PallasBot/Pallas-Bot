@@ -31,7 +31,7 @@ async def forward_maa_json_post(
         async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(url, json=json_body)
     except httpx.HTTPError as err:
-        logger.warning("maa forward user={} port={} path={}: {}", user, port, path, err)
+        logger.warning("MAA forward failed for user [{}] on port [{}] at path [{}]: [{}]", user, port, path, err)
         raise HTTPException(status_code=502, detail="MAA worker unreachable") from err
 
     try:

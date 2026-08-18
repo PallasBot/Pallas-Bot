@@ -277,7 +277,7 @@ async def retrieve_memory_hits_mongo(
                 row.embedding_model = str(item.get("embedding_model") or embedding_model_name(c))
                 await row.save()
         except Exception as exc:
-            logger.warning("memory embedding cache persist failed err={}", exc)
+            logger.warning("Memory embedding cache persistence failed: [{}]", exc)
     min_score = effective_memory_rag_min_score(c)
     seen: set[str] = set()
     out: list[dict[str, Any]] = []

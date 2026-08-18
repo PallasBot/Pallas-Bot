@@ -61,7 +61,7 @@ def list_active_knowledge_sources(*, cfg: LlmConfig | None = None) -> list[Regis
 
         ensure_file_knowledge_registered(cfg=c)
     except Exception as exc:
-        logger.warning("knowledge file ingest ensure failed err={}", exc)
+        logger.warning("Knowledge file ingest setup failed: [{}]", exc)
     seen = {row.source_id for row in _BUILTIN_SOURCES}
     rows: list[RegisteredKnowledgeSource] = list(_BUILTIN_SOURCES)
     for plugin_name, plugin_title, decl in iter_loaded_plugin_knowledge_sources():

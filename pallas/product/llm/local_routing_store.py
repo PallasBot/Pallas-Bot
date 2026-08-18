@@ -73,7 +73,7 @@ def load_local_routing_document() -> dict[str, Any]:
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
-            logger.exception("load local routing failed: path={}", path)
+            logger.exception("Local routing could not be loaded from path [{}]", path)
             _CACHE = _empty_document()
             return dict(_CACHE)
         _CACHE = _normalize_document(payload if isinstance(payload, dict) else {})
@@ -90,7 +90,7 @@ def save_local_routing_document(raw: dict[str, Any]) -> dict[str, Any]:
         tmp.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         tmp.replace(path)
         _CACHE = dict(doc)
-    logger.info("llm local routing saved: path={}", path)
+    logger.info("LLM local routing was saved to path [{}]", path)
     return export_local_routing_for_api(doc=doc)
 
 

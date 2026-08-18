@@ -113,7 +113,7 @@ async def probe_community_connectivity() -> dict[str, Any]:
             probes.append(result)
             if not result["ok"]:
                 logger.debug(
-                    "community_stats: connectivity probe failed url={} err={}",
+                    "Community statistics connectivity probe failed for URL [{}]: [{}]",
                     url,
                     result.get("error"),
                 )

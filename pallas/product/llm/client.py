@@ -203,6 +203,6 @@ async def delete_llm_chat_session(session_id: str, *, cfg: LlmConfig | None = No
     try:
         response = await HTTPXClient.delete(url, timeout=c.chat_timeout_sec)
     except Exception:
-        logger.warning("delete_llm_chat_session failed: session={}", session_id)
+        logger.warning("LLM chat session deletion failed for session [{}]", session_id)
         return False
     return bool(response) and response.status_code < 400

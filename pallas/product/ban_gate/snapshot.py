@@ -171,7 +171,7 @@ async def refresh_ban_gate_snapshot() -> None:
         elif backend in ("postgresql", "postgres", "pg"):
             users, groups, banned_groups = await _load_snapshot_postgresql()
         else:
-            logger.warning("ban_gate_snapshot: unsupported backend={}, skip refresh", backend)
+            logger.warning("Ban-gate snapshot refresh was skipped because backend [{}] is unsupported", backend)
             return
     except asyncio.CancelledError:
         raise
@@ -188,7 +188,7 @@ async def refresh_ban_gate_snapshot() -> None:
         _last_refresh_mono = time.monotonic()
         _ready = True
     logger.debug(
-        "ban_gate_snapshot refreshed: global_banned={} groups_with_blocks={} banned_groups={}",
+        "Ban-gate snapshot refreshed with [{}] globally banned users, [{}] groups with blocks, and [{}] banned groups",
         len(users),
         len(groups),
         len(banned_groups),

@@ -129,9 +129,9 @@ def clear_help_cache(group_id: int | None = None):
         if group_cache_dir.exists():
             try:
                 shutil.rmtree(group_cache_dir)
-                logger.debug(f"help cache cleared for group [{group_id}] path={group_cache_dir}")
+                logger.debug(f"Help cache cleared for group [{group_id}] at [{group_cache_dir}]")
             except Exception as e:
-                logger.warning(f"help cache rmtree failed group={group_id} path={group_cache_dir}: {e}")
+                logger.warning(f"Help cache removal failed for group [{group_id}] at [{group_cache_dir}]: [{e}]")
     else:
         try:
             for item in cache_base_dir.iterdir():
@@ -167,7 +167,7 @@ async def is_plugin_disabled(
             return is_plugin_name_in_set(plugin_name, disabled_names)
         return is_plugin_name_in_set(plugin_name, merge_global_disabled_plugin_names(frozenset()))
     except Exception as e:
-        logger.error(f"help is_plugin_disabled failed plugin={plugin_name}: {e}")
+        logger.error(f"Help plugin disable check failed for plugin [{plugin_name}]: [{e}]")
         return False
 
 
@@ -593,7 +593,7 @@ async def get_bot_config(bot_id: int) -> tuple[BotConfigModule, bool]:
     """
     bot_config, created = await bot_config_repo.get_or_create(bot_id, disabled_plugins=[])
     if created:
-        logger.debug(f"help bot_config created bot_id={bot_id}")
+        logger.debug(f"Help bot configuration created for bot [{bot_id}]")
     return bot_config, created
 
 
@@ -603,7 +603,7 @@ async def get_group_config(group_id: int) -> tuple[GroupConfigModule, bool]:
     """
     group_config, created = await group_config_repo.get_or_create(group_id, disabled_plugins=[])
     if created:
-        logger.debug(f"help group_config created group_id={group_id}")
+        logger.debug(f"Help group configuration created for group [{group_id}]")
     return group_config, created
 
 
@@ -780,7 +780,13 @@ async def toggle_plugin(
 
     plugin_name = target_plugin.name
     user_visible_name = plugin_display_name(target_plugin)
-    logger.debug(f"help toggle_plugin plugin={plugin_name} action={action} group_id={group_id} bot_id={bot_id}")
+    logger.debug(
+        "Help plugin toggle requested for plugin [{}], action [{}], group [{}], bot [{}]",
+        plugin_name,
+        action,
+        group_id,
+        bot_id,
+    )
 
     if group_id and resolve_plugin_disable_scope(plugin_name) == "bot":
         return (
@@ -1016,7 +1022,7 @@ async def fill_plugin_status(
             show_ignored=False,
             ignored_plugins=plugin_config.ignored_plugins if plugin_config else [],
         )
-    logger.debug(f"help fill_plugin_status sorted_plugins count={len(sorted_plugins)}")
+    logger.debug(f"Help plugin status prepared for [{len(sorted_plugins)}] sorted plugins")
 
     disabled_names = await collect_disabled_plugin_names(bot_id, group_id, ignore_cache=False)
     bot_disabled_names = (

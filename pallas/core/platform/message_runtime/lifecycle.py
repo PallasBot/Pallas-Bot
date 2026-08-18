@@ -34,7 +34,8 @@ def configure_direct_runtime() -> None:
         registry.register(handler)
     for diagnostic in diagnostics:
         logger.warning(
-            "MessageRuntime direct registration skipped code={} handler_id={} module={} commands={}",
+            "MessageRuntime skipped direct registration because code [{}] affected handler [{}] "
+            "in module [{}] for commands [{}].",
             diagnostic.code,
             diagnostic.handler_id,
             diagnostic.module,

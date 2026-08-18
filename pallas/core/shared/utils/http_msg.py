@@ -171,9 +171,13 @@ def user_failure_reply(body_or_empty: str, *, vague_reply: str | None = None) ->
         return fallback
     clean = sanitize_user_visible_message(msg)
     if upstream_error_is_internal(clean, code, err_type):
-        logger.warning(f"upstream failure (user sees vague reply): {clean} code={code!r}")
+        logger.warning("Upstream failure returned [{}]; user receives a vague reply with code [{!r}].", clean, code)
         return fallback
     if upstream_error_is_user_visible(clean, code, err_type):
         return clean or fallback
-    logger.warning(f"upstream failure (unclassified, vague reply): {clean} code={code!r}")
+    logger.warning(
+        "Unclassified upstream failure returned [{}]; user receives a vague reply with code [{!r}].",
+        clean,
+        code,
+    )
     return fallback

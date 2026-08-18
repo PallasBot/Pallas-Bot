@@ -37,7 +37,7 @@ def load_snapshot() -> dict[str, Any]:
     try:
         data = json.loads(raw)
     except (TypeError, ValueError):
-        logger.warning("[WebUI] 插件商店资源快照损坏，忽略 path={}", path)
+        logger.warning("Plugin store asset snapshot at path [{}] is corrupt and will be ignored", path)
         return {}
     return data if isinstance(data, dict) else {}
 
@@ -69,7 +69,7 @@ def save_snapshot(data: dict[str, Any]) -> None:
         tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         tmp.replace(path)
     except OSError as exc:
-        logger.warning("[WebUI] 插件商店资源快照写盘失败 err={}", exc)
+        logger.warning("Plugin store asset snapshot could not be written: [{}]", exc)
 
 
 def _public_root() -> Path:

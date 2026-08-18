@@ -79,7 +79,7 @@ def federate_redis_ping(url: str) -> bool:
                 return False
         from nonebot import logger
 
-        logger.debug("federate coord redis ping failed host={}: {}", host or "?", e)
+        logger.debug("Federate coordination Redis ping failed for host [{}]: [{}].", host or "?", e)
         return False
 
 

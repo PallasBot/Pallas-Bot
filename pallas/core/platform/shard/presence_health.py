@@ -74,7 +74,7 @@ async def probe_bot_get_status_healthy(bot: Any) -> bool:
         )
     except Exception as e:
         logger.debug(
-            "presence_health get_status failed bot={}: {}",
+            "Presence health check failed to get status from bot [{}]: [{}].",
             getattr(bot, "self_id", "?"),
             e,
         )
@@ -120,7 +120,7 @@ async def apply_presence_qq_health_probes(*, force: bool = False) -> list[int]:
             closed = await close_local_bot_connection(qq)
             kicked.append(qq)
             logger.warning(
-                "presence_health: qq={} quarantined after {} failed get_status closed_ws={}",
+                "Presence health quarantined bot [{}] after [{}] failed status checks; WebSocket closed [{}].",
                 qq,
                 STATUS_FAIL_THRESHOLD,
                 closed,

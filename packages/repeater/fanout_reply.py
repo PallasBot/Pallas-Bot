@@ -19,7 +19,6 @@ from itertools import starmap
 
 from pallas.api.logging import format_plugin_event
 from pallas.core.foundation.config import BotConfig
-from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.core.platform.bot_runtime.send_unavailable import BOT_SEND_UNAVAILABLE_ERRORS, log_bot_send_unavailable
 from pallas.core.platform.multi_bot.dedup import try_claim_group_message_once
 from pallas.core.platform.shard import context as shard_ctx
@@ -231,7 +230,7 @@ async def _run_repeater_reply_send(bot_id: int, group_id: int, answers) -> None:
     except asyncio.CancelledError:
         raise
     except Exception as e:
-        logger.warning("repeater reply background failed bot={} group={}: {}", bot_id, group_id, e)
+        logger.warning("Repeater background reply failed for bot [{}] in group [{}]: [{}]", bot_id, group_id, e)
 
 
 def dispatch_repeater_reply(bot_id: int, group_id: int, answers) -> None:
@@ -280,13 +279,10 @@ async def send_repeater_answers(bot_id: int, group_id: int, answers, *, fanout: 
             continue
 
         logger.debug(
-            format_business_event(
-                "复读回复",
-                "已准备",
-                bot=bot_id,
-                group=group_id,
-                mode=log_tag,
-            )
+            "[Repeater] Bot [{}] prepared a [{}] reply in group [{}]",
+            bot_id,
+            log_tag,
+            group_id,
         )
 
         await asyncio.sleep(delay)
@@ -331,7 +327,7 @@ async def send_repeater_answers(bot_id: int, group_id: int, answers, *, fanout: 
             shutup = await is_shutup(bot_id, group_id)
 
             if not shutup:
-                logger.debug(format_business_event("复读禁言", "已准备", bot=bot_id, group=group_id, mode=log_tag))
+                logger.debug("[Repeater] Bot [{}] prepared a [{}] mute in group [{}]", bot_id, log_tag, group_id)
 
                 await Chat.ban(group_id, bot_id, str(item), "ActionFailed")
 
@@ -406,7 +402,7 @@ async def dispatch_repeater_fanout_payload(
     remote: list[tuple[int, int]] = []
     for i, bid in enumerate(ids):
         if not bot_has_cluster_connection(bid):
-            logger.debug(f"repeater_fanout skip offline bot={bid} group={group_id}")
+            logger.debug(f"Repeater fanout skipped offline bot [{bid}] in group [{group_id}]")
             continue
         delay = i * stagger
         if bot_has_local_connection(bid):
@@ -445,7 +441,7 @@ async def _dispatch_remote_fanout_batch(
                 timeout_sec=45.0,
             )
         except Exception as e:
-            logger.warning("repeater_fanout remote bot={} failed: {}", bid, e)
+            logger.warning("Repeater fanout remote reply failed for bot [{}]: [{}]", bid, e)
 
     await asyncio.gather(*starmap(one, remote))
 
@@ -459,4 +455,4 @@ async def _delayed_local_reply(delay: float, bot_id: int, payload: dict[str, Any
         await run_repeater_reply_for_bot(bot_id, payload)
 
     except Exception as e:
-        logger.warning("repeater_fanout local bot={} failed: {}", bot_id, e)
+        logger.warning("Repeater fanout local reply failed for bot [{}]: [{}]", bot_id, e)

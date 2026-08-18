@@ -164,7 +164,8 @@ def execute_workers_only_start(
         try:
             if time.time() - lock_path.stat().st_mtime < 120.0:
                 logger.info(
-                    "shard worker scale: skip (lock active) reason={} required={} running={}",
+                    "Shard worker scaling skipped because its lock is active; reason [{}], required [{}], "
+                    "running [{}].",
                     reason,
                     required,
                     running,
@@ -181,7 +182,7 @@ def execute_workers_only_start(
         return False
 
     logger.info(
-        "shard worker scale: start --workers-only reason={} required={} running={} missing={}",
+        "Shard worker scaling started in workers-only mode; reason [{}], required [{}], running [{}], missing [{}].",
         reason,
         required,
         running,
@@ -222,7 +223,7 @@ def execute_workers_only_start(
             if proc.returncode != 0:
                 tail = (stderr or b"").decode("utf-8", errors="replace").strip()[-500:]
                 logger.warning(
-                    "shard worker scale: start exit={} stderr_tail={}",
+                    "Shard worker scaling exited with code [{}] and stderr tail [{}].",
                     proc.returncode,
                     tail,
                 )

@@ -553,7 +553,8 @@ def load_plugins_for_role() -> None:
         )
         register_startup_plugin_load_diagnostics()
         logger.debug(
-            "启动：unified local={} community={} src={} official={} nonebot={} extra_dirs={} skip={}",
+            "Unified plugin startup loaded local [{}], community [{}], source [{}], official [{}], "
+            "NoneBot [{}], extra directories [{}], and skipped [{}].",
             local_loaded + local_extra,
             community_loaded,
             loaded,
@@ -616,7 +617,8 @@ def load_plugins_for_role() -> None:
         )
         register_startup_plugin_load_diagnostics()
         logger.debug(
-            "启动：hub local={} community={} modules={}/{} official={} nonebot={} extra_dirs={}",
+            "Hub plugin startup loaded local [{}], community [{}], modules [{}/{}], official [{}], "
+            "NoneBot [{}], and extra directories [{}].",
             local_loaded + local_extra,
             community_loaded,
             loaded,
@@ -674,7 +676,8 @@ def load_plugins_for_role() -> None:
     )
     register_startup_plugin_load_diagnostics()
     logger.debug(
-        "启动：worker shard={} local={} community={} src={} official={} nonebot={} extra_dirs={} skip={}",
+        "Worker plugin startup for shard [{}] loaded local [{}], community [{}], source [{}], "
+        "official [{}], NoneBot [{}], extra directories [{}], and skipped [{}].",
         s.shard_id,
         local_loaded + local_extra,
         community_loaded,

@@ -27,7 +27,7 @@ async def forward_relogin_to_hub(*, bot_id: str, user_id: str, text: str) -> Rel
             resp = await client.post(url, json=payload)
     except httpx.HTTPError as err:
         logger.warning(
-            "relogin forward bot={} user={} {}: {}",
+            "Relogin forwarding for bot [{}] and user [{}] failed during [{}]: [{}].",
             bot_id,
             user_id,
             type(err).__name__,
@@ -37,7 +37,7 @@ async def forward_relogin_to_hub(*, bot_id: str, user_id: str, text: str) -> Rel
 
     if resp.status_code >= 400:
         logger.warning(
-            "relogin forward bot={} user={} status={} body={}",
+            "Relogin forwarding for bot [{}] and user [{}] returned status [{}] with body [{}].",
             bot_id,
             user_id,
             resp.status_code,

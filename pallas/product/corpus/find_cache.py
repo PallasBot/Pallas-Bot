@@ -62,7 +62,7 @@ async def _cached_find(
     if _reply_db_fail_active(key, now=now):
         if for_reply:
             logger.debug(
-                "corpus_find_reply.skip reply_db_fail_cooldown kw_len={}",
+                "Corpus find reply was skipped during reply database failure cooldown for keyword length [{}]",
                 len(key),
             )
         return None
@@ -96,7 +96,7 @@ async def _cached_find(
             mark_reply_db_fail(key)
             if for_reply:
                 logger.debug(
-                    "corpus_find_reply.skip db_timeout kw_len={}",
+                    "Corpus find reply was skipped after database timeout for keyword length [{}]",
                     len(key),
                 )
             return None

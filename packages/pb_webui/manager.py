@@ -353,12 +353,12 @@ def _sync_download_webui_zip(
                 progress_percent_step=5,
                 on_progress=progress,
             )
-            logger.info("[WebUI] WebUI dist 已通过 mirror={} 下载完成", mirror_id)
+            logger.info("[WebUI] WebUI dist download completed through mirror [{}]", mirror_id)
             return
         except Exception as e:  # noqa: BLE001
             last_exc = e
             logger.warning(
-                "[WebUI] WebUI dist mirror={} 失败：{}",
+                "[WebUI] WebUI dist download through mirror [{}] failed: [{}]",
                 mirror_id,
                 format_exception_for_log(e),
             )

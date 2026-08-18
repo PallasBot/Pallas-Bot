@@ -307,8 +307,8 @@ async def enrich_system_with_relationship_context(
         "assertiveness_delta": assertiveness_delta,
     }
     logger.debug(
-        "relationship inject bot={} group={} user={} hit={} fallback={} note_source={} "
-        "warmth_delta={} assertiveness_delta={}",
+        "Relationship injection for bot [{}], group [{}], and user [{}] had hit [{}], fallback [{}], note source [{}], "
+        "warmth delta [{}], and assertiveness delta [{}]",
         bot_id,
         group_id,
         user_id,

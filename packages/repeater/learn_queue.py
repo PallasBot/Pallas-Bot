@@ -132,16 +132,16 @@ async def run_learn_consumer() -> None:
             record_learn_dropped_shutdown(len(jobs))
             raise
         except Exception as exc:
-            logger.warning("repeater learn outbox batch failed count={}: {}", len(jobs), exc)
+            logger.warning("Repeater learn outbox batch failed for [{}] jobs: [{}]", len(jobs), exc)
             if is_nul_payload_error(exc):
-                logger.warning("repeater learn outbox dropped NUL payload count={}", len(jobs))
+                logger.warning("Repeater learn outbox dropped NUL payloads for [{}] jobs", len(jobs))
                 continue
             while True:
                 await asyncio.sleep(0.2)
                 try:
                     await build_work_job_store().enqueue_many(jobs)
                 except Exception as retry_exc:
-                    logger.warning("repeater learn outbox batch retry failed count={}: {}", len(jobs), retry_exc)
+                    logger.warning("Repeater learn outbox batch retry failed for [{}] jobs: [{}]", len(jobs), retry_exc)
                     continue
                 from pallas.core.platform.ingress.hotpath_metrics import record_learn_persisted
 

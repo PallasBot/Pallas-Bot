@@ -182,7 +182,7 @@ async def run_kernel_chat_job(
             delivery_kwargs["suppress_empty_fallback"] = True
         await deliver_llm_chat_result(request_id, **delivery_kwargs)
     except Exception as exc:
-        logger.exception("llm kernel chat failed: request_id={}", request_id)
+        logger.exception("LLM kernel chat failed for request [{}]", request_id)
         try:
             from pallas.product.llm.runtime_debug import append_runtime_trace
 
@@ -191,11 +191,11 @@ async def run_kernel_chat_job(
                 trace={"status": "failed", "error": str(exc)[:240], "agent_trace": None},
             )
         except Exception:
-            logger.exception("llm kernel runtime trace failure: request_id={}", request_id)
+            logger.exception("LLM kernel runtime trace failed for request [{}]", request_id)
         try:
             await deliver_llm_chat_result(request_id, status="failed")
         except Exception:
-            logger.exception("llm kernel deliver failure failed: request_id={}", request_id)
+            logger.exception("LLM kernel delivery failed for request [{}]", request_id)
     finally:
         release_llm_execution_slot(execution_slot, cfg=cfg)
 

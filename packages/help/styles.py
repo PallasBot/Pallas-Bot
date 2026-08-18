@@ -55,7 +55,7 @@ def _load_user_defined_styles(custom_styles, styles_dict):
             custom_style = pillowmd.LoadMarkdownStyles(style_path)
             styles_dict[style_config.name] = custom_style
         except Exception as e:
-            logger.warning(f"help style load failed name={style_config.name!r} path={style_config.path!r}: {e}")
+            logger.warning(f"Help style [{style_config.name!r}] failed to load from [{style_config.path!r}]: [{e}]")
 
 
 def get_default_style(config) -> str:

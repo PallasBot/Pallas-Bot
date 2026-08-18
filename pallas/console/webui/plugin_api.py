@@ -382,7 +382,7 @@ def apply_plugin_config_patch(
 
         reload_metadata_after_plugin_config_save(plugin_name)
     except Exception:
-        logger.exception("plugin config save: metadata index reload failed plugin={}", plugin_name)
+        logger.exception("Plugin configuration save could not reload the metadata index for plugin [{}]", plugin_name)
     canonical = canonical_plugin_id((plugin_name or "").strip())
     if canonical == "repeater" and {"learn_concurrency", "learn_queue_max_size"} & normalized.keys():
         schedule_repeater_learn_reload()

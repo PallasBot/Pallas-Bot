@@ -60,7 +60,7 @@ def register_maa_user_route(user: str, *, worker_port: int | None = None) -> Non
         int(_TTL_SEC),
     )
     if not ok:
-        logger.warning("maa route register failed user={}", key)
+        logger.warning("MAA route registration failed for user [{}]", key)
 
 
 def resolve_worker_port_for_maa_user(user: str) -> int | None:

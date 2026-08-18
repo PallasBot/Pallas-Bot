@@ -315,10 +315,10 @@ async def build_bot_git_status_payload(
             try:
                 await fetch_bot_origin_refs()
             except BotGitUpdateError as e:
-                logger.warning("[WebUI] Bot git status fetch 失败 err={}", e.detail)
+                logger.warning("[WebUI] Bot git status fetch failed: [{}]", e.detail)
             except Exception as e:  # noqa: BLE001
                 logger.warning(
-                    "[WebUI] Bot git status fetch 异常 err={}",
+                    "[WebUI] Bot git status fetch raised an exception: [{}]",
                     format_exception_for_log(e),
                 )
         probe = bot_branch_update_probe(preferred_branch=preferred_branch)
@@ -361,10 +361,10 @@ async def load_bot_git_history_payload(
         try:
             await fetch_bot_origin_refs()
         except BotGitUpdateError as e:
-            logger.warning("[WebUI] Bot git history fetch 失败 err={}", e.detail)
+            logger.warning("[WebUI] Bot git history fetch failed: [{}]", e.detail)
         except Exception as e:  # noqa: BLE001
             logger.warning(
-                "[WebUI] Bot git history fetch 异常 err={}",
+                "[WebUI] Bot git history fetch raised an exception: [{}]",
                 format_exception_for_log(e),
             )
 
@@ -478,7 +478,7 @@ async def apply_bot_git_target(
         mirrors = list(iter_mirrors_for_failover("bot"))
         for i, mirror in enumerate(mirrors, start=1):
             logger.info(
-                "[WebUI] Bot git {} 尝试 {}/{} mirror={}",
+                "[WebUI] Bot git [{}] attempt [{}/{}] through mirror [{}]",
                 " ".join(args[:3]),
                 i,
                 len(mirrors),
@@ -489,7 +489,7 @@ async def apply_bot_git_target(
                 return code, out, err
             last_code, last_out, last_err = code, out, err
             logger.warning(
-                "[WebUI] Bot git mirror={} 失败：{}",
+                "[WebUI] Bot git through mirror [{}] failed: [{}]",
                 mirror.id,
                 (err or out or f"exit={code}")[:300],
             )
@@ -666,7 +666,7 @@ async def apply_bot_git_target(
             rc_sp, _, err_sp = await git("stash", "pop")
             if rc_sp != 0:
                 stash_note = " 本地改动已暂存但未自动恢复，请手动 git stash pop。"
-                logger.warning("[WebUI] commit 更新后 stash pop 失败 err={}", err_sp)
+                logger.warning("[WebUI] stash pop failed after commit update: [{}]", err_sp)
             else:
                 stash_note = " 已自动恢复先前暂存的本地改动。"
 
@@ -735,7 +735,7 @@ async def apply_bot_git_target(
             rc_sp, _, err_sp = await git("stash", "pop")
             if rc_sp != 0:
                 stash_restore_note = " 本地改动已暂存但未自动恢复，请手动 git stash pop。"
-                logger.warning("[WebUI] release 更新后 stash pop 失败 err={}", err_sp)
+                logger.warning("[WebUI] stash pop failed after release update: [{}]", err_sp)
             else:
                 stash_restore_note = " 已自动恢复先前暂存的本地改动。"
     else:

@@ -36,14 +36,14 @@ async def sync_kb_data_async() -> bool:
         gaps = kb_sync_gaps()
         if not gaps:
             return True
-        logger.info("arknights kb: background sync start gaps={}", gaps)
+        logger.info("Arknights knowledge-base background sync started with gaps [{}]", gaps)
         plan = kb_sync_plan(avatars=False)
         result = await asyncio.to_thread(run_arknights_sync, plan)
         for line in result.messages:
             logger.info("arknights kb: {}", line)
         ready = not kb_sync_gaps()
         logger.info(
-            "arknights kb: background sync done ready={} operators={} enemies={}",
+            "Arknights knowledge-base background sync completed with ready [{}], [{}] operators, and [{}] enemies",
             ready,
             result.operators_count,
             result.enemies_count,

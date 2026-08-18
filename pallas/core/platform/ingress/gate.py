@@ -340,7 +340,7 @@ async def log_ingress_gate_startup() -> None:
     fed = "on" if federate_ingress_active() else "off"
     unified_bypass = "on" if federate_ingress_bypass_unified() else "off"
     logger.debug(
-        "[入站门控] mode={} fleet={} federate={} bypass={} id={}",
+        "Ingress gate initialized with mode [{}], fleet [{}], federate [{}], bypass [{}], and ID [{}].",
         mode,
         n,
         fed,

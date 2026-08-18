@@ -61,7 +61,12 @@ async def speak_up():
         return
 
     for msg in messages:
-        logger.debug(format_business_event("主动发言", "已准备", bot=bot_id, group=group_id, content_len=len(str(msg))))
+        logger.debug(
+            "[Repeater] Bot [{}] prepared proactive speech in group [{}] with content length [{}]",
+            bot_id,
+            group_id,
+            len(str(msg)),
+        )
         try:
             from pallas.product.llm.sticker_followup import suppress_outgoing_sticker_followup
 

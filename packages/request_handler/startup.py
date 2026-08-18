@@ -69,7 +69,9 @@ async def poll_doubt_friends_job() -> None:
                 notified_set.add(uid)
                 state_updated = True
             else:
-                logger.warning(f"bot [{bot_key}] doubt friends notify_admins failed uid={uid}")
+                logger.warning(
+                    f"Bot [{bot_key}] failed to notify admins about doubtful friend request from user [{uid}]"
+                )
 
         notified_map[bot_key] = notified_set
 

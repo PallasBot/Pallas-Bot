@@ -341,7 +341,7 @@ async def handle_sticker_label_visual(payload: dict[str, Any]) -> None:
                 "error": f"{type(exc).__name__}: {str(exc)[:200]}",
             })
             await save_sticker_label_observation(job_id, dict(payload), observation)
-            logger.info("sticker label content rejected: job_id={} err={}", job_id, type(exc).__name__)
+            logger.info("Sticker label content was rejected for job [{}]: [{}]", job_id, type(exc).__name__)
             return
         if failure_state not in {"parse_error", "no_vision"}:
             sticker_label_circuit_record(False)
@@ -352,7 +352,7 @@ async def handle_sticker_label_visual(payload: dict[str, Any]) -> None:
             "error": f"{type(exc).__name__}: {str(exc)[:200]}",
         })
         await save_sticker_label_observation(job_id, dict(payload), observation)
-        logger.warning("sticker label failed: job_id={} err={}", job_id, type(exc).__name__)
+        logger.warning("Sticker label processing failed for job [{}]: [{}]", job_id, type(exc).__name__)
         if failure_state in {"parse_error", "no_vision"}:
             return
         raise

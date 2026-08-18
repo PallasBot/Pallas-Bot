@@ -94,7 +94,9 @@ async def build_drunk_chat_system_prompt(
         if isinstance(persona_raw, dict):
             group_expression_profile = ResolvedPersona(**persona_raw).group_expression_profile
     except Exception:
-        logger.exception("build_drunk_chat_system_prompt: compile persona failed bot={} group={}", bot_id, group_id)
+        logger.exception(
+            "Drunk-chat system prompt could not compile persona for bot [{}] and group [{}]", bot_id, group_id
+        )
 
     if not system_prompt:
         system_prompt = load_base_system_prompt(custom_path=resolved_path).strip()

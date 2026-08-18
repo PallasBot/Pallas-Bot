@@ -412,7 +412,7 @@ async def init_postgresql_db() -> None:
     else:
         host = _cfg("MONGO_HOST", "127.0.0.1")
         if host != "127.0.0.1":
-            logger.warning("[DB] PG_HOST 未设置，回退 MONGO_HOST={}", host)
+            logger.warning("PostgreSQL host is unset; falling back to MongoDB host [{}].", host)
     port = int(_cfg("PG_PORT", "5432"))
     user = _cfg("PG_USER", "")
     password = _cfg("PG_PASSWORD", "")

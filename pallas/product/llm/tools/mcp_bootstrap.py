@@ -37,7 +37,7 @@ def close_all_mcp_sessions() -> None:
         try:
             session.close()
         except Exception as err:
-            logger.debug("mcp session close failed id={}: {}", session.server_id, err)
+            logger.debug("MCP session close failed for ID [{}]: [{}]", session.server_id, err)
 
 
 def mcp_registration_snapshot() -> dict[str, Any]:
@@ -185,7 +185,7 @@ class _StdioMcpSession(_McpSessionBase):
         self.proc = proc
         self._next_id = 1
         self._initialize()
-        logger.info("mcp stdio session started id={}", self.server_id)
+        logger.info("MCP stdio session started for ID [{}]", self.server_id)
 
     def _read_json_line(self) -> dict[str, Any]:
         proc = self.proc
@@ -292,7 +292,7 @@ class _HttpMcpSession(_McpSessionBase):
         self.url = url
         self.client = httpx.Client(timeout=30.0)
         self._next_id = 1
-        logger.info("mcp http session ready id={} url={}", self.server_id, url)
+        logger.info("MCP HTTP session for ID [{}] is ready at URL [{}]", self.server_id, url)
 
     def call(self, *, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         with self.lock:
@@ -484,7 +484,7 @@ def register_mcp_tools() -> int:
             tools = list_mcp_tools(server)
         except Exception as err:
             msg = str(err).strip() or err.__class__.__name__
-            logger.warning("mcp register failed server_id={}: {}", server_id, msg)
+            logger.warning("MCP registration failed for server ID [{}]: [{}]", server_id, msg)
             _MCP_REGISTER_ERRORS.append({"server_id": server_id, "error": msg})
             continue
         for tool_row in tools:

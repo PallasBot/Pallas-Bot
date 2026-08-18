@@ -65,8 +65,8 @@ async def maybe_persist_relationship_from_utterance(
     if ok:
         fact_preview = (fact or "")[:48]
         logger.info(
-            "relationship persist ok source={} trigger={} bot={} group={} user={} "
-            "fact={!r} warmth_add={} assertiveness_add={}",
+            "Relationship persistence succeeded for source [{}], trigger [{}], bot [{}], group [{}], user [{}], "
+            "fact [{!r}], warmth add [{}], and assertiveness add [{}]",
             source,
             trigger,
             bot_id,

@@ -39,7 +39,8 @@ async def run_corpus_cleanup_round() -> None:
         return
     if report.deleted_answer_messages or report.deleted_message_history:
         logger.info(
-            "语料污染周期扫库完成 answer_messages={} empty_answers={} message_history={}",
+            "Corpus contamination periodic scan completed with [{}] answer messages, [{}] empty answers, "
+            "and [{}] message-history entries",
             report.deleted_answer_messages,
             report.deleted_empty_answers,
             report.deleted_message_history,

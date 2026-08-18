@@ -207,7 +207,7 @@ async def dispatch_group_command_text(
     try:
         bot = get_bot(str(ctx.bot_id))
     except Exception as err:
-        logger.warning("llm command dispatch get_bot failed bot_id={}: {}", ctx.bot_id, err)
+        logger.warning("LLM command dispatch could not get bot [{}]: [{}]", ctx.bot_id, err)
         return {"ok": False, "error": "bot_unavailable"}
 
     source_segments = source_segments_for_command(

@@ -58,7 +58,8 @@ def run_daemon(
         previous_handlers[signum] = signal.signal(signum, stop)
 
     try:
-        logger.info("启动 unified daemon，探活端口 [%s]", listen_port)
+        start_message = f"启动 unified daemon，探活端口 [{listen_port}]"
+        logger.info(start_message)
         start_code = lifecycle("start", mode="unified", extra_args=["--detach"])
         if start_code != 0:
             return start_code
@@ -71,7 +72,8 @@ def run_daemon(
                 failures = 0
             else:
                 failures += 1
-                logger.warning("Bot health 探活失败 [%s/%s]", failures, fail_threshold)
+                failure_message = f"Bot health 探活失败 [{failures}/{fail_threshold}]"
+                logger.warning(failure_message)
                 if failures >= fail_threshold:
                     logger.error("Bot health 连续失败，重启 unified")
                     restart_code = lifecycle(
@@ -80,7 +82,8 @@ def run_daemon(
                         extra_args=["--detach", "--skip-port-sync"],
                     )
                     if restart_code != 0:
-                        logger.error("unified 重启失败，退出码 [%s]", restart_code)
+                        restart_message = f"unified 重启失败，退出码 [{restart_code}]"
+                        logger.error(restart_message)
                         return restart_code
                     failures = 0
                     sleep(cooldown)

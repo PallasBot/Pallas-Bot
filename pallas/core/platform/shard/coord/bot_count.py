@@ -475,7 +475,7 @@ async def run_shard_coordinated_bot_count(
         if data0 and not data0.get("cancelled"):
             shards = data0.get("shards") if isinstance(data0.get("shards"), dict) else {}
             logger.warning(
-                "bot_count: coord incomplete group={} self={} shards={} order={}",
+                "Bot count coordination was incomplete for group [{}], self [{}], shards [{}], and order [{}].",
                 group_id,
                 self_bot_id,
                 list(shards.keys()),

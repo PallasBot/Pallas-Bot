@@ -125,7 +125,7 @@ async def ensure_duel_avatars_bulk(
             return True
         logger.info("决斗资源：头像 {}/{} 补全中", have, len(ids))
         ok, tried = await sync_missing_avatars_async(ids, missing_only=True)
-        logger.info(f"arknights duel: avatar sync done ok={ok} tried={tried}")
+        logger.info("Arknights duel avatar sync completed with [{}] successes from [{}] attempts.", ok, tried)
         return (have + ok) >= len(ids) * min_ratio
 
 
@@ -184,7 +184,7 @@ async def _run_background_arknights_sync(*, sync_json: bool, bulk_avatars: bool)
             from pallas.core.plugin_coord.duel import reload_operators_cache
 
             reload_operators_cache()
-        logger.info("决斗资源：后台同步完成 ok={}", ok)
+        logger.info("Arknights duel background resource sync completed with [{}] successes.", ok)
     except Exception as err:
         logger.error(f"arknights duel: background resource sync failed: {err}")
 

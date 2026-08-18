@@ -611,7 +611,12 @@ async def switch_runtime_model(
     num_gpu = get_runtime_num_gpu()
     if num_gpu is not None:
         result["num_gpu"] = num_gpu
-    logger.info("llm model switched via Bot Ollama: model={} pull={} num_gpu={}", name, pull, result.get("num_gpu"))
+    logger.info(
+        "LLM model switched through Bot Ollama to [{}], with pull [{}] and num_gpu [{}]",
+        name,
+        pull,
+        result.get("num_gpu"),
+    )
     return result
 
 
@@ -634,7 +639,7 @@ async def set_runtime_num_gpu(
     result: dict[str, Any] = {"num_gpu": num_gpu}
     if model:
         result["model"] = model
-    logger.info("llm num_gpu set via Bot: num_gpu={} model={}", num_gpu, model)
+    logger.info("LLM num_gpu was set through Bot to [{}] for model [{}]", num_gpu, model)
     _ = c
     return result
 
@@ -653,7 +658,7 @@ async def reload_runtime_model(*, cfg: LlmConfig | None = None, timeout_sec: flo
     num_gpu = get_runtime_num_gpu()
     if num_gpu is not None:
         result["num_gpu"] = num_gpu
-    logger.info("llm model reloaded from local routing: model={} num_gpu={}", model, result.get("num_gpu"))
+    logger.info("LLM model [{}] was reloaded from local routing with num_gpu [{}]", model, result.get("num_gpu"))
     _ = c
     return result
 
@@ -672,7 +677,7 @@ async def unload_runtime_model(*, cfg: LlmConfig | None = None, timeout_sec: flo
         await unload_ollama_model(base, model, timeout_sec=timeout_sec)
     except LlmProviderError as exc:
         raise RuntimeError(f"卸载模型失败: {exc}") from exc
-    logger.info("llm model unloaded via Bot Ollama: model={}", model)
+    logger.info("LLM model [{}] was unloaded through Bot Ollama", model)
 
 
 async def fetch_local_routing_config(
@@ -700,7 +705,7 @@ async def save_local_routing_config(
     model = str(payload.get("llm_model") or "").strip()
     if model:
         set_runtime_model_name(model)
-    logger.info("llm local routing config saved: path={}", payload.get("env_file"))
+    logger.info("LLM local routing configuration was saved to path [{}]", payload.get("env_file"))
     return payload
 
 
@@ -884,7 +889,7 @@ async def fetch_provider_models(
             last_exc = exc
             if should_failover_api_key(exc) and key_index + 1 < len(keys):
                 logger.warning(
-                    "llm models discover api key failed, trying next: provider={} key={} err={}",
+                    "LLM model discovery API key failed for provider [{}] and key [{}]; trying next: [{}]",
                     pid,
                     mask_api_key_hint(use_key),
                     exc,
@@ -956,7 +961,7 @@ async def probe_provider(
     enabled = None if row is None else bool(row.get("enabled", True))
     if not ok:
         logger.warning(
-            "llm provider probe failed: id={} enabled={} status={} err={}",
+            "LLM provider probe failed for ID [{}], enabled [{}], and status [{}]: [{}]",
             pid,
             enabled,
             status_i,

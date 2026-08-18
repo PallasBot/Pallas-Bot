@@ -289,7 +289,7 @@ def start_pg_pool_diagnostics_task() -> None:
         return
     _diag_task = asyncio.create_task(pool_diagnostics_loop(), name="pg_pool_diagnostics")
     logger.debug(
-        "pg pool diagnostics started (tick={}s, session_hold_warn={}ms)",
+        "PostgreSQL pool diagnostics started with a [{}]s tick and [{}]ms session-hold warning threshold.",
         int(pool_diag_tick_sec()),
         int(session_hold_warn_ms()),
     )

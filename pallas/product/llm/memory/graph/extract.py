@@ -93,7 +93,7 @@ async def extract_from_text(
         raw = await _call_extract_llm(raw_text, scope_key=scope_key)
         payload = parse_llm_json(raw)
     except Exception as exc:  # noqa: BLE001
-        logger.warning("memory graph extract llm failed scope={} err={}", scope_key, exc)
+        logger.warning("Memory graph LLM extraction failed for scope [{}]: [{}]", scope_key, exc)
         return {"entities_upserted": 0, "edges_upserted": 0, "error": str(exc)}
 
     if not isinstance(payload, dict):
@@ -234,10 +234,12 @@ async def maybe_extract_after_episode_write(
         )
         if result.get("error"):
             logger.warning(
-                "memory graph extract_on_write failed bot={} group={} err={}",
+                "Memory graph extraction on write failed for bot [{}] and group [{}]: [{}]",
                 bot_id,
                 group_id,
                 result.get("error"),
             )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("memory graph extract_on_write exception bot={} group={} err={}", bot_id, group_id, exc)
+        logger.warning(
+            "Memory graph extraction on write failed for bot [{}] and group [{}]: [{}]", bot_id, group_id, exc
+        )

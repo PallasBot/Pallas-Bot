@@ -259,6 +259,6 @@ async def check_llm_chat_gate(
         return "cooldown"
     if should_skip_llm_chat_under_pressure(hot_path=True):
         if _skipped_pressure == 1 or _skipped_pressure % 50 == 0:
-            logger.debug("llm chat skipped under pg pool pressure (count={})", _skipped_pressure)
+            logger.debug("LLM chat was skipped under PostgreSQL pool pressure after [{}] skips", _skipped_pressure)
         return "pool_pressure"
     return None

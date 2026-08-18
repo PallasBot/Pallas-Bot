@@ -86,7 +86,7 @@ def _write_session_banner(path: str, *, role: str, shard_id: int, stem: str) -> 
         from nonebot.log import logger
 
         logger.info(
-            "shard_session: role={} shard_id={} pid={} log_file={}",
+            "Shard session started with role [{}], shard ID [{}], PID [{}], and log file [{}].",
             role,
             shard_id,
             pid,

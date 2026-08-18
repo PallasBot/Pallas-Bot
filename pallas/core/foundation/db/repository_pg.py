@@ -1182,14 +1182,14 @@ async def cached_reply_query_snapshot(
     if pg_pool_under_pressure(threshold=0.55):
         record_reply_snapshot(hit=False, skipped=True)
         logger.debug(
-            "reply_query_snapshot.skip pg_pool_pressure kw_len={}",
+            "Reply query snapshot skipped because the PostgreSQL pool is under pressure for keyword length [{}].",
             len(key),
         )
         return None
     if reply_db_fail_active(key):
         record_reply_snapshot(hit=False, skipped=True)
         logger.debug(
-            "reply_query_snapshot.skip reply_db_fail_cooldown kw_len={}",
+            "Reply query snapshot skipped during database-failure cooldown for keyword length [{}].",
             len(key),
         )
         return None
@@ -1220,7 +1220,7 @@ async def cached_reply_query_snapshot(
             if _reply_query_snapshot_inflight.get(key) is task:
                 _reply_query_snapshot_inflight.pop(key, None)
         record_reply_snapshot(hit=False)
-        logger.debug("reply_query_snapshot.timeout kw_len={}", len(key))
+        logger.debug("Reply query snapshot timed out for keyword length [{}].", len(key))
         return None
     except Exception as exc:
         async with _reply_query_snapshot_lock:
@@ -1229,7 +1229,7 @@ async def cached_reply_query_snapshot(
         if is_pg_pool_timeout_error(exc):
             mark_reply_db_fail(key)
             logger.debug(
-                "reply_query_snapshot.skip db_timeout kw_len={}",
+                "Reply query snapshot skipped after a database timeout for keyword length [{}].",
                 len(key),
             )
             return None
@@ -1424,9 +1424,9 @@ class PgContextRepository:
         if elapsed_ms < threshold_ms:
             return
         logger.debug(
-            "corpus.reply_query slow_path elapsed_ms={:.1f} "
-            "stages=context={:.1f}ms ban={:.1f}ms answers={:.1f}ms messages={:.1f}ms "
-            "counts=ban:{} answers:{} messages:{} hit={} kw_len={}",
+            "Corpus reply query used the slow path in [{:.1f}]ms: context [{:.1f}]ms, ban [{:.1f}]ms, "
+            "answers [{:.1f}]ms, messages [{:.1f}]ms; counts were ban [{}], answers [{}], "
+            "messages [{}], hit [{}], and keyword length [{}].",
             elapsed_ms,
             context_ms or 0.0,
             ban_ms or 0.0,

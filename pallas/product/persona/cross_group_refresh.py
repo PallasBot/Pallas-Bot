@@ -41,7 +41,7 @@ async def mark_bots_cross_group_dirty_for_group(group_id: int, *, window_hours: 
     try:
         bot_ids = await list_bots(int(group_id), since_time=cutoff)
     except Exception as exc:
-        logger.warning("cross_group_refresh list bots failed group={}: {}", group_id, exc)
+        logger.warning("Cross-group refresh could not list bots for group [{}]: [{}]", group_id, exc)
         return
     for bot_id in bot_ids:
         mark_bot_cross_group_dirty(int(bot_id))
@@ -102,7 +102,7 @@ async def refresh_dirty_bot_cross_group_batch(
         try:
             ok = await refresh_bot_cross_group_persona(bot_id, window_hours=window_hours)
         except Exception as exc:
-            logger.warning("cross_group_refresh failed bot={}: {}", bot_id, exc)
+            logger.warning("Cross-group refresh failed for bot [{}]: [{}]", bot_id, exc)
             continue
         if ok:
             refreshed += 1

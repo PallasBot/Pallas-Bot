@@ -54,7 +54,7 @@ async def _load_webui_update_check_payload(plugin_config: Config) -> dict[str, A
         asset_url = str(latest.get("asset_url", "") or "").strip()
     except Exception as e:  # noqa: BLE001
         err_msg = format_exception_for_log(e)
-        logger.warning("[WebUI] WebUI 更新检查失败（GitHub），repo={} err={}", repo, err_msg)
+        logger.warning("[WebUI] WebUI update check failed for repository [{}]: [{}]", repo, err_msg)
         return {
             "current_tag": current_tag,
             "latest_tag": None,
@@ -168,7 +168,7 @@ async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any
             )
     except Exception as e:  # noqa: BLE001
         github_err = format_exception_for_log(e)
-        logger.warning("[WebUI] Bot 版本更新检查失败（GitHub） err={}", github_err)
+        logger.warning("[WebUI] Bot release update check failed: [{}]", github_err)
 
     if update_track == "branch":
         if not deploy.get("git_available"):
@@ -186,10 +186,10 @@ async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any
             await fetch_bot_origin_refs()
         except BotGitUpdateError as e:
             fetch_err = e.detail
-            logger.warning("[WebUI] Bot 分支轨道 fetch 失败 err={}", fetch_err)
+            logger.warning("[WebUI] Bot branch update fetch failed: [{}]", fetch_err)
         except Exception as e:  # noqa: BLE001
             fetch_err = format_exception_for_log(e)
-            logger.warning("[WebUI] Bot 分支轨道 fetch 异常 err={}", fetch_err)
+            logger.warning("[WebUI] Bot branch update fetch raised an exception: [{}]", fetch_err)
         probe = bot_branch_update_probe(preferred_branch=preferred_branch)
         err = probe.get("error") or fetch_err or github_err
         # fetch 失败但本地仍有远端 refs 时，仍可给出 has_update；否则透传错误
@@ -431,7 +431,7 @@ def register_update_router(
 
         job = await create_update_apply_job("bot", restart=restart)
         logger.info(
-            "[WebUI] Bot git 定向更新任务已排队 job_id={} mode={} strategy={} ref={} restart={}",
+            "[WebUI] Bot git update job [{}] queued with mode [{}], strategy [{}], reference [{}], restart [{}]",
             job.job_id,
             apply_mode,
             apply_strategy,
@@ -520,7 +520,7 @@ def register_update_router(
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
         job = await create_update_apply_job("bot", restart=restart)
         logger.info(
-            "[WebUI] Bot 仓库在线更新（git）任务已排队 job_id={} restart={}",
+            "[WebUI] Bot repository update job [{}] queued with restart [{}]",
             job.job_id,
             restart,
         )
@@ -628,7 +628,7 @@ def register_update_router(
             raise HTTPException(status_code=409, detail="update_busy")
 
         job = await create_update_apply_job("auto")
-        logger.info("[WebUI] 自动更新立即执行已排队 job_id={}", job.job_id)
+        logger.info("[WebUI] Immediate automatic update job [{}] queued", job.job_id)
 
         async def _runner(j: Any) -> None:
             def on_progress(pct: int, message: str) -> None:
@@ -706,7 +706,7 @@ def register_update_router(
             try:
                 await cached_read(key=key, loader=loader, ttl_sec=ttl, stale_sec=stale)
             except Exception as e:  # noqa: BLE001
-                logger.debug("[WebUI] 预热读缓存失败 key={} err={}", key, e)
+                logger.debug("[WebUI] Cache warm-up read failed for key [{}]: [{}]", key, e)
 
         async def load_webui() -> dict[str, Any]:
             return await _load_webui_update_check_payload(plugin_config)

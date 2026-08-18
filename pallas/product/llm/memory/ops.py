@@ -51,7 +51,7 @@ def _read_json(path: Path) -> dict[str, Any]:
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
     except Exception as exc:
-        logger.warning("llm ops json read failed path={} err={}", path, exc)
+        logger.warning("LLM operations JSON could not be read from path [{}]: [{}]", path, exc)
         return {}
     return raw if isinstance(raw, dict) else {}
 

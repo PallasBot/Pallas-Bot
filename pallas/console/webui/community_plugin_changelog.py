@@ -34,10 +34,12 @@ async def generate_community_changelog_from_git(plugin_id: str) -> str | None:
             cwd=str(plugin_dir),
         )
     except Exception as exc:  # noqa: BLE001
-        logger.debug("社区插件 changelog: git log 失败 plugin={} err={}", pid, exc)
+        logger.debug("Community plugin changelog git log failed for plugin [{}]: [{}]", pid, exc)
         return None
     if code != 0:
-        logger.debug("社区插件 changelog: git log 非零退出 plugin={} err={}", pid, (err or "").strip())
+        logger.debug(
+            "Community plugin changelog git log returned nonzero for plugin [{}]: [{}]", pid, (err or "").strip()
+        )
         return None
 
     rows: list[tuple[str, str, str]] = []

@@ -96,7 +96,7 @@ async def send_group_message_with_receipt(
             message_id=parse_delivery_message_id(result),
         )
     except _CALLBACK_SEND_ERRORS as e:
-        logger.warning("AI callback send_group_msg failed group={}: {}", group_id, e)
+        logger.warning("AI callback failed to send group message to group [{}]: [{}].", group_id, e)
         return DeliveryReceipt(delivered=False)
 
 
@@ -108,14 +108,14 @@ async def send_group_image(bot, group_id: int, image_bytes: bytes, *, at_user_id
         return False
     if not image_api.is_valid_generated_image(image_bytes):
         logger.warning(
-            "AI callback draw image rejected group={} len={}",
+            "AI callback rejected image for group [{}] with length [{}].",
             group_id,
             len(image_bytes),
         )
         return False
     message = image_api.optional_message_at_user(at_user_id, MessageSegment.image(image_bytes))
     logger.debug(
-        "AI callback sending group image task=unknown bot_id={} group={} bytes={} at_user_id={}",
+        "AI callback is sending an image for unknown task from bot [{}] to group [{}], bytes [{}], at user [{}].",
         getattr(bot, "self_id", "<unknown>"),
         group_id,
         len(image_bytes),
@@ -130,7 +130,7 @@ async def send_group_image(bot, group_id: int, image_bytes: bytes, *, at_user_id
             },
         )
         logger.debug(
-            "AI callback sent group image task=unknown bot_id={} group={} bytes={} at_user_id={}",
+            "AI callback sent an image for unknown task from bot [{}] to group [{}], bytes [{}], at user [{}].",
             getattr(bot, "self_id", "<unknown>"),
             group_id,
             len(image_bytes),
@@ -138,7 +138,7 @@ async def send_group_image(bot, group_id: int, image_bytes: bytes, *, at_user_id
         )
         return True
     except _CALLBACK_SEND_ERRORS as e:
-        logger.warning("AI callback send_group image failed group={}: {}", group_id, e)
+        logger.warning("AI callback failed to send group image to group [{}]: [{}].", group_id, e)
         return False
 
 
@@ -146,7 +146,7 @@ async def send_group_voice(bot, group_id: int, audio_bytes: bytes) -> bool:
     if not audio_bytes:
         return False
     logger.debug(
-        "AI callback sending group voice task=unknown bot_id={} group={} bytes={}",
+        "AI callback is sending voice for unknown task from bot [{}] to group [{}], bytes [{}].",
         getattr(bot, "self_id", "<unknown>"),
         group_id,
         len(audio_bytes),
@@ -160,12 +160,12 @@ async def send_group_voice(bot, group_id: int, audio_bytes: bytes) -> bool:
             },
         )
         logger.debug(
-            "AI callback sent group voice task=unknown bot_id={} group={} bytes={}",
+            "AI callback sent voice for unknown task from bot [{}] to group [{}], bytes [{}].",
             getattr(bot, "self_id", "<unknown>"),
             group_id,
             len(audio_bytes),
         )
         return True
     except _CALLBACK_SEND_ERRORS as e:
-        logger.warning("AI callback send voice failed group={}: {}", group_id, e)
+        logger.warning("AI callback failed to send voice to group [{}]: [{}].", group_id, e)
         return False

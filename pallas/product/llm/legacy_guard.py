@@ -27,7 +27,7 @@ def assess_legacy_chat_submit(cfg: LlmConfig) -> LegacyChatRejectReason | None:
         return None
     if not cfg.legacy_chat_allowed:
         return "legacy_chat_disabled"
-    logger.warning("LLM legacy chat endpoint 已显式放行（LLM_LEGACY_CHAT_ALLOWED）: {}", endpoint)
+    logger.warning("LLM legacy chat endpoint was explicitly allowed: [{}]", endpoint)
     return None
 
 
@@ -38,16 +38,16 @@ def log_legacy_chat_config_warnings(cfg: LlmConfig) -> None:
     if is_legacy_ollama_endpoint(endpoint):
         if cfg.legacy_chat_allowed:
             logger.warning(
-                "LLM_USE_UNIFIED_CHAT_API=false 且 legacy 指向 ollama；仅过渡兼容，请尽快迁移统一 capability API: {}",
+                "Legacy Ollama routing is running with unified chat disabled; migrate to the capability API: [{}]",
                 endpoint,
             )
         else:
             logger.error(
-                "LLM legacy 指向 /ollama/ 但未启用 LLM_LEGACY_CHAT_ALLOWED；提交将被拒绝: {}",
+                "Legacy Ollama routing is not allowed, so submission will be rejected: [{}]",
                 endpoint,
             )
         return
     logger.warning(
-        "LLM_USE_UNIFIED_CHAT_API=false；legacy 提交默认拒绝，过渡请设 LLM_LEGACY_CHAT_ALLOWED=true: {}",
+        "Legacy submission was rejected because unified chat is disabled; enable it for migration: [{}]",
         endpoint or cfg.legacy_chat_endpoint,
     )

@@ -53,7 +53,7 @@ async def load_feedback_snapshot(
             hotpath=True,
         )
     except Exception as exc:
-        logger.warning("repeater.llm_feedback_bias_snapshot_failed group_id={}: {}", group_id, exc)
+        logger.warning("Repeater LLM feedback bias snapshot failed for group [{}]: [{}]", group_id, exc)
         return None
 
 
@@ -714,7 +714,7 @@ class Responder:
                 ).value
             )
         except Exception as exc:
-            logger.warning("repeater.behavior_scene_failed group_id={}: {}", group_id, exc)
+            logger.warning("Repeater behavior scene classification failed for group [{}]: [{}]", group_id, exc)
         t_feedback = time.perf_counter()
         feedback_snapshot = await load_feedback_snapshot(
             group_id=group_id,

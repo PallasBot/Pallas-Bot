@@ -158,7 +158,7 @@ async def apply_webui_dist_update(
     public = webui_public_path()
 
     logger.info(
-        "[CLI] WebUI 在线更新开始 repo={} asset={} tag={}",
+        "WebUI online update started for repository [{}], asset [{}], and tag [{}]",
         repo_name,
         asset_name,
         tag_name or "(latest)",
@@ -203,7 +203,7 @@ async def apply_webui_dist_update(
         new_tag = str(info.get("tag", "") or tag_name).strip()
     except Exception as e:  # noqa: BLE001
         logger.warning(
-            "[CLI] 获取 WebUI release 元数据失败 tag={} err={}",
+            "WebUI release metadata could not be fetched for tag [{}]: [{}]",
             tag_name or "(空)",
             format_exception_for_log(e),
         )

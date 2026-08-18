@@ -239,14 +239,14 @@ if not is_sharded_worker():
                     current_commit=str(bot_current_commit or ""),
                 ):
                     logger.debug(
-                        "[WebUI] Bot dev build ahead of release {} commit={}",
+                        "[WebUI] Bot development build is ahead of release [{}] at commit [{}]",
                         bot_latest_tag,
                         bot_current_commit or "-",
                     )
                 elif bot_current_tag:
-                    logger.debug("[WebUI] Bot up to date tag={}", bot_current_tag)
+                    logger.debug("[WebUI] Bot is up to date at tag [{}]", bot_current_tag)
                 else:
-                    logger.debug("[WebUI] Bot commit={}", bot_current_commit or "-")
+                    logger.debug("[WebUI] Bot is running commit [{}]", bot_current_commit or "-")
             except Exception as e:
                 logger.debug("[WebUI] Bot update check failed: {}", format_exception_for_log(e))
 

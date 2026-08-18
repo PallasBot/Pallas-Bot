@@ -80,7 +80,7 @@ async def run_corpus_write_consumer() -> None:
             else:
                 await mirror_insert(**op.payload)
         except Exception as e:
-            logger.warning("corpus mirror failed err_type={} err={!r}", type(e).__name__, e)
+            logger.warning("Corpus mirror failed with error type [{}]: [{!r}]", type(e).__name__, e)
         finally:
             corpus_write_queue().task_done()
 
@@ -180,7 +180,7 @@ def _enqueue_corpus_write(op: _MirrorWriteOp) -> None:
         _write_dropped_full += 1
         if _write_dropped_full == 1 or _write_dropped_full % 200 == 0:
             logger.info(
-                "corpus mirror queue full (max={}), dropped={}",
+                "Corpus mirror queue reached maximum [{}] and dropped [{}] entries",
                 _WRITE_QUEUE_MAX,
                 _write_dropped_full,
             )

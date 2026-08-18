@@ -179,7 +179,12 @@ def schedule_register_dream_active(bot_id: int, group_id: int, until_ts: float) 
         try:
             await asyncio.to_thread(register_dream_active_sync, bot_id, group_id, until_ts)
         except Exception as err:
-            logger.debug(f"dream_drift register active failed bot={bot_id} group={group_id}: {err}")
+            logger.debug(
+                "dream drift active registration failed for bot [{}] in group [{}]: [{}]",
+                bot_id,
+                group_id,
+                err,
+            )
 
     asyncio.create_task(job())
 
@@ -192,7 +197,12 @@ def schedule_unregister_dream_active(bot_id: int, group_id: int) -> None:
         try:
             await asyncio.to_thread(unregister_dream_active_sync, bot_id, group_id)
         except Exception as err:
-            logger.debug(f"dream_drift unregister active failed bot={bot_id} group={group_id}: {err}")
+            logger.debug(
+                "dream drift active removal failed for bot [{}] in group [{}]: [{}]",
+                bot_id,
+                group_id,
+                err,
+            )
 
     asyncio.create_task(job())
 
@@ -223,7 +233,12 @@ def schedule_publish_dream_drift(
                 if not coord_redis_enabled():
                     _warn_missing_redis_once()
         except Exception as err:
-            logger.debug(f"dream_drift publish failed bot={bot_id} target={target_group_id}: {err}")
+            logger.debug(
+                "dream drift publish failed for bot [{}] to group [{}]: [{}]",
+                bot_id,
+                target_group_id,
+                err,
+            )
 
     asyncio.create_task(job())
 

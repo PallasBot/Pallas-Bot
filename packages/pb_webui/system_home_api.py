@@ -444,7 +444,7 @@ def _runtime_metrics() -> dict[str, Any]:
 
         boot_time = float(_psutil_boot.boot_time())
     except Exception as e:  # noqa: BLE001
-        logger.debug("[WebUI] psutil.boot_time 不可用，将尝试其它方式 err={}", e)
+        logger.debug("[WebUI] psutil.boot_time is unavailable; trying another method: [{}]", e)
 
     if boot_time is None and sys.platform == "win32":
         try:
@@ -453,7 +453,7 @@ def _runtime_metrics() -> dict[str, Any]:
             ms = int(ctypes.windll.kernel32.GetTickCount64())
             boot_time = float(time.time() - ms / 1000.0)
         except Exception as e:  # noqa: BLE001
-            logger.debug("[WebUI] Windows GetTickCount64 推算启动时间失败 err={}", e)
+            logger.debug("[WebUI] Windows GetTickCount64 failed to estimate boot time: [{}]", e)
 
     return {
         "platform": platform.platform(),

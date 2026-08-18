@@ -492,7 +492,7 @@ def _read_ai_providers_toml() -> dict[str, Any] | None:
             with path.open("rb") as handle:
                 data = tomllib.load(handle)
         except Exception:
-            logger.exception("import ai providers.toml failed: path={}", path)
+            logger.exception("AI providers.toml import failed for path [{}]", path)
             continue
         if not isinstance(data, dict):
             continue
@@ -507,7 +507,7 @@ def _ensure_seeded_document() -> dict[str, Any]:
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
-            logger.exception("read llm providers store failed: path={}", path)
+            logger.exception("LLM providers store could not be read from path [{}]", path)
             return _empty_document()
         if isinstance(payload, dict):
             return _normalize_document(payload)
@@ -519,9 +519,9 @@ def _ensure_seeded_document() -> dict[str, Any]:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-        logger.info("seeded bot llm providers store: path={}", path)
+        logger.info("Bot LLM providers store was seeded at path [{}]", path)
     except Exception:
-        logger.exception("seed llm providers store failed: path={}", path)
+        logger.exception("LLM providers store seeding failed for path [{}]", path)
     return doc
 
 
@@ -547,7 +547,7 @@ def save_providers_document(document: dict[str, Any]) -> dict[str, Any]:
     with _LOCK:
         _DOC_CACHE = json.loads(json.dumps(normalized))
         _DOC_CACHE_REV = providers_store_disk_revision()
-    logger.info("llm providers saved: file={}", path)
+    logger.info("LLM providers were saved to file [{}]", path)
     return export_providers_for_api(doc=normalized)
 
 
@@ -599,7 +599,7 @@ def upsert_provider_row(provider: dict[str, Any]) -> dict[str, Any]:
     with _LOCK:
         _DOC_CACHE = json.loads(json.dumps(doc))
         _DOC_CACHE_REV = providers_store_disk_revision()
-    logger.info("llm provider upserted: id={} file={}", pid, path)
+    logger.info("LLM provider [{}] was upserted in file [{}]", pid, path)
     return export_providers_for_api(doc=doc)
 
 

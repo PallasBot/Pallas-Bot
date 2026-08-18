@@ -125,7 +125,7 @@ async def _llm_assign(names: list[str], *, layer: int) -> list[dict[str, Any]]:
         raw = await _chat(system, user)
         return _parse_cat_assignments(raw, item_count=len(names))
     except Exception as exc:  # noqa: BLE001
-        logger.warning("hiergraph llm assign failed layer={} err={}", layer, exc)
+        logger.warning("Hiergraph LLM assignment failed for layer [{}]: [{}]", layer, exc)
         return _fallback_singleton_assignments(names)
 
 
@@ -137,7 +137,7 @@ async def _maybe_group_summary(category_names: list[str]) -> str:
         text = await _chat(_SUMMARY_SYSTEM, f"类目：{preview}")
         return sanitize_prompt_literal(text, max_len=500) or ""
     except Exception as exc:  # noqa: BLE001
-        logger.warning("hiergraph group_summary failed err={}", exc)
+        logger.warning("Hiergraph group summary failed: [{}]", exc)
         return ""
 
 

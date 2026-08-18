@@ -33,14 +33,14 @@ async def submit_rwkv_drunk_chat(
             timeout=timeout_sec,
         )
     except Exception:
-        logger.exception("rwkv drunk chat request failed: url={}", url)
+        logger.exception("RWKV drunk-chat request failed for URL [{}]", url)
         return "", False
     if not response:
         return "", False
     try:
         body = response.json()
     except Exception:
-        logger.warning("rwkv drunk chat invalid json: url={}", url)
+        logger.warning("RWKV drunk-chat response contained invalid JSON for URL [{}]", url)
         return "", False
     task_id = str(body.get("task_id") or "")
     return task_id, bool(task_id)
@@ -59,6 +59,6 @@ async def delete_rwkv_chat_session(
     try:
         response = await HTTPXClient.delete(url, timeout=timeout_sec)
     except Exception:
-        logger.warning("delete_rwkv_chat_session failed: session={}", session_id)
+        logger.warning("RWKV chat session deletion failed for session [{}]", session_id)
         return False
     return bool(response) and response.status_code < 400

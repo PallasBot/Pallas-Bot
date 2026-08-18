@@ -485,7 +485,8 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                     )
                 if llm_command is not None:
                     logger.info(
-                        "LLM 合成命令调度 command={} source_segment_types={} selected_matchers={} acquired_matchers={}",
+                        "LLM synthesized command [{}] with source segment types [{}], selected matchers [{}], "
+                        "and acquired matchers [{}].",
                         llm_command["command_id"],
                         llm_command["source_segment_types"],
                         selected_matcher_modules,
@@ -520,7 +521,7 @@ def install_matcher_dispatch() -> None:
 
     _PATCHED = True
     logger.debug(
-        "[消息预筛] overload_threshold={} multi_bot={} adapter_patches={}",
+        "Message prefilter initialized with overload threshold [{}], multi-bot [{}], and adapter patches [{}].",
         overload_selected_threshold(),
         needs_group_host_bot_gate(),
         len(_ORIGINAL_ADAPTER_HANDLE_EVENTS),
