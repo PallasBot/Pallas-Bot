@@ -23,7 +23,7 @@ _ALLOWED_ASCII_PUNCT = frozenset(".,?!;:'\"()-_~`@#&+*=%^/\n\t \r")
 _EMPTY_MEM_TOKENS = frozenset({"无", "none", "n/a", "null", "无内容", "无可记"})
 _STANDALONE_CHAT_RE = re.compile(r"^[？?]$")
 # 受控提及占位符：LLM 可能输出单/双括号或裸 @key，delivery 校验授权后替换为 CQ at
-_MENTION_PLACEHOLDER_RE = re.compile(r"(?:\[{1,2}|【|（|\(|「)?\s*@[a-zA-Z0-9_]+\s*(?:\]{1,2}|】|）|\)|」)?")
+_MENTION_PLACEHOLDER_RE = re.compile(r"(?:\[{1,2}|【|（|\(|「)?\s*@[^\s\]】）)」]+\s*(?:\]{1,2}|】|）|\)|」)?")
 
 
 StructuredReply = StructuredChatReply

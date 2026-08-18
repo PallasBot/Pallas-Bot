@@ -556,10 +556,16 @@ async def deliver_llm_callback_success(
         if delivery_segments and str(group_id or "").isdigit() and str(bot_id or "").isdigit():
             from pallas.product.llm.tools.social import replace_mention_tokens
 
-            delivery_segments = [
+            replaced = [
                 replace_mention_tokens(segment, bot_id=int(bot_id), group_id=int(group_id))
                 for segment in delivery_segments
             ]
+            if not any(str(segment or "").strip() for segment in replaced):
+                logger.info(
+                    "AI callback reply silenced after mention token strip, raw segments {!r}",
+                    delivery_segments,
+                )
+            delivery_segments = replaced
             reply_text = "\n".join(delivery_segments)
     sticker_intent = str(structured_reply.sticker_intent or "")
     if marker_intent and sticker_intent in ("", "none"):

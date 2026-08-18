@@ -28,7 +28,7 @@ except Exception:  # pragma: no cover - 测试环境无 nonebot 时兜底
 
 _MENTION_GRANT_TTL_SEC = 300.0
 # 提及占位符：LLM 可能输出单/双括号或裸 @key；带括号的未授权项会被删除
-_MENTION_PLACEHOLDER_RE = re.compile(r"(?:\[{1,2}|【|（|\(|「)?\s*@([a-zA-Z0-9_]+)\s*(?:\]{1,2}|】|）|\)|」)?")
+_MENTION_PLACEHOLDER_RE = re.compile(r"(?:\[{1,2}|【|（|\(|「)?\s*@([^\s\]】）)」]+)\s*(?:\]{1,2}|】|）|\)|」)?")
 
 _grants_lock = threading.Lock()
 _grants: dict[tuple[int, int], dict[str, tuple[int, float]]] = {}
@@ -188,6 +188,7 @@ async def handle_master_info(arguments: dict[str, Any], context: ToolInvokeConte
             continue
         key = f"master_{index}"
         grant_mention(context.bot_id, context.group_id, key, qq)
+        grant_mention(context.bot_id, context.group_id, re.sub(r"\s+", "", name), qq)
         masters.append({"key": key, "qq": qq, "name": name})
     if not masters:
         logger.info(
@@ -254,6 +255,7 @@ async def handle_member_find(arguments: dict[str, Any], context: ToolInvokeConte
     for index, (_score, qq, name) in enumerate(scored[:5]):
         key = f"member_{index}"
         grant_mention(context.bot_id, context.group_id, key, qq)
+        grant_mention(context.bot_id, context.group_id, re.sub(r"\s+", "", name), qq)
         matches.append({"key": key, "qq": qq, "name": name})
     if not matches:
         logger.info(

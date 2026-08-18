@@ -136,6 +136,15 @@ def test_replace_mention_tokens_grants_only_authorized(monkeypatch) -> None:
     assert "[@master_0]" not in out
 
 
+def test_replace_mention_tokens_accepts_name_key(monkeypatch) -> None:
+    clear_social_mention_state()
+    grant_mention(BOT_ID, GROUP_ID, "星乃海獭獭", 3447284533)
+    out = replace_mention_tokens("[[@星乃海獭獭]] 有人找你", bot_id=BOT_ID, group_id=GROUP_ID)
+    assert out == "[CQ:at,qq=3447284533] 有人找你"
+    plain = replace_mention_tokens("星乃海獭獭，出来一下", bot_id=BOT_ID, group_id=GROUP_ID)
+    assert plain == "星乃海獭獭，出来一下"
+
+
 def test_replace_mention_tokens_unknown_group_deletes(monkeypatch) -> None:
     clear_social_mention_state()
     grant_mention(BOT_ID, GROUP_ID, "master_0", MASTER_QQ)
@@ -145,6 +154,7 @@ def test_replace_mention_tokens_unknown_group_deletes(monkeypatch) -> None:
 
 def test_social_domain_inference() -> None:
     assert "social" in infer_tool_domains("把你的主人@出来")
+    assert "social" in infer_tool_domains("你的主人是谁")
     assert "social" in infer_tool_domains("群里有没有叫泰坦的人")
     assert "social" in infer_tool_domains("牛牛叫星乃海獭獭出来一下")
     assert "social" in infer_tool_domains("把泰坦叫出来")
