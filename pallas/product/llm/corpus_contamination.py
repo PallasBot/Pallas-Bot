@@ -252,10 +252,7 @@ def reject_corpus_learn_message(message: str, *, source: str = "") -> bool:
     hit = match_corpus_learn_block(message)
     if hit is None:
         return False
-    preview = str(message or "").strip()
-    if len(preview) > 80:
-        preview = preview[:80] + "…"
-    logger.debug("corpus learn guard blocked source={} phrase={} text={}", source, hit.phrase, preview)
+    logger.debug("Corpus learning guard blocked source [{}] for phrase [{}]", source, hit.phrase)
     return True
 
 
@@ -378,10 +375,8 @@ async def run_mongo_corpus_contamination_cleanup(
                     if hit is None:
                         continue
                     logger.info(
-                        "[corpus-cleanup] context={} group={} msg={}",
-                        str(doc.get("keywords") or "")[:24],
+                        "Corpus cleanup processed contaminated context answer in group [{}]",
                         answer.get("group_id"),
-                        str(message)[:90],
                     )
                     preview_shown += 1
                     if preview_shown >= preview_limit:
@@ -402,12 +397,7 @@ async def run_mongo_corpus_contamination_cleanup(
     if preview_limit > 0 and include_message_history and message_query:
         preview_messages = await Message.find(message_query).limit(min(preview_limit, 10)).to_list()
         for row in preview_messages:
-            logger.info(
-                "[corpus-cleanup] message bot={} group={} text={}",
-                row.bot_id,
-                row.group_id,
-                str(row.plain_text)[:120],
-            )
+            logger.info("Corpus cleanup processed message from bot [{}] in group [{}]", row.bot_id, row.group_id)
 
     report = CorpusCleanupReport(
         answer_message_candidates=removed_message_candidates,
@@ -443,7 +433,8 @@ async def run_mongo_corpus_contamination_cleanup(
         pass
 
     logger.info(
-        "corpus cleanup mongo apply={} deleted answer_messages={} empty_answers={} message_history={}",
+        "Corpus cleanup Mongo apply [{}] deleted [{}] answer messages, [{}] empty answers, "
+        "and [{}] message-history entries",
         apply,
         deleted_messages,
         deleted_answers,
@@ -520,21 +511,9 @@ async def run_pg_corpus_contamination_cleanup(
 
     if preview_limit > 0:
         for row in answer_rows[:preview_limit]:
-            logger.info(
-                "[corpus-cleanup] answer id={} group={} ctx={} msg={}",
-                row[0],
-                row[3],
-                str(row[4])[:24],
-                str(row[2])[:90],
-            )
+            logger.info("Corpus cleanup processed answer [{}] in group [{}]", row[0], row[3])
         for row in message_rows[: min(preview_limit, 10)]:
-            logger.info(
-                "[corpus-cleanup] message id={} bot={} group={} text={}",
-                row[0],
-                row[1],
-                row[2],
-                row[3],
-            )
+            logger.info("Corpus cleanup processed message [{}] from bot [{}] in group [{}]", row[0], row[1], row[2])
 
     report = CorpusCleanupReport(
         answer_message_candidates=len(answer_ids),
@@ -603,7 +582,7 @@ async def run_pg_corpus_contamination_cleanup(
         pass
 
     logger.info(
-        "corpus cleanup apply={} deleted answer_messages={} empty_answers={} message_history={}",
+        "Corpus cleanup apply [{}] deleted [{}] answer messages, [{}] empty answers, and [{}] message-history entries",
         apply,
         deleted_messages,
         deleted_answers,

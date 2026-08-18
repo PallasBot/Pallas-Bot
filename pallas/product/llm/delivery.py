@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 from nonebot import logger
 
 from pallas.api.logging import format_plugin_event
+from pallas.core.foundation.logging import log_rate_limited
 from pallas.core.foundation.logging.bridge import format_business_event
 from pallas.core.platform.ai_callback.handlers import (
     should_append_llm_session,
@@ -554,19 +555,28 @@ async def deliver_llm_callback_success(
             )
         ]
         if delivery_segments and str(group_id or "").isdigit() and str(bot_id or "").isdigit():
-            from pallas.product.llm.tools.social import replace_mention_tokens
+            from pallas.product.llm.tools.social import is_social_request, replace_mention_tokens
 
-            replaced = [
-                replace_mention_tokens(segment, bot_id=int(bot_id), group_id=int(group_id))
-                for segment in delivery_segments
-            ]
-            if not any(str(segment or "").strip() for segment in replaced):
-                logger.info(
-                    "AI callback reply silenced after mention token strip, raw segments {!r}",
-                    delivery_segments,
-                )
-            delivery_segments = replaced
-            reply_text = "\n".join(delivery_segments)
+            request_id = str(task.get("request_id") or task_id).strip()
+            if is_social_request(int(bot_id), int(group_id), request_id):
+                replaced = [
+                    replace_mention_tokens(
+                        segment,
+                        bot_id=int(bot_id),
+                        group_id=int(group_id),
+                        request_id=request_id,
+                    )
+                    for segment in delivery_segments
+                ]
+                delivery_segments = [segment for segment in replaced if str(segment or "").strip()]
+                if not delivery_segments:
+                    log_rate_limited(
+                        logger,
+                        "info",
+                        "llm.delivery.mention_token_silenced",
+                        "AI callback reply silenced after unapproved mention token removal",
+                    )
+                reply_text = "\n".join(delivery_segments)
     sticker_intent = str(structured_reply.sticker_intent or "")
     if marker_intent and sticker_intent in ("", "none"):
         sticker_intent = marker_to_sticker_tokens(marker_intent)
@@ -580,7 +590,7 @@ async def deliver_llm_callback_success(
     if delivery_segments and group_id and bot is not None:
         logger.info(
             f"Bot [{getattr(bot, 'self_id', bot_id_str or '<missing>')}] delivering a "
-            f"[{task_type}] reply [id={task_id}] to group [{group_id}], length [{len(learned_reply_text)}]"
+            f"[{task_type}] reply with ID [{task_id}] to group [{group_id}], length [{len(learned_reply_text)}]"
         )
         bubble_sleeper = sleeper or asyncio.sleep
         reply_to_message_id, at_user_id = resolve_llm_reply_delivery(
@@ -745,7 +755,7 @@ async def deliver_llm_callback_success(
         logger.info(
             format_plugin_event(
                 "deliver_reply",
-                f"Bot [{bot_id}] delivered a reply in group [{group_id}]: {reply_text[:200]}",
+                f"Bot [{bot_id}] delivered a reply in group [{group_id}], length [{len(reply_text)}]",
             )
         )
     return reply_text, text_delivered, delivered

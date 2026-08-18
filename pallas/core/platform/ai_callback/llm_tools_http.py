@@ -15,6 +15,7 @@ class LlmToolExecuteRequest(BaseModel):
     bot_id: int
     group_id: int | None = None
     user_id: int
+    request_id: str = ""
 
 
 def register_llm_tools_http() -> None:
@@ -24,10 +25,13 @@ def register_llm_tools_http() -> None:
 
     @app.post("/pallas/api/internal/llm/tools/execute")
     async def llm_tool_execute_route(body: LlmToolExecuteRequest) -> dict:
+        if body.name.startswith("social."):
+            raise HTTPException(status_code=403, detail="social_tools_require_task_context")
         ctx = ToolInvokeContext(
             bot_id=body.bot_id,
             group_id=body.group_id,
             user_id=body.user_id,
+            request_id=body.request_id,
         )
         result = await execute_tool_async(body.name, body.arguments, context=ctx)
         if not result.get("ok"):

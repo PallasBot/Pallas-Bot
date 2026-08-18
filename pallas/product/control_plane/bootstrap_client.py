@@ -116,13 +116,13 @@ async def refresh_control_plane_bootstrap(*, force: bool = False) -> bool:
                     try:
                         resp = await client.get(endpoint, headers=headers)
                     except httpx.HTTPError as e:
-                        last_error = str(e)
-                        logger.warning("control_plane bootstrap failed endpoint={}: {}", endpoint, e)
+                        last_error = type(e).__name__
+                        logger.warning("Control-plane bootstrap failed with error type [{}]", type(e).__name__)
                         continue
                     if resp.status_code != 200:
-                        last_error = f"HTTP {resp.status_code}: {(resp.text or '')[:200]}"
+                        last_error = f"HTTP {resp.status_code}"
                         logger.warning(
-                            "control_plane bootstrap HTTP {} endpoint={}",
+                            "Control-plane bootstrap returned HTTP [{}] from endpoint [{}]",
                             resp.status_code,
                             endpoint,
                         )
@@ -162,17 +162,17 @@ async def refresh_control_plane_bootstrap(*, force: bool = False) -> bool:
                     )
                     clear_bootstrap_runtime_caches()
                     logger.info(
-                        "control_plane bootstrap: ok federate_id={} redis={}",
+                        "Control-plane bootstrap succeeded for federate ID [{}] with Redis [{}]",
                         federate_id or "-",
                         bool(coord and coord.get("redis_url")),
                     )
                     return True
     except Exception as e:
-        last_error = str(e)
-        logger.warning("control_plane bootstrap: {}", e)
+        last_error = type(e).__name__
+        logger.warning("Control-plane bootstrap failed with error type [{}]", type(e).__name__)
 
     if last_error:
-        logger.debug("control_plane bootstrap last_error={}", last_error)
+        logger.debug("Control-plane bootstrap exhausted all endpoints with error [{}]", last_error)
     return bootstrap_state_valid()
 
 

@@ -459,11 +459,11 @@ async def complete_chat_message(
                     if should_failover_api_key(exc) and key_index + 1 < len(keys):
                         key_failed_over = True
                         logger.warning(
-                            "llm api key failed, trying next key: provider={} model={} key={} err={}",
+                            "LLM key failover for provider [{}], model [{}], key [{}], error [{}]",
                             endpoint.provider_id,
                             use_model,
                             mask_api_key_hint(use_key),
-                            exc,
+                            type(exc).__name__,
                         )
                         continue
                     break
@@ -473,11 +473,11 @@ async def complete_chat_message(
             if index + 1 >= len(candidates):
                 break
             logger.warning(
-                "llm provider failed, trying fallback: provider={} model={} key_failover={} err={}",
+                "LLM provider [{}] failed for model [{}] with key failover [{}]; trying fallback after error type [{}]",
                 endpoint.provider_id,
                 use_model,
                 key_failed_over,
-                last_error,
+                type(last_error).__name__,
             )
         assert last_error is not None
         raise last_error
@@ -972,9 +972,9 @@ async def _post_anthropic_messages(
     response = await client.post(url, json=payload, headers=headers, timeout=timeout)
     if response.status_code != 200:
         logger.error(
-            "llm anthropic messages failed: status={} body={}",
+            "LLM Anthropic messages request failed with status [{}], response bytes [{}]",
             response.status_code,
-            (response.text or "")[:500],
+            len(response.content),
         )
         raise_provider_http_error(response)
     data = response.json()
@@ -1010,9 +1010,9 @@ async def _post_responses(
     response = await client.post(url, json=payload, headers=headers, timeout=timeout)
     if response.status_code != 200:
         logger.error(
-            "llm responses failed: status={} body={}",
+            "LLM responses request failed with status [{}], response bytes [{}]",
             response.status_code,
-            (response.text or "")[:500],
+            len(response.content),
         )
         raise LlmProviderError(
             f"provider status {response.status_code}",
@@ -1068,9 +1068,9 @@ async def _post_chat_completions(
     response = await client.post(url, json=payload, headers=headers, timeout=timeout)
     if response.status_code != 200:
         logger.error(
-            "llm provider failed: status={} body={}",
+            "LLM provider request failed with status [{}], response bytes [{}]",
             response.status_code,
-            (response.text or "")[:500],
+            len(response.content),
         )
         raise_provider_http_error(response)
 

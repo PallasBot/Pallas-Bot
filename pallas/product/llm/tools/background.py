@@ -37,6 +37,7 @@ def _context_from_task(task: dict[str, Any]) -> ToolInvokeContext:
         bot_id=int(task.get("bot_id") or 0),
         group_id=task.get("group_id"),
         user_id=int(task.get("user_id") or 0),
+        request_id=str(task.get("task_id") or ""),
         approved_tools=approved_tools,
     )
 

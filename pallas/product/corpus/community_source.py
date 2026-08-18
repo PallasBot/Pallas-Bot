@@ -129,7 +129,7 @@ class RemoteCorpusRepository(ContextRepositoryExistenceMixin):
                         )
                     except httpx.HTTPError as e:
                         last_error = e
-                        logger.warning(f"corpus community find failed api_base={base}: {e}")
+                        logger.warning("Corpus community search failed with error type [{}]", type(e).__name__)
                         continue
                     if resp.status_code == 401:
                         asyncio.create_task(self.schedule_auth_refresh())
@@ -137,15 +137,18 @@ class RemoteCorpusRepository(ContextRepositoryExistenceMixin):
                     if resp.status_code == 404:
                         return None
                     if resp.status_code != 200:
-                        preview = (resp.text or "")[:200]
-                        logger.warning(f"corpus community find HTTP {resp.status_code} api_base={base}: {preview}")
+                        logger.warning(
+                            "Corpus community search returned HTTP [{}], response bytes [{}]",
+                            resp.status_code,
+                            len(resp.content),
+                        )
                         continue
                     data = resp.json()
                     if not isinstance(data, dict):
                         return None
                     return self._context_from_payload(data)
         except httpx.HTTPError as e:
-            logger.warning(f"corpus community find failed: {e}")
+            logger.warning("Corpus community find failed with error type [{}]", type(e).__name__)
             raise
         if last_error is not None:
             raise last_error
@@ -216,30 +219,19 @@ class RemoteCorpusRepository(ContextRepositoryExistenceMixin):
                         resp = await client.post(contribute_url, json=body, headers=self._headers())
                     except httpx.HTTPError as e:
                         last_error = e
-                        logger.warning(
-                            "corpus community contribute failed api_base={} err_type={} err={!r}",
-                            base,
-                            type(e).__name__,
-                            e,
-                        )
+                        logger.warning("Corpus community contribution failed with error type [{}]", type(e).__name__)
                         continue
                     if resp.status_code in (200, 202):
                         return
                     if resp.status_code in (401, 403):
                         asyncio.create_task(self.schedule_auth_refresh())
-                    body_preview = (resp.text or "")[:200]
                     logger.warning(
-                        "corpus community contribute HTTP {} api_base={}: {}",
+                        "Corpus community contribution returned HTTP [{}], response bytes [{}]",
                         resp.status_code,
-                        base,
-                        body_preview,
+                        len(resp.content),
                     )
         except httpx.HTTPError as e:
-            logger.warning(
-                "corpus community contribute failed err_type={} err={!r}",
-                type(e).__name__,
-                e,
-            )
+            logger.warning("Corpus community contribution failed with error type [{}]", type(e).__name__)
             raise
         if last_error is not None:
             raise last_error

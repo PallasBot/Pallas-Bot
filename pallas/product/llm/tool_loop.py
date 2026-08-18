@@ -7,6 +7,7 @@ from typing import Any
 
 from nonebot import logger
 
+from pallas.core.foundation.logging import log_rate_limited
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.provider_client import complete_chat_message
 from pallas.product.llm.tools.context import ToolInvokeContext
@@ -339,6 +340,7 @@ async def complete_with_tool_loop(
     last_message: dict[str, Any] = {}
     schema_names = tool_names_from_schemas(tool_schemas)
     prefer_required = str(meta.get("tool_choice_prefer") or "").strip().lower() == "required"
+    social_tool_required = prefer_required and any(name.startswith(("social.", "social__")) for name in schema_names)
     ask_before_call = bool(meta.get("ask_before_call"))
     selection_source = str(meta.get("selection_source") or "").strip().lower()
     # 命令类工具：动作与开口拆分
@@ -383,6 +385,7 @@ async def complete_with_tool_loop(
     reply_texts: list[str] = []
     side_effect_ok = False
     chat_reply_injected = False
+    social_tool_succeeded = False
 
     from pallas.product.llm.tools.reply import CHAT_REPLY_NAME, extract_chat_reply_text
 
@@ -406,6 +409,18 @@ async def complete_with_tool_loop(
         tool_calls = last_message.get("tool_calls")
         round_trace: dict[str, Any] = {"round": round_idx + 1, "tool_calls": [], "calls": []}
         if not isinstance(tool_calls, list) or not tool_calls:
+            if social_tool_required and not social_tool_succeeded:
+                content = "群内信息暂时查不了，稍后再试。"
+                agent_trace["status"] = "required_tool_missing"
+                agent_trace["reply_source"] = "required_tool_missing"
+                agent_trace["final_stage"] = "required_tool_missing"
+                agent_trace["rounds"].append(round_trace)
+                assistant_message = dict(last_message)
+                assistant_message.setdefault("role", "assistant")
+                assistant_message["content"] = content
+                assistant_message["_agent_trace"] = agent_trace
+                record_bot_llm_task(task, "tool_session_no_call")
+                return content, assistant_message
             freeform = str(last_message.get("content", "") or "").strip()
             content, reply_source = resolve_visible_reply_after_tools(
                 freeform_content=freeform,
@@ -444,7 +459,10 @@ async def complete_with_tool_loop(
             args = parse_tool_arguments(fn.get("arguments"))
             round_trace["tool_calls"].append(resolved_name)
             agent_trace["tool_call_count"] = int(agent_trace.get("tool_call_count") or 0) + 1
-            logger.info(
+            log_rate_limited(
+                logger,
+                "info",
+                f"llm.tool_call.{resolved_name}",
                 "ToolCall round [{}] invokes [{}] via provider [{}] with args [{}]",
                 round_idx + 1,
                 resolved_name,
@@ -470,6 +488,8 @@ async def complete_with_tool_loop(
             })
             if summary["ok"]:
                 record_bot_llm_task(task, "tool_call_ok")
+                if resolved_name.startswith("social."):
+                    social_tool_succeeded = True
                 if resolved_name == CHAT_REPLY_NAME:
                     extracted = extract_chat_reply_text(result_dict)
                     if extracted is not None:
@@ -487,6 +507,17 @@ async def complete_with_tool_loop(
                         chat_reply_injected = True
             else:
                 record_bot_llm_task(task, "tool_call_fail")
+                if social_tool_required and resolved_name.startswith("social."):
+                    content = "群内信息暂时查不了，稍后再试。"
+                    agent_trace["status"] = "required_tool_failed"
+                    agent_trace["reply_source"] = "required_tool_failed"
+                    agent_trace["final_stage"] = "required_tool_failed"
+                    agent_trace["rounds"].append(round_trace)
+                    assistant_message = dict(last_message)
+                    assistant_message.setdefault("role", "assistant")
+                    assistant_message["content"] = content
+                    assistant_message["_agent_trace"] = agent_trace
+                    return content, assistant_message
                 if _is_side_effecting_tool(resolved_name):
                     agent_trace.setdefault("reject_reasons", []).append({
                         "tool": resolved_name,
@@ -513,6 +544,17 @@ async def complete_with_tool_loop(
         agent_trace["rounds"].append(round_trace)
 
     freeform = str(last_message.get("content", "") or "").strip()
+    if social_tool_required and not social_tool_succeeded:
+        content = "群内信息暂时查不了，稍后再试。"
+        agent_trace["status"] = "required_tool_missing"
+        agent_trace["reply_source"] = "required_tool_missing"
+        agent_trace["final_stage"] = "required_tool_missing"
+        assistant_message = dict(last_message)
+        assistant_message.setdefault("role", "assistant")
+        assistant_message["content"] = content
+        assistant_message["_agent_trace"] = agent_trace
+        record_bot_llm_task(task, "tool_session_no_call")
+        return content, assistant_message
     content, reply_source = resolve_visible_reply_after_tools(
         freeform_content=freeform,
         reply_texts=reply_texts,

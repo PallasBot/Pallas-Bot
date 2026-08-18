@@ -8,6 +8,7 @@ from typing import Literal
 
 from nonebot import logger
 
+from pallas.core.foundation.logging import log_rate_limited
 from pallas.core.platform.ai_callback.task_types import (
     CHAT_DRUNK_TASK_TYPE,
     LEGACY_LLM_CHAT_TASK_TYPES,
@@ -190,35 +191,49 @@ def _clean_and_guard_reply(text: str, *, task_type: str) -> str:
         return ""
     cleaned = strip_orphan_leading_particles(normalized)
     if cleaned != normalized:
-        logger.info(
-            "LLM orphan leading particle stripped for task [{}], before {!r} after {!r}",
+        log_rate_limited(
+            logger,
+            "info",
+            "llm.output_filter.orphan_particle",
+            "LLM orphan leading particle stripped for task [{}], length [{}] -> [{}]",
             task_type,
-            normalized[:48],
-            cleaned[:48],
+            len(normalized),
+            len(cleaned),
         )
     if not cleaned:
         return ""
     staged = strip_stage_direction_parens(cleaned)
     if staged != cleaned:
-        logger.info(
-            "LLM stage direction stripped for task [{}], before {!r} after {!r}",
+        log_rate_limited(
+            logger,
+            "info",
+            "llm.output_filter.stage_direction",
+            "LLM stage direction stripped for task [{}], length [{}] -> [{}]",
             task_type,
-            cleaned[:48],
-            staged[:48],
+            len(cleaned),
+            len(staged),
         )
     cleaned = staged
     if not cleaned:
         return ""
     if looks_like_truncated_reply(cleaned):
-        logger.info("LLM truncated reply rejected for task [{}], text {!r}", task_type, cleaned[:48])
+        log_rate_limited(
+            logger,
+            "info",
+            "llm.output_filter.truncated",
+            "LLM truncated reply rejected for task [{}]",
+            task_type,
+        )
         return ""
     ok, reason = validate_reply_chars(cleaned)
     if not ok:
-        logger.info(
-            "LLM reply char guard rejected reply for task [{}], reason [{}], text {!r}",
+        log_rate_limited(
+            logger,
+            "info",
+            f"llm.output_filter.char_guard.{reason}",
+            "LLM reply char guard rejected reply for task [{}], reason [{}]",
             task_type,
             reason,
-            cleaned[:48],
         )
         return ""
     return cleaned

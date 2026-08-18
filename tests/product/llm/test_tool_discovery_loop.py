@@ -105,3 +105,135 @@ async def test_tools_find_activates_deferred_tool_for_next_round(monkeypatch: py
     assert "demo__deferred_ping" in names or "demo.deferred_ping" in names
     assert "demo.deferred_ping" in ((assistant.get("_agent_trace") or {}).get("activated_tools") or [])
     assert "demo.deferred_ping" in activated_tool_names(1, 2, 3)
+
+
+@pytest.mark.asyncio
+async def test_social_required_tool_fails_closed_without_tool_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_complete(messages, *, model, options=None, tools=None, cfg=None, **_kwargs):
+        del messages, model, options, tools, cfg
+        return {"role": "assistant", "content": "我没有主人"}
+
+    monkeypatch.setattr("pallas.product.llm.tool_loop.complete_chat_message", fake_complete)
+
+    content, assistant = await complete_with_tool_loop(
+        system_prompt="sys",
+        messages=[{"role": "user", "content": "你的主人是谁"}],
+        metadata={
+            "task": "llm_chat",
+            "tools_enabled": True,
+            "tool_choice_prefer": "required",
+            "tool_schemas": [{"type": "function", "function": {"name": "social__master__info"}}],
+            "bot_id": 1,
+            "group_id": 2,
+            "user_id": 3,
+        },
+        cfg=LlmConfig(
+            llm_runtime="bot_kernel",
+            llm_base_url="http://example.test/v1",
+            llm_model="demo",
+            llm_tools_enabled=True,
+            llm_tools_max_rounds=2,
+        ),
+    )
+
+    assert content == "群内信息暂时查不了，稍后再试。"
+    assert assistant["_agent_trace"]["status"] == "required_tool_missing"
+
+
+@pytest.mark.asyncio
+async def test_social_required_tool_fails_closed_after_tool_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_complete(messages, *, model, options=None, tools=None, cfg=None, **_kwargs):
+        del messages, model, options, tools, cfg
+        return {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "social-1",
+                    "type": "function",
+                    "function": {"name": "social__master__info", "arguments": "{}"},
+                }
+            ],
+        }
+
+    async def fake_execute(*_args, **_kwargs):
+        return {"ok": False, "error": "bot_unavailable"}
+
+    monkeypatch.setattr("pallas.product.llm.tool_loop.complete_chat_message", fake_complete)
+    monkeypatch.setattr("pallas.product.llm.tool_loop.execute_tool_async", fake_execute)
+
+    content, assistant = await complete_with_tool_loop(
+        system_prompt="sys",
+        messages=[{"role": "user", "content": "你的主人是谁"}],
+        metadata={
+            "task": "llm_chat",
+            "tools_enabled": True,
+            "tool_choice_prefer": "required",
+            "tool_schemas": [{"type": "function", "function": {"name": "social__master__info"}}],
+            "bot_id": 1,
+            "group_id": 2,
+            "user_id": 3,
+        },
+        cfg=LlmConfig(
+            llm_runtime="bot_kernel",
+            llm_base_url="http://example.test/v1",
+            llm_model="demo",
+            llm_tools_enabled=True,
+            llm_tools_max_rounds=2,
+        ),
+    )
+
+    assert content == "群内信息暂时查不了，稍后再试。"
+    assert assistant["_agent_trace"]["status"] == "required_tool_failed"
+
+
+@pytest.mark.asyncio
+async def test_social_required_tool_rejects_unrelated_successful_tool(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = {"count": 0}
+
+    async def fake_complete(messages, *, model, options=None, tools=None, cfg=None, **_kwargs):
+        del messages, model, options, tools, cfg
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "other-1",
+                        "type": "function",
+                        "function": {"name": "web__search", "arguments": "{}"},
+                    }
+                ],
+            }
+        return {"role": "assistant", "content": "我没有主人"}
+
+    async def fake_execute(*_args, **_kwargs):
+        return {"ok": True, "result": {"summary": "web search completed"}}
+
+    monkeypatch.setattr("pallas.product.llm.tool_loop.complete_chat_message", fake_complete)
+    monkeypatch.setattr("pallas.product.llm.tool_loop.execute_tool_async", fake_execute)
+
+    content, assistant = await complete_with_tool_loop(
+        system_prompt="sys",
+        messages=[{"role": "user", "content": "你的主人是谁"}],
+        metadata={
+            "task": "llm_chat",
+            "tools_enabled": True,
+            "tool_choice_prefer": "required",
+            "tool_schemas": [{"type": "function", "function": {"name": "social__master__info"}}],
+            "bot_id": 1,
+            "group_id": 2,
+            "user_id": 3,
+        },
+        cfg=LlmConfig(
+            llm_runtime="bot_kernel",
+            llm_base_url="http://example.test/v1",
+            llm_model="demo",
+            llm_tools_enabled=True,
+            llm_tools_max_rounds=2,
+        ),
+    )
+
+    assert content == "群内信息暂时查不了，稍后再试。"
+    assert assistant["_agent_trace"]["status"] == "required_tool_missing"

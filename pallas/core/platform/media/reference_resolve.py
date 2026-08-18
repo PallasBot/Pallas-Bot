@@ -7,6 +7,7 @@ import base64
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import httpx
 from curl_cffi.requests import AsyncSession as CffiAsyncSession
@@ -18,6 +19,13 @@ PLATFORM_REFERENCE_HOST_TOKENS = (
     "qq.com",
     "multimedia.nt.qq.com.cn",
 )
+
+
+def reference_url_for_log(url: str) -> str:
+    parsed = urlsplit(str(url or ""))
+    if not parsed.scheme or not parsed.netloc:
+        return "<invalid-url>"
+    return f"{parsed.scheme}://{parsed.netloc}{parsed.path[:120]}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,8 +141,8 @@ async def httpx_get_reference_bytes(
     if response.status_code == 200 and response.content:
         return response.content
     logger.debug(
-        "reference download non-200 url={} status={}",
-        url[:160],
+        "Reference download returned a non-200 response for URL [{}] with status [{}].",
+        reference_url_for_log(url),
         response.status_code,
     )
     return None
@@ -159,7 +167,11 @@ async def curl_cffi_get_reference_bytes(
         )
         if response.status_code == 200 and response.content:
             return response.content
-    logger.debug("reference cffi non-200 url={} status={}", url[:160], response.status_code)
+    logger.debug(
+        "CFFI reference download returned a non-200 response for URL [{}] with status [{}].",
+        reference_url_for_log(url),
+        response.status_code,
+    )
     return None
 
 
@@ -205,7 +217,11 @@ async def curl_get_reference_bytes(
         return None
     if status == 200 and body:
         return body
-    logger.debug("reference curl non-200 url={} status={}", url[:160], status)
+    logger.debug(
+        "Curl reference download returned a non-200 response for URL [{}] with status [{}].",
+        reference_url_for_log(url),
+        status,
+    )
     return None
 
 
@@ -224,41 +240,71 @@ async def download_reference_bytes_with_transport(
         try:
             return await httpx_get_reference_bytes(client, url, options=options, download_timeout=download_timeout)
         except Exception as exc:
-            logger.debug(f"reference httpx error url={url[:160]!r} exc={exc!r}")
+            logger.debug(
+                "HTTPX reference download failed for URL [{}], error type [{}].",
+                reference_url_for_log(url),
+                type(exc).__name__,
+            )
             return None
     if mode == "cffi":
         try:
             return await curl_cffi_get_reference_bytes(url, options=options, download_timeout=download_timeout)
         except Exception as exc:
-            logger.warning(f"reference cffi failed, fallback httpx: {exc}")
+            logger.warning(
+                "Reference CFFI download failed; falling back to HTTPX with error type [{}].",
+                type(exc).__name__,
+            )
             try:
                 return await httpx_get_reference_bytes(client, url, options=options, download_timeout=download_timeout)
             except Exception as inner:
-                logger.debug(f"reference httpx fallback error url={url[:160]!r} exc={inner!r}")
+                logger.debug(
+                    "HTTPX fallback reference download failed for URL [{}], error type [{}].",
+                    reference_url_for_log(url),
+                    type(inner).__name__,
+                )
                 return None
     if mode == "curl":
         try:
             return await curl_get_reference_bytes(url, options=options, download_timeout=download_timeout)
         except Exception as exc:
-            logger.warning(f"reference curl failed, fallback httpx: {exc}")
+            logger.warning(
+                "Reference curl download failed; falling back to HTTPX with error type [{}].",
+                type(exc).__name__,
+            )
             try:
                 return await httpx_get_reference_bytes(client, url, options=options, download_timeout=download_timeout)
             except Exception as inner:
-                logger.debug(f"reference httpx fallback error url={url[:160]!r} exc={inner!r}")
+                logger.debug(
+                    "HTTPX fallback reference download failed for URL [{}], error type [{}].",
+                    reference_url_for_log(url),
+                    type(inner).__name__,
+                )
                 return None
     if (options.tls_impersonate or "").strip() and not skip_cffi:
         try:
             return await curl_cffi_get_reference_bytes(url, options=options, download_timeout=download_timeout)
         except Exception as exc:
-            logger.debug(f"reference auto cffi miss url={url[:160]!r} exc={exc!r}")
+            logger.debug(
+                "Automatic CFFI reference download missed for URL [{}], error type [{}].",
+                reference_url_for_log(url),
+                type(exc).__name__,
+            )
     try:
         return await httpx_get_reference_bytes(client, url, options=options, download_timeout=download_timeout)
     except Exception as exc:
-        logger.debug(f"reference auto httpx miss url={url[:160]!r} exc={exc!r}")
+        logger.debug(
+            "Automatic HTTPX reference download missed for URL [{}], error type [{}].",
+            reference_url_for_log(url),
+            type(exc).__name__,
+        )
     try:
         return await curl_get_reference_bytes(url, options=options, download_timeout=download_timeout)
     except Exception as exc:
-        logger.debug(f"reference auto curl miss url={url[:160]!r} exc={exc!r}")
+        logger.debug(
+            "Automatic curl reference download missed for URL [{}], error type [{}].",
+            reference_url_for_log(url),
+            type(exc).__name__,
+        )
     return None
 
 
@@ -283,7 +329,7 @@ async def resolve_reference_inline_urls(
             inline_urls.append(bytes_to_data_reference_url(blob))
             continue
         if not token.startswith(("http://", "https://")):
-            logger.warning("reference unrecognized token={}", token[:80])
+            logger.warning("Reference resolver encountered an unsupported token with length [{}].", len(token))
             failed.append(token)
             continue
         blob = await download_reference_bytes_with_transport(
@@ -295,7 +341,7 @@ async def resolve_reference_inline_urls(
         if blob is not None:
             inline_urls.append(bytes_to_data_reference_url(blob))
             continue
-        logger.warning("reference download failed url={}", token[:160])
+        logger.warning("Reference download failed for URL [{}].", reference_url_for_log(token))
         failed.append(token)
     return ReferenceResolveResult(inline_urls=inline_urls, failed_tokens=tuple(failed))
 
@@ -322,5 +368,9 @@ async def bytes_from_reference_token(
             download_timeout=ref_timeout,
         )
     except Exception as exc:
-        logger.debug(f"reference token download error url={u[:160]!r} exc={exc!r}")
+        logger.debug(
+            "Reference token download failed for URL [{}], error type [{}].",
+            reference_url_for_log(u),
+            type(exc).__name__,
+        )
         return None

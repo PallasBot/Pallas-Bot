@@ -108,16 +108,18 @@ async def _post_heartbeat(
     if resp.status_code == 200:
         save_heartbeat_endpoint(endpoint)
         touch_last_heartbeat_ok_unix()
-        logger.debug("community_stats: heartbeat ok deployment_id={} endpoint={}", payload["deployment_id"], endpoint)
+        logger.debug(
+            "Community statistics heartbeat succeeded for deployment [{}]",
+            payload["deployment_id"],
+        )
         return True
     if resp.status_code == 429:
-        logger.warning("community_stats: heartbeat rate limited (429) endpoint={}", endpoint)
+        logger.warning("Community statistics heartbeat was rate limited")
     else:
         logger.warning(
-            "community_stats: heartbeat HTTP {} endpoint={} body={}",
+            "Community statistics heartbeat returned HTTP [{}], response bytes [{}]",
             resp.status_code,
-            endpoint,
-            (resp.text or "")[:200],
+            len(resp.content),
         )
     return False
 
@@ -156,7 +158,7 @@ async def send_community_stats_heartbeat() -> bool:
                         ):
                             return True
                     except httpx.HTTPError as e:
-                        logger.warning(f"community_stats: heartbeat failed endpoint={endpoint}: {e}")
+                        logger.warning("Community statistics heartbeat failed for endpoint [{}]: [{}]", endpoint, e)
     except httpx.HTTPError as e:
         logger.warning(f"community_stats: heartbeat failed: {e}")
     return False

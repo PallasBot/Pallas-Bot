@@ -8,6 +8,7 @@ from typing import Literal
 
 from nonebot import logger
 
+from pallas.core.foundation.logging import log_rate_limited
 from pallas.product.llm.reply_necessity import is_short_vent
 
 FirewallAction = Literal["allow", "retry", "fallback", "silent"]
@@ -336,10 +337,12 @@ def resolve_persona_output(
     }
     if not policy.enabled or not inspection.rule_ids:
         return PersonaOutputDecision(action="allow", text=plain, trace=trace)
-    logger.info(
-        "persona output firewall flagged rules [{}] for reply {!r}",
+    log_rate_limited(
+        logger,
+        "info",
+        "llm.persona_output_firewall",
+        "persona output firewall flagged rules [{}]",
         list(inspection.rule_ids),
-        plain[:64],
     )
     if policy.severity == "soft" and inspection.rule_ids == ("roleplay_stage_direction",):
         trace["action"] = "allow"
