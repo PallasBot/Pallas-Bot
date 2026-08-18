@@ -19,6 +19,13 @@ from pallas.product.llm.tools.registry import LlmToolSpec, register_tool
 if TYPE_CHECKING:
     from pallas.product.llm.tools.context import ToolInvokeContext
 
+try:
+    from nonebot import logger
+except Exception:  # pragma: no cover - 测试环境无 nonebot 时兜底
+    import logging
+
+    logger = logging.getLogger("pallas.social")
+
 _MENTION_GRANT_TTL_SEC = 300.0
 # 提及占位符：LLM 可能输出单/双括号或裸 @key；带括号的未授权项会被删除
 _MENTION_PLACEHOLDER_RE = re.compile(r"(?:\[{1,2}|【|（|\(|「)?\s*@([a-zA-Z0-9_]+)\s*(?:\]{1,2}|】|）|\)|」)?")
@@ -183,11 +190,23 @@ async def handle_master_info(arguments: dict[str, Any], context: ToolInvokeConte
         grant_mention(context.bot_id, context.group_id, key, qq)
         masters.append({"key": key, "qq": qq, "name": name})
     if not masters:
+        logger.info(
+            "social master lookup for bot [{}] in group [{}]: no master present",
+            context.bot_id,
+            context.group_id,
+        )
         return {
             "ok": True,
             "result": {"in_group": False, "masters": []},
             "summary": "主人不在本群，不要透露主人身份或 QQ，如实说主人不在这个群。",
         }
+    logger.info(
+        "social master lookup for bot [{}] in group [{}]: [{}] master(s) in group [{}]",
+        context.bot_id,
+        context.group_id,
+        len(masters),
+        [f"{item['name']}({item['qq']})" for item in masters],
+    )
     return {
         "ok": True,
         "result": {
@@ -237,7 +256,21 @@ async def handle_member_find(arguments: dict[str, Any], context: ToolInvokeConte
         grant_mention(context.bot_id, context.group_id, key, qq)
         matches.append({"key": key, "qq": qq, "name": name})
     if not matches:
+        logger.info(
+            "social member find query [{}] for bot [{}] in group [{}]: no match",
+            query,
+            context.bot_id,
+            context.group_id,
+        )
         return {"ok": True, "result": {"matches": []}, "summary": "没找到匹配的群成员，如实说找不到，不要编造。"}
+    logger.info(
+        "social member find query [{}] for bot [{}] in group [{}]: [{}] match(es) [{}]",
+        query,
+        context.bot_id,
+        context.group_id,
+        len(matches),
+        [f"{item['name']}({item['qq']})" for item in matches],
+    )
     return {
         "ok": True,
         "result": {
