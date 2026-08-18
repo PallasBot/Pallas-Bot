@@ -811,7 +811,11 @@ async def prepare_and_submit_llm_chat_turn(
         if not self_identity:
             from pallas.product.persona.self_identity import compile_self_identity_prompt
 
-            self_identity = compile_self_identity_prompt()
+            self_identity = compile_self_identity_prompt(
+                persona_dict,
+                login_nickname=resolve_cached_login_nickname(int(bot.self_id)) or None,
+                managed_display_name=resolve_managed_display_name(int(bot.self_id)) or None,
+            )
 
         system_prompt = ChatPromptAssembler().assemble(
             core_persona=core_persona,

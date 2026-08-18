@@ -97,6 +97,14 @@ def shorten_niu_niu_compound_alias(raw: str) -> str | None:
     return None
 
 
+def single_niu_variant(raw: str) -> str | None:
+    """「XX牛牛」的单字牛变体：泰坦牛牛 → 泰坦牛，覆盖群友简称。"""
+    text = _safe_alias(raw) or ""
+    if not text or len(text) <= 2 or not text.endswith("牛牛"):
+        return None
+    return _safe_alias(text[:-1])
+
+
 def _append_alias(aliases: list[str], seen: set[str], raw: str) -> None:
     text = _safe_alias(raw)
     if not text or text.casefold() in seen:
@@ -113,6 +121,9 @@ def _append_exclusive_alias(aliases: list[str], seen: set[str], raw: str) -> Non
     shortened = shorten_niu_niu_compound_alias(text)
     if shortened and shortened.casefold() not in _DEFAULT_GENERIC_ALIAS_CASEFOLDS:
         _append_alias(aliases, seen, shortened)
+    single = single_niu_variant(text)
+    if single and single.casefold() not in _DEFAULT_GENERIC_ALIAS_CASEFOLDS:
+        _append_alias(aliases, seen, single)
 
 
 def extract_generic_self_aliases() -> list[str]:
@@ -179,31 +190,53 @@ def compile_self_identity_prompt(
     bot_persona: dict[str, Any] | None = None,
     *,
     login_nickname: str | None = None,
+    managed_display_name: str | None = None,
 ) -> str:
     generic_aliases = extract_generic_self_aliases()
     generic_text = "、".join(generic_aliases[:4]) or "牛牛"
-    body = "\n".join([
+    exclusive = extract_exclusive_self_aliases(
+        bot_persona,
+        login_nickname=login_nickname,
+        managed_display_name=managed_display_name,
+    )
+    body = [
         "【自称与群称呼】",
         f"- 「{generic_text}」是群友叫你的外号，只用于判断是否在叫你，不是物种、身体设定或话题联想。",
-        "- 被叫到时用第一人称回应；日常自称优先用「我」，不要把「牛牛」当第三者。",
-    ])
-    return wrap_stats_block("self_identity", body)
+    ]
+    if exclusive:
+        names = "、".join(exclusive[:8])
+        body.append(
+            f"- 别人也可能用「{names}」等称呼叫你；被这些称呼叫到时同样算在叫你，用第一人称接话，别反问对方是在叫谁。"
+        )
+    body.append("- 被叫到时用第一人称回应；日常自称优先用「我」，不要把「牛牛」当第三者。")
+    return wrap_stats_block("self_identity", "\n".join(body))
 
 
 def compile_repeater_self_identity_prompt(
     bot_persona: dict[str, Any] | None = None,
     *,
     login_nickname: str | None = None,
+    managed_display_name: str | None = None,
 ) -> str:
     generic_aliases = extract_generic_self_aliases()
     generic_text = "、".join(generic_aliases[:4]) or "牛牛"
-    body = "\n".join([
+    exclusive = extract_exclusive_self_aliases(
+        bot_persona,
+        login_nickname=login_nickname,
+        managed_display_name=managed_display_name,
+    )
+    body = [
         "【群称呼】",
         f"- 「{generic_text}」是群友对你的称呼，只用于判断是否在叫你；用第一人称接，别当成第三者。",
-        "- 登录昵称和学习别名只供路由判断，不据此推断身份或话题。",
+    ]
+    if exclusive:
+        names = "、".join(exclusive[:8])
+        body.append(f"- 别人也可能用「{names}」等称呼叫你，被叫到时同样第一人称接话，别反问对方是在叫谁。")
+    body.extend([
+        "- 这些称呼只是叫法，不代表身份或话题方向，不据此推断身份或话题。",
         "- 日常接话不必自我介绍帕拉斯或罗德岛，像群友顺口回一句即可。",
     ])
-    return wrap_stats_block("self_identity", body)
+    return wrap_stats_block("self_identity", "\n".join(body))
 
 
 def resolve_cached_login_nickname(bot_id: int) -> str:

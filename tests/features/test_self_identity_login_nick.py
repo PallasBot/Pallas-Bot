@@ -7,6 +7,7 @@ from pallas.product.persona.self_identity import (
     compile_repeater_self_identity_prompt,
     compile_self_identity_prompt,
     extract_self_aliases,
+    single_niu_variant,
 )
 
 
@@ -49,28 +50,43 @@ def test_extract_self_aliases_merges_learned_after_defaults() -> None:
     assert aliases.index("小牛") < aliases.index("阿帕") < aliases.index("牛牛")
 
 
-def test_compile_self_identity_prompt_keeps_login_nickname_out_of_role_context() -> None:
-    prompt = compile_self_identity_prompt(login_nickname="小牛")
-    assert "牛牛" in prompt
-    assert "小牛" not in prompt
+def test_single_niu_variant_generates_short_form() -> None:
+    assert single_niu_variant("泰坦牛牛") == "泰坦牛"
+    assert single_niu_variant("异色牛牛") == "异色牛"
+    assert single_niu_variant("尼牛牛") == "尼牛"
+    assert single_niu_variant("牛牛") is None
+    assert single_niu_variant("牛牛pot") is None
+    assert single_niu_variant("猫猫牛牛2号") is None
+    assert single_niu_variant("漂亮牛") is None
 
 
-def test_compile_self_identity_prompt_keeps_learned_aliases_out_of_role_context() -> None:
+def test_extract_self_aliases_includes_single_niu_variant() -> None:
+    aliases = extract_self_aliases(None, login_nickname="泰坦牛牛")
+    assert "泰坦牛牛" in aliases
+    assert "泰坦牛" in aliases
+    assert "泰坦" in aliases
+
+
+def test_compile_self_identity_prompt_injects_exclusive_as_call_names() -> None:
     prompt = compile_self_identity_prompt(
         {"self_aliases": ["啥阴", "阿帕"]},
         login_nickname="小牛",
+        managed_display_name="异色牛牛",
     )
+    assert "牛牛" in prompt
+    assert "小牛" in prompt
+    assert "异色牛牛" in prompt
+    assert "啥阴" in prompt
+    assert "阿帕" in prompt
+    assert "别反问对方是在叫谁" in prompt
 
-    assert "只用于判断是否在叫你" in prompt
-    assert "啥阴" not in prompt
-    assert "阿帕" not in prompt
 
-
-def test_compile_repeater_self_identity_prompt_keeps_login_nickname_out_of_role_context() -> None:
+def test_compile_repeater_self_identity_prompt_injects_exclusive_as_call_names() -> None:
     prompt = compile_repeater_self_identity_prompt(login_nickname="小牛")
     assert "牛牛" in prompt
-    assert "登录昵称和学习别名只供路由判断" in prompt
-    assert "小牛" not in prompt
+    assert "小牛" in prompt
+    assert "别反问对方是在叫谁" in prompt
+    assert "不代表身份或话题方向" in prompt
 
 
 def test_compile_repeater_self_identity_prompt_uses_generic_text_without_exclusive(

@@ -31,6 +31,7 @@ from .seed import normalize_seed_prefs, resolve_effective_seed_prefs
 from .self_identity import (
     compile_self_identity_prompt,
     resolve_login_nickname,
+    resolve_managed_display_name,
 )
 
 if TYPE_CHECKING:
@@ -235,6 +236,7 @@ def compile_persona_prompt(
     self_identity = compile_self_identity_prompt(
         bot_persona,
         login_nickname=login_nickname,
+        managed_display_name=resolve_managed_display_name(int(bot_id)) or None,
     )
     peer = (
         compile_peer_bots_prompt_for_message(
