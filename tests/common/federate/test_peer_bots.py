@@ -437,6 +437,45 @@ def test_yield_federate_skips_when_capable_peer_not_present_in_group(monkeypatch
     assert mod.should_yield_federate_ingress_for_peer_command(1076683542, plain="牛牛决斗") is False
 
 
+def test_federate_peer_declared_command_plaintext_covers_peer_capability(monkeypatch):
+    """对端显式宣告的命令能力明文，本机应识别为命令流量。"""
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
+    mod._cache_deployment_ids = frozenset({"dep-peer"})
+    mod._cache_deployment_capabilities = {
+        "dep-peer": frozenset({"牛牛画画"}),
+    }
+
+    assert mod.federate_peer_declared_command_plaintext("牛牛画画 猫娘") is True
+    assert mod.federate_peer_declared_command_plaintext("牛牛帮助") is False
+
+
+def test_federate_peer_declared_command_plaintext_ignores_unannounced_peer(monkeypatch):
+    """旧版对端未宣告能力（None）不视为覆盖，避免误当命令。"""
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
+    mod._cache_deployment_ids = frozenset({"dep-peer"})
+    mod._cache_deployment_capabilities = {
+        "dep-peer": None,
+    }
+
+    assert mod.federate_peer_declared_command_plaintext("牛牛画画") is False
+
+
+def test_federate_peer_declared_command_plaintext_inactive_or_no_peer(monkeypatch):
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "federate_ingress_active", lambda: False)
+    mod._cache_deployment_ids = frozenset({"dep-peer"})
+    mod._cache_deployment_capabilities = {
+        "dep-peer": frozenset({"牛牛画画"}),
+    }
+    assert mod.federate_peer_declared_command_plaintext("牛牛画画") is False
+
+    monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
+    mod._cache_deployment_ids = frozenset()
+    assert mod.federate_peer_declared_command_plaintext("牛牛画画") is False
+
+
 def test_owner_ring_excludes_peer_not_present_in_group(monkeypatch):
     """对端宣告了在场群且不含本群时，不参与命令归属（避免空应答）。"""
     mod.clear_federate_peer_bot_cache_for_tests()

@@ -420,10 +420,15 @@ async def submit_conversation_event(bot: Bot, event: Event, work: Work) -> None:
     if reservation is not None and reservation.scheduler is not scheduler:
         await reservation.release()
         reservation = None
+    from pallas.core.platform.federate.peer_bots import federate_peer_declared_command_plaintext
     from pallas.core.platform.ingress.matcher_activation import legacy_command_traffic
 
     plain = str(getattr(event, "get_plaintext", lambda: "")() or "").strip()
-    is_command = legacy_command_traffic(plain, group_only=True) or plain in {"牛牛", "帕拉斯"}
+    is_command = (
+        legacy_command_traffic(plain, group_only=True)
+        or federate_peer_declared_command_plaintext(plain)
+        or plain in {"牛牛", "帕拉斯"}
+    )
     mode = (
         "llm"
         if not is_command

@@ -13,6 +13,7 @@ from pallas.core.platform.federate.config import federate_ingress_bypass_unified
 from pallas.core.platform.federate.ingress import claim_federate_group_message_ingress
 from pallas.core.platform.federate.peer_bots import (
     federate_peer_bot_ids_contains,
+    federate_peer_declared_command_plaintext,
     should_process_federate_group_on_current_deployment,
     should_yield_federate_ingress_for_peer_command,
     start_federate_peer_bot_sync_loop,
@@ -57,6 +58,17 @@ def ingress_gate_active() -> bool:
 
 def local_only_federate_command(plain: str) -> bool:
     return (plain or "").strip().casefold() in _LOCAL_ONLY_FEDERATE_COMMANDS
+
+
+def command_lane_traffic(plain: str) -> bool:
+    """命令车道判定：本机命令明文，或任一联邦对端显式宣告的命令能力明文。
+
+    对端装了本机没装的命令（如牛牛画画）时，本机也当命令流量进归属环，
+    让有能力的一方接手，避免本机把这类消息落入 llm_chat 兜底。
+    """
+    if legacy_command_traffic(plain, group_only=True):
+        return True
+    return federate_peer_declared_command_plaintext(plain)
 
 
 def pallas_at_targets(event: GroupMessageEvent) -> frozenset[int]:
@@ -164,7 +176,7 @@ async def ingress_group_message_gate(bot, event) -> None:
         if (
             not local_only_federate
             and not pallas_ats
-            and legacy_command_traffic(plain, group_only=True)
+            and command_lane_traffic(plain)
             and not should_process_federate_group_on_current_deployment(
                 int(event.group_id),
                 plain=plain,
@@ -269,9 +281,9 @@ async def ingress_group_message_gate(bot, event) -> None:
                 candidate_capability = "hosted_activity"
             elif self_id in alias_matched_bot_ids:
                 candidate_capability = "llm_alias"
-            elif legacy_command_traffic(plain, group_only=True):
+            elif command_lane_traffic(plain):
                 candidate_capability = "command"
-            candidate_wait = bool(legacy_command_traffic(plain, group_only=True) or alias_matched_bot_ids)
+            candidate_wait = bool(command_lane_traffic(plain) or alias_matched_bot_ids)
             candidate_wait = candidate_wait or alias_target_is_hosted
             if not await claim_federate_group_message_ingress(
                 event,

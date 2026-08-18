@@ -372,6 +372,28 @@ def command_capability_covers_plaintext(capabilities: frozenset[str] | None, pla
     return False
 
 
+def federate_peer_declared_command_plaintext(plain: str) -> bool:
+    """任一联邦对端显式宣告的命令能力是否覆盖该明文。
+
+    供命令车道识别：本机未装某命令、但对端显式宣告有时（如对端装了画画、本机没有），
+    本机也把它当命令流量进归属环，让有能力的一方接手，而不是落入 llm_chat 兜底。
+    """
+    if not federate_ingress_active():
+        return False
+    if not _cache_deployment_ids:
+        return False
+    text = (plain or "").strip()
+    if not text:
+        return False
+    for dep in _cache_deployment_ids:
+        caps = _cache_deployment_capabilities.get(dep)
+        if caps is None:
+            continue
+        if command_capability_covers_plaintext(caps, text):
+            return True
+    return False
+
+
 def get_federate_peer_command_capabilities(deployment_id: str) -> frozenset[str] | None:
     key = deployment_id.strip().lower()
     if key not in _cache_deployment_capabilities:
