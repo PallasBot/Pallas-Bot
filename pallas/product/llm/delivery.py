@@ -489,16 +489,20 @@ async def deliver_llm_callback_success(
     structured_reply = resolve_output_filtered_chat_reply(task, structured_reply)
     reply_segments = list(structured_reply.reply_segments)
     band = str(task.get("reply_total_length_band") or "").strip()
-    if band and len(reply_segments) == 1:
-        from pallas.product.llm.reply_postprocess import split_short_reply_segments
+    if len(reply_segments) == 1 and not (direct_candidate and reply_text == direct_candidate):
+        from pallas.product.llm.reply_postprocess import (
+            has_cjk_space_separator,
+            split_short_reply_segments,
+        )
 
+        single_reply = reply_segments[0]
         if band == "short":
-            reply_segments = split_short_reply_segments(reply_segments[0])
-        elif "\n" in reply_segments[0]:
+            reply_segments = split_short_reply_segments(single_reply)
+        elif "\n" in single_reply or has_cjk_space_separator(single_reply):
             reply_segments = split_short_reply_segments(
-                reply_segments[0],
+                single_reply,
                 split_by_punctuation=False,
-                max_segments=2,
+                max_segments=3,
             )
     reply_text = "\n".join(reply_segments)
     if task_type == LLM_CHAT_TASK_TYPE and reply_text:

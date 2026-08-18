@@ -54,6 +54,38 @@ def apply_chinese_typo(text: str, *, error_rate: float = 0.01, rng_seed: int | N
     return "".join(chars)
 
 
+def _is_cjk_side_char(char: str) -> bool:
+    """CJK 字、CJK 标点与全角标点，作为「空格两侧都是中文才可切」的判定字符。"""
+    code = ord(char)
+    return 0x3400 <= code <= 0x4DBF or 0x4E00 <= code <= 0x9FFF or 0x3000 <= code <= 0x303F or 0xFF00 <= code <= 0xFFEF
+
+
+def _split_line_at_cjk_spaces(line: str) -> list[str]:
+    """把一行按「中文侧字符↔中文侧字符」之间的空格拆成候选气泡，保护英文/数字邻接排版空格。"""
+    parts: list[str] = []
+    start = 0
+    index = 0
+    length = len(line)
+    while index < length:
+        if line[index] not in " \t\u3000":
+            index += 1
+            continue
+        end = index + 1
+        while end < length and line[end] in " \t\u3000":
+            end += 1
+        if index > 0 and end < length and _is_cjk_side_char(line[index - 1]) and _is_cjk_side_char(line[end]):
+            parts.append(line[start:index])
+            start = end
+        index = end
+    parts.append(line[start:])
+    return [part for part in parts if part.strip()]
+
+
+def has_cjk_space_separator(text: str) -> bool:
+    """文本是否含「中文↔中文」空格分隔（LLM 常用的多气泡写法）。"""
+    return any(len(_split_line_at_cjk_spaces(line)) > 1 for line in str(text or "").splitlines())
+
+
 def _split_line_at_sentence_endings(text: str) -> list[str]:
     segments: list[str] = []
     start = 0
@@ -72,6 +104,32 @@ def _split_line_at_sentence_endings(text: str) -> list[str]:
     return segments
 
 
+_LONG_BUBBLE_HAN_CHARS = 15
+_MIN_COMMA_TAIL_CHARS = 4
+
+
+def _count_han_chars(text: str) -> int:
+    return sum(1 for ch in text if "\u3400" <= ch <= "\u4dbf" or "\u4e00" <= ch <= "\u9fff")
+
+
+def _split_long_comma_segments(segment: str) -> list[str]:
+    """把超过长度阈值且含中文逗号的段在逗号处压短；切出碎段则保持整段。"""
+    segments = [segment]
+    while True:
+        for index, current in enumerate(segments):
+            if _count_han_chars(current) <= _LONG_BUBBLE_HAN_CHARS or "，" not in current:
+                continue
+            split_at = current.rfind("，")
+            left, right = current[:split_at], current[split_at + 1 :].strip()
+            if _count_han_chars(left) < _MIN_COMMA_TAIL_CHARS or _count_han_chars(right) < _MIN_COMMA_TAIL_CHARS:
+                continue
+            segments[index : index + 1] = [left.strip(), right]
+            break
+        else:
+            break
+    return segments
+
+
 def split_short_reply_segments(
     text: str,
     *,
@@ -86,10 +144,12 @@ def split_short_reply_segments(
         line = line.strip()
         if not line:
             continue
-        if split_by_punctuation:
-            segments.extend(_split_line_at_sentence_endings(line))
-        else:
-            segments.append(line)
+        for chunk in _split_line_at_cjk_spaces(line):
+            if split_by_punctuation:
+                for part in _split_line_at_sentence_endings(chunk):
+                    segments.extend(_split_long_comma_segments(part))
+            else:
+                segments.append(chunk)
     if len(segments) <= 1:
         return [plain]
     if len(segments) > max_segments:

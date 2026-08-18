@@ -72,3 +72,58 @@ def test_split_newline_only_mode_caps_at_max_segments() -> None:
         split_by_punctuation=False,
         max_segments=2,
     ) == ["一。", "二\n三\n四"]
+
+
+def test_split_short_reply_splits_cjk_space_separated_bubbles() -> None:
+    assert split_short_reply_segments("在摸鱼呀 被你抓到了嘛") == ["在摸鱼呀", "被你抓到了嘛"]
+    assert split_short_reply_segments("在摸鱼呀　被你抓到了嘛") == ["在摸鱼呀", "被你抓到了嘛"]
+    assert split_short_reply_segments("在摸鱼呀  被你抓到了嘛") == ["在摸鱼呀", "被你抓到了嘛"]
+
+
+def test_split_short_reply_splits_multiple_cjk_space_bubbles() -> None:
+    assert split_short_reply_segments("T58？ 那车太脆了吧 我可不怎么喜欢呀") == [
+        "T58？",
+        "那车太脆了吧",
+        "我可不怎么喜欢呀",
+    ]
+
+
+def test_split_short_reply_keeps_ascii_adjacent_spaces() -> None:
+    assert split_short_reply_segments("用 QQ 空间发图") == ["用 QQ 空间发图"]
+    assert split_short_reply_segments("pallas bot 挺好用的") == ["pallas bot 挺好用的"]
+    assert split_short_reply_segments("美顶的话 F-15C、F-16C 制空最稳呀 A-10A 和 F-4S 也能玩 就是定位不太一样") == [
+        "美顶的话 F-15C、F-16C 制空最稳呀 A-10A 和 F-4S 也能玩",
+        "就是定位不太一样",
+    ]
+
+
+def test_split_short_reply_comma_splits_long_bubbles() -> None:
+    assert split_short_reply_segments("这个我记不太全啦，重装骑兵版本更新内容挺杂的") == [
+        "这个我记不太全啦",
+        "重装骑兵版本更新内容挺杂的",
+    ]
+    assert split_short_reply_segments("这个参数需要先填写地址，再保存并重启服务。") == [
+        "这个参数需要先填写地址",
+        "再保存并重启服务。",
+    ]
+
+
+def test_split_short_reply_comma_splits_iteratively() -> None:
+    assert split_short_reply_segments(
+        "库里球迷觉得王朝根基是库里的体系嘛，杜兰特和伊戈达拉再强也是锦上添花，自然不太服气咯"
+    ) == [
+        "库里球迷觉得王朝根基是库里的体系嘛",
+        "杜兰特和伊戈达拉再强也是锦上添花",
+        "自然不太服气咯",
+    ]
+
+
+def test_split_short_reply_comma_keeps_fragile_tails_unchanged() -> None:
+    assert split_short_reply_segments("确实，有时候作品里那些不那么美好的部分，反而更像现实里成年人会遇到的事呢") == [
+        "确实，有时候作品里那些不那么美好的部分",
+        "反而更像现实里成年人会遇到的事呢",
+    ]
+    assert split_short_reply_segments("梅西呀，世界杯加身太圆满了 C罗也伟大，但荣誉簿还是差口气嘛") == [
+        "梅西呀，世界杯加身太圆满了 C罗也伟大",
+        "但荣誉簿还是差口气嘛",
+    ]

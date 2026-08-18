@@ -193,6 +193,133 @@ async def test_delivery_splits_complete_multiline_reply_into_bubbles(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_delivery_splits_short_cjk_space_reply_into_bubbles(monkeypatch: pytest.MonkeyPatch) -> None:
+    sender = AsyncMock(
+        side_effect=[
+            type("Receipt", (), {"delivered": True, "message_id": 10})(),
+            type("Receipt", (), {"delivered": True, "message_id": 11})(),
+        ]
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
+        sender,
+    )
+    monkeypatch.setattr(
+        llm_delivery,
+        "get_llm_config",
+        lambda: LlmConfig(llm_reply_trim_terminal_period_enabled=False),
+    )
+
+    reply_text, _text_delivered, _delivered = await llm_delivery.deliver_llm_callback_success(
+        "task-cjk-space-bubbles",
+        {
+            "task_type": "llm_chat",
+            "bot_id": 99,
+            "group_id": 42,
+            "user_id": 7,
+            "reply_total_length_band": "short",
+        },
+        bot=object(),
+        group_id=42,
+        bot_id=99,
+        bot_id_str="99",
+        text="在摸鱼呀 被你抓到了嘛",
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+        sleeper=lambda _delay: None,
+    )
+
+    assert [call.args[2] for call in sender.await_args_list] == ["在摸鱼呀", "被你抓到了嘛"]
+    assert reply_text == "在摸鱼呀\n被你抓到了嘛"
+
+
+@pytest.mark.asyncio
+async def test_delivery_splits_complete_cjk_space_reply_into_bubbles(monkeypatch: pytest.MonkeyPatch) -> None:
+    sender = AsyncMock(
+        side_effect=[
+            type("Receipt", (), {"delivered": True, "message_id": 10})(),
+            type("Receipt", (), {"delivered": True, "message_id": 11})(),
+        ]
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
+        sender,
+    )
+    monkeypatch.setattr(
+        llm_delivery,
+        "get_llm_config",
+        lambda: LlmConfig(llm_reply_trim_terminal_period_enabled=False),
+    )
+
+    reply_text, _text_delivered, _delivered = await llm_delivery.deliver_llm_callback_success(
+        "task-complete-cjk-space",
+        {
+            "task_type": "llm_chat",
+            "bot_id": 99,
+            "group_id": 42,
+            "user_id": 7,
+            "reply_total_length_band": "complete",
+        },
+        bot=object(),
+        group_id=42,
+        bot_id=99,
+        bot_id_str="99",
+        text="制空最稳呀 A-10A 和 F-4S 也能玩 就是定位不太一样",
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+        sleeper=lambda _delay: None,
+    )
+
+    assert [call.args[2] for call in sender.await_args_list] == [
+        "制空最稳呀 A-10A 和 F-4S 也能玩",
+        "就是定位不太一样",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_delivery_splits_cjk_space_without_band(monkeypatch: pytest.MonkeyPatch) -> None:
+    sender = AsyncMock(
+        side_effect=[
+            type("Receipt", (), {"delivered": True, "message_id": 10})(),
+            type("Receipt", (), {"delivered": True, "message_id": 11})(),
+        ]
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
+        sender,
+    )
+    monkeypatch.setattr(
+        llm_delivery,
+        "get_llm_config",
+        lambda: LlmConfig(llm_reply_trim_terminal_period_enabled=False),
+    )
+
+    reply_text, _text_delivered, _delivered = await llm_delivery.deliver_llm_callback_success(
+        "task-no-band-space",
+        {
+            "task_type": "llm_chat",
+            "bot_id": 99,
+            "group_id": 42,
+            "user_id": 7,
+        },
+        bot=object(),
+        group_id=42,
+        bot_id=99,
+        bot_id_str="99",
+        text="没玩过诶 好玩吗",
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+        sleeper=lambda _delay: None,
+    )
+
+    assert [call.args[2] for call in sender.await_args_list] == ["没玩过诶", "好玩吗"]
+    assert reply_text == "没玩过诶\n好玩吗"
+
+
+@pytest.mark.asyncio
 async def test_multi_bubble_history_uses_one_logical_assistant_turn(monkeypatch: pytest.MonkeyPatch) -> None:
     append = AsyncMock(return_value=True)
     sender = AsyncMock(
