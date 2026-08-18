@@ -408,7 +408,7 @@ def maybe_append_llm_repeater_feedback(
             )
         )
     except Exception as e:
-        logger.warning("AI callback append llm_repeater feedback failed task={}: {}", task_id, e)
+        logger.warning("AI callback append llm_repeater feedback failed for task [{}], error [{}]", task_id, e)
 
 
 def semantic_source_matches_delivery(
@@ -605,7 +605,7 @@ async def deliver_llm_callback_success(
                 note_llm_reply_mention_sent(group_id)
             if not ok:
                 logger.warning(
-                    "AI callback bubble delivery stopped task={} sent_indexes={} failed_index={}",
+                    "AI callback bubble delivery stopped for task [{}], sent_indexes [{}], failed at index [{}]",
                     task_id,
                     sent_indexes,
                     index,
@@ -685,7 +685,7 @@ async def deliver_llm_callback_success(
                 bot_id=int(bot_id or 0),
             )
         except Exception as exc:
-            logger.debug("AI callback expression learn skipped task={}: {}", task_id, exc)
+            logger.debug("AI callback expression learn skipped for task [{}], error [{}]", task_id, exc)
     if learned_reply_text and text_delivered:
         if bool(get_llm_config().llm_reply_effect_eval_enabled):
             from pallas.product.llm.reply_effect import evaluate_and_record_reply_effect
@@ -698,7 +698,7 @@ async def deliver_llm_callback_success(
                     user_id=int(task.get("user_id") or 0) or None,
                 )
             except Exception:
-                logger.debug("reply effect eval skipped task={}", task_id)
+                logger.debug("reply effect eval skipped for task [{}]", task_id)
     behavior_scene = str(task.get("behavior_scene") or "").strip()
     if text_delivered and task_type == LLM_CHAT_TASK_TYPE and behavior_scene:
         append_behavior_run(

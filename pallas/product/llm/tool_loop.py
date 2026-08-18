@@ -443,7 +443,7 @@ async def complete_with_tool_loop(
             round_trace["tool_calls"].append(resolved_name)
             agent_trace["tool_call_count"] = int(agent_trace.get("tool_call_count") or 0) + 1
             logger.info(
-                "kernel tool call: round={} tool={} provider_name={} keys={}",
+                "kernel tool call round [{}] invokes [{}] via provider [{}] with args [{}]",
                 round_idx + 1,
                 resolved_name,
                 tool_name,

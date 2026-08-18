@@ -292,7 +292,7 @@ async def handle_llm_chat(
 
             persona_speak_bias = float((await resolve_persona(bot_id, group_id)).speak_bias)
         except Exception:
-            logger.debug("resolve persona speak bias skipped bot={} group={}", bot_id, group_id)
+            logger.debug("resolve persona speak bias skipped for bot [{}] in group [{}]", bot_id, group_id)
         decision = evaluate_speak_perception(
             plain_text=plain or msg,
             aliases=speak_aliases,
@@ -389,7 +389,7 @@ async def handle_llm_chat(
         merge_result = merge_queued_chat(int(bot.self_id), group_id, user_id, plain, cfg=llm_cfg)
         plain = merge_result.text
         if merge_result.merged:
-            logger.debug("llm chat merged queued message group={} user={}", group_id, user_id)
+            logger.debug("llm chat merged queued message for group [{}], user [{}]", group_id, user_id)
     else:
         deferred_text, deferred_message_id = take_pending_chat_one(int(bot.self_id), group_id, user_id)
         if deferred_text:
@@ -706,7 +706,7 @@ async def prepare_and_submit_llm_chat_turn(
                     current_message_id=message_id or None,
                 )
             except Exception:
-                logger.debug("group timeline context skipped group={}", group_id)
+                logger.debug("group timeline context skipped for group [{}]", group_id)
         assembled_context = await assemble_direct_chat_context(
             bot_id=int(bot.self_id),
             group_id=group_id,

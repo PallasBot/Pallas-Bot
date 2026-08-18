@@ -191,7 +191,7 @@ def _clean_and_guard_reply(text: str, *, task_type: str) -> str:
     cleaned = strip_orphan_leading_particles(normalized)
     if cleaned != normalized:
         logger.info(
-            "LLM orphan leading particle stripped task_type={} before={!r} after={!r}",
+            "LLM orphan leading particle stripped for task [{}], before {!r} after {!r}",
             task_type,
             normalized[:48],
             cleaned[:48],
@@ -201,7 +201,7 @@ def _clean_and_guard_reply(text: str, *, task_type: str) -> str:
     staged = strip_stage_direction_parens(cleaned)
     if staged != cleaned:
         logger.info(
-            "LLM stage direction stripped task_type={} before={!r} after={!r}",
+            "LLM stage direction stripped for task [{}], before {!r} after {!r}",
             task_type,
             cleaned[:48],
             staged[:48],
@@ -210,14 +210,15 @@ def _clean_and_guard_reply(text: str, *, task_type: str) -> str:
     if not cleaned:
         return ""
     if looks_like_truncated_reply(cleaned):
-        logger.info("LLM truncated reply rejected task_type={} text={!r}", task_type, cleaned[:48])
+        logger.info("LLM truncated reply rejected for task [{}], text {!r}", task_type, cleaned[:48])
         return ""
     ok, reason = validate_reply_chars(cleaned)
     if not ok:
         logger.info(
-            "LLM reply char guard reject task_type={} reason={}",
+            "LLM reply char guard rejected reply for task [{}], reason [{}], text {!r}",
             task_type,
             reason,
+            cleaned[:48],
         )
         return ""
     return cleaned
@@ -229,7 +230,7 @@ def _normalize_and_guard_reply(text: str, *, task_type: str) -> str:
     normalized = normalize_model_reply(text)
     if not normalized:
         if str(text or "").strip():
-            logger.info("LLM structured reply empty task_type={}", task_type)
+            logger.info("LLM structured reply turned out empty for task [{}]", task_type)
         return ""
     return _clean_and_guard_reply(normalized, task_type=task_type)
 
@@ -250,14 +251,14 @@ def _enforce_max_length(text: str, *, task: dict, task_type: str) -> str:
     fallback = str(task.get("fallback_text") or "").strip()
     if fallback and fallback != text and len(fallback) <= max_len + 12:
         logger.info(
-            "LLM reply length over cap task_type={} len={} max={} -> fallback",
+            "LLM reply length over cap for task [{}], len [{}] max [{}] -> fallback",
             task_type,
             len(text),
             max_len,
         )
         return fallback
     logger.info(
-        "LLM reply length over cap task_type={} len={} max={} -> silent",
+        "LLM reply length over cap for task [{}], len [{}] max [{}] -> silent",
         task_type,
         len(text),
         max_len,
@@ -295,7 +296,7 @@ def resolve_output_filtered_chat_reply(task: dict, reply: StructuredChatReply) -
         hit = match_output_filter(cleaned, profile) if filter_enabled else None
         if hit is not None:
             logger.info(
-                "LLM output filter {} task_type={} phrase={} -> drop segment",
+                "LLM output filter [{}] dropped segment for task [{}], phrase [{}]",
                 hit.tier,
                 task_type,
                 hit.phrase,
@@ -322,14 +323,14 @@ def resolve_output_filtered_chat_reply(task: dict, reply: StructuredChatReply) -
     fallback_reply = _resolve_filtered_fallback(task, profile=profile, task_type=task_type)
     if fallback_reply.reply_segments:
         logger.info(
-            "LLM output filter {} task_type={} phrase={} -> fallback",
+            "LLM output filter [{}] fell back for task [{}], phrase [{}]",
             hit.tier,
             task_type,
             hit.phrase,
         )
         return fallback_reply
     logger.info(
-        "LLM output filter {} task_type={} phrase={} -> silent",
+        "LLM output filter [{}] silenced reply for task [{}], phrase [{}]",
         hit.tier,
         task_type,
         hit.phrase,
