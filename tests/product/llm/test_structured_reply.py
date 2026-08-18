@@ -167,6 +167,10 @@ def test_validate_reply_chars_rejects_empty_and_no_cjk() -> None:
 def test_validate_reply_chars_allows_mention_placeholder() -> None:
     ok, _reason = validate_reply_chars("主人来啦 [[@master_0]] 帮我看看 [[@member_1]]")
     assert ok is True
+    ok2, _reason2 = validate_reply_chars("[@master_0] 被点名啦")
+    assert ok2 is True
+    ok3, _reason3 = validate_reply_chars("@member_1 来一下")
+    assert ok3 is True
 
     ok2, reason2 = validate_reply_chars("|||")
     assert ok2 is False

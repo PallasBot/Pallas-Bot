@@ -22,8 +22,8 @@ _BAD_TOKEN_CHARS = frozenset("<>{}|｜▁")
 _ALLOWED_ASCII_PUNCT = frozenset(".,?!;:'\"()-_~`@#&+*=%^/\n\t \r")
 _EMPTY_MEM_TOKENS = frozenset({"无", "none", "n/a", "null", "无内容", "无可记"})
 _STANDALONE_CHAT_RE = re.compile(r"^[？?]$")
-# 受控提及占位符：delivery 校验授权后替换为 CQ at，字符守卫放行整段
-_MENTION_PLACEHOLDER_RE = re.compile(r"\[\[@[a-zA-Z0-9_]+\]\]")
+# 受控提及占位符：LLM 可能输出单/双括号或裸 @key，delivery 校验授权后替换为 CQ at
+_MENTION_PLACEHOLDER_RE = re.compile(r"(?:\[{1,2}|【|（|\(|「)?@[a-zA-Z0-9_]+(?:\]{1,2}|】|）|\)|」)?")
 
 
 StructuredReply = StructuredChatReply

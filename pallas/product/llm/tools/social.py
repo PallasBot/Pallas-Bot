@@ -20,7 +20,8 @@ if TYPE_CHECKING:
     from pallas.product.llm.tools.context import ToolInvokeContext
 
 _MENTION_GRANT_TTL_SEC = 300.0
-_MENTION_PLACEHOLDER_RE = re.compile(r"\[\[@([a-zA-Z0-9_]+)\]\]")
+# 提及占位符：LLM 可能输出单/双括号或裸 @key；带括号的未授权项会被删除
+_MENTION_PLACEHOLDER_RE = re.compile(r"(?:\[{1,2}|【|（|\(|「)?@([a-zA-Z0-9_]+)(?:\]{1,2}|】|）|\)|」)?")
 
 _grants_lock = threading.Lock()
 _grants: dict[tuple[int, int], dict[str, tuple[int, float]]] = {}
@@ -59,11 +60,14 @@ def resolve_mention_qq(bot_id: int, group_id: int, key: str) -> int | None:
 
 
 def replace_mention_tokens(text: str, *, bot_id: int, group_id: int) -> str:
-    """把已授权的 ``[[@key]]`` 占位符替换为 CQ at；未授权的一律删除。"""
+    """把已授权的提及占位符替换为 CQ at；带括号的未授权项删除，裸 @ 保留。"""
 
     def repl(match: re.Match[str]) -> str:
         qq = resolve_mention_qq(bot_id, group_id, match.group(1))
-        return f"[CQ:at,qq={qq}]" if qq is not None else ""
+        if qq is not None:
+            return f"[CQ:at,qq={qq}]"
+        raw = match.group(0)
+        return raw if raw.startswith("@") else ""
 
     return _MENTION_PLACEHOLDER_RE.sub(repl, str(text or ""))
 

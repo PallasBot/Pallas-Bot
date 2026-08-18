@@ -129,11 +129,11 @@ def test_member_find_no_match(monkeypatch) -> None:
 def test_replace_mention_tokens_grants_only_authorized(monkeypatch) -> None:
     clear_social_mention_state()
     grant_mention(BOT_ID, GROUP_ID, "master_0", MASTER_QQ)
-    text = "主人来啦 [[@master_0]] 干得好 [[@hacker]]"
+    text = "主人来啦 [@master_0] 干得好 [[@hacker]] [[@master_0]]"
     out = replace_mention_tokens(text, bot_id=BOT_ID, group_id=GROUP_ID)
-    assert f"[CQ:at,qq={MASTER_QQ}]" in out
-    assert "[[@master_0]]" not in out
+    assert out.count(f"[CQ:at,qq={MASTER_QQ}]") == 2
     assert "[[@hacker]]" not in out
+    assert "[@master_0]" not in out
 
 
 def test_replace_mention_tokens_unknown_group_deletes(monkeypatch) -> None:
