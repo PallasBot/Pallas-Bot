@@ -35,6 +35,22 @@ _OPERATOR_LOOKUP_HINTS = (
     "什么职业",
 )
 
+_SOCIAL_HINTS = (
+    "你主人",
+    "@主人",
+    "叫主人",
+    "主人出来",
+    "喊主人",
+    "主人的",
+    "群里有没有",
+    "有没有人叫",
+    "找一下",
+    "喊一下",
+    "@一下",
+    "叫一下",
+    "是谁在群里",
+)
+
 # 工具 spec 可带这些域做分类，但 selective 命中时不得单独用它们拉全仓命令工具
 _SELECTIVE_DOMAIN_EXCLUDE = frozenset({"command", "meta"})
 
@@ -174,6 +190,8 @@ def infer_tool_domains(user_text: str) -> frozenset[str]:
     if any(hint in text for hint in _OPERATOR_LOOKUP_HINTS):
         if not is_self_identity_question(user_text):
             domains.add("arknights")
+    if any(hint in text for hint in _SOCIAL_HINTS):
+        domains.add("social")
     for hints, domain in _COMMAND_HINTS:
         if any(hint in text for hint in hints):
             domains.add(domain)

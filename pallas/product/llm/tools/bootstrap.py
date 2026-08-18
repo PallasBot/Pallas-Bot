@@ -10,6 +10,7 @@ from pallas.product.llm.tools.memory import register_memory_tools
 from pallas.product.llm.tools.person import register_person_tools
 from pallas.product.llm.tools.plugin_bootstrap import clear_plugin_command_tools, register_plugin_command_tools
 from pallas.product.llm.tools.reply import register_reply_tools
+from pallas.product.llm.tools.social import register_social_tools
 from pallas.product.llm.tools.tasks import register_task_tools
 from pallas.product.llm.tools.web import register_web_tools
 
@@ -33,6 +34,7 @@ def ensure_llm_tools_bootstrapped(*, force: bool = False) -> None:
     register_web_tools()
     register_history_tools()
     register_person_tools()
+    register_social_tools()
     register_task_tools()
     register_plugin_command_tools()
     register_mcp_tools()

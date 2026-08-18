@@ -35,6 +35,9 @@ _STRUCTURE_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"(记|记住|忘掉|回忆)\s*.{0,12}?(事|说过|以前)"), "memory"),
     # 找工具
     (re.compile(r"(有|能)\s*.{0,6}?(什么|哪些)\s*.{0,6}?工具"), "tools"),
+    # 群内社交：把主人@出来、群里找人、喊一下某成员
+    (re.compile(r"(?:你|我)?的?主人.{0,6}?[@出来叫喊]"), "social"),
+    (re.compile(r"(?:群里有|有没有|帮我找|找一下|喊一下|@一下|叫一下).{0,10}?(?:人|成员|朋友)"), "social"),
 )
 
 
