@@ -477,6 +477,16 @@ async def complete_with_tool_loop(
             tool_result = await execute_tool_async(resolved_name, args, **execute_kwargs)
             result_dict = tool_result if isinstance(tool_result, dict) else {"ok": True, "result": tool_result}
             summary = summarize_tool_result(result_dict)
+            log_rate_limited(
+                logger,
+                "info",
+                f"llm.tool_result.{resolved_name}",
+                "ToolCall round [{}] got result from [{}]: ok [{}], preview [{}]",
+                round_idx + 1,
+                resolved_name,
+                summary["ok"],
+                summary.get("result_preview") or summary.get("error") or "",
+            )
             round_trace["calls"].append({
                 "tool": resolved_name,
                 "provider_name": tool_name,
