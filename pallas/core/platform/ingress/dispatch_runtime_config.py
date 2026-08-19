@@ -197,26 +197,6 @@ class IngressDispatchRuntimeConfig(BaseModel):
             "变更后需重启 Bot 才生效",
         ),
     )
-    passive_nth_concurrency: int = Field(
-        default=4,
-        ge=1,
-        le=64,
-        description=field_help(
-            "非核心被动并发池上限",
-            "填正整数，默认 4",
-            "变更后需重启 Bot 才生效",
-        ),
-    )
-    passive_nth_queue_max: int = Field(
-        default=128,
-        ge=1,
-        le=1024,
-        description=field_help(
-            "非核心被动积压上限，超过后丢弃新被动任务",
-            "填正整数，默认 128",
-            "变更后需重启 Bot 才生效",
-        ),
-    )
     conversation_scheduler_startup_concurrency: int = Field(
         default=2,
         ge=1,
@@ -458,18 +438,6 @@ class IngressDispatchRuntimeConfig(BaseModel):
                 default=8,
                 minimum=1,
                 maximum=64,
-            ),
-            passive_nth_concurrency=dispatch_env_int(
-                "PALLAS_INGRESS_PASSIVE_NTH_CONCURRENCY",
-                default=4,
-                minimum=1,
-                maximum=64,
-            ),
-            passive_nth_queue_max=dispatch_env_int(
-                "PALLAS_INGRESS_PASSIVE_NTH_QUEUE_MAX",
-                default=128,
-                minimum=1,
-                maximum=1024,
             ),
             lane_acquire_timeout_sec=dispatch_env_float("PALLAS_LANE_ACQUIRE_TIMEOUT_SEC", default=1.0, minimum=0.0),
             lane_wait_overload_ms=dispatch_env_int(

@@ -339,7 +339,7 @@ class ConversationScheduler:
 
 
 _scheduler: ConversationScheduler | None = None
-_passive_pools: dict[str, PassiveWorkPool | None] = {"repeater": None, "llm": None, "nth": None}
+_passive_pools: dict[str, PassiveWorkPool | None] = {"repeater": None, "llm": None}
 _active_reservation: ContextVar[ConversationCapacityReservation | None] = ContextVar(
     "conversation_capacity_reservation",
     default=None,
@@ -416,19 +416,13 @@ def start_passive_pools() -> None:
             queue_max=config.conversation_scheduler_max_pending,
             droppable=False,
         ),
-        "nth": PassiveWorkPool(
-            "nth",
-            max_concurrency=config.passive_nth_concurrency,
-            queue_max=config.passive_nth_queue_max,
-            droppable=True,
-        ),
     }
 
 
 async def stop_passive_pools() -> None:
     global _passive_pools
     pools = tuple(pool for pool in _passive_pools.values() if pool is not None)
-    _passive_pools = {"repeater": None, "llm": None, "nth": None}
+    _passive_pools = {"repeater": None, "llm": None}
     for pool in pools:
         await pool.stop()
 
@@ -487,13 +481,13 @@ async def submit_conversation_event(bot: Bot, event: Event, work: Work) -> None:
     if mode == "llm":
         llm_pool = _passive_pools.get("llm")
         if llm_pool is not None:
-            await llm_pool.submit(key, work)
+            await llm_pool.submit(work)
             return
         mode = "serial"
     elif mode == "chat":
         repeater_pool = _passive_pools.get("repeater")
         if repeater_pool is not None:
-            await repeater_pool.submit(key, work)
+            await repeater_pool.submit(work)
             return
         mode = "serial"
     await scheduler.submit(key, work, reservation=reservation, mode=mode)
@@ -558,7 +552,7 @@ def conversation_scheduler_status() -> dict[str, int | float | bool | None]:
         }
     else:
         base = {"enabled": True, **scheduler.snapshot()}
-    for pool_name in ("repeater", "llm", "nth"):
+    for pool_name in ("repeater", "llm"):
         stat = pools.get(pool_name) or {}
         base[f"passive_{pool_name}_pending"] = int(stat.get("pending") or 0)
         base[f"passive_{pool_name}_active"] = int(stat.get("active") or 0)

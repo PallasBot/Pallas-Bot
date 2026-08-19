@@ -52,9 +52,6 @@ def test_ingress_history_aggregates_counter_deltas_and_peak_gauges(tmp_path, mon
             "passive_repeater_active": 0,
             "passive_llm_pending": 0,
             "passive_llm_active": 0,
-            "passive_nth_pending": 0,
-            "passive_nth_active": 0,
-            "passive_nth_dropped": 0,
             "send_queue_depth": 0,
             "send_queue_capacity": 0,
             "pg_pool_utilization": 0.0,
@@ -80,9 +77,6 @@ def test_ingress_history_aggregates_counter_deltas_and_peak_gauges(tmp_path, mon
             "passive_repeater_active": 0,
             "passive_llm_pending": 0,
             "passive_llm_active": 0,
-            "passive_nth_pending": 0,
-            "passive_nth_active": 0,
-            "passive_nth_dropped": 0,
             "send_queue_depth": 0,
             "send_queue_capacity": 0,
             "pg_pool_utilization": 0.0,
@@ -143,9 +137,6 @@ def test_ingress_history_records_scheduler_saturation_signals(tmp_path, monkeypa
             "passive_repeater_active": 0,
             "passive_llm_pending": 0,
             "passive_llm_active": 0,
-            "passive_nth_pending": 0,
-            "passive_nth_active": 0,
-            "passive_nth_dropped": 0,
             "send_queue_depth": 9,
             "send_queue_capacity": 256,
             "pg_pool_utilization": 0.75,
@@ -188,8 +179,7 @@ def test_ingress_history_records_passive_pool_signals(tmp_path, monkeypatch) -> 
                 "passive_repeater_pending": 2,
                 "passive_repeater_active": 1,
                 "passive_llm_pending": 3,
-                "passive_nth_pending": 4,
-                "passive_nth_dropped": 5,
+                "passive_llm_active": 1,
             }
         },
         ts=80,
@@ -199,16 +189,15 @@ def test_ingress_history_records_passive_pool_signals(tmp_path, monkeypatch) -> 
             "conversation_scheduler": {
                 "passive_repeater_pending": 2,
                 "passive_repeater_active": 1,
-                "passive_llm_pending": 3,
-                "passive_nth_pending": 4,
-                "passive_nth_dropped": 12,
+                "passive_llm_pending": 4,
+                "passive_llm_active": 2,
             }
         },
         ts=100,
     )
     data = mod.read_ingress_metrics_history(window_sec=30, bucket_sec=30, now=100)
     assert data["points"][1]["passive_repeater_pending"] == 2
-    assert data["points"][1]["passive_nth_dropped"] == 7
+    assert data["points"][1]["passive_llm_pending"] == 4
 
 
 def test_ingress_history_discards_expired_rows(tmp_path, monkeypatch) -> None:

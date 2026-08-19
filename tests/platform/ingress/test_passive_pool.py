@@ -20,12 +20,12 @@ async def test_pool_enforces_concurrency_and_keeps_undroppable_work() -> None:
             start_gate.set()
         await release.wait()
 
-    first = asyncio.create_task(pool.submit(("10001", 1), lambda: work(1)))
-    second = asyncio.create_task(pool.submit(("10001", 1), lambda: work(2)))
+    first = asyncio.create_task(pool.submit(lambda: work(1)))
+    second = asyncio.create_task(pool.submit(lambda: work(2)))
     await asyncio.wait_for(start_gate.wait(), timeout=5)
     assert sorted(started) == [1, 2]
 
-    third = asyncio.create_task(pool.submit(("10001", 1), lambda: work(3)))
+    third = asyncio.create_task(pool.submit(lambda: work(3)))
     await asyncio.sleep(0)
     assert third.done() is False
     assert started == [1, 2]
@@ -38,7 +38,7 @@ async def test_pool_enforces_concurrency_and_keeps_undroppable_work() -> None:
 
 @pytest.mark.asyncio
 async def test_pool_drops_work_when_queue_full_and_droppable() -> None:
-    pool = PassiveWorkPool("nth", max_concurrency=1, queue_max=1, droppable=True)
+    pool = PassiveWorkPool("extra", max_concurrency=1, queue_max=1, droppable=True)
     started = asyncio.Event()
     release = asyncio.Event()
 
@@ -46,13 +46,13 @@ async def test_pool_drops_work_when_queue_full_and_droppable() -> None:
         started.set()
         await release.wait()
 
-    first = asyncio.create_task(pool.submit(("10001", 1), work))
+    first = asyncio.create_task(pool.submit(work))
     await started.wait()
-    second = asyncio.create_task(pool.submit(("10001", 1), lambda: asyncio.sleep(0)))
+    second = asyncio.create_task(pool.submit(lambda: asyncio.sleep(0)))
     await asyncio.sleep(0)
     assert second.done() is False
 
-    third = asyncio.create_task(pool.submit(("10001", 1), lambda: asyncio.sleep(0)))
+    third = asyncio.create_task(pool.submit(lambda: asyncio.sleep(0)))
     await asyncio.sleep(0)
     assert third.done() is True
 

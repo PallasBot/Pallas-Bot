@@ -96,8 +96,6 @@ def test_passive_pool_config_fields_exist() -> None:
     for field in (
         "passive_repeater_concurrency",
         "passive_llm_concurrency",
-        "passive_nth_concurrency",
-        "passive_nth_queue_max",
     ):
         assert field in IngressDispatchRuntimeConfig.model_fields
 
@@ -108,8 +106,6 @@ def test_passive_pool_fields_require_restart() -> None:
     assert {
         "passive_repeater_concurrency",
         "passive_llm_concurrency",
-        "passive_nth_concurrency",
-        "passive_nth_queue_max",
     } <= _INGRESS_DISPATCH_SKIP
 
 

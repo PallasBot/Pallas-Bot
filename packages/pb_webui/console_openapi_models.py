@@ -270,9 +270,6 @@ class IngressDispatchHistoryPoint(BaseModel):
     passive_repeater_active: int = 0
     passive_llm_pending: int = 0
     passive_llm_active: int = 0
-    passive_nth_pending: int = 0
-    passive_nth_active: int = 0
-    passive_nth_dropped: int = 0
     send_queue_depth: int = 0
     send_queue_capacity: int = 0
     pg_pool_utilization: float = 0.0

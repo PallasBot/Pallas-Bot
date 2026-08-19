@@ -224,7 +224,7 @@ async def test_submit_conversation_event_routes_passive_to_pool(monkeypatch) -> 
 
     ran: list[str] = []
     pool = mod.PassiveWorkPool("repeater", max_concurrency=4, queue_max=8, droppable=False)
-    monkeypatch.setattr(mod, "_passive_pools", {"repeater": pool, "llm": None, "nth": None})
+    monkeypatch.setattr(mod, "_passive_pools", {"repeater": pool, "llm": None})
     monkeypatch.setattr(mod, "conversation_scheduler_enabled", lambda: True)
     monkeypatch.setattr(mod, "conversation_key", lambda bot, event: ("10001", 1))
     scheduler = mod.ConversationScheduler(concurrency=2, max_pending=8)
@@ -263,7 +263,7 @@ async def test_submit_conversation_event_routes_llm_trigger_to_llm_pool(monkeypa
 
     ran: list[str] = []
     llm_pool = mod.PassiveWorkPool("llm", max_concurrency=2, queue_max=8, droppable=False)
-    monkeypatch.setattr(mod, "_passive_pools", {"repeater": None, "llm": llm_pool, "nth": None})
+    monkeypatch.setattr(mod, "_passive_pools", {"repeater": None, "llm": llm_pool})
     monkeypatch.setattr(mod, "conversation_scheduler_enabled", lambda: True)
     monkeypatch.setattr(mod, "conversation_key", lambda bot, event: ("10001", 1))
     scheduler = mod.ConversationScheduler(concurrency=2, max_pending=8)
@@ -302,7 +302,7 @@ async def test_submit_conversation_event_keeps_command_on_serial_scheduler(monke
 
     ran: list[str] = []
     submitted_modes: list[str] = []
-    monkeypatch.setattr(mod, "_passive_pools", {"repeater": None, "llm": None, "nth": None})
+    monkeypatch.setattr(mod, "_passive_pools", {"repeater": None, "llm": None})
     monkeypatch.setattr(mod, "conversation_scheduler_enabled", lambda: True)
     monkeypatch.setattr(mod, "conversation_key", lambda bot, event: ("10001", 1))
     scheduler = mod.ConversationScheduler(concurrency=2, max_pending=8)

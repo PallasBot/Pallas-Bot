@@ -5,7 +5,6 @@ import time
 from collections import deque
 from collections.abc import Awaitable, Callable
 
-ConversationKey = tuple[str, int]
 Work = Callable[[], Awaitable[None]]
 
 
@@ -25,7 +24,7 @@ class PassiveWorkPool:
         self._sem = asyncio.Semaphore(self.max_concurrency)
         self._changed = asyncio.Event()
 
-    async def submit(self, key: ConversationKey, work: Work) -> None:
+    async def submit(self, work: Work) -> None:
         if self._stopping:
             return
         queued_at = time.monotonic()
@@ -68,13 +67,6 @@ class PassiveWorkPool:
             "dropped": self._dropped,
             "wait_ms_p95": wait_p95,
         }
-
-    async def wait_pending_at_least(self, count: int) -> None:
-        while self._pending < count and not self._stopping:
-            self._changed.clear()
-            if self._pending >= count:
-                break
-            await asyncio.wait_for(self._changed.wait(), timeout=5)
 
     async def stop(self) -> None:
         self._stopping = True
