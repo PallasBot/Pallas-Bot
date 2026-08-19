@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from nonebot import logger
-
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.provider_client import complete_chat_message
 from pallas.product.llm.tools.context import ToolInvokeContext
@@ -458,13 +456,6 @@ async def complete_with_tool_loop(
             args = parse_tool_arguments(fn.get("arguments"))
             round_trace["tool_calls"].append(resolved_name)
             agent_trace["tool_call_count"] = int(agent_trace.get("tool_call_count") or 0) + 1
-            logger.info(
-                "ToolCall round [{}] invokes [{}] via provider [{}] with args [{}]",
-                round_idx + 1,
-                resolved_name,
-                tool_name,
-                sorted(args.keys()),
-            )
             background_names = {str(name).strip() for name in (meta.get("background_tool_names") or [])}
             run_in_background = resolved_name in background_names
             execute_kwargs = {"context": context}
@@ -473,13 +464,6 @@ async def complete_with_tool_loop(
             tool_result = await execute_tool_async(resolved_name, args, **execute_kwargs)
             result_dict = tool_result if isinstance(tool_result, dict) else {"ok": True, "result": tool_result}
             summary = summarize_tool_result(result_dict)
-            logger.info(
-                "ToolCall round [{}] got result from [{}]: ok [{}], preview [{}]",
-                round_idx + 1,
-                resolved_name,
-                summary["ok"],
-                summary.get("result_preview") or summary.get("error") or "",
-            )
             round_trace["calls"].append({
                 "tool": resolved_name,
                 "provider_name": tool_name,

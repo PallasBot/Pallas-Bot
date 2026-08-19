@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import json
 import operator
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
+
+from nonebot import logger
 
 from pallas.core.platform.ingress.plugin_command_plaintext import is_plugin_command_plaintext
 from pallas.product.arknights_kb.config import get_arknights_kb_config
@@ -431,6 +434,23 @@ def tool_openai_schemas(*, domains: frozenset[str] | None = None) -> list[dict[s
     return openai_schemas_from_catalog(catalog)
 
 
+def _tool_result_preview(normalized: dict[str, Any]) -> str:
+    """从归一化工具结果取紧凑预览（供日志，脱敏截断）。"""
+    try:
+        if not normalized.get("ok"):
+            return str(normalized.get("error") or "")[:200]
+        payload = normalized.get("result")
+        if isinstance(payload, dict):
+            if "summary" in payload:
+                return str(payload["summary"] or "")[:200]
+            if "result_preview" in payload:
+                return str(payload["result_preview"] or "")[:200]
+        text = json.dumps(payload, ensure_ascii=False) if payload is not None else ""
+        return text[:200]
+    except Exception:
+        return ""
+
+
 async def execute_tool_async(
     name: str,
     arguments: dict[str, Any] | None,
@@ -470,6 +490,11 @@ async def execute_tool_async(
         )
         if dedupe_key and cache_key in _IDEMPOTENT_RESULTS:
             return _IDEMPOTENT_RESULTS[cache_key]
+        logger.info(
+            "ToolCall invokes [{}] with args [{}]",
+            resolved,
+            sorted(args.keys()),
+        )
         try:
             current_spec = spec
 
@@ -486,10 +511,18 @@ async def execute_tool_async(
             normalized = normalize_tool_result(result, spec=spec)
             if dedupe_key:
                 _IDEMPOTENT_RESULTS[cache_key] = normalized
+            logger.info(
+                "ToolCall got result from [{}]: ok [{}], preview [{}]",
+                resolved,
+                normalized.get("ok"),
+                _tool_result_preview(normalized),
+            )
             return normalized
         except TimeoutError:
+            logger.warning("ToolCall timed out for [{}]", resolved)
             return normalize_tool_result({"ok": False, "error": "tool_timeout"}, spec=spec)
         except Exception as exc:
+            logger.warning("ToolCall failed for [{}]: [{}]", resolved, exc)
             return normalize_tool_result({"ok": False, "error": str(exc)}, spec=spec)
     return normalize_tool_result({"ok": False, "error": f"unknown tool: {name}"})
 
