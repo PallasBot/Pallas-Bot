@@ -7,6 +7,13 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _mock_realtime_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import sticker_label_jobs
+
+    monkeypatch.setattr(sticker_label_jobs, "sticker_label_realtime_budget_ok", lambda: True)
+
+
 def test_label_runtime_state_is_shared_by_producer_and_worker(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.core.platform.shard.coord import coord_redis_store
     from pallas.product.llm import sticker_label_jobs
@@ -712,3 +719,28 @@ async def test_label_vision_downscales_image_and_caps_output_tokens(monkeypatch:
     resized = Image.open(BytesIO(base64.b64decode(encoded)))
     assert max(resized.size) <= 384
     assert resized.size == (384, 288)
+
+
+@pytest.mark.asyncio
+async def test_enqueue_respects_realtime_daily_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import sticker_label_jobs
+    from pallas.product.llm.sticker_label_jobs import StickerLabelSource
+
+    original = b"budget-test-bytes"
+    store = SimpleNamespace(requeue_terminal=AsyncMock(side_effect=lambda job: (job, True)))
+    repository = SimpleNamespace(get=AsyncMock(return_value=None))
+    monkeypatch.setattr(sticker_label_jobs, "build_work_job_store", lambda: store)
+    monkeypatch.setattr(sticker_label_jobs, "sticker_label_repository", lambda: repository)
+    monkeypatch.setattr("pallas.core.shared.utils.media_cache.bind_image_content_hash", AsyncMock())
+
+    def over_budget() -> bool:
+        return False
+
+    monkeypatch.setattr(sticker_label_jobs, "sticker_label_realtime_budget_ok", over_budget)
+    queued = await sticker_label_jobs.enqueue_sticker_label_candidate(
+        cache_key="[CQ:image,file=budget.image]",
+        content=original,
+        source=StickerLabelSource.REPEATER_CANDIDATE,
+    )
+    assert queued is False
+    store.requeue_terminal.assert_not_awaited()

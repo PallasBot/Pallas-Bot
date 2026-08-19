@@ -279,6 +279,7 @@ class LlmConfig(BaseModel):
     llm_sticker_vision_max_per_hour: int = Field(default=12, ge=0, le=1000)
     llm_sticker_label_backfill_enabled: bool = Field(default=True)
     llm_sticker_label_backfill_daily_limit: int = Field(default=200, ge=0, le=2000)
+    llm_sticker_label_realtime_daily_limit: int = Field(default=300, ge=0, le=2000)
     llm_reply_effect_eval_enabled: bool = Field(default=False)
     llm_reply_style_variants: dict[str, object] = Field(default_factory=dict)
     llm_corpus_learn_guard_enabled: bool = Field(default=True)
@@ -506,6 +507,7 @@ def get_llm_config() -> LlmConfig:
             llm_sticker_vision_max_per_hour=_env_int("LLM_STICKER_VISION_MAX_PER_HOUR", 12),
             llm_sticker_label_backfill_enabled=_env_bool("LLM_STICKER_LABEL_BACKFILL_ENABLED", True),
             llm_sticker_label_backfill_daily_limit=_env_int("LLM_STICKER_LABEL_BACKFILL_DAILY_LIMIT", 200),
+            llm_sticker_label_realtime_daily_limit=_env_int("LLM_STICKER_LABEL_REALTIME_DAILY_LIMIT", 300),
             llm_reply_effect_eval_enabled=_env_bool("LLM_REPLY_EFFECT_EVAL_ENABLED", False),
             llm_reply_style_variants=_env_json_object("LLM_REPLY_STYLE_VARIANTS"),
             llm_corpus_learn_guard_enabled=_env_bool("LLM_CORPUS_LEARN_GUARD_ENABLED", True),

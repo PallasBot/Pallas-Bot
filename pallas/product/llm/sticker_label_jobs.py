@@ -77,6 +77,25 @@ def sticker_label_runtime_redis_key() -> str:
     return sticker_label_runtime_state.sticker_label_runtime_redis_key()
 
 
+def sticker_label_realtime_budget_ok() -> bool:
+    """实时标注每日预算闸：按当日已成功标注次数限制，避免无上限消耗。"""
+    from pallas.product.llm.config import get_llm_config
+
+    limit = max(0, int(getattr(get_llm_config(), "llm_sticker_label_realtime_daily_limit", 0) or 0))
+    if limit <= 0:
+        return True
+    try:
+        from pallas.product.llm.task_metrics import llm_task_metrics_snapshot
+
+        snapshot = llm_task_metrics_snapshot()
+        by_task = snapshot.get("by_task") if isinstance(snapshot.get("by_task"), dict) else {}
+        row = by_task.get("sticker_label") if isinstance(by_task.get("sticker_label"), dict) else {}
+        done = int(row.get("submit_ok") or 0)
+    except Exception:
+        return True
+    return done < limit
+
+
 def sticker_label_repository():
     from pallas.core.foundation.db import make_sticker_label_repository
 
@@ -144,6 +163,11 @@ async def enqueue_sticker_label_candidate(*, cache_key: str, content: bytes, sou
     if type(source) is not StickerLabelSource or not cache_key:
         return False
     if lazy_sticker_labels_paused():
+        return False
+    if not sticker_label_realtime_budget_ok():
+        from pallas.product.llm.task_metrics import record_bot_llm_task
+
+        record_bot_llm_task("sticker_label", "submit_skip")
         return False
     source_name = source.value
     if sticker_label_circuit_open():
