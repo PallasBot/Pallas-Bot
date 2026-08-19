@@ -13,6 +13,7 @@ from ulid import ULID
 from pallas.api.logging import format_plugin_event
 from pallas.core.foundation.config import BotConfig, GroupConfig, TaskManager
 from pallas.core.platform.ai_callback.task_types import CHAT_DRUNK_TASK_TYPE
+from pallas.core.platform.ingress.plugin_command_plaintext import is_group_plugin_command_plaintext
 from pallas.product.llm import (
     ChatSubmitRequest,
     build_drunk_chat_system_prompt,
@@ -77,8 +78,11 @@ async def is_to_drunk_chat(event: GroupMessageEvent) -> bool:
         return False
     if not (is_llm_chat_service_enabled() or is_legacy_rwkv_drunk_chat_enabled()):
         return False
-    text = event.get_plaintext()
+    text = event.get_plaintext().strip()
     if not text.startswith("牛牛") and not event.is_tome():
+        return False
+    # 已注册的「牛牛*」命令不让酒后闲聊截胡；醉酒只拦截 @ / 「牛牛 + 聊天文本」
+    if not event.is_tome() and is_group_plugin_command_plaintext(text):
         return False
     config = BotConfig(event.self_id, event.group_id)
     return (await config.drunkenness()) > 0

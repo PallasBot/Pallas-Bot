@@ -54,7 +54,7 @@ async def test_start_roulette_logs_opened_mode_after_sending_invitation(monkeypa
 
     send.assert_awaited_once()
     assert log_info.call_args.args == (
-        "[StartRoulette] Bot [1] opened a mute roulette in group [100] with chamber [4].",
+        "[StartRoulette] Bot [1] opened a mute roulette in group [100] with chamber [4]",
     )
 
 

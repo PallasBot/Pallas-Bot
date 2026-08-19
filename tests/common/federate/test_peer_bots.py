@@ -462,6 +462,33 @@ def test_federate_peer_declared_command_plaintext_ignores_unannounced_peer(monke
     assert mod.federate_peer_declared_command_plaintext("牛牛画画") is False
 
 
+def test_command_capability_covers_plaintext_call_name_only_exact(monkeypatch):
+    """唤名能力（裸「牛牛」）只精确匹配，不做前缀覆盖，避免抢走对端命令。"""
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "federate_ingress_active", lambda: True)
+    monkeypatch.setattr(mod, "federate_owner_rotate_sec", lambda: 0)
+    monkeypatch.setattr(mod, "federate_prefer_local_owner", lambda: True)
+    monkeypatch.setattr(
+        mod,
+        "collect_local_federate_command_capabilities",
+        lambda: frozenset({"牛牛", "帕拉斯", "牛牛帮助"}),
+    )
+    mod._cache_deployment_ids = frozenset({"dep-peer"})
+    mod._cache_deployment_capabilities = {"dep-peer": frozenset({"牛牛吃什么"})}
+    mod._cache_deployment_permission_levels = {"dep-peer": {"what_to_eat.eat": "everyone"}}
+    mod._cache_deployment_present_groups = {"dep-peer": frozenset({733291779})}
+
+    # 本机仅有唤名「牛牛」+「牛牛帮助」，不应覆盖对端的「牛牛吃什么」
+    assert mod.command_capability_covers_plaintext(frozenset({"牛牛"}), "牛牛吃什么") is False
+    assert mod.command_capability_covers_plaintext(frozenset({"牛牛"}), "牛牛") is True
+    assert mod.command_capability_covers_plaintext(frozenset({"牛牛吃什么"}), "牛牛吃什么") is True
+
+    # prefer_local_owner=true 时，本机不在能力环 → 归属对端
+    assert mod.federate_group_owner_deployment(733291779, plain="牛牛吃什么") == "dep-peer"
+    assert mod.should_process_federate_group_on_current_deployment(733291779, plain="牛牛吃什么") is False
+
+
 def test_federate_peer_declared_command_plaintext_inactive_or_no_peer(monkeypatch):
     mod.clear_federate_peer_bot_cache_for_tests()
     monkeypatch.setattr(mod, "federate_ingress_active", lambda: False)

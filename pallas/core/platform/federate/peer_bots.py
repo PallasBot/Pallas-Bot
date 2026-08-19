@@ -352,6 +352,15 @@ async def collect_local_federate_public_online_bot_names_async(
     return names
 
 
+def _capability_is_call_name(token: str) -> bool:
+    """唤名能力（裸「牛牛」/「帕拉斯」等 greeting 唤名）只精确匹配。
+
+    这类 token 若作前缀覆盖，会让本机对一切 ``牛牛*`` 命令声称有能力，
+    配合 prefer_local_owner 固定本机当 owner 后，本机无 matcher 会落入 LLM 兜底。
+    """
+    return len(token) <= 2 and token.isalpha()
+
+
 def command_capability_covers_plaintext(capabilities: frozenset[str] | None, plain: str) -> bool:
     """显式能力集是否覆盖明文。
 
@@ -367,7 +376,9 @@ def command_capability_covers_plaintext(capabilities: frozenset[str] | None, pla
         token = str(cap).strip()
         if not token:
             continue
-        if text == token or matches_command_prefix(text, token):
+        if text == token:
+            return True
+        if matches_command_prefix(text, token) and not _capability_is_call_name(token):
             return True
     return False
 

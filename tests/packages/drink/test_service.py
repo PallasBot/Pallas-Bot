@@ -87,7 +87,7 @@ async def test_drink_logs_domain_narrative_after_state_changes(monkeypatch: pyte
 
     await service.drink(event(), AsyncMock())
 
-    assert log_info.call_args_list[0].args == ("[Drink] Bot [1] started drinking in group [2]; sober up in [60s].",)
+    assert log_info.call_args_list[0].args == ("[Drink] Bot [1] started drinking in group [2], sober up after [60s]",)
 
 
 @pytest.mark.asyncio
