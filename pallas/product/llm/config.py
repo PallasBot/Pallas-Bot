@@ -305,9 +305,10 @@ class LlmConfig(BaseModel):
     llm_memory_rag_min_score: int = Field(default=24, ge=0, le=100)
     llm_memory_max_per_group: int = Field(default=200, ge=1, le=2000)
     llm_memory_content_max_len: int = Field(default=500, ge=64, le=4000)
-    llm_memory_auto_episode_enabled: bool = Field(default=True)
-    llm_memory_auto_episode_summary_enabled: bool = Field(default=False)
-    llm_memory_auto_episode_cooldown_sec: int = Field(default=120, ge=0, le=3600)
+    llm_memory_auto_episode_enabled: bool = Field(default=False)
+    llm_memory_auto_episode_summary_enabled: bool = Field(default=True)
+    llm_memory_auto_episode_cooldown_sec: int = Field(default=600, ge=0, le=3600)
+    llm_memory_auto_episode_daily_budget: int = Field(default=100, ge=0, le=100000)
     llm_memory_auto_ip_enabled: bool = Field(default=False)
     llm_memory_auto_ip_cooldown_sec: int = Field(default=1800, ge=0, le=86400)
     llm_memory_auto_ip_daily_budget: int = Field(default=100, ge=0, le=100000)
@@ -344,6 +345,7 @@ class LlmConfig(BaseModel):
     llm_session_summary_enabled: bool = Field(default=True)
     llm_session_summary_threshold: int = Field(default=40, ge=8, le=200)
     llm_session_summary_keep_messages: int = Field(default=16, ge=4, le=120)
+    llm_session_summary_cooldown_sec: int = Field(default=600, ge=0, le=86400)
     mcp_servers: list[LlmMcpServerConfig] = Field(default_factory=list)
 
 
@@ -539,9 +541,10 @@ def get_llm_config() -> LlmConfig:
             llm_memory_rag_min_score=_env_int("LLM_MEMORY_RAG_MIN_SCORE", 24),
             llm_memory_max_per_group=_env_int("LLM_MEMORY_MAX_PER_GROUP", 200),
             llm_memory_content_max_len=_env_int("LLM_MEMORY_CONTENT_MAX_LEN", 500),
-            llm_memory_auto_episode_enabled=_env_bool("LLM_MEMORY_AUTO_EPISODE_ENABLED", True),
-            llm_memory_auto_episode_summary_enabled=_env_bool("LLM_MEMORY_AUTO_EPISODE_SUMMARY_ENABLED", False),
-            llm_memory_auto_episode_cooldown_sec=_env_int("LLM_MEMORY_AUTO_EPISODE_COOLDOWN_SEC", 120),
+            llm_memory_auto_episode_enabled=_env_bool("LLM_MEMORY_AUTO_EPISODE_ENABLED", False),
+            llm_memory_auto_episode_summary_enabled=_env_bool("LLM_MEMORY_AUTO_EPISODE_SUMMARY_ENABLED", True),
+            llm_memory_auto_episode_cooldown_sec=_env_int("LLM_MEMORY_AUTO_EPISODE_COOLDOWN_SEC", 600),
+            llm_memory_auto_episode_daily_budget=_env_int("LLM_MEMORY_AUTO_EPISODE_DAILY_BUDGET", 100),
             llm_memory_auto_ip_enabled=_env_bool("LLM_MEMORY_AUTO_IP_ENABLED", False),
             llm_memory_auto_ip_cooldown_sec=_env_int("LLM_MEMORY_AUTO_IP_COOLDOWN_SEC", 1800),
             llm_memory_auto_ip_daily_budget=_env_int("LLM_MEMORY_AUTO_IP_DAILY_BUDGET", 100),
@@ -577,6 +580,7 @@ def get_llm_config() -> LlmConfig:
             llm_session_summary_enabled=_env_bool("LLM_SESSION_SUMMARY_ENABLED", True),
             llm_session_summary_threshold=_env_int("LLM_SESSION_SUMMARY_THRESHOLD", 40),
             llm_session_summary_keep_messages=_env_int("LLM_SESSION_SUMMARY_KEEP_MESSAGES", 16),
+            llm_session_summary_cooldown_sec=_env_int("LLM_SESSION_SUMMARY_COOLDOWN_SEC", 600),
             mcp_servers=_env_mcp_server_list("LLM_MCP_SERVERS"),
         )
         return _cached_llm_config

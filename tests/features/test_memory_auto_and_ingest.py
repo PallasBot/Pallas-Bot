@@ -282,3 +282,58 @@ async def test_save_memory_entry_rejects_future_behavior_instruction(monkeypatch
 
     monkeypatch.setattr("pallas.product.llm.memory.store.is_llm_memory_store_available", lambda: True)
     assert await save_memory_entry(1, 2, "以后群友@你先说脏话", source="auto_episode") is False
+
+
+@pytest.mark.asyncio
+async def test_auto_episode_skips_noise_fragments(monkeypatch: pytest.MonkeyPatch) -> None:
+    clear_auto_episode_cooldown_for_tests()
+    called = {"n": 0}
+
+    async def fake_save(*_a, **_k):
+        called["n"] += 1
+        return True
+
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.is_llm_memory_store_available", lambda: True)
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.can_read_persistent_memory", lambda _cfg=None: True)
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.save_memory_entry", fake_save)
+    cfg = LlmConfig(llm_memory_auto_episode_enabled=True, llm_memory_auto_episode_cooldown_sec=0)
+
+    for noise in ("阿根廷还是英格兰", "为人民服务不辛苦", "傻逼牛牛我真要制裁你了", "哈哈", "好的收到"):
+        assert await maybe_auto_save_episode(bot_id=1, group_id=2, user_text=noise, cfg=cfg) is False
+    assert called["n"] == 0
+
+
+@pytest.mark.asyncio
+async def test_auto_episode_respects_daily_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    clear_auto_episode_cooldown_for_tests()
+    saved = {"n": 0}
+
+    async def fake_list(*_args, **_kwargs):
+        return [
+            LlmChatTurn(role="user", content="周五晚上一起开黑吗", user_id=11, created_at=1),
+            LlmChatTurn(role="user", content="可以，我带新图", user_id=22, created_at=2),
+            LlmChatTurn(role="user", content="八点在群里喊", user_id=11, created_at=3),
+        ]
+
+    async def fake_complete(*_args, **_kwargs):
+        return {"content": "群友约定周五晚上八点开黑"}
+
+    async def fake_save(*_args, **_kwargs):
+        saved["n"] += 1
+        return True
+
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.is_llm_memory_store_available", lambda: True)
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.can_read_persistent_memory", lambda _cfg=None: True)
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.list_group_ambient_messages", fake_list)
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.complete_chat_message", fake_complete)
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.save_memory_entry", fake_save)
+
+    cfg = LlmConfig(
+        llm_memory_auto_episode_enabled=True,
+        llm_memory_auto_episode_summary_enabled=True,
+        llm_memory_auto_episode_cooldown_sec=0,
+        llm_memory_auto_episode_daily_budget=1,
+    )
+    assert await maybe_auto_save_group_episode(bot_id=1, group_id=2, cfg=cfg) is True
+    assert await maybe_auto_save_group_episode(bot_id=1, group_id=2, cfg=cfg) is False
+    assert saved["n"] == 1

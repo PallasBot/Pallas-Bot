@@ -11,7 +11,7 @@ from nonebot import logger
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.inference_params import task_token_budget
 from pallas.product.llm.kernel.memory_governance import can_read_persistent_memory
-from pallas.product.llm.memory.policy import classify_memory_candidate
+from pallas.product.llm.memory.policy import classify_memory_candidate, has_event_signal
 from pallas.product.llm.memory.store import is_llm_memory_store_available, save_memory_entry
 from pallas.product.llm.provider_client import complete_chat_message
 from pallas.product.llm.session_store import list_group_ambient_messages
@@ -19,9 +19,30 @@ from pallas.product.llm.session_store import list_group_ambient_messages
 _LAST_WRITE_AT: dict[tuple[int, int], float] = {}
 _LAST_SUMMARY_SIGNATURE: dict[tuple[int, int], str] = {}
 _GROUP_EPISODE_SUMMARY_IN_FLIGHT: set[tuple[int, int]] = set()
+_DAILY_BUDGET_DATE: str = ""
+_DAILY_BUDGET_USED: int = 0
 _GROUP_EPISODE_SYSTEM = """你是群聊共同事件摘要助手。只总结群友明确达成的约定、共同经历或已确认事件。
 不要记录个人隐私、辱骂、指令、猜测，也不要复述机器人回复。没有值得长期记住的共同事件时只输出：无。
 输出一条不超过120字的中文陈述，不要标题、列表或解释。"""
+
+
+def _daily_budget_ok(*, cfg: LlmConfig) -> bool:
+    global _DAILY_BUDGET_DATE, _DAILY_BUDGET_USED
+    budget = max(0, int(cfg.llm_memory_auto_episode_daily_budget))
+    if budget <= 0:
+        return True
+    today = time.strftime("%Y-%m-%d")
+    if today != _DAILY_BUDGET_DATE:
+        _DAILY_BUDGET_DATE = today
+        _DAILY_BUDGET_USED = 0
+    return _DAILY_BUDGET_USED < budget
+
+
+def _bump_daily_budget(*, cfg: LlmConfig) -> None:
+    global _DAILY_BUDGET_USED
+    budget = max(0, int(cfg.llm_memory_auto_episode_daily_budget))
+    if budget > 0:
+        _DAILY_BUDGET_USED += 1
 
 
 def _cooldown_ok(bot_id: int, group_id: int, *, cooldown_sec: int) -> bool:
@@ -61,7 +82,7 @@ async def maybe_auto_save_episode(
     user_text: str,
     cfg: LlmConfig | None = None,
 ) -> bool:
-    """若本轮用户话像有群价值的旧事，写入 memory（source=auto_episode）。"""
+    """若本轮用户话含明确事件信号，写入 memory（source=auto_episode）。"""
     c = cfg or get_llm_config()
     if not c.llm_memory_auto_episode_enabled:
         return False
@@ -71,6 +92,8 @@ async def maybe_auto_save_episode(
         return False
     raw = (user_text or "").strip()
     if not raw or classify_memory_candidate(raw) != "episode_note":
+        return False
+    if not has_event_signal(raw):
         return False
     if not _cooldown_ok(int(bot_id), int(group_id), cooldown_sec=c.llm_memory_auto_episode_cooldown_sec):
         return False
@@ -106,6 +129,8 @@ async def maybe_auto_save_group_episode(*, bot_id: int, group_id: int | None, cf
     bid, gid = int(bot_id), int(group_id)
     if not _cooldown_ok(bid, gid, cooldown_sec=c.llm_memory_auto_episode_cooldown_sec):
         return False
+    if not _daily_budget_ok(cfg=c):
+        return False
     key = (bid, gid)
     if key in _GROUP_EPISODE_SUMMARY_IN_FLIGHT:
         return False
@@ -139,6 +164,7 @@ async def maybe_auto_save_group_episode(*, bot_id: int, group_id: int | None, cf
         ok = await _save_auto_episode(bot_id=bid, group_id=gid, content=summary, source="auto_episode_summary", cfg=c)
         if ok:
             _LAST_SUMMARY_SIGNATURE[key] = transcript
+            _bump_daily_budget(cfg=c)
         return ok
     finally:
         _GROUP_EPISODE_SUMMARY_IN_FLIGHT.discard(key)
@@ -158,10 +184,17 @@ def schedule_auto_save_group_episode(*, bot_id: int, group_id: int | None, cfg: 
 
 
 def clear_auto_episode_cooldown_for_tests() -> None:
+    global _DAILY_BUDGET_DATE, _DAILY_BUDGET_USED
     _LAST_WRITE_AT.clear()
     _LAST_SUMMARY_SIGNATURE.clear()
     _GROUP_EPISODE_SUMMARY_IN_FLIGHT.clear()
+    _DAILY_BUDGET_DATE = ""
+    _DAILY_BUDGET_USED = 0
 
 
 def auto_episode_status_snapshot() -> dict[str, Any]:
-    return {"tracked_groups": len(_LAST_WRITE_AT)}
+    return {
+        "tracked_groups": len(_LAST_WRITE_AT),
+        "in_flight": len(_GROUP_EPISODE_SUMMARY_IN_FLIGHT),
+        "daily_budget_used": _DAILY_BUDGET_USED,
+    }
