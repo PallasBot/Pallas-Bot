@@ -13,6 +13,9 @@ from pallas.product.llm.provider_client import complete_chat_message
 from pallas.product.llm.tools.context import ToolInvokeContext
 from pallas.product.llm.tools.registry import execute_tool_async
 
+# 工具调用统一日志通道，便于在控制台按模块过滤
+_TOOL_LOGGER = logger.bind(display_name="LLM 工具")
+
 
 def parse_tool_arguments(raw: Any) -> dict[str, Any]:
     if isinstance(raw, dict):
@@ -460,7 +463,7 @@ async def complete_with_tool_loop(
             round_trace["tool_calls"].append(resolved_name)
             agent_trace["tool_call_count"] = int(agent_trace.get("tool_call_count") or 0) + 1
             log_rate_limited(
-                logger,
+                _TOOL_LOGGER,
                 "info",
                 f"llm.tool_call.{resolved_name}",
                 "ToolCall round [{}] invokes [{}] via provider [{}] with args [{}]",
@@ -478,7 +481,7 @@ async def complete_with_tool_loop(
             result_dict = tool_result if isinstance(tool_result, dict) else {"ok": True, "result": tool_result}
             summary = summarize_tool_result(result_dict)
             log_rate_limited(
-                logger,
+                _TOOL_LOGGER,
                 "info",
                 f"llm.tool_result.{resolved_name}",
                 "ToolCall round [{}] got result from [{}]: ok [{}], preview [{}]",
