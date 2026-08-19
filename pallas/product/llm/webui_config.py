@@ -864,29 +864,67 @@ class LlmWebuiConfig(BaseModel):
         ),
     )
     llm_memory_auto_episode_enabled: bool = Field(
-        default=True,
+        default=False,
         description=field_help(
-            "聊完一轮后，要不要自动把片段沉淀进群记忆",
-            "开=对话结束后可能自动写入（推荐）；关=只靠人工「记住：」",
-            "写入节奏受下方冷却限制；开启图谱「写入后抽取」还会多耗模型",
+            "是否保留逐条启发式沉淀（默认关，推荐用摘要沉淀代替）",
+            "开=每句话都可能直接写入群记忆（旧行为，易记入寒暄/碎片）；关=只靠摘要或人工「记住：」",
+            "建议保持关闭；真正的群事件交给下方的「多人共同事件自动摘要」",
         ),
     )
     llm_memory_auto_episode_summary_enabled: bool = Field(
-        default=False,
+        default=True,
         description=field_help(
             "要不要把多人讨论过的共同事件自动摘要成群记忆",
-            "开=成功回复后异步摘要近期多人对话；关=仅保留现有启发式自动沉淀（默认）。建议先小范围观察费用和误记率",
+            "开=成功回复后异步摘要近期多人对话（推荐）；关=仅保留现有启发式自动沉淀",
             "只处理至少两人参与、至少三条群友消息的窗口；模型失败时不会影响正常聊天",
         ),
     )
     llm_memory_auto_episode_cooldown_sec: int = Field(
-        default=120,
+        default=600,
         ge=0,
         le=3600,
         description=field_help(
             "同一会话两次自动沉淀记忆至少隔多少秒",
-            "默认 120。想少记一点调大；0=不冷却（可能记太勤）。须开启自动沉淀",
+            "默认 600（10 分钟）。想少记一点调大；0=不冷却（可能记太勤）。须开启自动沉淀",
             "过密写入会产生大量相似记忆，检索变吵",
+        ),
+    )
+    llm_memory_auto_episode_daily_budget: int = Field(
+        default=100,
+        ge=0,
+        le=100000,
+        description=field_help(
+            "每天最多做几次「多人共同事件」自动摘要",
+            "默认 100。想控制模型费用调低（如 50）；0=不限制",
+            "摘要会额外调用一次模型；此预算用于防止高频群聊把费用刷爆",
+        ),
+    )
+    llm_memory_auto_ip_enabled: bool = Field(
+        default=False,
+        description=field_help(
+            "要不要自动从群聊提炼 IP 知识（游戏/番剧设定等）",
+            "开=群聊讨论到任何作品时，由模型自动判定并提炼稳定设定写入记忆（推荐）",
+            "会额外调用模型；每群 30 分钟冷却 + 每日预算上限",
+        ),
+    )
+    llm_memory_auto_ip_daily_budget: int = Field(
+        default=100,
+        ge=0,
+        le=100000,
+        description=field_help(
+            "每天最多提炼几次 IP 知识",
+            "默认 100。想控制模型费用调低（如 50）；0=不限制",
+            "须开启「自动提炼 IP 知识」",
+        ),
+    )
+    llm_memory_auto_ip_cooldown_sec: int = Field(
+        default=1800,
+        ge=0,
+        le=86400,
+        description=field_help(
+            "同一群两次提炼 IP 知识至少隔多少秒",
+            "默认 1800（30 分钟）。想更频繁调低；0=不冷却",
+            "过密提炼会产生重复知识",
         ),
     )
     llm_memory_graph_extract_enabled: bool = Field(
@@ -1027,6 +1065,10 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_memory_auto_episode_enabled=cfg.llm_memory_auto_episode_enabled,
         llm_memory_auto_episode_summary_enabled=cfg.llm_memory_auto_episode_summary_enabled,
         llm_memory_auto_episode_cooldown_sec=cfg.llm_memory_auto_episode_cooldown_sec,
+        llm_memory_auto_episode_daily_budget=cfg.llm_memory_auto_episode_daily_budget,
+        llm_memory_auto_ip_enabled=cfg.llm_memory_auto_ip_enabled,
+        llm_memory_auto_ip_daily_budget=cfg.llm_memory_auto_ip_daily_budget,
+        llm_memory_auto_ip_cooldown_sec=cfg.llm_memory_auto_ip_cooldown_sec,
         llm_memory_graph_extract_enabled=cfg.llm_memory_graph_extract_enabled,
         llm_memory_graph_extract_on_write=cfg.llm_memory_graph_extract_on_write,
         llm_memory_hiergraph_max_layers=cfg.llm_memory_hiergraph_max_layers,
