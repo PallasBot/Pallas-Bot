@@ -229,6 +229,8 @@ def retrieve_from_knowledge_sources(
             continue
         if decl.scope.value == "user" and not user_id:
             continue
+        if decl.scope.value == "bot" and (not bot_id or decl.bot_id != int(bot_id)):
+            continue
         top_k = min(decl.top_k, c.llm_knowledge_top_k)
         max_len = min(decl.max_chunk_len, c.llm_knowledge_content_max_len)
         chunks = retrieve_chunks_from_decl(

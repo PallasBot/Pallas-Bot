@@ -20,6 +20,7 @@ class KnowledgeSourceScope(StrEnum):
     GLOBAL = "global"
     GROUP = "group"
     USER = "user"
+    BOT = "bot"
 
 
 class KnowledgeChunkDecl(BaseModel):
@@ -38,6 +39,7 @@ class KnowledgeSourceDecl(BaseModel):
     description: str = Field(default="")
     retrieval_mode: KnowledgeRetrievalMode = KnowledgeRetrievalMode.PROMPT_INJECT
     scope: KnowledgeSourceScope = KnowledgeSourceScope.GLOBAL
+    bot_id: int | None = Field(default=None, description="scope=bot 时限定该牛可见")
     default: bool = True
     top_k: int = Field(default=3, ge=1, le=8)
     max_chunk_len: int = Field(default=400, ge=64, le=2000)

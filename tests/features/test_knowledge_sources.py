@@ -192,6 +192,43 @@ def test_retrieve_from_knowledge_sources_returns_sorted_hits() -> None:
     assert hits[0].source_id in {"pallas.bot_faq", "llm_chat.faq"}
 
 
+def test_retrieve_bot_scoped_source_only_for_that_bot() -> None:
+    from pallas.product.llm.knowledge.models import KnowledgeSourceDecl, KnowledgeSourceScope
+    from pallas.product.llm.knowledge.registry import (
+        _BUILTIN_SOURCES,
+        RegisteredKnowledgeSource,
+    )
+
+    cfg = LlmConfig(llm_chat_enabled=True, llm_knowledge_sources_enabled=True)
+    bot_only = KnowledgeSourceDecl(
+        source_id="test.bot_only",
+        title="某牛的私有知识",
+        scope=KnowledgeSourceScope.BOT,
+        bot_id=777,
+        chunks=[{"title": "私货", "content": "只有777号牛知道的事", "keywords": "私货"}],
+    )
+    original = list(_BUILTIN_SOURCES)
+    try:
+        _BUILTIN_SOURCES.clear()
+        _BUILTIN_SOURCES.append(
+            RegisteredKnowledgeSource(
+                source_id="test.bot_only",
+                plugin_name="",
+                plugin_title="",
+                decl=bot_only,
+                origin="builtin",
+            )
+        )
+        hits_other = retrieve_from_knowledge_sources("私货", bot_id=123, group_id=2, user_id=3, cfg=cfg)
+        hits_owner = retrieve_from_knowledge_sources("私货", bot_id=777, group_id=2, user_id=3, cfg=cfg)
+    finally:
+        _BUILTIN_SOURCES.clear()
+        _BUILTIN_SOURCES.extend(original)
+
+    assert not any(hit.source_id == "test.bot_only" for hit in hits_other)
+    assert any(hit.source_id == "test.bot_only" for hit in hits_owner)
+
+
 def test_llm_chat_plugin_declares_knowledge_source() -> None:
     from packages.llm_chat import __plugin_meta__
     from pallas.product.llm.knowledge.metadata import knowledge_sources_from_metadata
