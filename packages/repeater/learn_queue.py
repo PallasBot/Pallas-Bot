@@ -60,7 +60,8 @@ def learn_concurrency() -> int:
 
     requested = get_repeater_learn_runtime_config().learn_concurrency
     # learn 会持续制造本地写入、cache invalidate 与镜像回填，实际比普通后台 IO 更容易拖慢主循环。
-    ceiling = max(1, int(pg_pool_capacity() * 0.03))
+    # 0.03 比例在容量 ≤33 的池上会归零（20*0.03<1），下限提到 2 保证小池也能并行消化 outbox。
+    ceiling = max(2, int(pg_pool_capacity() * 0.03))
     return max(1, min(int(requested), ceiling))
 
 

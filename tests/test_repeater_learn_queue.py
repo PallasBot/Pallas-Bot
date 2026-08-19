@@ -52,6 +52,29 @@ def test_learn_concurrency_caps_more_conservatively_for_write_heavy_queue(monkey
     assert learn_concurrency() == 2
 
 
+def test_learn_concurrency_keeps_at_least_two_workers_on_small_pool(monkeypatch):
+    from packages.repeater import learn_queue as lq
+
+    monkeypatch.setattr(
+        lq,
+        "get_repeater_learn_runtime_config",
+        lambda: type("Cfg", (), {"learn_concurrency": 24})(),
+    )
+
+    def fake_env(key: str):
+        return {"PG_POOL_SIZE": "12", "PG_MAX_OVERFLOW": "8"}.get(key)
+
+    monkeypatch.setattr(
+        "pallas.core.foundation.db.pool_budget.repo_env_raw_value",
+        fake_env,
+    )
+    from pallas.core.foundation.db.pool_budget import clear_pool_budget_runtime_cache
+
+    clear_pool_budget_runtime_cache()
+
+    assert learn_concurrency() == 2
+
+
 def test_learn_queue_pressure_threshold_scales_with_queue_size(monkeypatch):
     from packages.repeater import learn_queue as lq
 
