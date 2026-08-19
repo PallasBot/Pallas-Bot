@@ -628,6 +628,14 @@ async def deliver_llm_callback_success(
                     index,
                 )
                 break
+            from pallas.product.llm.bot_reply_context import record_bot_reply_context
+
+            record_bot_reply_context(
+                group_id=int(group_id),
+                bot_id=int(bot_id),
+                message_id=receipt.message_id,
+                text=str(segment),
+            )
             sent_indexes.append(index)
         text_delivered = len(sent_indexes) == len(delivery_segments)
         delivered = text_delivered and delivered

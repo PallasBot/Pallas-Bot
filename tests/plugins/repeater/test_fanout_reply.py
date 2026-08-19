@@ -1,3 +1,5 @@
+from unittest.mock import Mock
+
 import pytest
 from nonebot.adapters.onebot.v11 import ActionFailed, Message
 
@@ -205,3 +207,41 @@ async def test_send_repeater_answers_records_corpus_route_once(monkeypatch):
         assert snap["by_task"]["other"]["route_counts"] == {"corpus_select": 1}
     finally:
         clear_llm_task_metrics_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_send_repeater_answers_registers_sent_message_for_reply_context(monkeypatch):
+    import packages.repeater as repeater
+
+    class FakeConfig:
+        async def refresh_cooldown(self, _key: str) -> None:
+            return None
+
+    class FakeBot:
+        async def send_group_msg(self, **_kwargs):
+            return {"message_id": 70001}
+
+    async def answers():
+        yield "复读回复"
+
+    async def pass_proc(item, *_args):
+        return item
+
+    async def no_sleep(_delay):
+        return None
+
+    recorder = Mock()
+    monkeypatch.setattr(fanout_reply, "BotConfig", lambda *_args, **_kwargs: FakeConfig())
+    monkeypatch.setattr(fanout_reply, "get_bot", lambda _bot_id: FakeBot())
+    monkeypatch.setattr(fanout_reply.asyncio, "sleep", no_sleep)
+    monkeypatch.setattr(repeater, "post_proc", pass_proc)
+    monkeypatch.setattr("pallas.product.llm.bot_reply_context.record_bot_reply_context", recorder)
+
+    await fanout_reply.send_repeater_answers(10001, 20002, answers())
+
+    recorder.assert_called_once_with(
+        group_id=20002,
+        bot_id=10001,
+        message_id=70001,
+        text="复读回复",
+    )

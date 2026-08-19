@@ -293,7 +293,16 @@ async def send_repeater_answers(bot_id: int, group_id: int, answers, *, fanout: 
             from pallas.product.llm.sticker_followup import suppress_outgoing_sticker_followup
 
             with suppress_outgoing_sticker_followup():
-                await bot.send_group_msg(group_id=group_id, message=msg)
+                result = await bot.send_group_msg(group_id=group_id, message=msg)
+            from pallas.core.platform.ai_callback.delivery import parse_delivery_message_id
+            from pallas.product.llm.bot_reply_context import record_bot_reply_context
+
+            record_bot_reply_context(
+                group_id=group_id,
+                bot_id=bot_id,
+                message_id=parse_delivery_message_id(result),
+                text=str(msg),
+            )
             logger.info(
                 format_plugin_event(
                     "fanout" if fanout else "reply",
