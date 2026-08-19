@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.2.5-3-g5eeb915f-dirty",
+    "version": "v4.3.4-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -25876,6 +25876,11 @@
             "type": "number",
             "title": "Scheduler Wait P95 Ms"
           },
+          "scheduler_run_p95_ms": {
+            "type": "number",
+            "title": "Scheduler Run P95 Ms",
+            "default": 0.0
+          },
           "scheduler_pending": {
             "type": "integer",
             "title": "Scheduler Pending"
@@ -25887,6 +25892,31 @@
           "scheduler_capacity": {
             "type": "integer",
             "title": "Scheduler Capacity"
+          },
+          "scheduler_backpressure_waits": {
+            "type": "integer",
+            "title": "Scheduler Backpressure Waits",
+            "default": 0
+          },
+          "scheduler_per_key_backpressure_waits": {
+            "type": "integer",
+            "title": "Scheduler Per Key Backpressure Waits",
+            "default": 0
+          },
+          "send_queue_depth": {
+            "type": "integer",
+            "title": "Send Queue Depth",
+            "default": 0
+          },
+          "send_queue_capacity": {
+            "type": "integer",
+            "title": "Send Queue Capacity",
+            "default": 0
+          },
+          "pg_pool_utilization": {
+            "type": "number",
+            "title": "Pg Pool Utilization",
+            "default": 0.0
           },
           "work_pending": {
             "type": "integer",

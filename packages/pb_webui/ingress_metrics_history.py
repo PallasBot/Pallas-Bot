@@ -14,7 +14,14 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 INGRESS_HISTORY_RETENTION_SEC = 7 * 24 * 60 * 60
-_COUNTER_KEYS = ("group_messages", "learn_enqueued", "learn_persisted", "work_completed")
+_COUNTER_KEYS = (
+    "group_messages",
+    "learn_enqueued",
+    "learn_persisted",
+    "work_completed",
+    "scheduler_backpressure_waits",
+    "scheduler_per_key_backpressure_waits",
+)
 _ROUTE_CANDIDATE_COUNTER_KEYS = (
     "messages",
     "route_index_hits",
@@ -147,14 +154,22 @@ def _sample(snapshot: dict[str, Any], *, ts: int) -> dict[str, Any]:
     scheduler = scheduler if isinstance(scheduler, dict) else {}
     work = snapshot.get("work_aux") if isinstance(snapshot.get("work_aux"), dict) else {}
     hotpath = snapshot.get("hotpath") if isinstance(snapshot.get("hotpath"), dict) else {}
+    send_queue = snapshot.get("send_queue") if isinstance(snapshot.get("send_queue"), dict) else {}
+    pool = snapshot.get("pool_budget") if isinstance(snapshot.get("pool_budget"), dict) else {}
     row = {
         "ts": int(ts),
         "ingress_p95_ms": _number(snapshot.get("ingress_duration_ms_p95")),
         "ingress_full_p95_ms": _number(snapshot.get("ingress_full_ms_p95")),
         "scheduler_wait_p95_ms": _number(scheduler.get("wait_ms_p95")),
+        "scheduler_run_p95_ms": _number(scheduler.get("run_ms_p95")),
         "scheduler_pending": int(scheduler.get("pending") or 0),
         "scheduler_active": int(scheduler.get("active") or 0),
         "scheduler_capacity": int(scheduler.get("concurrency") or 0),
+        "scheduler_backpressure_waits": int(scheduler.get("backpressure_waits") or 0),
+        "scheduler_per_key_backpressure_waits": int(scheduler.get("per_key_backpressure_waits") or 0),
+        "send_queue_depth": int(send_queue.get("depth_live", send_queue.get("depth", 0)) or 0),
+        "send_queue_capacity": int(send_queue.get("max_depth") or 0),
+        "pg_pool_utilization": _number(pool.get("utilization")),
         "work_pending": int(work.get("pending") or 0),
         "work_leased": int(work.get("leased") or 0),
         "group_messages": int(snapshot.get("group_messages") or 0),
@@ -442,6 +457,14 @@ def _counter_delta(current: dict[str, Any], previous: dict[str, Any] | None, key
     return max(0, value - int(previous.get(key) or 0))
 
 
+def _scheduler_counter_delta(current: dict[str, Any], previous: dict[str, Any] | None, key: str) -> int:
+    value = int(current.get(key) or 0)
+    if previous is None:
+        return 0
+    previous_value = int(previous.get(key) or 0)
+    return value - previous_value if value >= previous_value else value
+
+
 def read_ingress_metrics_history(*, window_sec: int, bucket_sec: int, now: int | None = None) -> dict[str, Any]:
     now_sec = int(now if now is not None else time.time())
     window = max(60, min(INGRESS_HISTORY_RETENTION_SEC, int(window_sec)))
@@ -463,19 +486,40 @@ def read_ingress_metrics_history(*, window_sec: int, bucket_sec: int, now: int |
                 "ingress_p95_ms": 0.0,
                 "ingress_full_p95_ms": 0.0,
                 "scheduler_wait_p95_ms": 0.0,
+                "scheduler_run_p95_ms": 0.0,
                 "scheduler_pending": 0,
                 "scheduler_active": 0,
                 "scheduler_capacity": 0,
+                "scheduler_backpressure_waits": 0,
+                "scheduler_per_key_backpressure_waits": 0,
+                "send_queue_depth": 0,
+                "send_queue_capacity": 0,
+                "pg_pool_utilization": 0.0,
                 "work_pending": 0,
                 "work_leased": 0,
                 **dict.fromkeys(_COUNTER_KEYS, 0),
             },
         )
-        for key in ("ingress_p95_ms", "ingress_full_p95_ms", "scheduler_wait_p95_ms"):
+        for key in (
+            "ingress_p95_ms",
+            "ingress_full_p95_ms",
+            "scheduler_wait_p95_ms",
+            "scheduler_run_p95_ms",
+            "pg_pool_utilization",
+        ):
             point[key] = max(float(point[key]), float(row.get(key) or 0))
-        for key in ("scheduler_pending", "scheduler_active", "scheduler_capacity", "work_pending", "work_leased"):
+        for key in (
+            "scheduler_pending",
+            "scheduler_active",
+            "scheduler_capacity",
+            "send_queue_depth",
+            "send_queue_capacity",
+            "work_pending",
+            "work_leased",
+        ):
             point[key] = max(int(point[key]), int(row.get(key) or 0))
         for key in _COUNTER_KEYS:
-            point[key] += _counter_delta(row, previous, key)
+            delta = _scheduler_counter_delta if key.startswith("scheduler_") else _counter_delta
+            point[key] += delta(row, previous, key)
         previous = row
     return {"retention_sec": INGRESS_HISTORY_RETENTION_SEC, "bucket_sec": bucket, "points": list(points.values())}

@@ -42,9 +42,15 @@ def test_ingress_history_aggregates_counter_deltas_and_peak_gauges(tmp_path, mon
             "ingress_p95_ms": 1_400.0,
             "ingress_full_p95_ms": 0.0,
             "scheduler_wait_p95_ms": 900.0,
+            "scheduler_run_p95_ms": 0.0,
             "scheduler_pending": 7,
             "scheduler_active": 4,
             "scheduler_capacity": 8,
+            "scheduler_backpressure_waits": 0,
+            "scheduler_per_key_backpressure_waits": 0,
+            "send_queue_depth": 0,
+            "send_queue_capacity": 0,
+            "pg_pool_utilization": 0.0,
             "work_pending": 3,
             "work_leased": 2,
             "group_messages": 12,
@@ -57,9 +63,15 @@ def test_ingress_history_aggregates_counter_deltas_and_peak_gauges(tmp_path, mon
             "ingress_p95_ms": 600.0,
             "ingress_full_p95_ms": 0.0,
             "scheduler_wait_p95_ms": 240.0,
+            "scheduler_run_p95_ms": 0.0,
             "scheduler_pending": 1,
             "scheduler_active": 2,
             "scheduler_capacity": 8,
+            "scheduler_backpressure_waits": 0,
+            "scheduler_per_key_backpressure_waits": 0,
+            "send_queue_depth": 0,
+            "send_queue_capacity": 0,
+            "pg_pool_utilization": 0.0,
             "work_pending": 0,
             "work_leased": 1,
             "group_messages": 6,
@@ -68,6 +80,81 @@ def test_ingress_history_aggregates_counter_deltas_and_peak_gauges(tmp_path, mon
             "work_completed": 4,
         },
     ]
+
+
+def test_ingress_history_records_scheduler_saturation_signals(tmp_path, monkeypatch) -> None:
+    from packages.pb_webui import ingress_metrics_history as mod
+
+    monkeypatch.setattr(mod, "ingress_metrics_history_path", lambda: tmp_path / "ingress_metrics_history.jsonl")
+    assert mod.append_ingress_metrics_history(
+        snapshot={
+            "conversation_scheduler": {
+                "run_ms_p95": 400.0,
+                "backpressure_waits": 20,
+                "per_key_backpressure_waits": 5,
+            },
+            "send_queue": {"depth_live": 4, "max_depth": 128},
+            "pool_budget": {"utilization": 0.2},
+        },
+        ts=100,
+    )
+    assert mod.append_ingress_metrics_history(
+        snapshot={
+            "conversation_scheduler": {
+                "run_ms_p95": 1_200.0,
+                "backpressure_waits": 27,
+                "per_key_backpressure_waits": 8,
+            },
+            "send_queue": {"depth_live": 9, "max_depth": 256},
+            "pool_budget": {"utilization": 0.75},
+        },
+        ts=115,
+    )
+
+    data = mod.read_ingress_metrics_history(window_sec=30, bucket_sec=30, now=115)
+
+    assert data["points"] == [
+        {
+            "at": 90,
+            "ingress_p95_ms": 0.0,
+            "ingress_full_p95_ms": 0.0,
+            "scheduler_wait_p95_ms": 0.0,
+            "scheduler_run_p95_ms": 1_200.0,
+            "scheduler_pending": 0,
+            "scheduler_active": 0,
+            "scheduler_capacity": 0,
+            "scheduler_backpressure_waits": 7,
+            "scheduler_per_key_backpressure_waits": 3,
+            "send_queue_depth": 9,
+            "send_queue_capacity": 256,
+            "pg_pool_utilization": 0.75,
+            "work_pending": 0,
+            "work_leased": 0,
+            "group_messages": 0,
+            "learn_enqueued": 0,
+            "learn_persisted": 0,
+            "work_completed": 0,
+        }
+    ]
+
+
+def test_ingress_history_treats_scheduler_counter_reset_as_a_new_process(tmp_path, monkeypatch) -> None:
+    from packages.pb_webui import ingress_metrics_history as mod
+
+    monkeypatch.setattr(mod, "ingress_metrics_history_path", lambda: tmp_path / "ingress_metrics_history.jsonl")
+    assert mod.append_ingress_metrics_history(
+        snapshot={"conversation_scheduler": {"backpressure_waits": 20}}, ts=80
+    )
+    assert mod.append_ingress_metrics_history(
+        snapshot={"conversation_scheduler": {"backpressure_waits": 25}}, ts=100
+    )
+    assert mod.append_ingress_metrics_history(
+        snapshot={"conversation_scheduler": {"backpressure_waits": 3}}, ts=115
+    )
+
+    data = mod.read_ingress_metrics_history(window_sec=30, bucket_sec=30, now=115)
+
+    assert data["points"][1]["scheduler_backpressure_waits"] == 8
 
 
 def test_ingress_history_discards_expired_rows(tmp_path, monkeypatch) -> None:

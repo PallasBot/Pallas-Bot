@@ -260,9 +260,15 @@ class IngressDispatchHistoryPoint(BaseModel):
     ingress_p95_ms: float
     ingress_full_p95_ms: float = 0.0
     scheduler_wait_p95_ms: float
+    scheduler_run_p95_ms: float = 0.0
     scheduler_pending: int
     scheduler_active: int
     scheduler_capacity: int
+    scheduler_backpressure_waits: int = 0
+    scheduler_per_key_backpressure_waits: int = 0
+    send_queue_depth: int = 0
+    send_queue_capacity: int = 0
+    pg_pool_utilization: float = 0.0
     work_pending: int
     work_leased: int
     group_messages: int
