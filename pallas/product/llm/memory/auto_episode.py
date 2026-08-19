@@ -186,10 +186,15 @@ def schedule_auto_save_group_episode(*, bot_id: int, group_id: int | None, cfg: 
     c = cfg or get_llm_config()
     if group_id is None or not c.llm_memory_auto_episode_summary_enabled:
         return
+    bid, gid = int(bot_id), int(group_id)
+    if not _cooldown_ok(bid, gid, cooldown_sec=c.llm_memory_auto_episode_cooldown_sec):
+        return
+    if (bid, gid) in _GROUP_EPISODE_SUMMARY_IN_FLIGHT or not _daily_budget_ok(cfg=c):
+        return
     try:
         asyncio.get_running_loop().create_task(
-            maybe_auto_save_group_episode(bot_id=bot_id, group_id=group_id, cfg=c),
-            name=f"group_episode_summary:{bot_id}:{group_id}",
+            maybe_auto_save_group_episode(bot_id=bid, group_id=gid, cfg=c),
+            name=f"group_episode_summary:{bid}:{gid}",
         )
     except RuntimeError:
         return
