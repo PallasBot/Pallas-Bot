@@ -11,6 +11,7 @@ from pallas.product.llm.webui_config import LlmWebuiConfig, VectorRetrieveMode, 
 SESSION_FIELD_NAMES = (
     "llm_session_enabled",
     "llm_session_user_window",
+    "llm_session_user_storage_window",
     "llm_session_group_window",
     "llm_session_group_ambient_enabled",
     "llm_session_user_ttl_sec",
@@ -20,6 +21,7 @@ SESSION_FIELD_NAMES = (
     "llm_session_summary_enabled",
     "llm_session_summary_threshold",
     "llm_session_summary_keep_messages",
+    "llm_session_summary_cooldown_sec",
 )
 
 MEMORY_FIELD_NAMES = (
@@ -44,6 +46,10 @@ MEMORY_FIELD_NAMES = (
     "llm_memory_graph_extract_enabled",
     "llm_memory_graph_extract_on_write",
     "llm_memory_hiergraph_max_layers",
+    "llm_memory_decay_half_life_days",
+    "llm_memory_decay_min_importance",
+    "llm_memory_hit_boost_enabled",
+    "llm_memory_hit_boost_sec",
     "llm_relationship_notes_enabled",
 )
 
@@ -51,6 +57,7 @@ MEMORY_FIELD_NAMES = (
 class LlmSessionOpsConfig(BaseModel):
     llm_session_enabled: bool = True
     llm_session_user_window: int = Field(default=18, ge=1, le=200)
+    llm_session_user_storage_window: int = Field(default=200, ge=1, le=1000)
     llm_session_group_window: int = Field(default=8, ge=0, le=100)
     llm_session_group_ambient_enabled: bool = True
     llm_session_user_ttl_sec: int = Field(default=0, ge=0, le=2592000)
@@ -60,6 +67,7 @@ class LlmSessionOpsConfig(BaseModel):
     llm_session_summary_enabled: bool = True
     llm_session_summary_threshold: int = Field(default=40, ge=8, le=200)
     llm_session_summary_keep_messages: int = Field(default=16, ge=4, le=120)
+    llm_session_summary_cooldown_sec: int = Field(default=600, ge=0, le=86400)
 
 
 class LlmMemoryOpsConfig(BaseModel):
@@ -80,6 +88,10 @@ class LlmMemoryOpsConfig(BaseModel):
     llm_memory_graph_extract_enabled: bool = True
     llm_memory_graph_extract_on_write: bool = False
     llm_memory_hiergraph_max_layers: int = Field(default=3, ge=1, le=6)
+    llm_memory_decay_half_life_days: float = Field(default=30.0, ge=0.0, le=3650.0)
+    llm_memory_decay_min_importance: float = Field(default=0.6, ge=0.0, le=1.0)
+    llm_memory_hit_boost_enabled: bool = True
+    llm_memory_hit_boost_sec: int = Field(default=3600, ge=0, le=2592000)
     llm_relationship_notes_enabled: bool = True
 
 

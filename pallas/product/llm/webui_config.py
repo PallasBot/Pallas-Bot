@@ -131,6 +131,16 @@ class LlmWebuiConfig(BaseModel):
             "条数越大越连贯，也越占上下文预算、越费钱；需开启「记住多轮上下文」",
         ),
     )
+    llm_session_user_storage_window: int = Field(
+        default=200,
+        ge=1,
+        le=1000,
+        description=field_help(
+            "每个用户最多在存储里保留多少条历史消息（超出后由摘要接管）",
+            "默认 200。聊天很长的群可调大；一般保持默认，过大只会占磁盘",
+            "与「记忆条数」独立；摘要开启时，超过此窗口的旧内容会先被压缩",
+        ),
+    )
     llm_session_group_window: int = Field(
         default=8,
         ge=0,
@@ -213,6 +223,16 @@ class LlmWebuiConfig(BaseModel):
             "做完摘要后，最近几条原文仍完整保留",
             "默认 16。想紧接刚才几句就略增；想更省预算就略减（别小于 4）",
             "更早的内容靠摘要概括；须开启摘要功能",
+        ),
+    )
+    llm_session_summary_cooldown_sec: int = Field(
+        default=600,
+        ge=0,
+        le=86400,
+        description=field_help(
+            "同一会话两次做摘要至少隔多少秒",
+            "默认 600（10 分钟）。聊天频繁、常触发摘要可调大减少费用；0=不冷却",
+            "只影响摘要触发频率，不影响存储窗口",
         ),
     )
     llm_speak_perception_enabled: bool = Field(
@@ -681,6 +701,16 @@ class LlmWebuiConfig(BaseModel):
         le=2000,
         description=field_help("标签回填每日预算", "每天最多为多少张图调用视觉模型打标签；0 表示关闭。"),
     )
+    llm_sticker_label_realtime_daily_limit: int = Field(
+        default=300,
+        ge=0,
+        le=2000,
+        description=field_help(
+            "标签实时标注每日预算",
+            "默认 300。新收到的表情立即识别语义、存入缓存；0=关闭实时标注",
+            "超限后当天不再实时标注，只保留回填路径",
+        ),
+    )
     llm_reply_effect_eval_enabled: bool = Field(
         default=False,
         description=field_help(
@@ -945,6 +975,44 @@ class LlmWebuiConfig(BaseModel):
             "层数过大计算更重，收益未必明显",
         ),
     )
+    llm_memory_decay_half_life_days: float = Field(
+        default=30.0,
+        ge=0.0,
+        le=3650.0,
+        description=field_help(
+            "低重要性记忆多久淡出一半（半衰期，天）",
+            "默认 30 天。想记更久调大（如 90）；想更轻快忘掉调小",
+            "重要性低于「淡出下限」的记忆按此半衰期衰减；0=不衰减",
+        ),
+    )
+    llm_memory_decay_min_importance: float = Field(
+        default=0.6,
+        ge=0.0,
+        le=1.0,
+        description=field_help(
+            "低于此重要性评分的记忆才开始随时间淡出",
+            "默认 0.6。调高=更多低分记忆会被淡出；调低=只让极低分记忆淡出",
+            "仅影响低于此分的记忆；高分记忆长期保留",
+        ),
+    )
+    llm_memory_hit_boost_enabled: bool = Field(
+        default=True,
+        description=field_help(
+            "近期被检索命中的记忆要不要临时提高权重",
+            "开=刚被用到的记忆短期内更可能再次被想起（推荐）；关=不做命中加权",
+            "帮助在对话中连续引用刚聊过的话题",
+        ),
+    )
+    llm_memory_hit_boost_sec: int = Field(
+        default=3600,
+        ge=0,
+        le=2592000,
+        description=field_help(
+            "命中加权的有效期（秒）",
+            "默认 3600（1 小时）。想更短暂调小；0=不设有效期",
+            "须开启「命中加权」",
+        ),
+    )
     llm_relationship_notes_enabled: bool = Field(
         default=True,
         description=field_help(
@@ -971,6 +1039,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_governance_enabled=cfg.llm_governance_enabled,
         llm_session_enabled=cfg.llm_session_enabled,
         llm_session_user_window=cfg.llm_session_user_window,
+        llm_session_user_storage_window=cfg.llm_session_user_storage_window,
         llm_session_group_window=cfg.llm_session_group_window,
         llm_session_group_ambient_enabled=cfg.llm_session_group_ambient_enabled,
         llm_session_user_ttl_sec=cfg.llm_session_user_ttl_sec,
@@ -980,6 +1049,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_session_summary_enabled=cfg.llm_session_summary_enabled,
         llm_session_summary_threshold=cfg.llm_session_summary_threshold,
         llm_session_summary_keep_messages=cfg.llm_session_summary_keep_messages,
+        llm_session_summary_cooldown_sec=cfg.llm_session_summary_cooldown_sec,
         llm_speak_perception_enabled=cfg.llm_speak_perception_enabled,
         llm_speak_mention_enabled=cfg.llm_speak_mention_enabled,
         llm_speak_ambient_enabled=cfg.llm_speak_ambient_enabled,
@@ -1036,6 +1106,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_sticker_vision_max_per_hour=cfg.llm_sticker_vision_max_per_hour,
         llm_sticker_label_backfill_enabled=cfg.llm_sticker_label_backfill_enabled,
         llm_sticker_label_backfill_daily_limit=cfg.llm_sticker_label_backfill_daily_limit,
+        llm_sticker_label_realtime_daily_limit=cfg.llm_sticker_label_realtime_daily_limit,
         llm_reply_effect_eval_enabled=cfg.llm_reply_effect_eval_enabled,
         llm_reply_style_variants=cfg.llm_reply_style_variants,
         llm_memory_rag_enabled=cfg.llm_memory_rag_enabled,
@@ -1063,5 +1134,9 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_memory_graph_extract_enabled=cfg.llm_memory_graph_extract_enabled,
         llm_memory_graph_extract_on_write=cfg.llm_memory_graph_extract_on_write,
         llm_memory_hiergraph_max_layers=cfg.llm_memory_hiergraph_max_layers,
+        llm_memory_decay_half_life_days=cfg.llm_memory_decay_half_life_days,
+        llm_memory_decay_min_importance=cfg.llm_memory_decay_min_importance,
+        llm_memory_hit_boost_enabled=cfg.llm_memory_hit_boost_enabled,
+        llm_memory_hit_boost_sec=cfg.llm_memory_hit_boost_sec,
         llm_relationship_notes_enabled=cfg.llm_relationship_notes_enabled,
     )
