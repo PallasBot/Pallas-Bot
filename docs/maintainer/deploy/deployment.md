@@ -73,9 +73,17 @@ UV_DEFAULT_INDEX=https://<你的 Python 包索引>/simple uv sync --dry-run
 
 ## 3. 写入主配置 `config/pallas.toml`
 
-```bash
+::: code-group
+
+```bash [Linux / macOS]
 cp config/pallas.example.toml config/pallas.toml
 ```
+
+```powershell [Windows PowerShell]
+Copy-Item config\pallas.example.toml config\pallas.toml
+```
+
+:::
 
 至少完成：
 
@@ -106,7 +114,7 @@ db = "PallasBot"
 uv run python tools/migrate_env_to_pallas.py
 ```
 
-确认 `config/pallas.toml` 是文件（不是目录），且 `superusers` 与数据库段已填写。勿提交含密钥的文件。
+确认 `config/pallas.toml` 是文件（不是目录），且 `superusers` 与数据库段已填写。不要提交含密钥的文件。
 
 插件与通用项可在 Web 控制台修改（落盘 `data/pallas_config/webui.json`），见 [配置要点](/maintainer/reference/config-production)、[配置存储](/developer/architecture/config-storage)。合并顺序为 `pallas.toml` → `.env` → `webui.json`。
 

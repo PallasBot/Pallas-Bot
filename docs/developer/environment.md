@@ -69,10 +69,19 @@ uv run pallas doctor          # 环境检查（uv、配置、启停脚本、分�
 
 激活虚拟环境后也可直接：
 
-```bash
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
+::: code-group
+
+```bash [Linux / macOS]
+source .venv/bin/activate
 pallas status --mode shard
 ```
+
+```powershell [Windows PowerShell]
+.\.venv\Scripts\Activate.ps1
+pallas status --mode shard
+```
+
+:::
 
 ### 启停 Bot
 
@@ -111,9 +120,17 @@ uv run pallas deploy shard      # 应用 deploy 分片模板
 
 1. 复制主配置：
 
-```bash
+::: code-group
+
+```bash [Linux / macOS]
 cp config/pallas.example.toml config/pallas.toml
 ```
+
+```powershell [Windows PowerShell]
+Copy-Item config\pallas.example.toml config\pallas.toml
+```
+
+:::
 
 2. 编辑 `config/pallas.toml`：**至少**改 `superusers` 与数据库段（见示例内「最少配置」）。新装默认 **PostgreSQL**（驱动已在主依赖）。
 

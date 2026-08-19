@@ -127,8 +127,21 @@ local/plugins/你的插件名/__init__.py
 
 若插件通过 PyPI 发布，先将依赖安装到已激活的虚拟环境，再仅将插件本体安装到本地目录：
 
-```bash
+::: code-group
+
+```bash [Linux / macOS]
 source .venv/bin/activate
+```
+
+```powershell [Windows PowerShell]
+.\.venv\Scripts\Activate.ps1
+```
+
+:::
+
+激活环境后执行：
+
+```bash
 python -m pip install nonebot_plugin_example
 python -m pip install --no-deps -t local/plugins nonebot_plugin_example
 ```

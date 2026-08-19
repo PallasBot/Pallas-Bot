@@ -79,7 +79,9 @@ curl -s http://127.0.0.1:8088/pallas/api/health | python3 -m json.tool
 
 ### B1. Bot 本体
 
-```bash
+::: code-group
+
+```bash [Linux / macOS]
 cd /path/to/Pallas-Bot
 uv sync --dev
 cp config/pallas.example.toml config/pallas.toml
@@ -87,6 +89,17 @@ cp config/pallas.example.toml config/pallas.toml
 uv run pallas doctor
 uv run pallas
 ```
+
+```powershell [Windows PowerShell]
+Set-Location C:\path\to\Pallas-Bot
+uv sync --dev
+Copy-Item config\pallas.example.toml config\pallas.toml
+# 编辑 superusers；本地 PG 或 mongodb 段
+uv run pallas doctor
+uv run pallas
+```
+
+:::
 
 - [ ] `pallas doctor` 无致命项
 - [ ] `http://127.0.0.1:8088/pallas/api/health` 正常

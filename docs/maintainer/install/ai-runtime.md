@@ -38,7 +38,7 @@
 
 ## 安装（维护者）
 
-### 本机开发（推荐）
+### 本机开发（Linux / macOS）
 
 在 **Pallas-Bot-AI** 仓库：
 
@@ -48,6 +48,8 @@ cp .env.example .env
 ```
 
 默认安装 **媒体栈**（含 torch），启动 media worker + API。普通聊天不经本 Runtime。
+
+Windows 环境优先通过 WSL 或 Docker 运行 AI Runtime；媒体 Runtime 的具体平台支持以 [Pallas-Bot-AI](https://github.com/PallasBot/Pallas-Bot-AI) 为准。
 
 日常运维在 AI Runtime 根目录执行：
 
