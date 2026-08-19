@@ -89,7 +89,7 @@ async def append_llm_message(
         role_key,  # type: ignore[arg-type]
         safe_content,
         ttl_sec=ttl,
-        window=cfg.llm_session_user_window,
+        window=cfg.llm_session_user_storage_window,
     )
 
 
@@ -108,13 +108,24 @@ async def list_user_llm_messages(
     max_items = limit if limit is not None else c.llm_session_user_window
     max_items = max(1, min(max_items, c.llm_session_user_window))
     ttl = user_ttl_seconds(scope_gid, c)
-    return await resolve_session_backend().list_user_messages(
+    turns = await resolve_session_backend().list_user_messages(
         int(bot_id),
         scope_gid,
         int(user_id),
-        limit=max_items,
+        limit=max_items + 2,
         ttl_sec=ttl,
     )
+    # 摘要消息（【此前对话摘要】）始终保留在读取窗口内，优先于同窗口的普通旧消息
+    summary_index = next(
+        (i for i, turn in enumerate(turns) if "【此前对话摘要】" in str(turn.content or "")),
+        None,
+    )
+    if summary_index is None or summary_index < max_items:
+        return turns[:max_items]
+    turns = list(turns)
+    summary = turns.pop(summary_index)
+    kept = turns[-(max_items - 1) :]
+    return [summary, *kept]
 
 
 async def list_group_ambient_messages(

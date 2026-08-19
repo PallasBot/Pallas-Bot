@@ -78,6 +78,7 @@ from pallas.product.llm.reply_target_candidates import (
 )
 from pallas.product.llm.reply_variation import should_wait_for_more
 from pallas.product.llm.session_store import list_user_llm_messages
+from pallas.product.llm.session_summary import schedule_session_summary
 from pallas.product.llm.speak_perception import evaluate_speak_perception, speak_perception_metrics
 from pallas.product.llm.task_metrics import record_bot_llm_task
 from pallas.product.llm.turn_policy import resolve_turn_policy
@@ -978,6 +979,15 @@ async def prepare_and_submit_llm_chat_turn(
                 )
             except Exception as exc:
                 logger.debug("llm chat auto_ip_knowledge schedule skipped: {}", exc)
+            try:
+                schedule_session_summary(
+                    bot_id=int(bot.self_id),
+                    group_id=int(group_id),
+                    user_id=user_id,
+                    cfg=llm_cfg,
+                )
+            except Exception as exc:
+                logger.debug("llm chat session summary schedule skipped: {}", exc)
 
         if not result.task_id:
             await TaskManager.remove_task(request_id)

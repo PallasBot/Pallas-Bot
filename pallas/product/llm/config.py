@@ -230,6 +230,7 @@ class LlmConfig(BaseModel):
     chat_timeout_sec: float = Field(default=30.0, ge=1.0, le=300.0)
     llm_session_enabled: bool = Field(default=True)
     llm_session_user_window: int = Field(default=18, ge=1, le=200)
+    llm_session_user_storage_window: int = Field(default=200, ge=1, le=1000)
     llm_session_group_window: int = Field(default=8, ge=0, le=100)
     llm_session_group_ambient_enabled: bool = Field(default=True)
     llm_session_user_ttl_sec: int = Field(default=0, ge=0, le=2592000)
@@ -343,6 +344,7 @@ class LlmConfig(BaseModel):
     llm_session_summary_enabled: bool = Field(default=True)
     llm_session_summary_threshold: int = Field(default=40, ge=8, le=200)
     llm_session_summary_keep_messages: int = Field(default=16, ge=4, le=120)
+    llm_session_summary_cooldown_sec: int = Field(default=600, ge=0, le=86400)
     mcp_servers: list[LlmMcpServerConfig] = Field(default_factory=list)
 
 
@@ -451,6 +453,7 @@ def get_llm_config() -> LlmConfig:
             chat_timeout_sec=_env_float("LLM_CHAT_TIMEOUT_SEC", 30.0),
             llm_session_enabled=_env_bool("LLM_SESSION_ENABLED", True),
             llm_session_user_window=_env_int("LLM_SESSION_USER_WINDOW", 18),
+            llm_session_user_storage_window=_env_int("LLM_SESSION_USER_STORAGE_WINDOW", 200),
             llm_session_group_window=_env_int("LLM_SESSION_GROUP_WINDOW", 8),
             llm_session_group_ambient_enabled=_env_bool("LLM_SESSION_GROUP_AMBIENT_ENABLED", True),
             llm_session_user_ttl_sec=_env_int("LLM_SESSION_USER_TTL_SEC", 0),
@@ -575,6 +578,7 @@ def get_llm_config() -> LlmConfig:
             llm_session_summary_enabled=_env_bool("LLM_SESSION_SUMMARY_ENABLED", True),
             llm_session_summary_threshold=_env_int("LLM_SESSION_SUMMARY_THRESHOLD", 40),
             llm_session_summary_keep_messages=_env_int("LLM_SESSION_SUMMARY_KEEP_MESSAGES", 16),
+            llm_session_summary_cooldown_sec=_env_int("LLM_SESSION_SUMMARY_COOLDOWN_SEC", 600),
             mcp_servers=_env_mcp_server_list("LLM_MCP_SERVERS"),
         )
         return _cached_llm_config
