@@ -1,10 +1,14 @@
 # AI 扩展
 
+> 目标：按控制台顺序配置 `@牛牛` LLM 对话
+> 准备：Bot 已运行、可登录控制台；已确认要启用聊天、唱歌还是画画
+> 完成之后：`@牛牛` 能多轮对话；唱歌 / TTS 视需要接入 AI Runtime
+
 ::: tip
-不启用 AI Runtime 时，复读、喝酒、轮盘等核心玩法照常可用。**默认 LLM 聊天**由 Bot 内核直连 Provider，**不必**安装 Pallas-Bot-AI。唱歌 / TTS 等媒体能力才需要 AI Runtime。
+复读、喝酒、轮盘等核心玩法默认可用。**LLM 聊天**由 Bot 内核直连 Provider；唱歌 / TTS 等媒体能力才需要 AI Runtime。
 :::
 
-本文按控制台点击顺序配置 **@ LLM 对话**；唱歌 / TTS 的部署见文末进阶。先了解组件边界可阅读 [LLM 对话、媒体与 AI Runtime](ai-runtime-choice.md)。
+唱歌 / TTS 的部署见文末进阶。先了解组件边界可阅读 [LLM 对话、媒体与 AI Runtime](ai-runtime-choice.md)。
 
 ## 能力对照
 
@@ -33,15 +37,17 @@
 
 浏览器进入 `http://<主机>:8088/pallas/`，登录后在 **AI 配置** 中打开 Provider 接入区域。先确认 Provider 测通结果。
 
+![网页控制台 AI 配置：Provider 接入区与添加提供方入口](/assets/webui-ai-config.png)
+
 ### 2. 配置 Provider（接入）
 
 在 **AI 配置 → 接入**：
 
 1. 选择云端服务商或本地 Ollama  
 2. 填写密钥 / Base URL 与模型  
-3. **测通 Provider 并保存**（不要求 AI Runtime / `:9099` 可达）
+3. **测通 Provider 并保存**
 
-`LLM_RUNTIME` 已兼容为 Bot 内核运行时；聊天无需 **媒体服务** 页测通。
+`LLM_RUNTIME` 已兼容为 Bot 内核运行时；聊天在 **AI 配置 → 接入** 测通即可，媒体服务状态另见下方媒体章节。
 
 ### 3. 打开对话总闸
 
@@ -126,7 +132,7 @@ WebUI 在同一页「功能开关」里：启用智能对话 / 启用遗留酒�
 | 方式 | 做法 |
 | --- | --- |
 | **源码（推荐本机开发）** | 未安装：「下载并安装」。托管目录已安装时打开/刷新会 `git fetch` 对比：有更新才显示「更新 Runtime」；已是最新则只留「仅重装依赖」作修复。探测失败时显示「检查并更新」。 |
-| **Docker 全栈** | 用主仓 compose 起 `pallasbot-ai`。见 [Docker 部署](/deploy/docker)。 |
+| **Docker 全栈** | 用主仓 compose 起 `pallasbot-ai`。见 [Docker 部署](/maintainer/deploy/docker)。 |
 
 控制台**不代跑** Docker。保存连接（含 Bearer）后，扩展基址会同步 Bot 侧 `AI_SERVER_*`，Token 同步 `TTS_API_TOKEN`。
 
@@ -137,17 +143,17 @@ WebUI 在同一页「功能开关」里：启用智能对话 / 启用遗留酒�
    - 选择侧车**默认说话人**、**优先 SVC backend**（失败仍按 registry 回退）与 **TTS 参考音色**
    - TTS 页可配置 **中翻日**（开关、百度/有道与密钥；单独保存；落盘 AI `media_models.json`，未保存过回退 AI `.env`）
    - 同页嵌入插件配置（启停、音色映射、合成时长等）；服务地址不再在插件页填写
-3. **自备唱歌音色**：放到 AI 仓 `resource/sing/models/<音色名>/`（目录名即 Speaker id，勿用 `pretrain`），刷新「唱歌」页应出现在 Speaker 列表；DDSP / RVC / SoVITS 文件约定见 [唱歌插件说明](../plugins/sing/README.md#自备音色)
-4. **Docker**：页内只读就绪状态；下载请换 `pallas-bot-ai:latest` 并由启动脚本拉取；若 `data/` 卷可写，仍可切换默认说话人 / backend / 音色
+3. **自备唱歌音色**：放到 AI 仓 `resource/sing/models/<音色名>/`（目录名即 Speaker id，不要用 `pretrain`），刷新「唱歌」页应出现在 Speaker 列表；DDSP / RVC / SoVITS 文件约定见 [唱歌插件说明](../plugins/sing/README.md#自备音色)
+4. **Docker**：页内只读就绪状态；下载换用 `pallas-bot-ai:latest` 并由启动脚本拉取；若 `data/` 卷可写，仍可切换默认说话人 / backend / 音色
 5. 插件商店安装 **`pallas-plugin-ai-media`**（画画另装 `pallas-plugin-draw`）
 
-插件安装步骤 → [安装插件](install-plugins.md)
+插件安装步骤见 [安装插件](install-plugins.md)
 
 ---
 
 ## 相关文档
 
-- 维护者安装细节 → [AI Runtime](/maintainer/install/ai-runtime)  
-- 运维排障 → [LLM 与 AI](/maintainer/operate/llm-and-ai)  
-- 接话策略 → [@牛牛与复读](llm-and-repeater.md)  
-- 组件边界 → [LLM 对话、媒体与 AI Runtime](ai-runtime-choice.md)
+- 维护者安装细节见 [AI Runtime](/maintainer/install/ai-runtime)  
+- 运维排障见 [LLM 与 AI](/maintainer/operate/llm-and-ai)  
+- 接话策略见 [@牛牛与复读](llm-and-repeater.md)  
+- 组件边界见 [LLM 对话、媒体与 AI Runtime](ai-runtime-choice.md)

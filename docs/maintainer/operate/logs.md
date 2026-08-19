@@ -31,6 +31,8 @@ uv run pallas status
 
 浏览器导出在 Docker 下同样落到你本机；不依赖容器内另开 shell。
 
+![网页控制台运行日志：按结构化级别、范围和关键词筛选后导出](/assets/webui-logs.png)
+
 ## API / curl（含 Docker）
 
 与页面相同筛选参数：
