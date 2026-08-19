@@ -25,6 +25,16 @@ uv python install 3.12
 
 安装脚本完成后，若终端提示找不到 `uv`，重新打开一个终端再执行 `uv --version`。
 
+## Python 依赖镜像源
+
+`uv` 下载依赖较慢或无法连接 PyPI 时，可为单次命令指定兼容 PEP 503 的索引地址：
+
+```bash
+UV_DEFAULT_INDEX=https://<你的 Python 包索引>/simple uv sync
+```
+
+需要持续使用时，将 `UV_DEFAULT_INDEX` 写入当前用户的 shell 环境或系统守护服务环境。镜像站需自行确认可信度、同步完整性与可用性。
+
 ## 2. 准备 PostgreSQL
 
 Release 与源码路径需要一个可连接的 PostgreSQL。可选择以下任一方式：

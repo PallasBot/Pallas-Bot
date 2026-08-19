@@ -105,7 +105,7 @@ A: **WebUI「数据库」页**有「数据库备份」面板；若未检测到 `
 
 ### Docker 和 git clone，更新方式有什么区别？
 
-A: **Docker**：代码在镜像里，更新主要是 **`docker compose pull`** 后重建容器，一般没有本机 git 冲突；数据与配置应在卷（`data/`、`config/pallas.toml` 等）里。**git clone**：更新是 **`git pull`**（或控制台「Bot 更新」在检测到 git 工作副本时的等价操作）；若你改过与上游同一已跟踪文件，可能冲突，需本地处理后再拉。详见 [标准部署 - 后续更新](/maintainer/deploy/deployment) 与 [Docker 部署](/maintainer/deploy/docker)。
+A: **Docker**：代码在镜像里，更新主要是 **`docker compose pull`** 后重建容器，一般没有本机 git 冲突；数据与配置应在卷（`data/`、`config/pallas.toml` 等）里。**git clone**：更新是 **`git pull`**（或控制台「Bot 更新」在检测到 git 工作副本时的等价操作）；若你改过与上游同一已跟踪文件，可能冲突，需本地处理后再拉。详见 [升级与站点定制](/maintainer/deploy/upgrade) 与 [Docker 部署](/maintainer/deploy/docker)。
 
 ### `git pull --autostash` 能避免所有冲突吗？
 

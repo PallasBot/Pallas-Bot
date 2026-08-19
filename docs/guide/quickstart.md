@@ -24,7 +24,7 @@ Release 或源码路径先完成 [环境准备](prepare-environment.md)。本页
 :::
 
 ::: tip 下载慢或失败
-先看报错来自哪里：拉容器镜像或构建基础镜像，见 [Docker 下载慢与镜像源](/maintainer/deploy/docker#下载慢与镜像源)；`uv sync` 下载 Python 依赖失败，见 [Python 依赖镜像源](/maintainer/deploy/deployment#python-依赖镜像源)。控制台自带的 Git 镜像源只用于 GitHub 资源，不能替代这两类配置。
+先看报错来自哪里：拉容器镜像或构建基础镜像，见 [Docker 下载慢与镜像源](/maintainer/deploy/docker#下载慢与镜像源)；`uv sync` 下载 Python 依赖失败，见 [Python 依赖镜像源](prepare-environment.md#python-依赖镜像源)。控制台自带的 Git 镜像源只用于 GitHub 资源，不能替代这两类配置。
 :::
 
 按所选文档完成安装、填写 `superusers` 与数据库配置，然后启动 Bot。
@@ -100,7 +100,7 @@ systemd 日志用于查看守护进程状态；Bot 业务日志仍按自身配�
 
 生产与进阶设置见：
 
-- [标准部署](/maintainer/deploy/deployment)：systemd、备份与防火墙。
+- [标准生产部署](/maintainer/deploy/deployment)：systemd、备份与防火墙。
 - [Docker 部署](/maintainer/deploy/docker)：Compose 运行方式。
 - [配置要点](/maintainer/reference/config-production)：生产配置检查。
 - [分片部署](/maintainer/deploy/sharded)：多牛分片。

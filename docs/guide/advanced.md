@@ -16,7 +16,7 @@
 ## 部署与运维
 
 - [配置要点](/maintainer/reference/config-production)
-- [标准部署](/maintainer/deploy/deployment)：systemd 与备份。
+- [标准生产部署](/maintainer/deploy/deployment)：systemd 与备份。
 - [Docker](/maintainer/deploy/docker)：Compose 镜像与运行命令。
 - [运维入口](/maintainer/quickstart)
 

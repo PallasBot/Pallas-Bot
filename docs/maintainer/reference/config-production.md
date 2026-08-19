@@ -4,7 +4,7 @@
 > **准备**：可编辑 `config/pallas.toml`，启动前能核对 `data/` 目录可写  
 > **完成之后**：能按本页检查清单验收生产配置
 
-相关：[配置存储](/developer/architecture/config-storage) · [标准部署](/maintainer/deploy/deployment) · [Docker](/maintainer/deploy/docker) · [FAQ](/deploy/faq)
+相关：[配置存储](/developer/architecture/config-storage) · [标准生产部署](/maintainer/deploy/deployment) · [Docker](/maintainer/deploy/docker) · [FAQ](/deploy/faq)
 
 ## 最少能跑
 
@@ -161,7 +161,7 @@ uv run python tools/migrate_env_to_pallas.py
 
 | 主题 | 文档 |
 | --- | --- |
-| 分步部署 | [标准部署](/maintainer/deploy/deployment) |
+| 分步部署 | [标准生产部署](/maintainer/deploy/deployment) |
 | Docker 卷 | [Docker 部署](/maintainer/deploy/docker) |
 | 合并与热重载 | [配置存储](/developer/architecture/config-storage) |
 | 站点插件 | [站点定制](/maintainer/deploy/upgrade) |
