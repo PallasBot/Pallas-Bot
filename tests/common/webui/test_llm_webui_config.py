@@ -21,7 +21,6 @@ def test_llm_webui_config_hides_retired_repeater_assist() -> None:
 def test_llm_webui_config_defaults_current_turn_model_decision_off() -> None:
     config = LlmWebuiConfig()
     assert config.llm_current_turn_decision_enabled is False
-    assert config.llm_current_turn_decision_model == ""
 
 
 def test_get_llm_webui_config_keeps_saved_persona_output_firewall(monkeypatch) -> None:

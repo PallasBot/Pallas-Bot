@@ -224,7 +224,6 @@ class LlmConfig(BaseModel):
     legacy_chat_allowed: bool = Field(default=False)
     legacy_chat_endpoint: str = Field(default="/api/llm/chat")
     legacy_del_session_endpoint: str = Field(default="/api/llm/del_session")
-    unified_chat_endpoint: str = Field(default="/api/v1/chat/completions")
     unified_del_session_endpoint: str = Field(default="/api/v1/chat/completions/session")
     user_message_max_len: int = Field(default=4000, ge=64, le=16000)
     chat_timeout_sec: float = Field(default=30.0, ge=1.0, le=300.0)
@@ -257,7 +256,6 @@ class LlmConfig(BaseModel):
     conversation_feature_level: str = Field(default="")
     llm_reply_gate_enabled: bool = Field(default=True)
     llm_current_turn_decision_enabled: bool = Field(default=False)
-    llm_current_turn_decision_model: str = Field(default="")
     llm_reply_gate_min_chars: int = Field(default=1, ge=0, le=32)
     llm_chat_queue_merge: bool = Field(default=True)
     llm_output_filter_enabled: bool = Field(default=True)
@@ -444,7 +442,6 @@ def get_llm_config() -> LlmConfig:
             legacy_chat_allowed=_env_bool("LLM_LEGACY_CHAT_ALLOWED", False),
             legacy_chat_endpoint=_env_str("LLM_LEGACY_CHAT_ENDPOINT", "/api/llm/chat"),
             legacy_del_session_endpoint=_env_str("LLM_LEGACY_DEL_SESSION_ENDPOINT", "/api/llm/del_session"),
-            unified_chat_endpoint=_env_str("LLM_UNIFIED_CHAT_ENDPOINT", "/api/v1/chat/completions"),
             unified_del_session_endpoint=_env_str(
                 "LLM_UNIFIED_DEL_SESSION_ENDPOINT",
                 "/api/v1/chat/completions/session",
@@ -480,7 +477,6 @@ def get_llm_config() -> LlmConfig:
             conversation_feature_level=resolve_conversation_feature_level_raw(),
             llm_reply_gate_enabled=_env_bool("LLM_REPLY_GATE_ENABLED", True),
             llm_current_turn_decision_enabled=_env_bool("LLM_CURRENT_TURN_DECISION_ENABLED", False),
-            llm_current_turn_decision_model=_env_str("LLM_CURRENT_TURN_DECISION_MODEL"),
             llm_reply_gate_min_chars=_env_int("LLM_REPLY_GATE_MIN_CHARS", 1),
             llm_chat_queue_merge=_env_bool("LLM_CHAT_QUEUE_MERGE", True),
             llm_output_filter_enabled=_env_bool("LLM_OUTPUT_FILTER_ENABLED", True),

@@ -501,14 +501,6 @@ class LlmWebuiConfig(BaseModel):
             "开启后请到「接入 → 任务编排」里给「本轮动作决策」选提供方与模型",
         ),
     )
-    llm_current_turn_decision_model: str = Field(
-        default="",
-        description=field_help(
-            "旧版「本轮动作决策」单独填模型名的遗留项",
-            "新配置请到「任务编排 → 本轮动作决策」设置，这里留空即可",
-            "仅兼容读旧配置；两边都填时以任务编排为准更清晰",
-        ),
-    )
     llm_chat_queue_merge: bool = Field(
         default=True,
         description=field_help(
@@ -1020,7 +1012,6 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         conversation_feature_level=cfg.conversation_feature_level or "",  # type: ignore[arg-type]
         llm_reply_gate_enabled=cfg.llm_reply_gate_enabled,
         llm_current_turn_decision_enabled=cfg.llm_current_turn_decision_enabled,
-        llm_current_turn_decision_model=cfg.llm_current_turn_decision_model,
         llm_chat_queue_merge=cfg.llm_chat_queue_merge,
         llm_chat_queue_enabled=cfg.llm_chat_queue_enabled,
         llm_chat_queue_max=cfg.llm_chat_queue_max,
