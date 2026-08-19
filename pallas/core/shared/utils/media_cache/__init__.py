@@ -34,8 +34,11 @@ _image_download_client: httpx.AsyncClient | None = None
 _image_download_lock = asyncio.Lock()
 
 
-async def _fetch_image_bytes(url: str) -> bytes | None:
-    """图片下载专用：短超时 + 不重试，避免图床慢/断连长时间占用 work worker。"""
+async def _fetch_image_bytes(url: str) -> tuple[bytes | None, int | None]:
+    """图片下载专用：短超时 + 不重试，避免图床慢/断连长时间占用 work worker。
+
+    返回 (内容, HTTP 状态码)；网络异常时状态码为 None。
+    """
     global _image_download_client
     async with _image_download_lock:
         if _image_download_client is None or _image_download_client.is_closed:
@@ -47,10 +50,10 @@ async def _fetch_image_bytes(url: str) -> bytes | None:
     try:
         rsp = await client.get(url)
     except httpx.HTTPError:
-        return None
+        return None, None
     if rsp.status_code != httpx.codes.OK:
-        return None
-    return rsp.content
+        return None, rsp.status_code
+    return rsp.content, rsp.status_code
 
 
 _IMAGE_CAPTURE_BOUND = False
@@ -129,14 +132,14 @@ async def handle_image_cache_capture(payload: dict[str, object]) -> None:
         return
     cache = await image_cache_repo.find_by_cq_code(cq_code)
     if cache is None:
-        content = await _fetch_image_bytes(url)
+        content, status = await _fetch_image_bytes(url)
         if content is None:
             log_rate_limited(
                 logger,
                 "warning",
-                "image_cache.download.failed",
-                "image cache download skipped after HTTP failure for [{}]",
-                cq_code,
+                f"image_cache.download.{status or 'unknown'}",
+                "image cache download skipped after HTTP failure status [{}]",
+                status or "unknown",
             )
             return
         values = {
