@@ -77,6 +77,7 @@ __plugin_meta__ = PluginMetadata(
                 parameters={"type": "object", "properties": {}},
                 command_template="牛牛轮盘",
                 hints=["轮盘", "玩轮盘", "开始轮盘", "来一局轮盘"],
+                visibility="deferred",
             ),
             llm_command_tool_row(
                 name="roulette.shot",
@@ -85,6 +86,7 @@ __plugin_meta__ = PluginMetadata(
                 parameters={"type": "object", "properties": {}},
                 command_template="牛牛开枪",
                 hints=["开枪", "参与轮盘"],
+                visibility="deferred",
             ),
             llm_command_tool_row(
                 name="roulette.rescue",
@@ -93,6 +95,7 @@ __plugin_meta__ = PluginMetadata(
                 parameters={"type": "object", "properties": {}},
                 command_template="牛牛救一下",
                 hints=["救一下", "解禁", "救人"],
+                visibility="deferred",
             ),
             llm_command_tool_row(
                 name="roulette.punish",
@@ -101,6 +104,7 @@ __plugin_meta__ = PluginMetadata(
                 parameters={"type": "object", "properties": {}},
                 command_template="牛牛补一枪",
                 hints=["补一枪", "再罚一次"],
+                visibility="deferred",
             ),
         ],
         "menu_data": [
