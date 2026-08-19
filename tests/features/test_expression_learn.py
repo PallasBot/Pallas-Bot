@@ -88,7 +88,7 @@ def test_note_expression_keeps_group_observation_separate_from_llm_success(monke
     monkeypatch.setattr(
         learn,
         "get_llm_config",
-        lambda: SimpleNamespace(llm_expression_learn_enabled=True, llm_expression_learn_cooldown_sec=300),
+        lambda: SimpleNamespace(llm_expression_learn_enabled=True),
     )
     assert learn.note_expression_from_utterance(10001, "那确实", channel="group", source="llm_success") is None
     observed = learn.note_expression_from_utterance(10001, "那确实", channel="group", source="group_observe")
