@@ -177,6 +177,46 @@ class IngressDispatchRuntimeConfig(BaseModel):
             "变更后需重启 Bot 才生效",
         ),
     )
+    passive_repeater_concurrency: int = Field(
+        default=8,
+        ge=1,
+        le=64,
+        description=field_help(
+            "repeater 接话独立并发池上限",
+            "填正整数，默认 8；仅靠并发限速，不丢弃",
+            "变更后需重启 Bot 才生效",
+        ),
+    )
+    passive_llm_concurrency: int = Field(
+        default=8,
+        ge=1,
+        le=64,
+        description=field_help(
+            "LLM 接话独立并发池上限",
+            "填正整数，默认 8；仅靠并发限速，不丢弃",
+            "变更后需重启 Bot 才生效",
+        ),
+    )
+    passive_nth_concurrency: int = Field(
+        default=4,
+        ge=1,
+        le=64,
+        description=field_help(
+            "非核心被动并发池上限",
+            "填正整数，默认 4",
+            "变更后需重启 Bot 才生效",
+        ),
+    )
+    passive_nth_queue_max: int = Field(
+        default=128,
+        ge=1,
+        le=1024,
+        description=field_help(
+            "非核心被动积压上限，超过后丢弃新被动任务",
+            "填正整数，默认 128",
+            "变更后需重启 Bot 才生效",
+        ),
+    )
     conversation_scheduler_startup_concurrency: int = Field(
         default=2,
         ge=1,
@@ -404,6 +444,30 @@ class IngressDispatchRuntimeConfig(BaseModel):
             conversation_scheduler_per_key_pending=dispatch_env_int(
                 "PALLAS_CONVERSATION_SCHEDULER_PER_KEY_PENDING",
                 default=32,
+                minimum=1,
+                maximum=1024,
+            ),
+            passive_repeater_concurrency=dispatch_env_int(
+                "PALLAS_INGRESS_PASSIVE_REPEATER_CONCURRENCY",
+                default=8,
+                minimum=1,
+                maximum=64,
+            ),
+            passive_llm_concurrency=dispatch_env_int(
+                "PALLAS_INGRESS_PASSIVE_LLM_CONCURRENCY",
+                default=8,
+                minimum=1,
+                maximum=64,
+            ),
+            passive_nth_concurrency=dispatch_env_int(
+                "PALLAS_INGRESS_PASSIVE_NTH_CONCURRENCY",
+                default=4,
+                minimum=1,
+                maximum=64,
+            ),
+            passive_nth_queue_max=dispatch_env_int(
+                "PALLAS_INGRESS_PASSIVE_NTH_QUEUE_MAX",
+                default=128,
                 minimum=1,
                 maximum=1024,
             ),

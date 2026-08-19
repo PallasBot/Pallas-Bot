@@ -398,6 +398,48 @@ async def stop_conversation_scheduler() -> None:
         await scheduler.stop()
 
 
+def start_passive_pools() -> None:
+    global _passive_pools
+    if any(pool is not None for pool in _passive_pools.values()):
+        return
+    config = get_ingress_dispatch_runtime_config()
+    _passive_pools = {
+        "repeater": PassiveWorkPool(
+            "repeater",
+            max_concurrency=config.passive_repeater_concurrency,
+            queue_max=config.conversation_scheduler_max_pending,
+            droppable=False,
+        ),
+        "llm": PassiveWorkPool(
+            "llm",
+            max_concurrency=config.passive_llm_concurrency,
+            queue_max=config.conversation_scheduler_max_pending,
+            droppable=False,
+        ),
+        "nth": PassiveWorkPool(
+            "nth",
+            max_concurrency=config.passive_nth_concurrency,
+            queue_max=config.passive_nth_queue_max,
+            droppable=True,
+        ),
+    }
+
+
+async def stop_passive_pools() -> None:
+    global _passive_pools
+    pools = tuple(pool for pool in _passive_pools.values() if pool is not None)
+    _passive_pools = {"repeater": None, "llm": None, "nth": None}
+    for pool in pools:
+        await pool.stop()
+
+
+def passive_pool_status() -> dict[str, dict[str, int | float]]:
+    return {
+        name: pool.snapshot() if pool is not None else {"name": name, "pending": 0, "active": 0, "dropped": 0}
+        for name, pool in _passive_pools.items()
+    }
+
+
 async def set_conversation_scheduler_concurrency(concurrency: int) -> bool:
     scheduler = _scheduler
     if scheduler is None:

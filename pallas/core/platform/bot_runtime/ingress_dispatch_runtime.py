@@ -13,7 +13,9 @@ from pallas.core.platform.ingress.conversation_scheduler import (
     conversation_scheduler_status,
     set_conversation_scheduler_concurrency,
     start_conversation_scheduler,
+    start_passive_pools,
     stop_conversation_scheduler,
+    stop_passive_pools,
 )
 from pallas.core.platform.ingress.dispatch_lanes import DispatchLane, lane_status, set_lane_limit
 from pallas.core.platform.ingress.dispatch_runtime_config import get_ingress_dispatch_runtime_config
@@ -125,6 +127,7 @@ def register_ingress_dispatch_runtime() -> None:
             )
         install_send_queue()
         await start_send_queue_workers()
+        start_passive_pools()
         await start_conversation_scheduler()
         start_adaptive_capacity_loop()
         install_onebot_backpressure()
@@ -141,6 +144,7 @@ def register_ingress_dispatch_runtime() -> None:
         await stop_dispatch_stats_logger()
         await stop_adaptive_capacity_loop()
         await stop_conversation_scheduler()
+        await stop_passive_pools()
         uninstall_matcher_dispatch()
         uninstall_onebot_backpressure()
         await stop_send_queue_workers()

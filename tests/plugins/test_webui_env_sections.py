@@ -90,6 +90,29 @@ def test_conversation_scheduler_fields_require_restart() -> None:
     } <= _INGRESS_DISPATCH_SKIP
 
 
+def test_passive_pool_config_fields_exist() -> None:
+    from pallas.core.platform.ingress.dispatch_runtime_config import IngressDispatchRuntimeConfig
+
+    for field in (
+        "passive_repeater_concurrency",
+        "passive_llm_concurrency",
+        "passive_nth_concurrency",
+        "passive_nth_queue_max",
+    ):
+        assert field in IngressDispatchRuntimeConfig.model_fields
+
+
+def test_passive_pool_fields_require_restart() -> None:
+    from pallas.console.webui.env_sections import _INGRESS_DISPATCH_SKIP
+
+    assert {
+        "passive_repeater_concurrency",
+        "passive_llm_concurrency",
+        "passive_nth_concurrency",
+        "passive_nth_queue_max",
+    } <= _INGRESS_DISPATCH_SKIP
+
+
 @skip_no_message_scrub
 def test_message_scrub_not_in_common_config_list(monkeypatch: pytest.MonkeyPatch):
     from pallas.console.webui import list_webui_env_sections
