@@ -12,6 +12,7 @@ from pallas.api.logging import format_plugin_event
 from pallas.api.perm import group_message_permission_for_command
 from pallas.core.foundation.config import TaskManager
 from pallas.core.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE
+from pallas.core.shared.reply_command_rule import extract_reply_id_from_raw_message
 from pallas.product.llm import (
     ChatSubmitRequest,
     LlmConfig,
@@ -32,6 +33,7 @@ from pallas.product.llm.behavior import (
     select_behavior_patterns,
 )
 from pallas.product.llm.behavior_store import ensure_default_behavior_patterns
+from pallas.product.llm.bot_reply_context import lookup_bot_reply_context
 from pallas.product.llm.chat_queue import (
     begin_chat_turn,
     finish_chat_turn,
@@ -83,6 +85,7 @@ from pallas.product.llm.speak_perception import evaluate_speak_perception, speak
 from pallas.product.llm.task_metrics import record_bot_llm_task
 from pallas.product.llm.turn_policy import resolve_turn_policy
 from pallas.product.persona.peer_bots_prompt import save_peer_alias_from_teach
+from pallas.product.persona.prompt_guard import sanitize_prompt_literal
 from pallas.product.persona.self_identity import (
     extract_self_aliases,
     maybe_persist_self_alias_from_utterance,
@@ -709,6 +712,16 @@ async def prepare_and_submit_llm_chat_turn(
                 )
             except Exception:
                 logger.debug("group timeline context skipped for group [{}]", group_id)
+        replied_message_id = extract_reply_id_from_raw_message(str(getattr(event, "raw_message", "") or ""))
+        replied_text = lookup_bot_reply_context(
+            group_id=group_id or 0,
+            bot_id=int(bot.self_id),
+            message_id=replied_message_id,
+        )
+        if replied_text:
+            reply_context = sanitize_prompt_literal(replied_text, max_len=500)
+            if reply_context:
+                group_timeline = "\n".join(part for part in (group_timeline, "【牛牛刚才说】", reply_context) if part)
         assembled_context = await assemble_direct_chat_context(
             bot_id=int(bot.self_id),
             group_id=group_id,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock, call
 
 import pytest
 
@@ -148,6 +148,55 @@ async def test_delivery_keeps_complete_reply_as_one_bubble(monkeypatch: pytest.M
     )
 
     assert [call.args[2] for call in sender.await_args_list] == ["这个参数需要先填写地址，再保存并重启服务。"]
+
+
+@pytest.mark.asyncio
+async def test_delivery_registers_each_successful_text_bubble_for_reply_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    sender = AsyncMock(
+        side_effect=[
+            type("Receipt", (), {"delivered": True, "message_id": 70001})(),
+            type("Receipt", (), {"delivered": True, "message_id": 70002})(),
+        ]
+    )
+    recorder = Mock()
+    monkeypatch.setattr(
+        "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
+        sender,
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.bot_reply_context.record_bot_reply_context",
+        recorder,
+    )
+    monkeypatch.setattr(
+        llm_delivery,
+        "get_llm_config",
+        lambda: LlmConfig(llm_reply_trim_terminal_period_enabled=False),
+    )
+
+    await llm_delivery.deliver_llm_callback_success(
+        "task-context-bubbles",
+        {
+            "task_type": "llm_chat",
+            "bot_id": 10001,
+            "group_id": 20002,
+            "user_id": 7,
+            "reply_total_length_band": "short",
+        },
+        bot=object(),
+        group_id=20002,
+        bot_id=10001,
+        bot_id_str="10001",
+        text="第一句。第二句。",
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+        sleeper=lambda _delay: None,
+    )
+
+    assert recorder.call_args_list == [
+        call(group_id=20002, bot_id=10001, message_id=70001, text="第一句。"),
+        call(group_id=20002, bot_id=10001, message_id=70002, text="第二句。"),
+    ]
 
 
 @pytest.mark.asyncio

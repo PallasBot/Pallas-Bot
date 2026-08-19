@@ -332,7 +332,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
         user_id=30003,
         message_id=40004,
         time=123456,
-        raw_message="[CQ:at,qq=10001] 你还在吗",
+        raw_message="[CQ:reply,id=70001][CQ:at,qq=10001] 你还在吗",
         get_plaintext=lambda: "你还在吗",
         get_message=lambda: "[CQ:at,qq=10001] 你还在吗",
         get_session_id=lambda: "group_20002_30003",
@@ -392,7 +392,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     async def fake_context(*_args, **kwargs) -> SimpleNamespace:
         assert decision_called, "current turn decision must run before context assembly"
         assert kwargs["allow_persistent_memory"] is False
-        assert kwargs["group_timeline"] == "【刚才的群聊】\n- 兔兔：还是笨蛋欸"
+        assert kwargs["group_timeline"] == "【刚才的群聊】\n- 兔兔：还是笨蛋欸\n【牛牛刚才说】\n复读的原话"
         return SimpleNamespace(
             system_prompt="sys",
             knowledge_retrieval_trace={"hit_count": 1},
@@ -426,6 +426,8 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
         "build_recent_group_timeline",
         AsyncMock(return_value="【刚才的群聊】\n- 兔兔：还是笨蛋欸"),
     )
+    reply_context_lookup = Mock(return_value="复读的原话")
+    monkeypatch.setattr(mod, "lookup_bot_reply_context", reply_context_lookup, raising=False)
     monkeypatch.setattr(
         mod,
         "classify_behavior_scene",
@@ -519,6 +521,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     assert payload["message_id"] == 40004
     assert payload["reply_to_message_id"] == 40003
     assert payload["reply_candidate_ids"] == [40003, 40004]
+    reply_context_lookup.assert_called_once_with(group_id=20002, bot_id=10001, message_id=70001)
     assert payload["reply_total_length_band"] == "complete"
     feedback_hint.assert_not_called()
     submit_request = submit_mock.await_args.args[0]
