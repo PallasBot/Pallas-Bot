@@ -14,7 +14,7 @@ from pallas.product.llm.tools.context import ToolInvokeContext
 from pallas.product.llm.tools.registry import execute_tool_async
 
 # 工具调用统一日志通道，便于在控制台按模块过滤
-_TOOL_LOGGER = logger.bind(display_name="LLM 工具")
+_TOOL_LOGGER = logger.bind(display_name="LLM Tools")
 
 
 def parse_tool_arguments(raw: Any) -> dict[str, Any]:
