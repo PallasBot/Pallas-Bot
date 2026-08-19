@@ -219,6 +219,122 @@ async def test_hot_conversation_cannot_fill_all_pending_capacity() -> None:
 
 
 @pytest.mark.asyncio
+async def test_submit_conversation_event_routes_passive_to_pool(monkeypatch) -> None:
+    import pallas.core.platform.ingress.conversation_scheduler as mod
+
+    ran: list[str] = []
+    pool = mod.PassiveWorkPool("repeater", max_concurrency=4, queue_max=8, droppable=False)
+    monkeypatch.setattr(mod, "_passive_pools", {"repeater": pool, "llm": None, "nth": None})
+    monkeypatch.setattr(mod, "conversation_scheduler_enabled", lambda: True)
+    monkeypatch.setattr(mod, "conversation_key", lambda bot, event: ("10001", 1))
+    scheduler = mod.ConversationScheduler(concurrency=2, max_pending=8)
+    monkeypatch.setattr(mod, "_scheduler", scheduler)
+
+    class _Event:
+        def __init__(self, plain: str, *, to_me: bool = False) -> None:
+            self._plain = plain
+            self.to_me = to_me
+            self.group_id = 10001
+            self.user_id = 1
+
+        def get_plaintext(self) -> str:
+            return self._plain
+
+        async def work(self) -> None:
+            ran.append(self._plain)
+
+    event = _Event("随便聊聊")
+    done = asyncio.Event()
+
+    async def _work() -> None:
+        await event.work()
+        done.set()
+
+    await mod.submit_conversation_event(object(), event, _work)
+    await asyncio.wait_for(done.wait(), timeout=5)
+    assert ran == ["随便聊聊"]
+    assert pool.snapshot()["pending_peak"] == 1
+    await scheduler.stop()
+
+
+@pytest.mark.asyncio
+async def test_submit_conversation_event_routes_llm_trigger_to_llm_pool(monkeypatch) -> None:
+    import pallas.core.platform.ingress.conversation_scheduler as mod
+
+    ran: list[str] = []
+    llm_pool = mod.PassiveWorkPool("llm", max_concurrency=2, queue_max=8, droppable=False)
+    monkeypatch.setattr(mod, "_passive_pools", {"repeater": None, "llm": llm_pool, "nth": None})
+    monkeypatch.setattr(mod, "conversation_scheduler_enabled", lambda: True)
+    monkeypatch.setattr(mod, "conversation_key", lambda bot, event: ("10001", 1))
+    scheduler = mod.ConversationScheduler(concurrency=2, max_pending=8)
+    monkeypatch.setattr(mod, "_scheduler", scheduler)
+
+    class _Event:
+        def __init__(self, plain: str) -> None:
+            self._plain = plain
+            self.to_me = True
+            self.group_id = 10001
+            self.user_id = 1
+
+        def get_plaintext(self) -> str:
+            return self._plain
+
+        async def work(self) -> None:
+            ran.append(self._plain)
+
+    event = _Event("@牛牛 在吗")
+    done = asyncio.Event()
+
+    async def _work() -> None:
+        await event.work()
+        done.set()
+
+    await mod.submit_conversation_event(object(), event, _work)
+    await asyncio.wait_for(done.wait(), timeout=5)
+    assert ran == ["@牛牛 在吗"]
+    assert llm_pool.snapshot()["pending_peak"] == 1
+    await scheduler.stop()
+
+
+@pytest.mark.asyncio
+async def test_submit_conversation_event_keeps_command_on_serial_scheduler(monkeypatch) -> None:
+    import pallas.core.platform.ingress.conversation_scheduler as mod
+
+    ran: list[str] = []
+    submitted_modes: list[str] = []
+    monkeypatch.setattr(mod, "_passive_pools", {"repeater": None, "llm": None, "nth": None})
+    monkeypatch.setattr(mod, "conversation_scheduler_enabled", lambda: True)
+    monkeypatch.setattr(mod, "conversation_key", lambda bot, event: ("10001", 1))
+    scheduler = mod.ConversationScheduler(concurrency=2, max_pending=8)
+    monkeypatch.setattr(mod, "_scheduler", scheduler)
+
+    async def fake_submit(key, work, *, reservation=None, mode="serial") -> None:
+        submitted_modes.append(mode)
+        await work()
+
+    monkeypatch.setattr(scheduler, "submit", fake_submit)
+
+    class _Event:
+        def __init__(self, plain: str) -> None:
+            self._plain = plain
+            self.to_me = False
+            self.group_id = 10001
+            self.user_id = 1
+
+        def get_plaintext(self) -> str:
+            return self._plain
+
+        async def work(self) -> None:
+            ran.append(self._plain)
+
+    event = _Event("牛牛")
+    await mod.submit_conversation_event(object(), event, event.work)
+    assert ran == ["牛牛"]
+    assert submitted_modes == ["serial"]
+    await scheduler.stop()
+
+
+@pytest.mark.asyncio
 async def test_stop_releases_pending_capacity_for_queued_conversations() -> None:
     scheduler = ConversationScheduler(concurrency=1, max_pending=4, per_key_pending=2)
     started = asyncio.Event()

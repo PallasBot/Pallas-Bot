@@ -12,6 +12,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent
 
 from pallas.core.platform.ingress.cold_start import in_cold_start_window
 from pallas.core.platform.ingress.dispatch_runtime_config import get_ingress_dispatch_runtime_config
+from pallas.core.platform.ingress.passive_pool import PassiveWorkPool
 
 if TYPE_CHECKING:
     from nonebot.adapters import Bot, Event
@@ -338,6 +339,7 @@ class ConversationScheduler:
 
 
 _scheduler: ConversationScheduler | None = None
+_passive_pools: dict[str, PassiveWorkPool | None] = {"repeater": None, "llm": None, "nth": None}
 _active_reservation: ContextVar[ConversationCapacityReservation | None] = ContextVar(
     "conversation_capacity_reservation",
     default=None,
@@ -429,16 +431,29 @@ async def submit_conversation_event(bot: Bot, event: Event, work: Work) -> None:
         or federate_peer_declared_command_plaintext(plain)
         or plain in {"牛牛", "帕拉斯"}
     )
-    mode = (
-        "llm"
-        if not is_command
-        and (
-            getattr(event, "to_me", False)
-            or getattr(event, "_pallas_llm_alias_hard_trigger", False)
-            or getattr(event, "_pallas_llm_at_trigger", False)
-        )
-        else ("serial" if is_command else "chat")
-    )
+    if is_command:
+        mode = "serial"
+    elif (
+        getattr(event, "to_me", False)
+        or getattr(event, "_pallas_llm_alias_hard_trigger", False)
+        or getattr(event, "_pallas_llm_at_trigger", False)
+    ):
+        mode = "llm"
+    else:
+        mode = "chat"
+
+    if mode == "llm":
+        llm_pool = _passive_pools.get("llm")
+        if llm_pool is not None:
+            await llm_pool.submit(key, work)
+            return
+        mode = "serial"
+    elif mode == "chat":
+        repeater_pool = _passive_pools.get("repeater")
+        if repeater_pool is not None:
+            await repeater_pool.submit(key, work)
+            return
+        mode = "serial"
     await scheduler.submit(key, work, reservation=reservation, mode=mode)
 
 
