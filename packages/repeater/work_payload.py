@@ -27,6 +27,23 @@ def chat_data_to_dict(chat_data: Any) -> dict[str, int | str | None]:
     }
 
 
+def chat_data_to_message_dict(chat_data: Any) -> dict[str, int | str | bool | None]:
+    """序列化 ChatData 供独立 message 落库 job 使用（含 message 表所需全部字段）。"""
+    return {
+        "group_id": int(chat_data.group_id),
+        "user_id": int(chat_data.user_id),
+        "bot_id": int(chat_data.bot_id),
+        "raw_message": normalize_work_text(chat_data.raw_message),
+        "plain_text": normalize_work_text(chat_data.plain_text),
+        "time": int(chat_data.time),
+        "is_plain_text": bool(chat_data.is_plain_text),
+        "keywords": normalize_work_text(chat_data.keywords),
+        "sender_name": normalize_work_text(getattr(chat_data, "sender_name", "")),
+        "message_id": getattr(chat_data, "message_id", None),
+        "reply_to_message_id": getattr(chat_data, "reply_to_message_id", None),
+    }
+
+
 def message_to_dict(message: Any) -> dict[str, int | str | bool | None]:
     return {
         "group_id": int(message.group_id),

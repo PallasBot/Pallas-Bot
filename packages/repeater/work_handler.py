@@ -15,6 +15,27 @@ async def handle_repeater_learn(payload: dict[str, Any]) -> None:
     record_learn_completed()
 
 
+async def handle_repeater_message(payload: dict[str, Any]) -> None:
+    from .message_store import MessageStore
+    from .model import ChatData
+
+    raw_message = payload.get("message")
+    if not isinstance(raw_message, dict):
+        return
+    chat_data = ChatData(
+        group_id=int(raw_message.get("group_id") or 0),
+        user_id=int(raw_message.get("user_id") or 0),
+        bot_id=int(raw_message.get("bot_id") or 0),
+        raw_message=str(raw_message.get("raw_message") or ""),
+        plain_text=str(raw_message.get("plain_text") or ""),
+        sender_name=str(raw_message.get("sender_name") or ""),
+        message_id=raw_message.get("message_id"),
+        reply_to_message_id=raw_message.get("reply_to_message_id"),
+        time=int(raw_message.get("time") or 0),
+    )
+    await MessageStore.persist_message(chat_data)
+
+
 def repeater_work_handlers():
     from pallas.core.shared.utils.media_cache import handle_image_cache_capture
     from pallas.product.llm.repeater_semantic_style import (
@@ -28,6 +49,7 @@ def repeater_work_handlers():
 
     return {
         "repeater.learn": handle_repeater_learn,
+        "repeater.message": handle_repeater_message,
         "repeater.semantic_style": handle_repeater_semantic_style,
         "repeater.semantic_style.backfill": handle_repeater_semantic_style_backfill,
         "repeater.semantic_style.backfill.scan": handle_repeater_semantic_style_backfill_scan,

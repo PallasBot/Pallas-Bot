@@ -154,16 +154,21 @@ async def run_learn_consumer() -> None:
 
 
 async def enqueue_repeater_learn(chat: Chat, event: GroupMessageEvent) -> bool:
-    """仅抢占成功的牛写入 durable outbox，实际学习在 work aux 执行。"""
+    """抢占成功后先保证 message 落库，再按压力保护入队 learn。"""
     if not await claim_group_message_event(_LEARN_PLUGIN, event, int(event.self_id)):
         return False
     observe_quoted_semantic_style_feedback(event)
+
+    from .learner import Learner
+
+    message_dict = await Learner.capture_message_for_persist(chat.chat_data)
+    if message_dict is not None:
+        enqueue_message_persist_job(message_dict, event)
     if should_skip_repeater_learn_enqueue():
         from pallas.core.platform.ingress.hotpath_metrics import record_learn_skipped_pressure
 
         record_learn_skipped_pressure()
         return False
-    from .learner import Learner
     from .model import Chat
 
     payload = await Learner.capture_for_work(chat.chat_data, Chat._topics_lock, Chat._recent_topics)
@@ -191,6 +196,26 @@ async def enqueue_repeater_learn(chat: Chat, event: GroupMessageEvent) -> bool:
 
     record_learn_enqueued()
     record_learn_buffered()
+    return True
+
+
+def enqueue_message_persist_job(message_dict: dict[str, object], event: GroupMessageEvent) -> bool:
+    """message 落库独立于 learn 压力：进同一 outbox，但压力只跳过 learn 入队。"""
+    job = WorkJob.create(
+        kind="repeater.message",
+        payload={"message": message_dict},
+        idempotency_key=f"repeater.message:{int(event.group_id)}:{int(event.message_id)}",
+    )
+    try:
+        learn_queue().put_nowait(job)
+    except asyncio.QueueFull:
+        from pallas.core.platform.ingress.hotpath_metrics import record_message_persist_skipped_full
+
+        record_message_persist_skipped_full()
+        return False
+    from pallas.core.platform.ingress.hotpath_metrics import record_message_persist_buffered
+
+    record_message_persist_buffered()
     return True
 
 

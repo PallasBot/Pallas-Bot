@@ -16,25 +16,44 @@ def reset_message_load_state() -> None:
     reset_message_load_for_tests()
 
 
+def _chat_data(**overrides):
+    from packages.repeater.model import ChatData
+
+    base = {
+        "group_id": 42,
+        "user_id": 11,
+        "bot_id": 100,
+        "raw_message": "这一句",
+        "plain_text": "这一句",
+        "time": 20,
+    }
+    base.update(overrides)
+    return ChatData(**base)
+
+
 @pytest.mark.asyncio
 async def test_enqueue_repeater_learn_captures_idempotent_work_job(monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.repeater import learn_queue
     from pallas.core.platform.ingress import hotpath_metrics
 
     payload = SimpleNamespace(to_dict=lambda: {"chat": {"group_id": 42}})
-    chat = SimpleNamespace(chat_data=SimpleNamespace(group_id=42, bot_id=100))
+    chat = SimpleNamespace(chat_data=_chat_data())
     event = SimpleNamespace(group_id=42, message_id=99, self_id=100)
     monkeypatch.setattr(learn_queue, "claim_group_message_event", AsyncMock(return_value=True))
     monkeypatch.setattr("packages.repeater.learner.Learner.capture_for_work", AsyncMock(return_value=payload))
+    monkeypatch.setattr(
+        "packages.repeater.learner.Learner.capture_message_for_persist", AsyncMock(return_value={"message": 1})
+    )
     learn_queue.clear_repeater_learn_runtime_state()
     hotpath_metrics.clear_hotpath_metrics_for_tests()
 
     assert await learn_queue.enqueue_repeater_learn(chat, event) is True
 
-    job = learn_queue.learn_queue().get_nowait()
-    assert job.kind == "repeater.learn"
-    assert job.idempotency_key == "repeater.learn:42:99:100"
-    assert job.payload == {"chat": {"group_id": 42}}
+    jobs = [learn_queue.learn_queue().get_nowait() for _ in range(2)]
+    learn_job = next(job for job in jobs if job.kind == "repeater.learn")
+    assert learn_job.kind == "repeater.learn"
+    assert learn_job.idempotency_key == "repeater.learn:42:99:100"
+    assert learn_job.payload == {"chat": {"group_id": 42}}
     assert hotpath_metrics.hotpath_metrics_snapshot()["learn_enqueued"] == 1
     assert hotpath_metrics.hotpath_metrics_snapshot()["learn_buffered"] == 1
 
@@ -45,38 +64,48 @@ async def test_enqueue_repeater_learn_buffers_job_without_waiting_for_outbox(mon
 
     learn_queue.clear_repeater_learn_runtime_state()
     payload = SimpleNamespace(to_dict=lambda: {"chat": {"group_id": 42}})
-    chat = SimpleNamespace(chat_data=SimpleNamespace(group_id=42, bot_id=100))
+    chat = SimpleNamespace(chat_data=_chat_data())
     event = SimpleNamespace(group_id=42, message_id=99, self_id=100)
     store = SimpleNamespace(enqueue_many=AsyncMock())
     monkeypatch.setattr(learn_queue, "claim_group_message_event", AsyncMock(return_value=True))
     monkeypatch.setattr("packages.repeater.learner.Learner.capture_for_work", AsyncMock(return_value=payload))
+    monkeypatch.setattr(
+        "packages.repeater.learner.Learner.capture_message_for_persist", AsyncMock(return_value={"message": 1})
+    )
     monkeypatch.setattr(learn_queue, "build_work_job_store", lambda: store)
 
     assert await learn_queue.enqueue_repeater_learn(chat, event) is True
 
     store.enqueue_many.assert_not_awaited()
-    assert learn_queue.learn_queue().qsize() == 1
+    assert learn_queue.learn_queue().qsize() == 2
 
 
 @pytest.mark.asyncio
-async def test_enqueue_repeater_learn_skips_capture_under_pressure(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_enqueue_repeater_learn_skips_capture_under_pressure_but_keeps_message_persist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from packages.repeater import learn_queue
     from pallas.core.platform.ingress import hotpath_metrics
 
-    chat = SimpleNamespace(chat_data=SimpleNamespace(group_id=42, bot_id=100))
+    chat = SimpleNamespace(chat_data=_chat_data())
     event = SimpleNamespace(group_id=42, message_id=99, self_id=100)
     capture = AsyncMock(return_value=None)
+    message_capture = AsyncMock(return_value={"message": {"group_id": 42}})
     monkeypatch.setattr(learn_queue, "claim_group_message_event", AsyncMock(return_value=True))
     monkeypatch.setattr(learn_queue, "should_skip_repeater_learn_enqueue", lambda: True)
     monkeypatch.setattr("packages.repeater.learner.Learner.capture_for_work", capture)
+    monkeypatch.setattr("packages.repeater.learner.Learner.capture_message_for_persist", message_capture)
     learn_queue.clear_repeater_learn_runtime_state()
     hotpath_metrics.clear_hotpath_metrics_for_tests()
 
     assert await learn_queue.enqueue_repeater_learn(chat, event) is False
 
+    message_capture.assert_awaited_once()
     capture.assert_not_awaited()
-    assert learn_queue.learn_queue().empty()
+    jobs = [learn_queue.learn_queue().get_nowait()]
+    assert [job.kind for job in jobs] == ["repeater.message"]
     assert hotpath_metrics.hotpath_metrics_snapshot()["learn_skipped_pressure"] == 1
+    assert hotpath_metrics.hotpath_metrics_snapshot()["message_persist_buffered"] == 1
 
 
 @pytest.mark.asyncio
@@ -96,10 +125,13 @@ async def test_enqueue_repeater_learn_also_buffers_semantic_style_job(monkeypatc
             "predecessor": {"plain_text": "又炸了"},
         }
     )
-    chat = SimpleNamespace(chat_data=SimpleNamespace(group_id=42, bot_id=100))
+    chat = SimpleNamespace(chat_data=_chat_data())
     event = SimpleNamespace(group_id=42, message_id=99, self_id=100)
     monkeypatch.setattr(learn_queue, "claim_group_message_event", AsyncMock(return_value=True))
     monkeypatch.setattr("packages.repeater.learner.Learner.capture_for_work", AsyncMock(return_value=payload))
+    monkeypatch.setattr(
+        "packages.repeater.learner.Learner.capture_message_for_persist", AsyncMock(return_value={"message": 1})
+    )
     monkeypatch.setattr(
         "pallas.product.llm.repeater_semantic_style.claim_semantic_style_realtime_admission",
         lambda **_kwargs: True,
@@ -107,7 +139,7 @@ async def test_enqueue_repeater_learn_also_buffers_semantic_style_job(monkeypatc
 
     assert await learn_queue.enqueue_repeater_learn(chat, event) is True
 
-    jobs = [learn_queue.learn_queue().get_nowait(), learn_queue.learn_queue().get_nowait()]
+    jobs = [learn_queue.learn_queue().get_nowait() for _ in range(3)]
     semantic_job = next(job for job in jobs if job.kind == "repeater.semantic_style")
     assert semantic_job.idempotency_key == "repeater.semantic_style:42:99:100"
     assert semantic_job.payload["trigger_text"] == "又炸了"
@@ -128,10 +160,13 @@ async def test_enqueue_repeater_learn_skips_semantic_style_when_realtime_budget_
             "predecessor": {"plain_text": "又炸了"},
         }
     )
-    chat = SimpleNamespace(chat_data=SimpleNamespace(group_id=42, bot_id=100))
+    chat = SimpleNamespace(chat_data=_chat_data())
     event = SimpleNamespace(group_id=42, message_id=99, self_id=100)
     monkeypatch.setattr(learn_queue, "claim_group_message_event", AsyncMock(return_value=True))
     monkeypatch.setattr("packages.repeater.learner.Learner.capture_for_work", AsyncMock(return_value=payload))
+    monkeypatch.setattr(
+        "packages.repeater.learner.Learner.capture_message_for_persist", AsyncMock(return_value={"message": 1})
+    )
     monkeypatch.setattr(
         "pallas.product.llm.repeater_semantic_style.claim_semantic_style_realtime_admission",
         lambda **_kwargs: False,
@@ -139,8 +174,8 @@ async def test_enqueue_repeater_learn_skips_semantic_style_when_realtime_budget_
 
     assert await learn_queue.enqueue_repeater_learn(chat, event) is True
 
-    jobs = [learn_queue.learn_queue().get_nowait()]
-    assert jobs[0].kind == "repeater.learn"
+    jobs = [learn_queue.learn_queue().get_nowait() for _ in range(2)]
+    assert sorted(job.kind for job in jobs) == ["repeater.learn", "repeater.message"]
 
 
 @pytest.mark.asyncio
@@ -156,10 +191,13 @@ async def test_enqueue_repeater_learn_skips_semantic_style_when_scope_is_disable
             "predecessor": {"plain_text": "又炸了"},
         }
     )
-    chat = SimpleNamespace(chat_data=SimpleNamespace(group_id=42, bot_id=100))
+    chat = SimpleNamespace(chat_data=_chat_data())
     event = SimpleNamespace(group_id=42, message_id=99, self_id=100)
     monkeypatch.setattr(learn_queue, "claim_group_message_event", AsyncMock(return_value=True))
     monkeypatch.setattr("packages.repeater.learner.Learner.capture_for_work", AsyncMock(return_value=payload))
+    monkeypatch.setattr(
+        "packages.repeater.learner.Learner.capture_message_for_persist", AsyncMock(return_value={"message": 1})
+    )
     monkeypatch.setattr(
         "pallas.product.llm.repeater_semantic_style.semantic_style_collection_enabled",
         lambda *, bot_id, group_id: False,
@@ -167,8 +205,8 @@ async def test_enqueue_repeater_learn_skips_semantic_style_when_scope_is_disable
 
     assert await learn_queue.enqueue_repeater_learn(chat, event) is True
 
-    jobs = [learn_queue.learn_queue().get_nowait()]
-    assert [job.kind for job in jobs] == ["repeater.learn"]
+    jobs = [learn_queue.learn_queue().get_nowait() for _ in range(2)]
+    assert sorted(job.kind for job in jobs) == ["repeater.learn", "repeater.message"]
 
 
 @pytest.mark.asyncio

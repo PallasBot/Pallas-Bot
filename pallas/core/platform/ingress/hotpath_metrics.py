@@ -32,6 +32,8 @@ _COUNTERS = (
     "learn_skipped_pressure",
     "learn_skipped_full",
     "learn_completed",
+    "message_persist_buffered",
+    "message_persist_skipped_full",
     "chat_shed_sidework",
     "reply_local_dispatched",
     "llm_path_skipped_shed",
@@ -256,6 +258,16 @@ def record_learn_skipped_full() -> None:
 def record_learn_completed() -> None:
     _rollover_if_needed()
     _state["learn_completed"] += 1
+
+
+def record_message_persist_buffered() -> None:
+    _rollover_if_needed()
+    _state["message_persist_buffered"] += 1
+
+
+def record_message_persist_skipped_full() -> None:
+    _rollover_if_needed()
+    _state["message_persist_skipped_full"] += 1
 
 
 def record_chat_shed_sidework() -> None:

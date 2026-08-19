@@ -11,7 +11,7 @@ from .learner_context import group_messages_before
 from .message_store import MessageStore
 from .repeat_teach import is_forced_repeat_teaching
 from .topic_utils import filtered_recent_topics
-from .work_payload import RepeaterLearnPayload, chat_data_to_dict, message_to_dict
+from .work_payload import RepeaterLearnPayload, chat_data_to_dict, chat_data_to_message_dict, message_to_dict
 
 if TYPE_CHECKING:
     from .model import ChatData
@@ -65,12 +65,31 @@ class Learner:
         return True
 
     @staticmethod
+    async def capture_message_for_persist(chat_data: "ChatData") -> dict[str, int | str | bool | None] | None:
+        """消息基础：更新进程内回复窗口并冻结落库数据；不受 learn 压力影响。"""
+        if len(chat_data.raw_message.strip()) == 0:
+            return None
+
+        from .responder import Responder
+
+        if chat_data.user_id in Responder._repeat_ignore_user_ids():
+            return None
+
+        from pallas.core.plugin_coord.duel import should_skip_repeater_learn
+
+        if await should_skip_repeater_learn(chat_data.group_id, chat_data.user_id, chat_data.raw_message):
+            return None
+
+        await MessageStore.capture_message(chat_data)
+        return chat_data_to_message_dict(chat_data)
+
+    @staticmethod
     async def capture_for_work(
         chat_data: "ChatData",
         topics_lock: asyncio.Lock,
         recent_topics: dict[int, deque],
     ) -> RepeaterLearnPayload | None:
-        """在消息进程保存回复窗口，并冻结 aux 所需的前序上下文。"""
+        """learn 专属：冻结前序上下文并生成 learn payload；消息窗口由 capture_message_for_persist 负责。"""
         if len(chat_data.raw_message.strip()) == 0:
             return None
 
@@ -88,11 +107,9 @@ class Learner:
         predecessor = group_msgs[-1] if group_msgs else None
         forced_teaching = is_forced_repeat_teaching(chat_data, group_msgs)
 
-        async def topics_callback(group_id: int, keywords_list: list[str]):
+        if chat_data.is_plain_text:
             async with topics_lock:
-                recent_topics[group_id] += filtered_recent_topics(keywords_list)
-
-        await MessageStore.capture_message(chat_data, topics_callback=topics_callback)
+                recent_topics[chat_data.group_id] += filtered_recent_topics(chat_data._keywords_list)
         from pallas.product.persona.group_style_refresh import mark_group_style_dirty, mark_group_style_forced_teach
 
         if forced_teaching:
@@ -113,7 +130,6 @@ class Learner:
         predecessor = MessageModel.model_construct(**payload.predecessor) if payload.predecessor is not None else None
         if predecessor is not None:
             await Learner._context_insert(chat_data, predecessor)
-        await MessageStore.persist_message(chat_data)
         from pallas.product.llm.memory.auto_episode import schedule_auto_save_group_episode
 
         schedule_auto_save_group_episode(bot_id=chat_data.bot_id, group_id=chat_data.group_id)

@@ -80,6 +80,7 @@ def main() -> None:
         "sing.submit",
         "sing.request_song",
         "tts.submit",
+        "repeater.message",
         "repeater.learn",
     })
     asyncio.run(

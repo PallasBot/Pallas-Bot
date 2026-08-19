@@ -8,7 +8,7 @@ import pytest
 
 
 @pytest.mark.asyncio
-async def test_capture_for_work_keeps_live_message_window_and_serializes_predecessor(
+async def test_capture_message_for_persist_keeps_live_message_window_and_capture_for_work_serializes_predecessor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from packages.repeater.learner import Learner
@@ -38,8 +38,11 @@ async def test_capture_for_work_keeps_live_message_window_and_serializes_predece
 
     chat = ChatData(group_id=42, user_id=11, bot_id=100, raw_message="这一句", plain_text="这一句", time=20)
     try:
-        payload = await Learner.capture_for_work(chat, asyncio.Lock(), defaultdict(lambda: deque(maxlen=10)))
+        message_dict = await Learner.capture_message_for_persist(chat)
+        assert message_dict is not None
+        assert [msg.raw_message for msg in MessageStore._message_dict[42]] == ["上一句", "这一句"]
 
+        payload = await Learner.capture_for_work(chat, asyncio.Lock(), defaultdict(lambda: deque(maxlen=10)))
         assert payload is not None
         assert payload.predecessor is not None
         assert payload.predecessor["raw_message"] == "上一句"
@@ -97,7 +100,7 @@ async def test_capture_for_work_preserves_forced_repeat_teaching(
 
 
 @pytest.mark.asyncio
-async def test_process_work_payload_persists_message_and_uses_captured_predecessor(
+async def test_process_work_payload_uses_captured_predecessor_without_persisting_message(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from packages.repeater.learner import Learner
@@ -132,15 +135,33 @@ async def test_process_work_payload_persists_message_and_uses_captured_predecess
         "pallas.product.llm.memory.auto_episode.schedule_auto_save_group_episode",
         lambda **kwargs: scheduled.append(kwargs),
     )
-    marked: list[int] = []
-    monkeypatch.setattr("pallas.product.persona.group_style_refresh.mark_group_style_dirty", marked.append)
 
     await Learner.process_work_payload(payload)
 
     context_insert.assert_awaited_once()
-    persist.assert_awaited_once()
+    persist.assert_not_awaited()
     assert scheduled == [{"bot_id": 100, "group_id": 42}]
-    assert marked == []
+
+
+@pytest.mark.asyncio
+async def test_handle_repeater_message_persists_message(monkeypatch: pytest.MonkeyPatch) -> None:
+    from packages.repeater.work_handler import handle_repeater_message
+
+    persist = AsyncMock()
+    monkeypatch.setattr("packages.repeater.message_store.MessageStore.persist_message", persist)
+
+    await handle_repeater_message({
+        "message": {
+            "group_id": 42,
+            "user_id": 11,
+            "bot_id": 100,
+            "raw_message": "这一句",
+            "plain_text": "这一句",
+            "time": 20,
+        }
+    })
+
+    persist.assert_awaited_once()
 
 
 @pytest.mark.asyncio
