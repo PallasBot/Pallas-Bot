@@ -86,3 +86,24 @@ async def test_recent_summary_returns_short_message_without_model(monkeypatch: p
 
     assert result["ok"] is True
     assert result["result"]["summary"] == "最近消息不多，还没有形成明确话题。"
+
+
+def test_history_tool_hints_match_followup_questions() -> None:
+    from pallas.product.llm.tools.history import register_history_tools
+    from pallas.product.llm.tools.select import deferred_tools_matched_by_hints
+
+    register_history_tools()
+
+    for question in (
+        "谁规定的群聊",
+        "到底是谁说的",
+        "具体是谁定的规矩",
+        "谁喊的",
+        "谁测试的",
+        "他的名字是？",
+    ):
+        assert "chat.history" in deferred_tools_matched_by_hints(question)
+        assert "chat.recent_summary" in deferred_tools_matched_by_hints(question)
+
+    for casual in ("随便聊聊", "今天天气不错", "在吗"):
+        assert deferred_tools_matched_by_hints(casual) == frozenset()

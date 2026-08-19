@@ -26,7 +26,11 @@ def register_history_tools() -> None:
     register_tool(
         LlmToolSpec(
             name="chat.history",
-            description="读取当前群最近的完整聊天记录。用户问「最近聊了什么」「刚才发生什么」「总结群聊」时使用。",
+            description=(
+                "读取当前群最近的完整聊天记录（含发言人昵称）。"
+                "用户问「最近聊了什么」「刚才发生什么」「总结群聊」，"
+                "或对总结内容追问细节（如「谁说的」「谁定的」「具体聊了什么」「展开讲讲」）时使用。"
+            ),
             parameters={"type": "object", "properties": {"limit": {"type": "integer"}}, "required": []},
             domains=frozenset({"chat", "history"}),
             handler=handle_chat_history,
@@ -38,13 +42,20 @@ def register_history_tools() -> None:
                 "翻聊天记录",
                 "翻历史",
                 "谁说的",
+                "谁喊的",
                 "谁定的",
                 "谁规定的",
                 "谁提的",
+                "谁测试的",
+                "谁发的",
+                "谁建的",
+                "谁改的",
                 "哪个人说的",
                 "具体是谁",
+                "他的名字",
                 "展开讲讲",
                 "详细说说",
+                "详细聊聊",
             }),
         )
     )
@@ -65,13 +76,20 @@ def register_history_tools() -> None:
                 "总结一下群聊",
                 "群里最近",
                 "谁说的",
+                "谁喊的",
                 "谁定的",
                 "谁规定的",
                 "谁提的",
+                "谁测试的",
+                "谁发的",
+                "谁建的",
+                "谁改的",
                 "哪个人说的",
                 "具体是谁",
+                "他的名字",
                 "展开讲讲",
                 "详细说说",
+                "详细聊聊",
             }),
             estimated_duration_ms=1500,
         )
