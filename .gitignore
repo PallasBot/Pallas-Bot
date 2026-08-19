@@ -247,6 +247,7 @@ test.py
 .superpowers/
 .claude/skills/
 .agents/
+skills-lock.json
 docs/superpowers/
 tmp/
 
