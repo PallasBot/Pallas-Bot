@@ -38,9 +38,9 @@ BOT_STYLE_PROMOTION_RECENT_SAMPLE_COUNT = 8
 SEMANTIC_STYLE_BACKFILL_WINDOW_SEC = 30 * 24 * 60 * 60
 SEMANTIC_STYLE_BACKFILL_JOB_TTL_SEC = 7 * 24 * 60 * 60
 SEMANTIC_STYLE_BACKFILL_MAX_PER_DAY = 128
-SEMANTIC_STYLE_REALTIME_MAX_PER_DAY = 512
-SEMANTIC_STYLE_REALTIME_MAX_PER_SCOPE_PER_DAY = 32
-SEMANTIC_STYLE_REALTIME_SAMPLE_DIVISOR = 5
+SEMANTIC_STYLE_REALTIME_MAX_PER_DAY = 320
+SEMANTIC_STYLE_REALTIME_MAX_PER_SCOPE_PER_DAY = 20
+SEMANTIC_STYLE_REALTIME_SAMPLE_DIVISOR = 8
 SEMANTIC_STYLE_LABEL_MAX_RETRIES = 2
 _SEMANTIC_STYLE_BACKFILL_GROUP_LIMIT = 128
 _SEMANTIC_STYLE_BACKFILL_PAGE_SIZE = 32
@@ -1592,22 +1592,17 @@ async def label_semantic_style_with_llm(
 
     cfg = get_llm_config()
     prompt = (
-        "分析一组真实群聊接话，输出严格 JSON，不要做价值判断。字段只能是 interaction_actions、"
-        "semantic_relations、intensity、forms、behavior_strategy。"
-        "intensity 只能 quiet/soft/neutral/sharp/strong；其余文本字段使用受控词表。\n"
-        "behavior_strategy 是这条接话里可复用的接话策略对象，格式："
-        '{"scene":"触发场景的简短概括","action":"真人在这条里实际采用的接话动作","outcome":"对话中可观察的结果",'
-        '"learning_type":"observed"}。scene 要抽象到相似场景还能用，不绑定具体对象、人名或临时梗；'
-        "action 如实概括这条接话实际的做法，无论是共情追问、打哈哈带过、转移话题、怼回去还是无视，"
-        "都照实抽象成行为结构，不要美化或套用模板式安慰；不要摘抄原话；"
-        "outcome 写可观察的互动变化（例如“对方愿意补充细节”“话题被带过”“对方不再追问”）。"
-        "真人接话默认 learning_type=observed，抽不出可复用策略时 behavior_strategy 输出 null。\n"
-        f"前句：{_short_text(trigger_text, 160)}\n接话：{_short_text(reply_text, 160)}"
+        "分析真实群聊的「前句→接话」，只输出严格 JSON：interaction_actions、semantic_relations、"
+        "intensity、forms、behavior_strategy。intensity 只能 quiet/soft/neutral/sharp/strong；"
+        "数组字段用受控英文词。behavior_strategy 为 null 或 "
+        '{"scene":"可泛化场景","action":"实际接话动作","outcome":"可观察变化",'
+        '"learning_type":"observed"}。不抄原话，不带人名/临时梗，不做价值判断。\n'
+        f"前句：{_short_text(trigger_text, 96)}\n接话：{_short_text(reply_text, 96)}"
     )
     response = await complete_chat_message(
         [{"role": "user", "content": prompt}],
         model=str(cfg.llm_model or ""),
-        options={"temperature": 0, "max_tokens": task_token_budget("repeater.semantic_style")},
+        options={"temperature": 0, "max_tokens": 160},
         cfg=cfg,
         task="repeater.semantic_style",
     )
