@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="500" viewBox="0 0 1440 500" role="img" aria-labelledby="title desc">
+  <title id="title">Pallas-Bot 分片运行时拓扑</title>
+  <desc id="desc">Hub 提供 WebUI、协议端管理、注册表与回调入口。协议端按账号连接目标 Worker；Hub 和 Worker 通过 Redis 协调，Worker 处理群消息并按需调用媒体或遗留 RWKV Runtime。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="6" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b5cf6" />
+    </marker>
+    <style>
+      .node { fill: #fff; stroke: #c4b5fd; stroke-width: 2.5; }
+      .primary { fill: #f1edff; stroke: #7c3aed; stroke-width: 3; }
+      .edge { stroke: #8b5cf6; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .both { stroke: #8b5cf6; stroke-width: 3; fill: none; marker-start: url(#arrow); marker-end: url(#arrow); }
+      .optional { stroke: #8b5cf6; stroke-width: 3; stroke-dasharray: 9 7; fill: none; marker-end: url(#arrow); }
+      .label { fill: #1f1738; font: 600 23px sans-serif; text-anchor: middle; }
+      .sub { fill: #665a82; font: 16px sans-serif; text-anchor: middle; }
+      .kicker { fill: #7c3aed; font: 600 15px sans-serif; text-anchor: middle; letter-spacing: 1px; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="500" fill="#fbfaff" />
+  <path class="edge" d="M 250 250 H 370" />
+  <path class="edge" d="M 250 250 H 650" />
+  <path class="edge" d="M 250 250 H 930" />
+  <path class="both" d="M 490 160 H 620" />
+  <path class="both" d="M 750 230 V 320" />
+  <path class="both" d="M 1030 230 V 320" />
+  <path class="optional" d="M 1070 250 H 1190" />
+
+  <g>
+    <rect class="node" x="50" y="185" width="200" height="130" rx="18" />
+    <text class="kicker" x="150" y="225">INGRESS</text>
+    <text class="label" x="150" y="260">协议端 / QQ</text>
+    <text class="sub" x="150" y="290">按账号路由到 Worker</text>
+  </g>
+  <g>
+    <rect class="primary" x="370" y="95" width="240" height="130" rx="20" />
+    <text class="kicker" x="490" y="135">CONTROL</text>
+    <text class="label" x="490" y="170">Hub</text>
+    <text class="sub" x="490" y="200">WebUI、注册表与回调</text>
+  </g>
+  <g>
+    <rect class="primary" x="650" y="185" width="200" height="130" rx="20" />
+    <text class="kicker" x="750" y="225">MESSAGE</text>
+    <text class="label" x="750" y="260">Worker 1</text>
+    <text class="sub" x="750" y="290">群消息与插件主路径</text>
+  </g>
+  <g>
+    <rect class="primary" x="930" y="185" width="200" height="130" rx="20" />
+    <text class="kicker" x="1030" y="225">MESSAGE</text>
+    <text class="label" x="1030" y="260">Worker N</text>
+    <text class="sub" x="1030" y="290">账号级横向扩展</text>
+  </g>
+  <g>
+    <rect class="node" x="620" y="350" width="240" height="100" rx="18" />
+    <text class="kicker" x="740" y="385">COORDINATION</text>
+    <text class="label" x="740" y="420">Redis</text>
+  </g>
+  <g>
+    <rect class="node" x="1190" y="185" width="200" height="130" rx="18" />
+    <text class="kicker" x="1290" y="225">OPTIONAL</text>
+    <text class="label" x="1290" y="260">AI Runtime</text>
+    <text class="sub" x="1290" y="290">媒体与遗留 RWKV</text>
+  </g>
+</svg>

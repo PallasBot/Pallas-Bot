@@ -577,6 +577,33 @@ def sync(dest_root: Path) -> int:
         llm_dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(llm_src, llm_dst)
         print("sync assets/llm-output-path.svg -> src/public/assets/llm-output-path.svg")
+    agent_lifecycle_src = DOCS / "assets" / "agent-lifecycle-overview.svg"
+    agent_lifecycle_dst = src_root / "public" / "assets" / "agent-lifecycle-overview.svg"
+    if agent_lifecycle_src.is_file():
+        agent_lifecycle_dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(agent_lifecycle_src, agent_lifecycle_dst)
+        print(
+            "sync assets/agent-lifecycle-overview.svg -> "
+            "src/public/assets/agent-lifecycle-overview.svg"
+        )
+    system_topology_src = DOCS / "assets" / "architecture-system-topology.svg"
+    system_topology_dst = src_root / "public" / "assets" / "architecture-system-topology.svg"
+    if system_topology_src.is_file():
+        system_topology_dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(system_topology_src, system_topology_dst)
+        print(
+            "sync assets/architecture-system-topology.svg -> "
+            "src/public/assets/architecture-system-topology.svg"
+        )
+    shard_topology_src = DOCS / "assets" / "shard-runtime-topology.svg"
+    shard_topology_dst = src_root / "public" / "assets" / "shard-runtime-topology.svg"
+    if shard_topology_src.is_file():
+        shard_topology_dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(shard_topology_src, shard_topology_dst)
+        print(
+            "sync assets/shard-runtime-topology.svg -> "
+            "src/public/assets/shard-runtime-topology.svg"
+        )
     for asset in sorted((DOCS / "assets").glob("*.png")):
         dst = src_root / "public" / "assets" / asset.name
         dst.parent.mkdir(parents=True, exist_ok=True)

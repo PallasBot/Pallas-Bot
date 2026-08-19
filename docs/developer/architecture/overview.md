@@ -17,22 +17,7 @@ Pallas-Bot 的可执行边界是：主仓承载运行时与产品语义；WebUI�
 
 ## 拓扑
 
-```mermaid
-flowchart LR
-    Protocol[Protocol / QQ]
-    Core[Pallas-Bot Core]
-    WebUI[Pallas-Bot-WebUI]
-    AI[Pallas-Bot-AI]
-    Official[Official Extensions]
-    Community[Community Extensions]
-
-    Protocol --> Core
-    WebUI --> Core
-    Core --> Official
-    Core --> Community
-    Core --> Provider[LLM Provider]
-    Core -.媒体 / RWKV.-> AI
-```
+![Pallas-Bot 系统拓扑：协议端、Core、WebUI、LLM Provider、扩展与可选 AI Runtime 的协作边界](/assets/architecture-system-topology.svg)
 
 ## 层职责
 

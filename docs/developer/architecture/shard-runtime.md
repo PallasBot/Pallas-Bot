@@ -21,25 +21,7 @@
 
 ## 拓扑
 
-```mermaid
-flowchart LR
-    Hub[Hub]
-    W1[Worker]
-    W2[Worker]
-    Redis[(Redis)]
-    Proto[Protocol]
-    AI[AI Runtime]
-
-    Hub <--> Redis
-    Hub --> W1
-    Hub --> W2
-    W1 <--> Redis
-    W2 <--> Redis
-    Proto --> W1
-    Proto --> W2
-    W1 --> AI
-    W2 --> AI
-```
+![Pallas-Bot 分片运行时拓扑：Hub、Worker、Redis、协议端与可选 AI Runtime 的职责和连接关系](/assets/shard-runtime-topology.svg)
 
 图中 AI 为媒体 / RWKV Runtime；普通聊天仍在 worker 内走 Bot Provider，不经该边。
 

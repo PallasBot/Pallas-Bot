@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="500" viewBox="0 0 1440 500" role="img" aria-labelledby="title desc">
+  <title id="title">Pallas-Bot LLM Agent 生命周期</title>
+  <desc id="desc">群消息经 llm_chat 路由、上下文装配与本轮决策后进入 kernel。kernel 调用 Provider 和工具循环，结果经过输出护栏后投递，并异步沉淀会话、表达和记忆。</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="6" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b5cf6" />
+    </marker>
+    <style>
+      .node { fill: #fff; stroke: #c4b5fd; stroke-width: 2.5; }
+      .primary { fill: #f1edff; stroke: #7c3aed; stroke-width: 3; }
+      .edge { stroke: #8b5cf6; stroke-width: 3; fill: none; marker-end: url(#arrow); }
+      .label { fill: #1f1738; font: 600 22px sans-serif; text-anchor: middle; }
+      .sub { fill: #665a82; font: 16px sans-serif; text-anchor: middle; }
+      .kicker { fill: #7c3aed; font: 600 15px sans-serif; text-anchor: middle; letter-spacing: 1px; }
+    </style>
+  </defs>
+
+  <rect width="1440" height="500" fill="#fbfaff" />
+
+  <path class="edge" d="M 220 150 H 280" />
+  <path class="edge" d="M 460 150 H 520" />
+  <path class="edge" d="M 700 150 H 760" />
+  <path class="edge" d="M 940 150 H 1000" />
+  <path class="edge" d="M 1120 220 V 330 H 1020" />
+  <path class="edge" d="M 840 380 H 780" />
+  <path class="edge" d="M 600 380 H 540" />
+
+  <g>
+    <rect class="node" x="40" y="90" width="180" height="120" rx="18" />
+    <text class="kicker" x="130" y="125">INPUT</text>
+    <text class="label" x="130" y="160">群消息</text>
+  </g>
+  <g>
+    <rect class="node" x="280" y="90" width="180" height="120" rx="18" />
+    <text class="kicker" x="370" y="125">ROUTE</text>
+    <text class="label" x="370" y="158">触发判定</text>
+    <text class="sub" x="370" y="187">llm_chat 路由</text>
+  </g>
+  <g>
+    <rect class="node" x="520" y="90" width="180" height="120" rx="18" />
+    <text class="kicker" x="610" y="125">CONTEXT</text>
+    <text class="label" x="610" y="158">上下文装配</text>
+    <text class="sub" x="610" y="187">会话、人格、记忆</text>
+  </g>
+  <g>
+    <rect class="node" x="760" y="90" width="180" height="120" rx="18" />
+    <text class="kicker" x="850" y="125">DECISION</text>
+    <text class="label" x="850" y="158">本轮决策</text>
+    <text class="sub" x="850" y="187">回复、跳过或工具</text>
+  </g>
+  <g>
+    <rect class="primary" x="1000" y="70" width="240" height="160" rx="20" />
+    <text class="kicker" x="1120" y="110">KERNEL</text>
+    <text class="label" x="1120" y="150">Provider 与工具循环</text>
+    <text class="sub" x="1120" y="182">模型调用、tool call</text>
+    <text class="sub" x="1120" y="205">结果回填与继续生成</text>
+  </g>
+  <g>
+    <rect class="node" x="840" y="320" width="180" height="120" rx="18" />
+    <text class="kicker" x="930" y="355">GUARD</text>
+    <text class="label" x="930" y="388">输出护栏</text>
+    <text class="sub" x="930" y="417">结构化回复与过滤</text>
+  </g>
+  <g>
+    <rect class="node" x="600" y="320" width="180" height="120" rx="18" />
+    <text class="kicker" x="690" y="355">DELIVERY</text>
+    <text class="label" x="690" y="388">结果投递</text>
+    <text class="sub" x="690" y="417">气泡、引用与提及</text>
+  </g>
+  <g>
+    <rect class="primary" x="300" y="320" width="240" height="120" rx="20" />
+    <text class="kicker" x="420" y="355">LEARNING</text>
+    <text class="label" x="420" y="388">异步沉淀</text>
+    <text class="sub" x="420" y="417">会话、表达与记忆</text>
+  </g>
+</svg>
