@@ -59,6 +59,6 @@
 
 ## 接下来做什么
 
-- [日常管理](usage-admin.md)
+- [网页控制台](web-console.md)
 - [@牛牛与复读](llm-and-repeater.md)
 - [LLM 对话、媒体与 AI Runtime](ai-runtime-choice.md)

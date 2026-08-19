@@ -8,7 +8,7 @@
 - [安装插件](install-plugins.md)：官方、社区和本地插件。
 - [网页控制台](web-console.md)：改配置、看日志。
 - [命令与功能](usage.md)：群里命令一览。
-- [日常管理](usage-admin.md) 与 [号主](bot-owner.md)。
+- [网页控制台](web-console.md) 与 [号主](bot-owner.md)。
 - [AI 扩展](ai.md)：唱歌、画画和 LLM 对话；[AI 观测与联网搜索](ai.md#聊得起来之后ai-观测与对话策略)。
 - [@牛牛与复读](llm-and-repeater.md)。
 - [FAQ](/deploy/faq) 与 [排障](/maintainer/operate/troubleshooting)。

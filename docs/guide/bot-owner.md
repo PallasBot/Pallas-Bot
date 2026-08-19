@@ -76,6 +76,6 @@
 
 ## 接下来做什么
 
-- [日常管理](usage-admin.md) · [网页控制台](web-console.md)
+- [网页控制台](web-console.md)
 - [连接 QQ](connect-qq.md) · [重新上号](/plugins/relogin_bot)
 - [命令权限](/maintainer/operate/command-permissions) · [FAQ](/deploy/faq)
