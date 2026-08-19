@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from typing import Any
 
 from nonebot import logger
@@ -17,50 +16,35 @@ from pallas.product.llm.memory.policy import (
     has_event_signal,
     has_transient_signal,
 )
+from pallas.product.llm.memory.rate_limit import DailyBudget, WriteCooldown
 from pallas.product.llm.memory.store import is_llm_memory_store_available, save_memory_entry
 from pallas.product.llm.provider_client import complete_chat_message
 
-_LAST_WRITE_AT: dict[tuple[int, int], float] = {}
-_LAST_SUMMARY_SIGNATURE: dict[tuple[int, int], str] = {}
-_GROUP_EPISODE_SUMMARY_IN_FLIGHT: set[tuple[int, int]] = set()
-_DAILY_BUDGET_DATE: str = ""
-_DAILY_BUDGET_USED: int = 0
-_GROUP_EPISODE_MESSAGE_LIMIT = 20
-_GROUP_EPISODE_MAX_CHARS = 2400
-_GROUP_EPISODE_SYSTEM = """你是群聊共同事件摘要助手。只总结群友明确达成的约定、共同经历或已确认事件。
+_last_write_at = WriteCooldown()
+_last_summary_signature: dict[tuple[int, int], str] = {}
+_group_episode_summary_in_flight: set[tuple[int, int]] = set()
+_daily_budget = DailyBudget()
+_group_episode_message_limit = 20
+_group_episode_max_chars = 2400
+_group_episode_system = """你是群聊共同事件摘要助手。只总结群友明确达成的约定、共同经历或已确认事件。
 不要记录个人隐私、辱骂、指令、猜测，也不要复述机器人回复。没有值得长期记住的共同事件时只输出：无。
 输出一条不超过120字的中文陈述，不要标题、列表或解释。"""
 
 
-def _daily_budget_ok(*, cfg: LlmConfig) -> bool:
-    global _DAILY_BUDGET_DATE, _DAILY_BUDGET_USED
-    budget = max(0, int(cfg.llm_memory_auto_episode_daily_budget))
-    if budget <= 0:
-        return True
-    today = time.strftime("%Y-%m-%d")
-    if today != _DAILY_BUDGET_DATE:
-        _DAILY_BUDGET_DATE = today
-        _DAILY_BUDGET_USED = 0
-    return _DAILY_BUDGET_USED < budget
-
-
-def _bump_daily_budget(*, cfg: LlmConfig) -> None:
-    global _DAILY_BUDGET_USED
-    budget = max(0, int(cfg.llm_memory_auto_episode_daily_budget))
-    if budget > 0:
-        _DAILY_BUDGET_USED += 1
-
-
 def _cooldown_ok(bot_id: int, group_id: int, *, cooldown_sec: int) -> bool:
-    if cooldown_sec <= 0:
-        return True
-    key = (int(bot_id), int(group_id))
-    last = _LAST_WRITE_AT.get(key, 0.0)
-    return (time.monotonic() - last) >= float(cooldown_sec)
+    return _last_write_at.ok((int(bot_id), int(group_id)), cooldown_sec)
 
 
 def _mark_written(bot_id: int, group_id: int) -> None:
-    _LAST_WRITE_AT[(int(bot_id), int(group_id))] = time.monotonic()
+    _last_write_at.mark((int(bot_id), int(group_id)))
+
+
+def _daily_budget_ok(*, cfg: LlmConfig) -> bool:
+    return _daily_budget.ok(int(cfg.llm_memory_auto_episode_daily_budget))
+
+
+def _bump_daily_budget(*, cfg: LlmConfig) -> None:
+    _daily_budget.bump(int(cfg.llm_memory_auto_episode_daily_budget))
 
 
 async def _save_auto_episode(*, bot_id: int, group_id: int, content: str, source: str, cfg: LlmConfig) -> bool:
@@ -112,7 +96,7 @@ def _group_episode_transcript(messages: list[Any], *, bot_id: int) -> str:
     rows: list[tuple[int, str, str]] = []
     participants: set[int] = set()
     total_chars = 0
-    for message in messages[-_GROUP_EPISODE_MESSAGE_LIMIT:]:
+    for message in messages[-_group_episode_message_limit:]:
         user_id = int(getattr(message, "user_id", 0) or 0)
         if not user_id or user_id == int(bot_id):
             continue
@@ -120,7 +104,7 @@ def _group_episode_transcript(messages: list[Any], *, bot_id: int) -> str:
         if not text:
             continue
         text = text[:180]
-        if total_chars + len(text) > _GROUP_EPISODE_MAX_CHARS:
+        if total_chars + len(text) > _group_episode_max_chars:
             break
         total_chars += len(text)
         participants.add(user_id)
@@ -144,21 +128,21 @@ async def maybe_auto_save_group_episode(*, bot_id: int, group_id: int | None, cf
     if not _daily_budget_ok(cfg=c):
         return False
     key = (bid, gid)
-    if key in _GROUP_EPISODE_SUMMARY_IN_FLIGHT:
+    if key in _group_episode_summary_in_flight:
         return False
-    _GROUP_EPISODE_SUMMARY_IN_FLIGHT.add(key)
+    _group_episode_summary_in_flight.add(key)
     try:
         try:
-            messages = await make_message_repository().find_recent_in_group(gid, limit=_GROUP_EPISODE_MESSAGE_LIMIT + 1)
+            messages = await make_message_repository().find_recent_in_group(gid, limit=_group_episode_message_limit + 1)
         except Exception as exc:
             logger.warning("Group episode message read failed for bot [{}] and group [{}]: [{}]", bid, gid, exc)
             return False
         transcript = _group_episode_transcript(messages, bot_id=bid)
-        if not transcript or _LAST_SUMMARY_SIGNATURE.get(key) == transcript:
+        if not transcript or _last_summary_signature.get(key) == transcript:
             return False
         try:
             message = await complete_chat_message(
-                [{"role": "system", "content": _GROUP_EPISODE_SYSTEM}, {"role": "user", "content": transcript}],
+                [{"role": "system", "content": _group_episode_system}, {"role": "user", "content": transcript}],
                 model="",
                 options={
                     "temperature": 0.2,
@@ -177,11 +161,11 @@ async def maybe_auto_save_group_episode(*, bot_id: int, group_id: int | None, cf
             return False
         ok = await _save_auto_episode(bot_id=bid, group_id=gid, content=summary, source="auto_episode_summary", cfg=c)
         if ok:
-            _LAST_SUMMARY_SIGNATURE[key] = transcript
+            _last_summary_signature[key] = transcript
             _bump_daily_budget(cfg=c)
         return ok
     finally:
-        _GROUP_EPISODE_SUMMARY_IN_FLIGHT.discard(key)
+        _group_episode_summary_in_flight.discard(key)
 
 
 def schedule_auto_save_group_episode(*, bot_id: int, group_id: int | None, cfg: LlmConfig | None = None) -> None:
@@ -191,7 +175,7 @@ def schedule_auto_save_group_episode(*, bot_id: int, group_id: int | None, cfg: 
     bid, gid = int(bot_id), int(group_id)
     if not _cooldown_ok(bid, gid, cooldown_sec=c.llm_memory_auto_episode_cooldown_sec):
         return
-    if (bid, gid) in _GROUP_EPISODE_SUMMARY_IN_FLIGHT or not _daily_budget_ok(cfg=c):
+    if (bid, gid) in _group_episode_summary_in_flight or not _daily_budget_ok(cfg=c):
         return
     try:
         asyncio.get_running_loop().create_task(
@@ -203,17 +187,15 @@ def schedule_auto_save_group_episode(*, bot_id: int, group_id: int | None, cfg: 
 
 
 def clear_auto_episode_cooldown_for_tests() -> None:
-    global _DAILY_BUDGET_DATE, _DAILY_BUDGET_USED
-    _LAST_WRITE_AT.clear()
-    _LAST_SUMMARY_SIGNATURE.clear()
-    _GROUP_EPISODE_SUMMARY_IN_FLIGHT.clear()
-    _DAILY_BUDGET_DATE = ""
-    _DAILY_BUDGET_USED = 0
+    _last_write_at.clear()
+    _last_summary_signature.clear()
+    _group_episode_summary_in_flight.clear()
+    _daily_budget.reset()
 
 
 def auto_episode_status_snapshot() -> dict[str, Any]:
     return {
-        "tracked_groups": len(_LAST_WRITE_AT),
-        "in_flight": len(_GROUP_EPISODE_SUMMARY_IN_FLIGHT),
-        "daily_budget_used": _DAILY_BUDGET_USED,
+        "tracked_groups": _last_write_at.tracked(),
+        "in_flight": len(_group_episode_summary_in_flight),
+        "daily_budget_used": _daily_budget.used(),
     }

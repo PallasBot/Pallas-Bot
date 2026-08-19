@@ -9,7 +9,6 @@ from __future__ import annotations
 import asyncio
 import json
 import re
-import time
 from typing import Any
 
 from nonebot import logger
@@ -17,14 +16,14 @@ from nonebot import logger
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.inference_params import task_token_budget
 from pallas.product.llm.kernel.memory_governance import can_read_persistent_memory
+from pallas.product.llm.memory.rate_limit import DailyBudget, WriteCooldown
 from pallas.product.llm.memory.store import is_llm_memory_store_available, save_memory_entry
 from pallas.product.llm.provider_client import complete_chat_message
 from pallas.product.llm.session_store import list_group_ambient_messages
 
-_LAST_WRITE_AT: dict[tuple[int, int], float] = {}
-_IN_FLIGHT: set[tuple[int, int]] = set()
-_DAILY_BUDGET_DATE: str = ""
-_DAILY_BUDGET_USED: int = 0
+_last_write_at = WriteCooldown()
+_in_flight: set[tuple[int, int]] = set()
+_daily_budget = DailyBudget()
 
 _IP_SYSTEM_PROMPT = """你是群聊 IP 知识提炼助手。从群聊摘录中找出「可复用的 IP 事实」。
 
@@ -60,34 +59,19 @@ def _transcript(turns: list[Any]) -> str:
 
 
 def _cooldown_ok(bot_id: int, group_id: int, *, cooldown_sec: int) -> bool:
-    if cooldown_sec <= 0:
-        return True
-    key = (int(bot_id), int(group_id))
-    last = _LAST_WRITE_AT.get(key, 0.0)
-    return (time.monotonic() - last) >= float(cooldown_sec)
+    return _last_write_at.ok((int(bot_id), int(group_id)), cooldown_sec)
 
 
 def _mark_written(bot_id: int, group_id: int) -> None:
-    _LAST_WRITE_AT[(int(bot_id), int(group_id))] = time.monotonic()
+    _last_write_at.mark((int(bot_id), int(group_id)))
 
 
 def _daily_budget_ok(*, cfg: LlmConfig) -> bool:
-    global _DAILY_BUDGET_DATE, _DAILY_BUDGET_USED
-    budget = max(0, int(cfg.llm_memory_auto_ip_daily_budget))
-    if budget <= 0:
-        return True
-    today = time.strftime("%Y-%m-%d")
-    if today != _DAILY_BUDGET_DATE:
-        _DAILY_BUDGET_DATE = today
-        _DAILY_BUDGET_USED = 0
-    return _DAILY_BUDGET_USED < budget
+    return _daily_budget.ok(int(cfg.llm_memory_auto_ip_daily_budget))
 
 
 def _bump_daily_budget(*, cfg: LlmConfig) -> None:
-    global _DAILY_BUDGET_USED
-    budget = max(0, int(cfg.llm_memory_auto_ip_daily_budget))
-    if budget > 0:
-        _DAILY_BUDGET_USED += 1
+    _daily_budget.bump(int(cfg.llm_memory_auto_ip_daily_budget))
 
 
 def _parse_facts(raw: str) -> list[dict[str, str]]:
@@ -139,9 +123,9 @@ async def maybe_auto_save_ip_knowledge(
     if not _daily_budget_ok(cfg=c):
         return False
     key = (bid, gid)
-    if key in _IN_FLIGHT:
+    if key in _in_flight:
         return False
-    _IN_FLIGHT.add(key)
+    _in_flight.add(key)
     try:
         try:
             turns = await list_group_ambient_messages(bid, gid, limit=12, cfg=c)
@@ -191,7 +175,7 @@ async def maybe_auto_save_ip_knowledge(
             return True
         return False
     finally:
-        _IN_FLIGHT.discard(key)
+        _in_flight.discard(key)
 
 
 def schedule_auto_save_ip_knowledge(*, bot_id: int, group_id: int | None, cfg: LlmConfig | None = None) -> None:
@@ -208,16 +192,14 @@ def schedule_auto_save_ip_knowledge(*, bot_id: int, group_id: int | None, cfg: L
 
 
 def clear_auto_ip_cooldown_for_tests() -> None:
-    global _DAILY_BUDGET_DATE, _DAILY_BUDGET_USED
-    _LAST_WRITE_AT.clear()
-    _IN_FLIGHT.clear()
-    _DAILY_BUDGET_DATE = ""
-    _DAILY_BUDGET_USED = 0
+    _last_write_at.clear()
+    _in_flight.clear()
+    _daily_budget.reset()
 
 
 def auto_ip_status_snapshot() -> dict[str, Any]:
     return {
-        "tracked_groups": len(_LAST_WRITE_AT),
-        "in_flight": len(_IN_FLIGHT),
-        "daily_budget_used": _DAILY_BUDGET_USED,
+        "tracked_groups": _last_write_at.tracked(),
+        "in_flight": len(_in_flight),
+        "daily_budget_used": _daily_budget.used(),
     }

@@ -7,7 +7,6 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from typing import Any
 
 from nonebot import logger
@@ -15,6 +14,7 @@ from nonebot import logger
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.inference_params import task_token_budget
 from pallas.product.llm.kernel.memory_governance import can_write_runtime_state_summary
+from pallas.product.llm.memory.rate_limit import WriteCooldown
 from pallas.product.llm.provider_client import complete_chat_message
 from pallas.product.llm.session_store import (
     compact_user_llm_history_with_summary,
@@ -22,9 +22,9 @@ from pallas.product.llm.session_store import (
     list_user_llm_messages,
 )
 
-_SUMMARY_MARK = "【此前对话摘要】"
-_IN_FLIGHT: set[tuple[int, int, int]] = set()
-_LAST_COMPACT_AT: dict[tuple[int, int, int], float] = {}
+_summary_mark = "【此前对话摘要】"
+_in_flight: set[tuple[int, int, int]] = set()
+_last_compact_at = WriteCooldown()
 
 _SESSION_SUMMARY_SYSTEM = """你是群聊对话摘要助手。把用户与机器人的一段聊天历史压缩成一条不超过 120 字的中文摘要。
 
@@ -39,7 +39,7 @@ def _summary_messages(history: list[Any]) -> str:
     for turn in history:
         role = str(getattr(turn, "role", "") or "").strip()
         content = str(getattr(turn, "content", "") or "").strip()
-        if not content or _SUMMARY_MARK in content:
+        if not content or _summary_mark in content:
             continue
         label = "你" if role == "assistant" else "对方"
         lines.append(f"{label}：{content[:240]}")
@@ -47,15 +47,13 @@ def _summary_messages(history: list[Any]) -> str:
 
 
 def _compact_ok(bot_id: int, group_id: int, user_id: int, *, cooldown_sec: int) -> bool:
-    if cooldown_sec <= 0:
-        return True
-    key = (int(bot_id), int(group_id), int(user_id))
-    last = _LAST_COMPACT_AT.get(key, 0.0)
-    return (time.monotonic() - last) >= float(cooldown_sec)
+    key = (int(bot_id), int(group_id) if group_id is not None else 0, int(user_id))
+    return _last_compact_at.ok(key, cooldown_sec)
 
 
 def _mark_compacted(bot_id: int, group_id: int, user_id: int) -> None:
-    _LAST_COMPACT_AT[(int(bot_id), int(group_id), int(user_id))] = time.monotonic()
+    key = (int(bot_id), int(group_id) if group_id is not None else 0, int(user_id))
+    _last_compact_at.mark(key)
 
 
 async def maybe_compact_session_history(
@@ -76,7 +74,7 @@ async def maybe_compact_session_history(
     bid, uid = int(bot_id), int(user_id)
     gid = int(group_id) if group_id is not None else None
     key = (bid, gid or 0, uid)
-    if key in _IN_FLIGHT:
+    if key in _in_flight:
         return False
     if not _compact_ok(bid, gid, uid, cooldown_sec=int(c.llm_session_summary_cooldown_sec)):
         return False
@@ -84,7 +82,7 @@ async def maybe_compact_session_history(
     user_turns = [turn for turn in history if str(getattr(turn, "role", "") or "") == "user"]
     if len(user_turns) < threshold:
         return False
-    _IN_FLIGHT.add(key)
+    _in_flight.add(key)
     try:
         transcript = _summary_messages(history)
         if not transcript:
@@ -105,7 +103,7 @@ async def maybe_compact_session_history(
             return False
         summary = str(message.get("content") or "") if isinstance(message, dict) else ""
         summary = " ".join(summary.split()).strip()
-        if not summary or _SUMMARY_MARK in summary:
+        if not summary or _summary_mark in summary:
             return False
         ok = await compact_user_llm_history_with_summary(
             bid,
@@ -127,7 +125,7 @@ async def maybe_compact_session_history(
             return True
         return False
     finally:
-        _IN_FLIGHT.discard(key)
+        _in_flight.discard(key)
 
 
 def schedule_session_summary(*, bot_id: int, group_id: int | None, user_id: int, cfg: LlmConfig | None = None) -> None:
@@ -144,12 +142,12 @@ def schedule_session_summary(*, bot_id: int, group_id: int | None, user_id: int,
 
 
 def clear_session_summary_state_for_tests() -> None:
-    _IN_FLIGHT.clear()
-    _LAST_COMPACT_AT.clear()
+    _in_flight.clear()
+    _last_compact_at.clear()
 
 
 def session_summary_status_snapshot() -> dict[str, Any]:
     return {
-        "in_flight": len(_IN_FLIGHT),
-        "compacted_keys": len(_LAST_COMPACT_AT),
+        "in_flight": len(_in_flight),
+        "compacted_keys": _last_compact_at.tracked(),
     }
