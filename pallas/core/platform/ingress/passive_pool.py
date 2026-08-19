@@ -23,6 +23,7 @@ class PassiveWorkPool:
         self._tasks: set[asyncio.Task[None]] = set()
         self._stopping = False
         self._sem = asyncio.Semaphore(self.max_concurrency)
+        self._changed = asyncio.Event()
 
     async def submit(self, key: ConversationKey, work: Work) -> None:
         if self._stopping:
@@ -30,6 +31,7 @@ class PassiveWorkPool:
         queued_at = time.monotonic()
         self._pending += 1
         self._pending_peak = max(self._pending_peak, self._pending)
+        self._changed.set()
         try:
             if self.droppable and self._pending > self.queue_max:
                 self._dropped += 1
@@ -49,6 +51,7 @@ class PassiveWorkPool:
             await work()
         finally:
             self._active = max(0, self._active - 1)
+            self._changed.set()
             self._sem.release()
 
     def snapshot(self) -> dict[str, int | float]:
@@ -67,8 +70,11 @@ class PassiveWorkPool:
         }
 
     async def wait_pending_at_least(self, count: int) -> None:
-        while self._pending < count:
-            await asyncio.sleep(0)
+        while self._pending < count and not self._stopping:
+            self._changed.clear()
+            if self._pending >= count:
+                break
+            await asyncio.wait_for(self._changed.wait(), timeout=5)
 
     async def stop(self) -> None:
         self._stopping = True
