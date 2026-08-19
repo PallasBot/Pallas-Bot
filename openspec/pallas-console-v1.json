@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.3.4-16-gc4a88cdc-dirty",
+    "version": "v4.3.4-37-gac3d9bbf-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -25901,6 +25901,41 @@
           "scheduler_per_key_backpressure_waits": {
             "type": "integer",
             "title": "Scheduler Per Key Backpressure Waits",
+            "default": 0
+          },
+          "passive_repeater_pending": {
+            "type": "integer",
+            "title": "Passive Repeater Pending",
+            "default": 0
+          },
+          "passive_repeater_active": {
+            "type": "integer",
+            "title": "Passive Repeater Active",
+            "default": 0
+          },
+          "passive_llm_pending": {
+            "type": "integer",
+            "title": "Passive Llm Pending",
+            "default": 0
+          },
+          "passive_llm_active": {
+            "type": "integer",
+            "title": "Passive Llm Active",
+            "default": 0
+          },
+          "passive_nth_pending": {
+            "type": "integer",
+            "title": "Passive Nth Pending",
+            "default": 0
+          },
+          "passive_nth_active": {
+            "type": "integer",
+            "title": "Passive Nth Active",
+            "default": 0
+          },
+          "passive_nth_dropped": {
+            "type": "integer",
+            "title": "Passive Nth Dropped",
             "default": 0
           },
           "send_queue_depth": {

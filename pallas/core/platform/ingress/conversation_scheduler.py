@@ -536,9 +536,10 @@ async def wait_for_conversation_capacity(bot: Bot, event: Event) -> None:
 
 def conversation_scheduler_status() -> dict[str, int | float | bool | None]:
     scheduler = _scheduler
+    pools = passive_pool_status()
     if scheduler is None:
         config = get_ingress_dispatch_runtime_config()
-        return {
+        base = {
             "enabled": config.conversation_scheduler_enabled,
             "concurrency": config.conversation_scheduler_concurrency,
             "pending": 0,
@@ -555,7 +556,14 @@ def conversation_scheduler_status() -> dict[str, int | float | bool | None]:
             "backpressure_waits": 0,
             "per_key_backpressure_waits": 0,
         }
-    return {"enabled": True, **scheduler.snapshot()}
+    else:
+        base = {"enabled": True, **scheduler.snapshot()}
+    for pool_name in ("repeater", "llm", "nth"):
+        stat = pools.get(pool_name) or {}
+        base[f"passive_{pool_name}_pending"] = int(stat.get("pending") or 0)
+        base[f"passive_{pool_name}_active"] = int(stat.get("active") or 0)
+        base[f"passive_{pool_name}_dropped"] = int(stat.get("dropped") or 0)
+    return base
 
 
 def reset_conversation_scheduler_for_tests() -> None:

@@ -48,6 +48,13 @@ def test_ingress_history_aggregates_counter_deltas_and_peak_gauges(tmp_path, mon
             "scheduler_capacity": 8,
             "scheduler_backpressure_waits": 0,
             "scheduler_per_key_backpressure_waits": 0,
+            "passive_repeater_pending": 0,
+            "passive_repeater_active": 0,
+            "passive_llm_pending": 0,
+            "passive_llm_active": 0,
+            "passive_nth_pending": 0,
+            "passive_nth_active": 0,
+            "passive_nth_dropped": 0,
             "send_queue_depth": 0,
             "send_queue_capacity": 0,
             "pg_pool_utilization": 0.0,
@@ -69,6 +76,13 @@ def test_ingress_history_aggregates_counter_deltas_and_peak_gauges(tmp_path, mon
             "scheduler_capacity": 8,
             "scheduler_backpressure_waits": 0,
             "scheduler_per_key_backpressure_waits": 0,
+            "passive_repeater_pending": 0,
+            "passive_repeater_active": 0,
+            "passive_llm_pending": 0,
+            "passive_llm_active": 0,
+            "passive_nth_pending": 0,
+            "passive_nth_active": 0,
+            "passive_nth_dropped": 0,
             "send_queue_depth": 0,
             "send_queue_capacity": 0,
             "pg_pool_utilization": 0.0,
@@ -125,6 +139,13 @@ def test_ingress_history_records_scheduler_saturation_signals(tmp_path, monkeypa
             "scheduler_capacity": 0,
             "scheduler_backpressure_waits": 7,
             "scheduler_per_key_backpressure_waits": 3,
+            "passive_repeater_pending": 0,
+            "passive_repeater_active": 0,
+            "passive_llm_pending": 0,
+            "passive_llm_active": 0,
+            "passive_nth_pending": 0,
+            "passive_nth_active": 0,
+            "passive_nth_dropped": 0,
             "send_queue_depth": 9,
             "send_queue_capacity": 256,
             "pg_pool_utilization": 0.75,
@@ -155,6 +176,39 @@ def test_ingress_history_treats_scheduler_counter_reset_as_a_new_process(tmp_pat
     data = mod.read_ingress_metrics_history(window_sec=30, bucket_sec=30, now=115)
 
     assert data["points"][1]["scheduler_backpressure_waits"] == 8
+
+
+def test_ingress_history_records_passive_pool_signals(tmp_path, monkeypatch) -> None:
+    from packages.pb_webui import ingress_metrics_history as mod
+
+    monkeypatch.setattr(mod, "ingress_metrics_history_path", lambda: tmp_path / "h.jsonl")
+    assert mod.append_ingress_metrics_history(
+        snapshot={
+            "conversation_scheduler": {
+                "passive_repeater_pending": 2,
+                "passive_repeater_active": 1,
+                "passive_llm_pending": 3,
+                "passive_nth_pending": 4,
+                "passive_nth_dropped": 5,
+            }
+        },
+        ts=80,
+    )
+    assert mod.append_ingress_metrics_history(
+        snapshot={
+            "conversation_scheduler": {
+                "passive_repeater_pending": 2,
+                "passive_repeater_active": 1,
+                "passive_llm_pending": 3,
+                "passive_nth_pending": 4,
+                "passive_nth_dropped": 12,
+            }
+        },
+        ts=100,
+    )
+    data = mod.read_ingress_metrics_history(window_sec=30, bucket_sec=30, now=100)
+    assert data["points"][1]["passive_repeater_pending"] == 2
+    assert data["points"][1]["passive_nth_dropped"] == 7
 
 
 def test_ingress_history_discards_expired_rows(tmp_path, monkeypatch) -> None:

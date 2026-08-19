@@ -167,6 +167,13 @@ def _sample(snapshot: dict[str, Any], *, ts: int) -> dict[str, Any]:
         "scheduler_capacity": int(scheduler.get("concurrency") or 0),
         "scheduler_backpressure_waits": int(scheduler.get("backpressure_waits") or 0),
         "scheduler_per_key_backpressure_waits": int(scheduler.get("per_key_backpressure_waits") or 0),
+        "passive_repeater_pending": int(scheduler.get("passive_repeater_pending") or 0),
+        "passive_repeater_active": int(scheduler.get("passive_repeater_active") or 0),
+        "passive_llm_pending": int(scheduler.get("passive_llm_pending") or 0),
+        "passive_llm_active": int(scheduler.get("passive_llm_active") or 0),
+        "passive_nth_pending": int(scheduler.get("passive_nth_pending") or 0),
+        "passive_nth_active": int(scheduler.get("passive_nth_active") or 0),
+        "passive_nth_dropped": int(scheduler.get("passive_nth_dropped") or 0),
         "send_queue_depth": int(send_queue.get("depth_live", send_queue.get("depth", 0)) or 0),
         "send_queue_capacity": int(send_queue.get("max_depth") or 0),
         "pg_pool_utilization": _number(pool.get("utilization")),
@@ -492,6 +499,13 @@ def read_ingress_metrics_history(*, window_sec: int, bucket_sec: int, now: int |
                 "scheduler_capacity": 0,
                 "scheduler_backpressure_waits": 0,
                 "scheduler_per_key_backpressure_waits": 0,
+                "passive_repeater_pending": 0,
+                "passive_repeater_active": 0,
+                "passive_llm_pending": 0,
+                "passive_llm_active": 0,
+                "passive_nth_pending": 0,
+                "passive_nth_active": 0,
+                "passive_nth_dropped": 0,
                 "send_queue_depth": 0,
                 "send_queue_capacity": 0,
                 "pg_pool_utilization": 0.0,
@@ -516,10 +530,17 @@ def read_ingress_metrics_history(*, window_sec: int, bucket_sec: int, now: int |
             "send_queue_capacity",
             "work_pending",
             "work_leased",
+            "passive_repeater_pending",
+            "passive_repeater_active",
+            "passive_llm_pending",
+            "passive_llm_active",
+            "passive_nth_pending",
+            "passive_nth_active",
         ):
             point[key] = max(int(point[key]), int(row.get(key) or 0))
         for key in _COUNTER_KEYS:
             delta = _scheduler_counter_delta if key.startswith("scheduler_") else _counter_delta
             point[key] += delta(row, previous, key)
+        point["passive_nth_dropped"] += _scheduler_counter_delta(row, previous, "passive_nth_dropped")
         previous = row
     return {"retention_sec": INGRESS_HISTORY_RETENTION_SEC, "bucket_sec": bucket, "points": list(points.values())}
