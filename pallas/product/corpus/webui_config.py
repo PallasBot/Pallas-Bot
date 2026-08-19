@@ -202,14 +202,6 @@ class CorpusFederationWebuiConfig(BaseModel):
             "例如 300 表示 5 分钟一次；间隔越短请求越频繁，越长则页面数据更新越慢",
         ),
     )
-    community_stats_roster_public: bool = Field(
-        default=False,
-        description=field_help(
-            "是否在社区主站公开本部署牛牛名册",
-            "开启后随统计上报 QQ、昵称、在线状态与近 7 日消息量；主站气泡墙可点击查看 QQ 资料",
-            "不上报群号与消息正文；默认关闭，可随时关掉",
-        ),
-    )
 
 
 def get_corpus_federation_webui_config() -> CorpusFederationWebuiConfig:
@@ -263,6 +255,4 @@ def get_corpus_federation_webui_config() -> CorpusFederationWebuiConfig:
         ),
         community_stats_token=_str_read("PALLAS_COMMUNITY_STATS_TOKEN"),
         community_stats_interval_sec=interval,
-        community_stats_roster_public=_str_read("PALLAS_COMMUNITY_STATS_ROSTER_PUBLIC", "").lower()
-        in ("1", "true", "yes", "on"),
     )
