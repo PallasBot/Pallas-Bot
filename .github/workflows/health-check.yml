@@ -4,25 +4,33 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      version:
+        description: '要检查的 Docker 镜像版本（例如 v2.0.0）'
+        required: true
+        type: string
 
 jobs:
   docker-health-check:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Build and test Docker image
+      - name: Get version
+        id: get_version
         run: |
-          LABEL="$(git describe --tags --always --dirty 2>/dev/null || true)"
-          if [ -z "${LABEL}" ]; then LABEL="sha-${GITHUB_SHA:0:7}"; fi
-          docker build --build-arg "PALLAS_BOT_VERSION=${LABEL}" -t pallas-bot-test .
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=${{ github.event.release.tag_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Pull and test Docker image
+        run: |
+          IMAGE="${{ secrets.DOCKERHUB_USERNAME }}/pallas-bot:${{ steps.get_version.outputs.version }}"
+          docker pull "${IMAGE}"
 
           # 运行容器进行健康检查
-          docker run --name test-container -d pallas-bot-test
+          docker run --name test-container -d "${IMAGE}"
 
           # 等待容器启动
           sleep 10

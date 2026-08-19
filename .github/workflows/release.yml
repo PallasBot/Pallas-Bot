@@ -119,7 +119,7 @@ jobs:
 
   create-release:
     runs-on: ubuntu-latest
-    needs: build-webui-dist
+    needs: [build-webui-dist, build-tagged-image]
     permissions:
       contents: write
       packages: write
