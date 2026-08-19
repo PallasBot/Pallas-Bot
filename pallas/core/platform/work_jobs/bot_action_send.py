@@ -55,4 +55,4 @@ async def _run_send_consumer_loop() -> None:
         kinds=frozenset({SEND_JOB_KIND}),
         batch_size=4,
     )
-    await run_work_consumer(worker)
+    await run_work_consumer(worker, idle_backoff=False)

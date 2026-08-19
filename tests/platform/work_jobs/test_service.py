@@ -51,3 +51,36 @@ async def test_work_service_initializes_database_before_building_store(monkeypat
         await service.run_work_service({})
 
     assert steps == ["db", "store", "run"]
+
+
+@pytest.mark.asyncio
+async def test_work_consumer_idle_backoff_slows_idle_polling(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    from pallas.core.platform.work_jobs import service
+
+    class Worker:
+        def __init__(self) -> None:
+            self.count = 0
+
+        async def run_once(self) -> bool:
+            self.count += 1
+            return False
+
+    async def collect(worker: Worker, idle_backoff: bool, seconds: float) -> int:
+        task = asyncio.create_task(service.run_work_consumer(worker, idle_backoff=idle_backoff))
+        try:
+            await asyncio.sleep(seconds)
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        return worker.count
+
+    monkeypatch.setattr(service, "_IDLE_BACKOFF_MAX_SEC", 2.0)
+    monkeypatch.setattr(service, "_IDLE_BACKOFF_BASE_SEC", 0.1)
+
+    fast = await collect(Worker(), idle_backoff=False, seconds=0.5)
+    slow = await collect(Worker(), idle_backoff=True, seconds=0.5)
+
+    assert fast > slow
+    assert slow >= 1
