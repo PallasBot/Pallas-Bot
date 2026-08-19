@@ -1,5 +1,0 @@
-interface:
-  display_name: "Ubiquitous Language"
-  short_description: "Build a shared domain glossary"
-policy:
-  allow_implicit_invocation: false

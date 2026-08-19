@@ -246,6 +246,7 @@ test.py
 .sisyphus/
 .superpowers/
 .claude/skills/
+.agents/
 docs/superpowers/
 tmp/
 
