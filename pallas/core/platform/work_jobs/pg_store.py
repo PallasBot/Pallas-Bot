@@ -106,6 +106,13 @@ class PostgresWorkJobStore:
         if not jobs:
             return []
         from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
+        from pallas.core.platform.observability import SlowPathTimer, slow_path_threshold_ms
+
+        timer = SlowPathTimer(
+            "work_jobs.enqueue_many",
+            threshold_ms=slow_path_threshold_ms("PALLAS_SLOW_ENQUEUE_MANY_MS", 300.0),
+            log_level="warning",
+        )
 
         keys = [job.idempotency_key for job in jobs]
         values = [
@@ -129,6 +136,7 @@ class PostgresWorkJobStore:
             ).scalars()
             by_key = {row.idempotency_key: row for row in rows}
             await session.commit()
+        timer.finish(jobs=len(jobs))
         return [
             WorkJob(
                 row.id,
@@ -184,7 +192,13 @@ class PostgresWorkJobStore:
         priority_kinds: frozenset[str] | None = None,
     ) -> list[WorkJob]:
         from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
+        from pallas.core.platform.observability import SlowPathTimer, slow_path_threshold_ms
 
+        timer = SlowPathTimer(
+            "work_jobs.claim_many",
+            threshold_ms=slow_path_threshold_ms("PALLAS_SLOW_CLAIM_MANY_MS", 300.0),
+            log_level="warning",
+        )
         now = time.time()
         stmt = select(BackgroundJobRow).where(
             BackgroundJobRow.finished_at.is_(None),
@@ -207,6 +221,7 @@ class PostgresWorkJobStore:
         stmt = stmt.with_for_update(skip_locked=True).limit(max(1, int(limit)))
         async with get_session() as session:
             rows = (await session.execute(stmt)).scalars().all()
+            timer.mark("query")
             for row in rows:
                 row.status = "leased"
                 row.lease_owner = str(owner)
@@ -214,6 +229,7 @@ class PostgresWorkJobStore:
                 row.leased_until = now + max(1.0, float(lease_sec))
                 row.attempts += 1
             await session.commit()
+        timer.finish(owner=owner, limit=limit, rows=len(rows))
         return [
             WorkJob(
                 row.id,

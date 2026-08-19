@@ -16,7 +16,6 @@ from pallas.core.foundation.db.runtime import is_postgresql_backend
 from pallas.core.foundation.logging.throttle import log_rate_limited
 from pallas.core.platform.work_jobs.models import WorkJob
 from pallas.core.platform.work_jobs.runtime import build_work_job_store
-from pallas.core.shared.utils import HTTPXClient
 
 image_cache_repo = make_image_cache_repository()
 _image_capture_queue: asyncio.Queue[WorkJob] | None = None
@@ -30,7 +29,30 @@ _IMAGE_CAPTURE_MIN_INTERVAL_SEC = 2.0
 _IMAGE_CAPTURE_GLOBAL_RATE_PER_SEC = 4
 _IMAGE_CAPTURE_GLOBAL_WINDOW_SEC = 1.0
 _IMAGE_CAPTURE_MAX_AGE_SEC = 600.0
-_IMAGE_CAPTURE_DOWNLOAD_TIMEOUT = httpx.Timeout(20.0, connect=10.0)
+_IMAGE_CAPTURE_DOWNLOAD_LIMITED_TIMEOUT = httpx.Timeout(8.0, connect=3.0)
+_image_download_client: httpx.AsyncClient | None = None
+_image_download_lock = asyncio.Lock()
+
+
+async def _fetch_image_bytes(url: str) -> bytes | None:
+    """图片下载专用：短超时 + 不重试，避免图床慢/断连长时间占用 work worker。"""
+    global _image_download_client
+    async with _image_download_lock:
+        if _image_download_client is None or _image_download_client.is_closed:
+            _image_download_client = httpx.AsyncClient(
+                timeout=_IMAGE_CAPTURE_DOWNLOAD_LIMITED_TIMEOUT,
+                follow_redirects=True,
+            )
+    client = _image_download_client
+    try:
+        rsp = await client.get(url)
+    except httpx.HTTPError:
+        return None
+    if rsp.status_code != httpx.codes.OK:
+        return None
+    return rsp.content
+
+
 _IMAGE_CAPTURE_BOUND = False
 
 
@@ -107,25 +129,20 @@ async def handle_image_cache_capture(payload: dict[str, object]) -> None:
         return
     cache = await image_cache_repo.find_by_cq_code(cq_code)
     if cache is None:
-        rsp = await HTTPXClient.get(
-            url,
-            raise_for_status=False,
-            timeout=_IMAGE_CAPTURE_DOWNLOAD_TIMEOUT,
-        )
-        if not rsp or rsp.status_code != httpx.codes.OK:
-            status = getattr(rsp, "status_code", None)
+        content = await _fetch_image_bytes(url)
+        if content is None:
             log_rate_limited(
                 logger,
                 "warning",
-                f"image_cache.download.{status or 'unknown'}",
-                "image cache download skipped after HTTP failure status [{}]",
-                status or "unknown",
+                "image_cache.download.failed",
+                "image cache download skipped after HTTP failure for [{}]",
+                cq_code,
             )
             return
         values = {
             "cq_code": cq_code,
-            "content_hash": hashlib.sha256(rsp.content).hexdigest(),
-            "blob_data": rsp.content,
+            "content_hash": hashlib.sha256(content).hexdigest(),
+            "blob_data": content,
             "ref_times": 1,
             "date": int(str(datetime.now().date()).replace("-", "")),
         }
@@ -204,6 +221,10 @@ def bind_image_capture_lifecycle() -> None:
     @driver.on_shutdown
     async def _on_shutdown() -> None:
         await stop_image_capture_workers()
+        global _image_download_client
+        if _image_download_client is not None:
+            await _image_download_client.aclose()
+            _image_download_client = None
 
 
 async def insert_image(

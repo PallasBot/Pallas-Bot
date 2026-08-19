@@ -434,6 +434,13 @@ async def claim_sticker_vision_delivery(bot_ids: set[int]) -> dict[str, object] 
     if not bot_ids:
         return None
     from pallas.core.foundation.db.runtime import is_postgresql_backend
+    from pallas.core.platform.observability import SlowPathTimer, slow_path_threshold_ms
+
+    timer = SlowPathTimer(
+        "sticker_vision.claim_delivery",
+        threshold_ms=slow_path_threshold_ms("PALLAS_SLOW_STICKER_CLAIM_MS", 300.0),
+        log_level="warning",
+    )
 
     if is_postgresql_backend():
         from sqlalchemy import String, cast, select
@@ -457,6 +464,7 @@ async def claim_sticker_vision_delivery(bot_ids: set[int]) -> dict[str, object] 
                     .with_for_update(skip_locked=True)
                 )
             ).scalars()
+            timer.mark("query")
             for row in rows:
                 payload = dict(row.payload or {})
                 delivery = payload.get("delivery")
@@ -467,7 +475,9 @@ async def claim_sticker_vision_delivery(bot_ids: set[int]) -> dict[str, object] 
                 payload["delivery"] = {**delivery, "state": "sending", "claimed_at": time.time()}
                 row.payload = payload
                 await session.commit()
+                timer.finish(bot_ids=len(bot_ids))
                 return payload
+        timer.finish(bot_ids=len(bot_ids), rows=0)
         return None
 
     from pallas.core.foundation.db.modules import BackgroundJob
@@ -483,6 +493,7 @@ async def claim_sticker_vision_delivery(bot_ids: set[int]) -> dict[str, object] 
         {"$set": {"payload.delivery.state": "sending", "payload.delivery.claimed_at": time.time()}},
         return_document=True,
     )
+    timer.finish(bot_ids=len(bot_ids), rows=int(row is not None))
     return dict(row.get("payload") or {}) if row else None
 
 
