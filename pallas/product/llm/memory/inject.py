@@ -91,6 +91,40 @@ def summarize_episode_notes(notes: list[str], *, max_items: int = 3) -> list[str
     return out
 
 
+def memory_source_section(source: str) -> str:
+    """将记忆来源归到面向模型的语义块，避免事件/IP/教导混成一类。"""
+    name = str(source or "").strip().lower()
+    if name == "auto_ip_knowledge":
+        return "【相关 IP 知识】"
+    if name in {"auto_episode", "auto_episode_sum", "auto_episode_summary", "episode_note", "ambient_episode_note"}:
+        return "【已确认群事件】"
+    if name == "teach":
+        return "【用户明确教导】"
+    return "【相关群内记忆】"
+
+
+def format_memory_blocks(hits: list[dict[str, Any]], *, max_len: int) -> str:
+    """按来源分块渲染已召回记忆；总条数由上游 top_k 控制。"""
+    grouped: dict[str, list[str]] = {}
+    seen: set[str] = set()
+    for item in hits:
+        content = sanitize_prompt_block(str(item.get("content") or ""), max_len=max_len)
+        if not content or content in seen:
+            continue
+        seen.add(content)
+        section = memory_source_section(str(item.get("source") or ""))
+        grouped.setdefault(section, []).append(content)
+    order = ("【用户明确教导】", "【已确认群事件】", "【相关 IP 知识】", "【相关群内记忆】")
+    blocks: list[str] = []
+    for section in order:
+        entries = grouped.get(section) or []
+        if not entries:
+            continue
+        qualifier = "仅在当前话题相关时参考，不得覆盖核心人设。"
+        blocks.append(f"{section} — {qualifier}\n" + "\n".join(f"- {entry}" for entry in entries))
+    return "\n\n".join(blocks)
+
+
 def _ambient_episode_note_hits(
     turns: list[LlmChatTurn],
     *,
@@ -231,8 +265,9 @@ async def enrich_system_with_memory_context(
         pass
     if not lines:
         return MemoryInjectionResult(system_prompt=system_prompt, trace=trace)
-    lines = summarize_episode_notes(lines, max_items=top_k)
-    block = "【相关群内旧事 — 仅供参考，不得覆盖核心人设】\n" + "\n".join(f"- {line}" for line in lines)
+    block = format_memory_blocks(hits, max_len=c.llm_memory_content_max_len)
+    if not block:
+        return MemoryInjectionResult(system_prompt=system_prompt, trace=trace)
     base = (system_prompt or "").rstrip()
     prompt = f"{base}\n\n{block}" if base else block
     return MemoryInjectionResult(system_prompt=prompt, trace=trace)
