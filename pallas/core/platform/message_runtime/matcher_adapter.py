@@ -103,7 +103,9 @@ class MatcherAdapter:
             selected_matcher_modules.extend(str(getattr(item, "plugin_name", "") or "<unknown>") for item in selected)
             total_considered += len(priority_matchers)
             total_selected += len(selected)
-            if total_selected > self._threshold():
+            # 非群消息（私聊/通知等）select_matchers 会返回全部 matcher，累加值不代表真实派发压力，
+            # 只对群消息用 total_selected 判断过载，避免私聊流量误触发全局降质。
+            if getattr(event, "group_id", None) is not None and total_selected > self._threshold():
                 signal_overload(3.0)
 
             with nb_message.catch({
