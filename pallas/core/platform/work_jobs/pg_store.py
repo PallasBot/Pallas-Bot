@@ -111,7 +111,7 @@ class PostgresWorkJobStore:
         timer = SlowPathTimer(
             "work_jobs.enqueue_many",
             threshold_ms=slow_path_threshold_ms("PALLAS_SLOW_ENQUEUE_MANY_MS", 300.0),
-            log_level="warning",
+            log_level="debug",
         )
 
         keys = [job.idempotency_key for job in jobs]
@@ -197,7 +197,7 @@ class PostgresWorkJobStore:
         timer = SlowPathTimer(
             "work_jobs.claim_many",
             threshold_ms=slow_path_threshold_ms("PALLAS_SLOW_CLAIM_MANY_MS", 300.0),
-            log_level="warning",
+            log_level="debug",
         )
         now = time.time()
         stmt = select(BackgroundJobRow).where(

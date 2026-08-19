@@ -439,7 +439,7 @@ async def claim_sticker_vision_delivery(bot_ids: set[int]) -> dict[str, object] 
     timer = SlowPathTimer(
         "sticker_vision.claim_delivery",
         threshold_ms=slow_path_threshold_ms("PALLAS_SLOW_STICKER_CLAIM_MS", 300.0),
-        log_level="warning",
+        log_level="debug",
     )
 
     if is_postgresql_backend():
