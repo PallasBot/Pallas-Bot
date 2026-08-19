@@ -11,6 +11,7 @@
 - **智能对话**：新增自动 IP 知识学习——群聊讨论到任何作品（游戏/番剧/电影等）时，由模型自动判定并提炼稳定设定写入记忆（默认关闭，环境变量 `LLM_MEMORY_AUTO_IP_ENABLED` 开启；每群 30 分钟冷却 + 全局每日 100 次预算）。
 - **控制台**：账号 persona 新增可配置项 `seed_override`（chaotic/restrained/warm）与 `disposition`（处事风格），进一步拉开不同账号的性格差异。
 - **贴纸**：实时标注增加每日预算上限（`LLM_STICKER_LABEL_REALTIME_DAILY_LIMIT`，默认 300），避免表情识别无上限消耗。
+- **记忆**：收紧自动事件记忆——默认改为只存「群共同事件」的提炼摘要，不再逐条记录群消息原话；加入寒暄/碎片/临时信号的过滤，并新增每日提炼预算（`LLM_MEMORY_AUTO_EPISODE_DAILY_BUDGET`，默认 100），历史噪音记忆已清理。
 
 ### Added
 
@@ -19,6 +20,7 @@
 * feat(webui): 账号 persona 可配置 seed 与处事风格
 * feat(llm): 贴纸实时标注增加每日预算上限
 * feat(llm): 提高基础温度压制回复模板化
+* fix(llm): 收紧 auto_episode 噪音并增加每日预算
 
 ## [4.3.4] - 2026-08-18
 
