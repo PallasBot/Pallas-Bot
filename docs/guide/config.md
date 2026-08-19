@@ -10,14 +10,9 @@ Pallas-Bot 的配置分两类：「让 Bot 启动起来」的配置在 `pallas.t
 
 登录控制台后，按要完成的事情进入对应页面：
 
-| 要完成的事 | 页面 |
-| --- | --- |
-| 给某只牛配置号主 | **实例与连接**，详见 [号主](bot-owner.md) |
-| 安装或更新官方插件 | **插件商店** |
-| 开关插件、调整冷却 | 对应插件页面 |
-| 改命令可用范围 | **命令权限** |
-| 配 Provider、聊天或媒体能力 | **AI 配置** |
-| 配语料和通用服务地址 | **通用配置** |
+- **账号与插件**：在 **实例与连接** 配号主（见 [号主](bot-owner.md)）；在 **插件商店** 安装或更新官方插件；在对应插件页开关插件和调整冷却。
+- **权限与 AI**：在 **命令权限** 调整可用范围；在 **AI 配置** 配 Provider、聊天和媒体能力。
+- **语料与服务**：在 **通用配置** 配语料和外部服务地址。
 
 只想让 `@牛牛` 聊天时，在 **AI 配置** 配好 Provider 即可；唱歌、TTS 和遗留 RWKV 需额外部署 AI Runtime，见 [LLM 对话、媒体与 AI Runtime](ai-runtime-choice.md)。
 
@@ -76,10 +71,8 @@ flowchart LR
 
 ## 需要更多细节时
 
-| 文档 | 何时看 |
-| --- | --- |
-| [网页控制台](web-console.md) | 控制台的登录、侧栏和保存方式 |
-| [号主](bot-owner.md) | `admins` 的作用和配置方法 |
-| [配置要点（生产）](/maintainer/reference/config-production) | 部署检查清单与 `[bootstrap]` 细节 |
-| [配置参考](/maintainer/reference/config) | 热生效边界与排障顺序 |
-| [配置存储](/developer/architecture/config-storage) | 开发向合并与读取合同 |
+- [网页控制台](web-console.md)：控制台的登录、侧栏和保存方式。
+- [号主](bot-owner.md)：`admins` 的作用和配置方法。
+- [配置要点（生产）](/maintainer/reference/config-production)：部署检查清单与 `[bootstrap]` 细节。
+- [配置参考](/maintainer/reference/config)：热生效边界与排障顺序。
+- [配置存储](/developer/architecture/config-storage)：开发向合并与读取合同。

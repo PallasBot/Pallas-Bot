@@ -1,8 +1,10 @@
 # 源码安装
 
-> 目标：从源码跑起 Pallas-Bot，连接 PostgreSQL 并启动网页控制台
-> 准备：`git`、Python 3.12+（或由 `uv` 安装）、一台可长期运行的机器
-> 完成之后：源码目录可运行，控制台可访问；适合修改或参与开发的使用者
+> **目标**：从源码跑起 Pallas-Bot，连接 PostgreSQL 并启动网页控制台  
+> **准备**：`git`、Python 3.12+（或由 `uv` 安装）、一台可长期运行的机器  
+> **完成之后**：源码目录可运行，控制台可访问；适合修改或参与开发的使用者
+
+尚未安装 Python、`uv` 或 PostgreSQL 时，先完成 [环境准备](prepare-environment.md)。
 
 ## 1. 获得可运行的源码目录
 
@@ -34,6 +36,8 @@ uv run pallas doctor
 需要一个**空库**，首次启动时会自动建表。下面两种方式任选其一。
 
 ::: details 推荐：Docker 起库
+::: code-group
+
 ```bash
 docker run -d --name pallas-pg \
   -e POSTGRES_USER=pallas \
@@ -45,13 +49,27 @@ docker run -d --name pallas-pg \
 docker exec pallas-pg pg_isready
 # 回复类似 accepting connections 即可
 ```
+
+```powershell [Windows PowerShell]
+docker run -d --name pallas-pg `
+  -e POSTGRES_USER=pallas `
+  -e POSTGRES_PASSWORD=pallas `
+  -e POSTGRES_DB=PallasBot `
+  -p 5432:5432 `
+  postgres:16-alpine
+
+docker exec pallas-pg pg_isready
+```
+
+:::
+
 `pg_isready` 回复类似 `accepting connections`，说明数据库可以使用。
 :::
 
 ::: details 备选：本机安装 PostgreSQL
 | 系统 | 文档 |
 | --- | --- |
-| Windows | 装 PostgreSQL（Windows） |
+| Windows | [PostgreSQL Windows 安装包](https://www.postgresql.org/download/windows/) |
 | Linux / macOS | [PostgreSQL 官方下载](https://www.postgresql.org/download/) |
 
 建一个空库（示例名 `PallasBot`），账号能建表即可。权限说明见 [deploy/pg](https://github.com/PallasBot/Pallas-Bot/blob/main/deploy/pg/README.md)。

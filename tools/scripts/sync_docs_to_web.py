@@ -127,6 +127,7 @@ FILE_MAP: dict[str, str] = {
     "develop/knowledge-sources.md": "develop/knowledge-sources.md",
     # --- Guide 上手 ---
     "guide/quickstart.md": "guide/quickstart.md",
+    "guide/prepare-environment.md": "guide/prepare-environment.md",
     "guide/update.md": "guide/update.md",
     "guide/install-source.md": "guide/install-source.md",
     "guide/connect-qq.md": "guide/connect-qq.md",

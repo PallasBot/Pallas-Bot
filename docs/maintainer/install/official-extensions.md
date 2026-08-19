@@ -1,43 +1,19 @@
-# 安装官方插件
+# 官方插件运维
 
-本页说明如何装、卸、更新官方插件。日常优先用 WebUI 插件商店；无图形界面或脚本化时再用 CLI。
-
-## 三类包
-
-| 类型 | 说明 |
-| --- | --- |
-| `core` | 随主仓启动，无需额外安装 |
-| 官方插件 | PyPI 包；日常用 WebUI 插件商店装 / 卸 / 更新 |
-| `local` / community | 站点私有或社区插件，一般放在 `local/plugins/` |
-
-V4 起多数玩法与站点能力从本体拆成独立 pip 包。
+用户向的安装、商店界面和插件对照见 [安装插件](/guide/install-plugins)。本页只处理无图形界面、精简 Docker 镜像、分片和回滚等运维场景。
 
 ## 适用场景
 
-- 主仓已跑，帮助菜单无决斗、MAA、谁是卧底等能力
-- 新站点按需装插件；**从 3.x 升级且玩法已在跑则通常不必重装**
-- Docker / 分片：确认生效的是 pip、镜像预装，还是 `local/plugins/` 副本
+- 通过 SSH、CI/CD 或脚本批量安装、更新或卸载官方插件。
+- 精简 Docker 镜像没有现场装包条件，需要在构建期预装插件。
+- 分片部署中需要确认插件是否在目标 worker 生效。
+- 排查 `local/plugins/` 同名副本、pip 包和运行态加载结果。
 
-## 推荐顺序
+`core` 随主仓启动；官方插件以 PyPI 包安装；站点私有与社区插件通常位于 `local/plugins/`。
 
-1. **WebUI 插件商店**（装、卸、更新、看加载态）——日常运维
-2. **CLI**（`pallas ext`）——初次部署、SSH、脚本化、商店不可用时
-3. **镜像构建期** `uv sync --extra ...`——精简 Docker 无现场装包条件时
+## CLI 管理
 
-## 方式一：WebUI 插件商店（推荐）
-
-1. 打开 `http://<主机>:8088/pallas/` 并登录
-2. 侧栏「插件商店」→「安装」「更新」或「安装并重启」
-
-| 状态 | 含义 |
-| --- | --- |
-| 未安装 | 当前环境无 pip 包 |
-| 已安装待重启 | 包已装入环境，当前进程未加载 |
-| 已加载 | 当前运行进程已在使用 |
-
-插件配置、命令权限、治理页在控制台完成即可。
-
-## 方式二：CLI（备选）
+在 Pallas-Bot 工作目录中执行：
 
 ```bash
 uv run pallas ext list
@@ -46,60 +22,44 @@ uv run pallas ext update pallas-plugin-duel --restart
 uv run pallas ext uninstall pallas-plugin-duel --restart
 ```
 
-适合无图形界面、CI/CD 或批量初始化。有控制台时，官方插件装卸更新仍以商店为主。
+CLI 适合无图形界面、CI/CD 或批量初始化。日常使用控制台时，仍优先在 **插件商店** 完成装、卸和更新。
 
-## 运行前提（CLI / 商店共用）
+## 运行前提
 
-商店一键安装需要：完整 Pallas-Bot 工作目录、能执行 `uv`、能访问 PyPI。
+商店一键安装与 CLI 共用当前 Pallas-Bot 运行环境：需要完整工作目录、可执行的 `uv` 和可访问的 PyPI。
 
 ```bash
 uv --version
 uv run pallas --help
 ```
 
-::: warning 精简 Docker 镜像例外
-精简镜像往往没有容器内现场装包条件。构建期预装，或部署后通过能访问 PyPI 的控制台商店安装。
+::: warning 注意：精简 Docker 镜像
+精简镜像通常没有容器内现场装包条件。构建镜像时使用 `uv sync --extra ...` 预装插件；运行后安装则使用具备 PyPI 访问能力的控制台商店。
 :::
 
-## 常见官方插件对照
+## 分片与加载状态
 
-| 包名 | 作用 |
-| --- | --- |
-| `pallas-plugin-protocol` | 协议端管理、账号上号、relologin 相关能力 |
-| `pallas-plugin-duel` | 决斗与八角笼玩法 |
-| `pallas-plugin-who-is-spy` | 谁是卧底 |
-| `pallas-plugin-maa` | MAA 远控 |
-| `pallas-plugin-ai-media` | 牛牛唱歌（翻唱 / 点歌） |
-| `pallas-plugin-draw` | 绘图相关能力 |
-| `pallas-plugin-dream` | 做梦相关能力 |
-| `pallas-plugin-bot-status` | 在吗、报数等状态类能力 |
+官方插件安装完成后重启 Bot，再确认：
 
-以下能力已在 V4 回归 core，无需再装：
+1. 控制台商店显示「已加载」，或 `pallas ext list` 显示 `installed=yes`。
+2. 群里发送 `牛牛帮助`，确认新增能力已出现。
+3. 有配置页时，控制台页面可打开并读到配置。
 
-- `llm_chat`
-- `pb_stats`
-
-## 安装后验收
-
-1. 商店显示「已加载」（或 `pallas ext list` 为 `installed=yes`）
-2. 群里发「牛牛帮助」，能看到新增能力
-3. 有配置页时，WebUI 能打开并读到配置
-
-::: warning 分片
-部分插件只在 worker 侧运行。控制台加载态取决于 hub 聚合到的 worker 元数据。
+::: warning 注意：分片加载
+部分插件只在 worker 侧运行。控制台的加载态来自 hub 聚合的 worker 元数据；排查时确认目标 worker 已重启并已加载插件。
 :::
 
 ## 卸载与回滚
 
-优先在 **插件商店** 卸载。无 UI 时用 `pallas ext uninstall`。
+优先在 **插件商店** 卸载；无 UI 时使用 `pallas ext uninstall`。
 
-::: warning 注意：卸载与重启
-- 卸载 pip 包不会删掉 `local/plugins/` 里的同名副本
-- 装、卸、升级之后都重启一次
-:::
+- 卸载 pip 包不会删除 `local/plugins/` 中的同名副本。
+- 安装、卸载或升级后都重启 Bot。
+- 插件仍被加载时，检查 `local/plugins/` 是否覆盖了同名 pip 包。
 
 ## 相关阅读
 
+- [安装插件](/guide/install-plugins)
 - [网页控制台](/guide/web-console)
-- [CLI 参考](/maintainer/reference/cli)（Bot 升级与初次部署）
-- [用户向安装说明](/guide/install-plugins)
+- [CLI 参考](/maintainer/reference/cli)
+- [插件治理](/maintainer/operate/plugin-governance)

@@ -1,8 +1,8 @@
 # 配置要点（生产）
 
-> 目标：确认生产环境最少配置、合并优先级，以及需要备份的文件
-> 准备：可编辑 `config/pallas.toml`，启动前能核对 `data/` 目录可写
-> 完成之后：能按本页检查清单验收生产配置
+> **目标**：确认生产环境最少配置、合并优先级，以及需要备份的文件  
+> **准备**：可编辑 `config/pallas.toml`，启动前能核对 `data/` 目录可写  
+> **完成之后**：能按本页检查清单验收生产配置
 
 相关：[配置存储](/developer/architecture/config-storage) · [标准部署](/maintainer/deploy/deployment) · [Docker](/maintainer/deploy/docker) · [FAQ](/deploy/faq)
 

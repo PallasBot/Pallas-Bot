@@ -1,8 +1,8 @@
 # 使用 Docker 部署
 
-> 目标：用 Docker Compose 启动 Bot、PostgreSQL 和网页控制台
-> 准备：安装 Docker；镜像内已有代码，本机只需 compose 文件与配置
-> 完成之后：服务已启动，浏览器可打开控制台；适合没有源码开发需求的部署
+> **目标**：用 Docker Compose 启动 Bot、PostgreSQL 和网页控制台  
+> **准备**：安装 Docker；镜像内已有代码，本机只需 compose 文件与配置  
+> **完成之后**：服务已启动，浏览器可打开控制台；适合没有源码开发需求的部署
 
 ::: warning 注意：无需 clone 整仓
 镜像内已包含代码，**不要** `git clone` Pallas-Bot 仓库，本机只需要 compose 文件与配置文件。
@@ -20,7 +20,9 @@ docker compose version
 
 创建一个空的部署目录，并下载三个所需文件：
 
-```bash
+::: code-group
+
+```bash [Linux / macOS]
 mkdir -p ~/pallas-deploy/pallas-bot/config \
          ~/pallas-deploy/pallas-bot/data \
          ~/pallas-deploy/pallas-bot/resource/voices
@@ -32,8 +34,20 @@ curl -fsSL -o pallas-bot/config/pallas.toml "$BASE/config/pallas.example.toml"
 curl -fsSL -o pallas-bot/config/compose.env "$BASE/config/compose.env.example"
 ```
 
+```powershell [Windows PowerShell]
+New-Item -ItemType Directory -Force -Path pallas-deploy/pallas-bot/config, pallas-deploy/pallas-bot/data, pallas-deploy/pallas-bot/resource/voices | Out-Null
+Set-Location pallas-deploy
+
+$base = "https://raw.githubusercontent.com/PallasBot/Pallas-Bot/main"
+Invoke-WebRequest "$base/docker-compose.yml" -OutFile docker-compose.yml
+Invoke-WebRequest "$base/config/pallas.example.toml" -OutFile pallas-bot/config/pallas.toml
+Invoke-WebRequest "$base/config/compose.env.example" -OutFile pallas-bot/config/compose.env
+```
+
+:::
+
 ::: tip Windows 用户
-可用 Docker Desktop 自带的终端执行上述命令。没有 `curl` 时，用浏览器打开上面三个 URL，把内容存到对应路径即可。
+在 PowerShell 中运行上面的 Windows 命令。若已在 Git Bash 或 WSL 中工作，也可使用 Linux / macOS 这一组命令。
 :::
 
 ::: warning 注意：配置文件是文件不是目录

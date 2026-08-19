@@ -1,8 +1,7 @@
 # 更新 Pallas-Bot
 
-> 目标：把已经能正常运行的 Pallas-Bot 更新到新版本
-> 准备：已备份 `config/pallas.toml` 和 `data/`（Docker 另备份卷）；先确定自己的部署方式
-> 完成之后：版本更新到目标，Bot 重新运行
+> **目标**：把已经能正常运行的 Pallas-Bot 更新到新版本  
+> **完成之后**：版本更新到目标，Bot 重新运行
 
 Docker 容器只支持正式 Release，不支持 Git 分支或 Commit 更新。
 

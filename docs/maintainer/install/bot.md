@@ -1,63 +1,73 @@
-# 本体安装
+# Release 部署包安装
 
-> 目标：安装 Pallas-Bot 本体并完成首次启动
-> 准备：按所选部署方式满足前置条件（见下方表格）
-> 完成之后：Bot 可运行，控制台可访问；后续接协议端即可连 QQ
+> **目标**：通过 Release 部署包安装 Pallas-Bot 并完成首次启动  
+> **完成之后**：Bot 可运行、网页控制台可访问；接入协议端后即可连 QQ
 
-本页是各部署方式的入口。按场景选择下方文档即可，不必把所有页面读完。
+Release 部署包适合不使用 Docker、也不准备修改 Bot 本体的长期部署。Docker 与源码路径见文末。
 
-## 前置条件
+## 开始前准备
 
-| 项 | 要求 |
-| --- | --- |
-| Python | 3.12 |
-| 包管理 | `uv` |
-| 数据库 | PostgreSQL（V4 默认）；3.x 升级可沿用 MongoDB，见 [配置参考](/maintainer/reference/config) |
-| Redis | 仅分片、AI 等场景需要 |
+1. 按 [环境准备](/guide/prepare-environment) 安装 `uv`、Python 3.12，并准备 PostgreSQL 连接信息。3.x 升级可沿用 MongoDB，见 [配置参考](/maintainer/reference/config)。
+2. 从 [GitHub Releases](https://github.com/PallasBot/Pallas-Bot/releases/latest) 下载当前版本的 `pallas-bot-<version>.tar.gz`。
 
-## 按场景选择入口
+## 1. 解压部署包
 
-| 场景 | 文档 |
-| --- | --- |
-| 快速跑通 | [快速开始](/guide/quickstart) |
-| 非 Docker 长期部署 | [Release 部署包](#release-部署包推荐) |
-| 容器部署 | [Docker 部署](/maintainer/deploy/docker) |
-| 修改本体源码 | [源码安装](/guide/install-source) |
-| 插件与扩展 | [安装插件](/guide/install-plugins) · [AI 扩展](/guide/ai) |
-| 本地开发 | [开发环境](/developer/environment) |
+::: code-group
 
-## Release 部署包（推荐）
-
-不使用 Docker、也不准备修改 Bot 本体时，从 [GitHub Releases](https://github.com/PallasBot/Pallas-Bot/releases/latest) 下载当前版本的 `pallas-bot-<version>.tar.gz`：
-
-```bash
+```bash [Linux / macOS]
 tar -xzf pallas-bot-<version>.tar.gz
 cd pallas-bot-<version>
+```
+
+```powershell [Windows PowerShell]
+tar -xzf pallas-bot-<version>.tar.gz
+Set-Location pallas-bot-<version>
+```
+
+:::
+
+::: details Windows：没有 `tar`
+使用 7-Zip 或其他解压工具依次解开 `.gz` 与 `.tar`，进入得到的 `pallas-bot-<version>` 目录后继续下一步。
+:::
+
+## 2. 安装依赖并生成配置
+
+```bash
 uv sync --extra perf
+```
+
+::: code-group
+
+```bash [Linux / macOS]
 cp config/pallas.example.toml config/pallas.toml
-# 编辑 config/pallas.toml 的 [bootstrap]、superusers 与数据库连接
+```
+
+```powershell [Windows PowerShell]
+Copy-Item config\pallas.example.toml config\pallas.toml
+```
+
+:::
+
+编辑 `config/pallas.toml`，填写 `[bootstrap] superusers` 与 `[bootstrap.postgres]`。数据库连接示例和建库方式见 [源码安装：准备数据库](/guide/install-source#3-准备可连接的-postgresql-数据库)。
+
+## 3. 启动并验证
+
+```bash
 uv run pallas
 ```
 
-部署包已经包含对应版本的 WebUI，以及用于后续 Release 更新的浅层 Git 元数据；**不需要执行 `git init`**。`config/pallas.toml`、`data/` 与 `local/plugins/` 不进入版本控制，更新时会保留。
+启动日志出现网页控制台初始密码，且浏览器能打开 `http://<主机>:8088/pallas/` 时，本体已启动。后续步骤见 [连接 QQ](/guide/connect-qq)。
 
-Bot 本体和 WebUI 使用独立的更新开关。需要更新时见[更新 Pallas-Bot](/guide/update)。需要自行修改内核、运行测试或提交 PR 时，再使用[源码安装](/guide/install-source)。
+部署包包含对应版本的 WebUI 与 Release 更新所需的浅层 Git 元数据。`config/pallas.toml`、`data/` 和 `local/plugins/` 保留在部署目录中，更新策略见 [更新 Pallas-Bot](/guide/update)。
 
-## V4 本体职责
+## 安装后继续配置
 
-本体负责：
+1. 打开 [网页控制台](/guide/web-console)，登录并查看运行状态。
+2. 按 [连接 QQ](/guide/connect-qq) 接入协议端与机器人账号。
+3. 为每只牛牛配置 [号主](/guide/bot-owner)，再安装需要的 [插件](/guide/install-plugins)。
+4. 上线前走查 [安装验收 Checklist](ga-install-checklist.md)。
 
-- 消息入口
-- 插件加载
-- 配置合并（`pallas.toml` → `.env` → `webui.json`）
-- WebUI API 与默认静态目录 `data/pb_webui/public-react/`
-- 分片协调
-- 媒体 / RWKV callback 落地
+## 其他安装路径
 
-决斗、MAA 等由官方插件提供，见 [安装官方插件](official-extensions.md)。
-
-## 下一步
-
-1. 按所选入口完成安装与启动。
-2. 接入协议端：[协议端](protocol.md) 或 [连接 QQ](/guide/connect-qq)。
-3. 上线前走查：[安装验收 Checklist](ga-install-checklist.md)。
+- 希望由 Compose 同时管理 Bot、PostgreSQL 和控制台时，使用 [Docker 部署](/maintainer/deploy/docker)。宿主机不需要安装 Python、`uv` 或 PostgreSQL。
+- 需要修改本体、运行测试或提交 PR 时，使用 [源码安装](/guide/install-source)。

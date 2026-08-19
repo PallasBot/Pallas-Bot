@@ -1,8 +1,8 @@
 # 写社区插件并上架
 
-> 目标：把仓库整理成商店可识别的形态，自检通过后上架到社区插件商店
-> 准备：已完成插件开发；了解 [Golden Plugin](/developer/plugin-development/golden-plugin) 代码合同
-> 完成之后：向 [community-plugin-index](https://github.com/PallasBot/community-plugin-index) 提 PR，收录后用户可安装
+> **目标**：把仓库整理成商店可识别的形态，自检通过后上架到社区插件商店  
+> **准备**：已完成插件开发；了解 [Golden Plugin](/developer/plugin-development/golden-plugin) 代码合同  
+> **完成之后**：向 [community-plugin-index](https://github.com/PallasBot/community-plugin-index) 提 PR，收录后用户可安装
 
 用户安装见 [社区插件商店](community-plugin-store.md)。
 
