@@ -1,3 +1,5 @@
+import asyncio
+
 from pallas.product.llm.memory.store import apply_memory_lifecycle_overlay
 
 
@@ -73,3 +75,52 @@ def test_lifecycle_overlay_applies_time_decay(monkeypatch) -> None:
     # 90 天前（3 个半衰期）→ 100 * 0.125 = 12.5 → 12
     assert scores[2] <= scores[1]
     assert scores[2] <= 13
+
+
+def test_touch_updates_updated_at_when_not_in_cooldown(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from pallas.product.llm.memory import store
+
+    committed: list[str] = []
+
+    class FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_a):
+            return False
+
+        async def get(self, _model, entry_id):  # noqa: ARG002
+            return SimpleNamespace(updated_at=0)
+
+        async def commit(self):
+            committed.append("commit")
+
+    monkeypatch.setattr(store, "get_session", lambda **_: FakeSession())
+    cfg = SimpleNamespace(llm_memory_hit_boost_enabled=True, llm_memory_hit_boost_sec=3600)
+    asyncio.run(store.touch_memory_hit_timestamps([1], cfg=cfg))
+    assert "commit" in committed
+
+
+def test_touch_skips_when_disabled(monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    from pallas.product.llm.memory import store
+
+    committed: list[str] = []
+
+    class FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_a):
+            return False
+
+        async def commit(self):
+            committed.append("commit")
+
+    monkeypatch.setattr(store, "get_session", lambda **_: FakeSession())
+    cfg = SimpleNamespace(llm_memory_hit_boost_enabled=False, llm_memory_hit_boost_sec=3600)
+    asyncio.run(store.touch_memory_hit_timestamps([1], cfg=cfg))
+    assert committed == []

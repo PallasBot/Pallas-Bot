@@ -115,8 +115,9 @@ def apply_memory_lifecycle_overlay(candidates: list[dict[str, Any]]) -> list[dic
         if overlay.get("frozen"):
             continue
         result = dict(item)
+        decay_base = item.get("updated_at") or item.get("created_at") or 0
         decay = memory_time_decay_factor(
-            item.get("created_at"),
+            decay_base,
             half_life_days=half_life,
             min_importance=min_importance,
             importance=item.get("importance"),
@@ -359,6 +360,35 @@ async def retrieve_memory_entries(
     return [str(item.get("content") or "").strip() for item in hits]
 
 
+async def touch_memory_hit_timestamps(
+    entry_ids: list[object],
+    *,
+    cfg: LlmConfig | None = None,
+) -> None:
+    """检索命中后刷新 updated_at（冷却内不重复），使半衰期衰减以最近命中为基准。"""
+    ids = [int(item) for item in entry_ids if str(item or "").isdigit() and int(item) > 0]
+    if not ids:
+        return
+    c = cfg or get_llm_config()
+    if not getattr(c, "llm_memory_hit_boost_enabled", True):
+        return
+    boost_sec = max(0, int(getattr(c, "llm_memory_hit_boost_sec", 3600) or 0))
+    now = int(time.time())
+    try:
+        async with get_session() as session:
+            for entry_id in ids:
+                row = await session.get(LlmMemoryEntryRow, entry_id)
+                if row is None:
+                    continue
+                # 冷却内（boost_sec 秒内已强化过）跳过，避免高频对话反复刷新
+                if boost_sec > 0 and (now - int(row.updated_at or 0)) < boost_sec:
+                    continue
+                row.updated_at = now
+            await session.commit()
+    except Exception as exc:
+        logger.debug("Memory hit timestamp touch skipped: {}", exc)
+
+
 async def retrieve_memory_hits(
     bot_id: int,
     group_id: int | None,
@@ -460,6 +490,7 @@ async def retrieve_memory_hits(
         out.append(item)
         if len(out) >= top_k:
             break
+    await touch_memory_hit_timestamps([item.get("id") for item in out], cfg=c)
     return out
 
 
