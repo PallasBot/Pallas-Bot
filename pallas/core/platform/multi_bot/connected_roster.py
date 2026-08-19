@@ -20,6 +20,7 @@ from pallas.core.platform.shard.presence_health import clear_health_quarantine
 _connected_bots: set[int] = set()
 _hooks_registered = False
 _shutting_down = False
+_startup_count_scheduled = False
 
 
 async def ensure_bot_runtime_storage(qq: int) -> bool:
@@ -37,6 +38,28 @@ def note_connected_bot(qq: int) -> None:
 
 def note_disconnected_bot(qq: int) -> None:
     _connected_bots.discard(int(qq))
+
+
+def schedule_startup_bot_count_report() -> None:
+    """去抖聚合并输出一次本进程已连接牛牛总数（启动期一次，随后静默）。
+
+    由 on_bot_connect 在首次连接后触发，去抖 3 秒兜底后续 Bot 陆续接入；
+    输出后不再重复。逐条连接仍保持 DEBUG，避免 INFO 刷屏。
+    """
+    global _startup_count_scheduled
+    if _startup_count_scheduled:
+        return
+    _startup_count_scheduled = True
+    loop = asyncio.get_running_loop()
+    loop.call_later(3.0, _report_startup_bot_count)
+    loop.call_later(6.0, _report_startup_bot_count)
+
+
+def _report_startup_bot_count() -> None:
+    if _shutting_down:
+        return
+    count = len(_connected_bots)
+    logger.info("本进程已连接 {} 个牛牛账号", count)
 
 
 def mark_process_shutting_down() -> None:
@@ -104,6 +127,7 @@ async def on_bot_connect(bot: Bot) -> None:
             clear_health_quarantine(qq)
 
         note_connected_bot(qq)
+        schedule_startup_bot_count_report()
         note_bot_session_seen(qq)
         await clear_protocol_bot_offline(qq)
         clear_health_quarantine(qq)
