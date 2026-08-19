@@ -66,6 +66,7 @@ from pallas.product.llm.memory import (
     save_relationship_note,
 )
 from pallas.product.llm.memory.auto_episode import maybe_auto_save_episode
+from pallas.product.llm.memory.auto_ip_knowledge import schedule_auto_save_ip_knowledge
 from pallas.product.llm.message_guard import normalize_llm_chat_user_text
 from pallas.product.llm.persona_context import build_persona_llm_context
 from pallas.product.llm.reply_gate import evaluate_llm_reply_gate_result, reply_gate_skip_metric
@@ -969,6 +970,14 @@ async def prepare_and_submit_llm_chat_turn(
                 )
             except Exception as exc:
                 logger.debug("llm chat auto_episode skipped: {}", exc)
+            try:
+                schedule_auto_save_ip_knowledge(
+                    bot_id=int(bot.self_id),
+                    group_id=int(group_id),
+                    cfg=llm_cfg,
+                )
+            except Exception as exc:
+                logger.debug("llm chat auto_ip_knowledge schedule skipped: {}", exc)
 
         if not result.task_id:
             await TaskManager.remove_task(request_id)

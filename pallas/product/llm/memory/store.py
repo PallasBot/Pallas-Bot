@@ -68,6 +68,7 @@ def derive_memory_metadata(
         "teach": (0.8, 0.9),
         "auto_episode": (0.3, 0.4),
         "auto_episode_summary": (0.5, 0.6),
+        "auto_ip_knowledge": (0.6, 0.7),
     }
     default_importance, default_confidence = source_defaults.get((source or "").strip(), (0.5, 0.5))
 

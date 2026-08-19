@@ -307,6 +307,9 @@ class LlmConfig(BaseModel):
     llm_memory_auto_episode_enabled: bool = Field(default=True)
     llm_memory_auto_episode_summary_enabled: bool = Field(default=False)
     llm_memory_auto_episode_cooldown_sec: int = Field(default=120, ge=0, le=3600)
+    llm_memory_auto_ip_enabled: bool = Field(default=False)
+    llm_memory_auto_ip_cooldown_sec: int = Field(default=1800, ge=0, le=86400)
+    llm_memory_auto_ip_daily_budget: int = Field(default=100, ge=0, le=100000)
     llm_memory_graph_extract_enabled: bool = Field(default=True)
     llm_memory_graph_extract_on_write: bool = Field(default=False)
     llm_memory_hiergraph_max_layers: int = Field(default=3, ge=1, le=6)
@@ -537,6 +540,9 @@ def get_llm_config() -> LlmConfig:
             llm_memory_auto_episode_enabled=_env_bool("LLM_MEMORY_AUTO_EPISODE_ENABLED", True),
             llm_memory_auto_episode_summary_enabled=_env_bool("LLM_MEMORY_AUTO_EPISODE_SUMMARY_ENABLED", False),
             llm_memory_auto_episode_cooldown_sec=_env_int("LLM_MEMORY_AUTO_EPISODE_COOLDOWN_SEC", 120),
+            llm_memory_auto_ip_enabled=_env_bool("LLM_MEMORY_AUTO_IP_ENABLED", False),
+            llm_memory_auto_ip_cooldown_sec=_env_int("LLM_MEMORY_AUTO_IP_COOLDOWN_SEC", 1800),
+            llm_memory_auto_ip_daily_budget=_env_int("LLM_MEMORY_AUTO_IP_DAILY_BUDGET", 100),
             llm_memory_graph_extract_enabled=_env_bool("LLM_MEMORY_GRAPH_EXTRACT_ENABLED", True),
             llm_memory_graph_extract_on_write=_env_bool("LLM_MEMORY_GRAPH_EXTRACT_ON_WRITE", False),
             llm_memory_hiergraph_max_layers=_env_int("LLM_MEMORY_HIERGRAPH_MAX_LAYERS", 3),
