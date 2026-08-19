@@ -67,10 +67,9 @@ docker exec pallas-pg pg_isready
 :::
 
 ::: details 备选：本机安装 PostgreSQL
-| 系统 | 文档 |
-| --- | --- |
-| Windows | [PostgreSQL Windows 安装包](https://www.postgresql.org/download/windows/) |
-| Linux / macOS | [PostgreSQL 官方下载](https://www.postgresql.org/download/) |
+
+- Windows 使用 [PostgreSQL Windows 安装包](https://www.postgresql.org/download/windows/)。
+- Linux / macOS 使用 [PostgreSQL 官方下载](https://www.postgresql.org/download/)。
 
 建一个空库（示例名 `PallasBot`），账号能建表即可。权限说明见 [deploy/pg](https://github.com/PallasBot/Pallas-Bot/blob/main/deploy/pg/README.md)。
 :::

@@ -7,11 +7,9 @@
 
 ## 开始前准备
 
-| 需要准备 | 说明 |
-| --- | --- |
-| 可登录的网页控制台 | 路径 **插件商店 → 社区插件** |
-| 运行环境可执行 `git` | WebUI 安装依赖 git |
-| （推荐）`extra_plugin_dirs` | 在 `pallas.toml` 的 `[bootstrap]` 写明 `["local/plugins"]` |
+- **可登录的网页控制台**：进入 **插件商店 → 社区插件**。
+- **可执行 `git` 的运行环境**：WebUI 安装社区插件时使用 Git。
+- **`extra_plugin_dirs`**（推荐）：在 `pallas.toml` 的 `[bootstrap]` 写明 `["local/plugins"]`。
 
 ## WebUI 安装（推荐）
 
