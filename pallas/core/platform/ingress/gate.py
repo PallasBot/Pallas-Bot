@@ -14,6 +14,7 @@ from pallas.core.platform.federate.ingress import claim_federate_group_message_i
 from pallas.core.platform.federate.peer_bots import (
     federate_peer_bot_ids_contains,
     federate_peer_declared_command_plaintext,
+    get_federate_peer_bot_ids,
     should_process_federate_group_on_current_deployment,
     should_yield_federate_ingress_for_peer_command,
     start_federate_peer_bot_sync_loop,
@@ -75,7 +76,10 @@ def pallas_at_targets(event: GroupMessageEvent) -> frozenset[int]:
     ats = group_at_qq_ids(event)
     if not ats:
         return frozenset()
-    return ats & get_fleet_bot_ids()
+    # @ 本部署舰队或联邦对端的牛都算定向点名：对端牛也在群里，被 @ 时
+    # 本机不应因「本地 fleet 没有该号」而把消息当闲聊接走。
+    bot_ids = get_fleet_bot_ids() | get_federate_peer_bot_ids()
+    return ats & bot_ids
 
 
 def ingress_fanout_early_exit(

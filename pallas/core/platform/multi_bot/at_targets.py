@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from pallas.core.platform.federate.peer_bots import get_federate_peer_bot_ids
 from pallas.core.platform.multi_bot.fleet import get_fleet_bot_ids
 
 _AT_QQ_RE = re.compile(r"\[(?:CQ:)?at(?:,qq=|:qq=)(\d+)")
@@ -35,7 +36,7 @@ def group_at_qq_ids(event) -> frozenset[int]:
 
 
 def message_at_fleet_bot(event) -> bool:
-    fleet = get_fleet_bot_ids()
+    fleet = get_fleet_bot_ids() | get_federate_peer_bot_ids()
     if not fleet:
         return False
     return bool(group_at_qq_ids(event) & fleet)
