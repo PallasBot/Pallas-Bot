@@ -25,6 +25,7 @@ def _jsonable_sing_progress(obj: Any) -> Any:
 
 def bot_config_to_public(doc_or_row: Any, *, include_audit: bool = False) -> dict[str, Any]:
     """统一 Mongo Document 与 PG Row 的 JSON 形态。"""
+    raw_persona = dict(doc_or_row.persona) if getattr(doc_or_row, "persona", None) else None
     data = {
         "account": int(doc_or_row.account),
         "admins": list(doc_or_row.admins or []),
@@ -35,12 +36,19 @@ def bot_config_to_public(doc_or_row: Any, *, include_audit: bool = False) -> dic
         "drunk": dict(doc_or_row.drunk or {}),
         "disabled_plugins": list(doc_or_row.disabled_plugins or []),
         "community_roster_show_qq": bool(getattr(doc_or_row, "community_roster_show_qq", True)),
-        "persona": dict(doc_or_row.persona) if getattr(doc_or_row, "persona", None) else None,
+        "persona": raw_persona,
+        "account_profile_effective": _effective_account_profile(int(doc_or_row.account), raw_persona),
         "group_style_enabled": bool(getattr(doc_or_row, "group_style_enabled", True)),
     }
     if include_audit:
         data["disabled_plugins_audit"] = list(getattr(doc_or_row, "disabled_plugins_audit", None) or [])
     return data
+
+
+def _effective_account_profile(account: int, raw_persona: dict[str, Any] | None) -> dict[str, Any]:
+    from pallas.product.persona.account_profile import resolve_account_persona_profile
+
+    return resolve_account_persona_profile(raw_persona, int(account)).model_dump(mode="json")
 
 
 async def bot_community_roster_show_qq_by_accounts(account_ids: list[int]) -> dict[int, bool]:
