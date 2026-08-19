@@ -11,7 +11,11 @@ from nonebot import logger
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.inference_params import task_token_budget
 from pallas.product.llm.kernel.memory_governance import can_read_persistent_memory
-from pallas.product.llm.memory.policy import classify_memory_candidate, has_event_signal
+from pallas.product.llm.memory.policy import (
+    classify_memory_candidate,
+    has_event_signal,
+    has_transient_signal,
+)
 from pallas.product.llm.memory.store import is_llm_memory_store_available, save_memory_entry
 from pallas.product.llm.provider_client import complete_chat_message
 from pallas.product.llm.session_store import list_group_ambient_messages
@@ -160,6 +164,8 @@ async def maybe_auto_save_group_episode(*, bot_id: int, group_id: int | None, cf
             return False
         summary = str(message.get("content") or "").strip() if isinstance(message, dict) else ""
         if summary in {"", "无", "无。"} or classify_memory_candidate(summary) != "episode_note":
+            return False
+        if has_transient_signal(summary):
             return False
         ok = await _save_auto_episode(bot_id=bid, group_id=gid, content=summary, source="auto_episode_summary", cfg=c)
         if ok:
