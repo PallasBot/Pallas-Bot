@@ -114,6 +114,9 @@ class Learner:
         if predecessor is not None:
             await Learner._context_insert(chat_data, predecessor)
         await MessageStore.persist_message(chat_data)
+        from pallas.product.llm.memory.auto_episode import schedule_auto_save_group_episode
+
+        schedule_auto_save_group_episode(bot_id=chat_data.bot_id, group_id=chat_data.group_id)
 
     @staticmethod
     async def _context_insert(chat_data: "ChatData", pre_msg: MessageModel | None):

@@ -8,6 +8,7 @@ from typing import Any
 
 from nonebot import logger
 
+from pallas.core.foundation.db import make_message_repository
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.inference_params import task_token_budget
 from pallas.product.llm.kernel.memory_governance import can_read_persistent_memory
@@ -18,7 +19,6 @@ from pallas.product.llm.memory.policy import (
 )
 from pallas.product.llm.memory.store import is_llm_memory_store_available, save_memory_entry
 from pallas.product.llm.provider_client import complete_chat_message
-from pallas.product.llm.session_store import list_group_ambient_messages
 
 _LAST_WRITE_AT: dict[tuple[int, int], float] = {}
 _LAST_SUMMARY_SIGNATURE: dict[tuple[int, int], str] = {}
@@ -106,21 +106,27 @@ async def maybe_auto_save_episode(
     )
 
 
-def _group_episode_transcript(turns: list[Any]) -> str:
-    user_turns = [turn for turn in turns if str(getattr(turn, "role", "")) == "user"]
-    participants = {
-        int(getattr(turn, "user_id", 0) or 0) for turn in user_turns if int(getattr(turn, "user_id", 0) or 0)
-    }
-    if len(user_turns) < 3 or len(participants) < 2:
-        return ""
-    lines: list[str] = []
-    for turn in turns:
-        if str(getattr(turn, "role", "")) != "user":
+def _group_episode_transcript(messages: list[Any], *, bot_id: int) -> str:
+    rows: list[tuple[int, str, str]] = []
+    participants: set[int] = set()
+    total_chars = 0
+    for message in messages[-24:]:
+        user_id = int(getattr(message, "user_id", 0) or 0)
+        if not user_id or user_id == int(bot_id):
             continue
-        text = str(getattr(turn, "content", "") or "").strip()
-        if text:
-            lines.append(f"群友：{text[:240]}")
-    return "\n".join(lines)
+        text = str(getattr(message, "plain_text", "") or getattr(message, "content", "") or "").strip()
+        if not text:
+            continue
+        text = text[:180]
+        if total_chars + len(text) > 3600:
+            break
+        total_chars += len(text)
+        participants.add(user_id)
+        speaker = str(getattr(message, "sender_name", "") or "").strip() or f"群友#{user_id % 10000:04d}"
+        rows.append((user_id, speaker, text))
+    if len(rows) < 3 or len(participants) < 2:
+        return ""
+    return "\n".join(f"{speaker}：{text}" for _, speaker, text in rows)
 
 
 async def maybe_auto_save_group_episode(*, bot_id: int, group_id: int | None, cfg: LlmConfig | None = None) -> bool:
@@ -141,11 +147,11 @@ async def maybe_auto_save_group_episode(*, bot_id: int, group_id: int | None, cf
     _GROUP_EPISODE_SUMMARY_IN_FLIGHT.add(key)
     try:
         try:
-            turns = await list_group_ambient_messages(bid, gid, limit=12, cfg=c)
+            messages = await make_message_repository().find_recent_in_group(gid, limit=25)
         except Exception as exc:
-            logger.warning("Group episode history read failed for bot [{}] and group [{}]: [{}]", bid, gid, exc)
+            logger.warning("Group episode message read failed for bot [{}] and group [{}]: [{}]", bid, gid, exc)
             return False
-        transcript = _group_episode_transcript(turns)
+        transcript = _group_episode_transcript(messages, bot_id=bid)
         if not transcript or _LAST_SUMMARY_SIGNATURE.get(key) == transcript:
             return False
         try:

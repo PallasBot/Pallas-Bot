@@ -21,6 +21,14 @@ from pallas.product.llm.memory.auto_episode import (
 from pallas.product.llm.session_models import LlmChatTurn
 
 
+def message_repo(fetch):
+    class Repo:
+        async def find_recent_in_group(self, group_id: int, *, limit: int):  # noqa: ARG002
+            return await fetch()
+
+    return Repo()
+
+
 @pytest.mark.asyncio
 async def test_auto_episode_skips_low_value(monkeypatch: pytest.MonkeyPatch) -> None:
     clear_auto_episode_cooldown_for_tests()
@@ -98,7 +106,9 @@ async def test_auto_episode_summarizes_shared_group_event(monkeypatch: pytest.Mo
 
     monkeypatch.setattr("pallas.product.llm.memory.auto_episode.is_llm_memory_store_available", lambda: True)
     monkeypatch.setattr("pallas.product.llm.memory.auto_episode.can_read_persistent_memory", lambda _cfg=None: True)
-    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.list_group_ambient_messages", fake_list)
+    monkeypatch.setattr(
+        "pallas.product.llm.memory.auto_episode.make_message_repository", lambda: message_repo(fake_list)
+    )
     monkeypatch.setattr("pallas.product.llm.memory.auto_episode.complete_chat_message", fake_complete)
     monkeypatch.setattr("pallas.product.llm.memory.auto_episode.save_memory_entry", fake_save)
 
@@ -140,7 +150,9 @@ async def test_auto_episode_summary_runs_once_while_group_summary_is_in_flight(
 
     monkeypatch.setattr("pallas.product.llm.memory.auto_episode.is_llm_memory_store_available", lambda: True)
     monkeypatch.setattr("pallas.product.llm.memory.auto_episode.can_read_persistent_memory", lambda _cfg=None: True)
-    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.list_group_ambient_messages", fake_list)
+    monkeypatch.setattr(
+        "pallas.product.llm.memory.auto_episode.make_message_repository", lambda: message_repo(fake_list)
+    )
     monkeypatch.setattr("pallas.product.llm.memory.auto_episode.complete_chat_message", fake_complete)
     monkeypatch.setattr("pallas.product.llm.memory.auto_episode.save_memory_entry", fake_save)
     cfg = LlmConfig(llm_memory_auto_episode_enabled=True, llm_memory_auto_episode_summary_enabled=True)
@@ -178,7 +190,9 @@ async def test_auto_episode_summary_rejects_future_behavior_instruction(monkeypa
 
     monkeypatch.setattr("pallas.product.llm.memory.auto_episode.is_llm_memory_store_available", lambda: True)
     monkeypatch.setattr("pallas.product.llm.memory.auto_episode.can_read_persistent_memory", lambda _cfg=None: True)
-    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.list_group_ambient_messages", fake_list)
+    monkeypatch.setattr(
+        "pallas.product.llm.memory.auto_episode.make_message_repository", lambda: message_repo(fake_list)
+    )
     monkeypatch.setattr("pallas.product.llm.memory.auto_episode.complete_chat_message", fake_complete)
     monkeypatch.setattr("pallas.product.llm.memory.auto_episode.save_memory_entry", fake_save)
     cfg = LlmConfig(llm_memory_auto_episode_enabled=True, llm_memory_auto_episode_summary_enabled=True)
@@ -324,7 +338,9 @@ async def test_auto_episode_respects_daily_budget(monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr("pallas.product.llm.memory.auto_episode.is_llm_memory_store_available", lambda: True)
     monkeypatch.setattr("pallas.product.llm.memory.auto_episode.can_read_persistent_memory", lambda _cfg=None: True)
-    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.list_group_ambient_messages", fake_list)
+    monkeypatch.setattr(
+        "pallas.product.llm.memory.auto_episode.make_message_repository", lambda: message_repo(fake_list)
+    )
     monkeypatch.setattr("pallas.product.llm.memory.auto_episode.complete_chat_message", fake_complete)
     monkeypatch.setattr("pallas.product.llm.memory.auto_episode.save_memory_entry", fake_save)
 

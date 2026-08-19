@@ -125,8 +125,13 @@ async def test_process_work_payload_persists_message_and_uses_captured_predecess
     )
     context_insert = AsyncMock()
     persist = AsyncMock()
+    scheduled = []
     monkeypatch.setattr(Learner, "_context_insert", context_insert)
     monkeypatch.setattr("packages.repeater.learner.MessageStore.persist_message", persist)
+    monkeypatch.setattr(
+        "pallas.product.llm.memory.auto_episode.schedule_auto_save_group_episode",
+        lambda **kwargs: scheduled.append(kwargs),
+    )
     marked: list[int] = []
     monkeypatch.setattr("pallas.product.persona.group_style_refresh.mark_group_style_dirty", marked.append)
 
@@ -134,6 +139,7 @@ async def test_process_work_payload_persists_message_and_uses_captured_predecess
 
     context_insert.assert_awaited_once()
     persist.assert_awaited_once()
+    assert scheduled == [{"bot_id": 100, "group_id": 42}]
     assert marked == []
 
 
