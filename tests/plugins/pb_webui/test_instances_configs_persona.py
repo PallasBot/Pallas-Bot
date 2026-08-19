@@ -155,7 +155,7 @@ async def test_bot_persona_endpoint_removes_profile_without_losing_other_fields(
     assert persisted["peer_aliases"] == ["隔壁牛"]
 
 
-@pytest.mark.parametrize("retired_field", ["disposition", "seed", "seed_override"])
+@pytest.mark.parametrize("retired_field", ["seed"])
 @pytest.mark.asyncio
 async def test_bot_persona_endpoint_rejects_retired_editor_fields(
     monkeypatch: pytest.MonkeyPatch,
@@ -176,6 +176,64 @@ async def test_bot_persona_endpoint_rejects_retired_editor_fields(
     assert response.status_code == 422
 
 
+@pytest.mark.parametrize("open_field", ["disposition", "seed_override"])
+@pytest.mark.asyncio
+async def test_bot_persona_endpoint_accepts_seed_and_disposition(
+    monkeypatch: pytest.MonkeyPatch,
+    open_field: str,
+) -> None:
+    from packages.pb_webui import instances_configs_api as api
+
+    class Repo:
+        def __init__(self) -> None:
+            self.persona = {"self_aliases": ["猪猪"]}
+            self.upserts: list[dict] = []
+
+        async def get_or_create(self, account, **defaults):  # noqa: ARG002
+            return None, False
+
+        async def get(self, account, ignore_cache=False):  # noqa: ARG002
+            return type(
+                "BotConfig",
+                (),
+                {
+                    "account": account,
+                    "admins": [],
+                    "disabled_plugins": [],
+                    "taken_name": {},
+                    "drunk": {},
+                    "persona": deepcopy(self.persona),
+                },
+            )()
+
+        async def upsert_fields(self, account, fields):  # noqa: ARG002
+            self.upserts.append(deepcopy(fields))
+            self.persona = deepcopy(fields["persona"])
+
+    repo = Repo()
+    monkeypatch.setattr(api, "check_pallas_write_token", lambda *args, **kwargs: None)
+    monkeypatch.setattr("pallas.core.foundation.db.make_bot_config_repository", lambda: repo)
+    app = FastAPI()
+    register_instances_configs_router(app.router, x="/pallas/api", plugin_config=Config())
+
+    payload = {"persona": {}}
+    if open_field == "disposition":
+        payload["persona"]["disposition"] = {"approach": "先接住对方情绪再给结论"}
+    else:
+        payload["persona"]["seed_override"] = {"prefs": ["chaotic"]}
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.put("/pallas/api/bot-configs/7", json=payload)
+
+    assert response.status_code == 200
+    assert len(repo.upserts) == 1
+    persisted = repo.upserts[0]["persona"]
+    if open_field == "disposition":
+        assert persisted["disposition"]["approach"] == "先接住对方情绪再给结论"
+    else:
+        assert persisted["seed_override"]["prefs"] == ["chaotic"]
+
+
 def test_bot_persona_openapi_uses_typed_account_profile() -> None:
     app = FastAPI()
     register_instances_configs_router(app.router, x="/pallas/api", plugin_config=Config())
@@ -185,4 +243,4 @@ def test_bot_persona_openapi_uses_typed_account_profile() -> None:
     persona_ref = patch_schema["properties"]["persona"]["anyOf"][0]["$ref"]
     persona_schema = schema["components"]["schemas"][persona_ref.rsplit("/", 1)[-1]]
 
-    assert set(persona_schema["properties"]) == {"account_profile"}
+    assert set(persona_schema["properties"]) == {"account_profile", "disposition", "seed_override"}

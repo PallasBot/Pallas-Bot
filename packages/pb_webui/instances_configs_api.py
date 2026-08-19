@@ -67,7 +67,7 @@ async def _apply_bot_config_patch(account: int, body: _BotConfigPatch) -> dict[s
         incoming = fields.get("persona")
         if (
             isinstance(incoming, dict)
-            and any(key in incoming for key in ("account_profile", "seed_override", "seed"))
+            and any(key in incoming for key in ("account_profile", "seed_override", "seed", "disposition"))
             and not any(key in incoming for key in ("source", "derived", "version"))
         ):
             current = await repo.get(account)
@@ -174,6 +174,8 @@ class _BotPersonaPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     account_profile: AccountPersonaProfile | None = None
+    seed_override: dict[str, Any] | None = None
+    disposition: dict[str, Any] | None = None
 
 
 class _BotConfigPatch(BaseModel):
