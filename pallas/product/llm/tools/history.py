@@ -32,7 +32,20 @@ def register_history_tools() -> None:
             handler=handle_chat_history,
             capabilities=frozenset({ToolCapability.READ_ONLY.value, ToolCapability.REQUIRES_GROUP_CONTEXT.value}),
             visibility="deferred",
-            hints=frozenset({"聊天记录", "看聊天记录", "翻聊天记录", "翻历史"}),
+            hints=frozenset({
+                "聊天记录",
+                "看聊天记录",
+                "翻聊天记录",
+                "翻历史",
+                "谁说的",
+                "谁定的",
+                "谁规定的",
+                "谁提的",
+                "哪个人说的",
+                "具体是谁",
+                "展开讲讲",
+                "详细说说",
+            }),
         )
     )
     register_tool(
@@ -51,6 +64,14 @@ def register_history_tools() -> None:
                 "刚才在聊什么",
                 "总结一下群聊",
                 "群里最近",
+                "谁说的",
+                "谁定的",
+                "谁规定的",
+                "谁提的",
+                "哪个人说的",
+                "具体是谁",
+                "展开讲讲",
+                "详细说说",
             }),
             estimated_duration_ms=1500,
         )
@@ -74,12 +95,14 @@ async def handle_chat_history(arguments: dict[str, Any], context: ToolInvokeCont
 
 async def recent_group_message_rows(context: ToolInvokeContext, *, limit: int) -> list[dict[str, Any]]:
     from pallas.core.foundation.db import make_message_repository
+    from pallas.product.llm.sender_identity import sender_kind
 
     messages = await make_message_repository().find_recent_in_group(int(context.group_id or 0), limit=limit + 1)
     rows: list[dict[str, Any]] = []
     total_chars = 0
     for message in messages[-limit:]:
-        if int(getattr(message, "user_id", 0) or 0) == int(context.bot_id):
+        kind = sender_kind(getattr(message, "user_id", 0), self_bot_id=context.bot_id)
+        if kind != "human":
             continue
         text = sanitize_prompt_literal(str(getattr(message, "plain_text", "") or ""), max_len=180)
         if not text:

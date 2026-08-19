@@ -709,6 +709,7 @@ async def prepare_and_submit_llm_chat_turn(
                 group_timeline = await build_recent_group_timeline(
                     int(group_id),
                     current_message_id=message_id or None,
+                    self_bot_id=int(bot.self_id),
                 )
             except Exception:
                 logger.debug("group timeline context skipped for group [{}]", group_id)
