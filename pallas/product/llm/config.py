@@ -297,7 +297,7 @@ class LlmConfig(BaseModel):
     llm_memory_auto_episode_enabled: bool = Field(default=False)
     llm_memory_auto_episode_summary_enabled: bool = Field(default=True)
     llm_memory_auto_episode_cooldown_sec: int = Field(default=600, ge=0, le=3600)
-    llm_memory_auto_episode_daily_budget: int = Field(default=100, ge=0, le=100000)
+    llm_memory_auto_episode_daily_budget: int = Field(default=30, ge=0, le=100000)
     llm_memory_auto_ip_enabled: bool = Field(default=False)
     llm_memory_auto_ip_cooldown_sec: int = Field(default=1800, ge=0, le=86400)
     llm_memory_auto_ip_daily_budget: int = Field(default=100, ge=0, le=100000)
@@ -533,7 +533,7 @@ def get_llm_config() -> LlmConfig:
             llm_memory_auto_episode_enabled=_env_bool("LLM_MEMORY_AUTO_EPISODE_ENABLED", False),
             llm_memory_auto_episode_summary_enabled=_env_bool("LLM_MEMORY_AUTO_EPISODE_SUMMARY_ENABLED", True),
             llm_memory_auto_episode_cooldown_sec=_env_int("LLM_MEMORY_AUTO_EPISODE_COOLDOWN_SEC", 600),
-            llm_memory_auto_episode_daily_budget=_env_int("LLM_MEMORY_AUTO_EPISODE_DAILY_BUDGET", 100),
+            llm_memory_auto_episode_daily_budget=_env_int("LLM_MEMORY_AUTO_EPISODE_DAILY_BUDGET", 30),
             llm_memory_auto_ip_enabled=_env_bool("LLM_MEMORY_AUTO_IP_ENABLED", False),
             llm_memory_auto_ip_cooldown_sec=_env_int("LLM_MEMORY_AUTO_IP_COOLDOWN_SEC", 1800),
             llm_memory_auto_ip_daily_budget=_env_int("LLM_MEMORY_AUTO_IP_DAILY_BUDGET", 100),

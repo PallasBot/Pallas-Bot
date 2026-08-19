@@ -882,12 +882,12 @@ class LlmWebuiConfig(BaseModel):
         ),
     )
     llm_memory_auto_episode_daily_budget: int = Field(
-        default=100,
+        default=30,
         ge=0,
         le=100000,
         description=field_help(
             "每天最多做几次「多人共同事件」自动摘要",
-            "默认 100。想控制模型费用调低（如 50）；0=不限制",
+            "默认 30。想控制模型费用调低（如 10）；0=不限制",
             "摘要会额外调用一次模型；此预算用于防止高频群聊把费用刷爆",
         ),
     )

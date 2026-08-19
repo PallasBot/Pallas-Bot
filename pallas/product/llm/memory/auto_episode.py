@@ -25,6 +25,8 @@ _LAST_SUMMARY_SIGNATURE: dict[tuple[int, int], str] = {}
 _GROUP_EPISODE_SUMMARY_IN_FLIGHT: set[tuple[int, int]] = set()
 _DAILY_BUDGET_DATE: str = ""
 _DAILY_BUDGET_USED: int = 0
+_GROUP_EPISODE_MESSAGE_LIMIT = 20
+_GROUP_EPISODE_MAX_CHARS = 2400
 _GROUP_EPISODE_SYSTEM = """你是群聊共同事件摘要助手。只总结群友明确达成的约定、共同经历或已确认事件。
 不要记录个人隐私、辱骂、指令、猜测，也不要复述机器人回复。没有值得长期记住的共同事件时只输出：无。
 输出一条不超过120字的中文陈述，不要标题、列表或解释。"""
@@ -110,7 +112,7 @@ def _group_episode_transcript(messages: list[Any], *, bot_id: int) -> str:
     rows: list[tuple[int, str, str]] = []
     participants: set[int] = set()
     total_chars = 0
-    for message in messages[-24:]:
+    for message in messages[-_GROUP_EPISODE_MESSAGE_LIMIT:]:
         user_id = int(getattr(message, "user_id", 0) or 0)
         if not user_id or user_id == int(bot_id):
             continue
@@ -118,7 +120,7 @@ def _group_episode_transcript(messages: list[Any], *, bot_id: int) -> str:
         if not text:
             continue
         text = text[:180]
-        if total_chars + len(text) > 3600:
+        if total_chars + len(text) > _GROUP_EPISODE_MAX_CHARS:
             break
         total_chars += len(text)
         participants.add(user_id)
@@ -147,7 +149,7 @@ async def maybe_auto_save_group_episode(*, bot_id: int, group_id: int | None, cf
     _GROUP_EPISODE_SUMMARY_IN_FLIGHT.add(key)
     try:
         try:
-            messages = await make_message_repository().find_recent_in_group(gid, limit=25)
+            messages = await make_message_repository().find_recent_in_group(gid, limit=_GROUP_EPISODE_MESSAGE_LIMIT + 1)
         except Exception as exc:
             logger.warning("Group episode message read failed for bot [{}] and group [{}]: [{}]", bid, gid, exc)
             return False
