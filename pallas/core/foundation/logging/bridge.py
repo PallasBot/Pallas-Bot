@@ -92,6 +92,7 @@ _BUSINESS_LOG_LABELS = (
 
 _DISPLAY_LOG_NAME_PREFIXES = (
     "packages.",
+    "local.",
     "pallas_plugin_",
     "nonebot_plugin_",
     "pallas.core",
@@ -179,6 +180,8 @@ def display_log_name(logger_name: str) -> str:
         return "LLMChat"
     if name.startswith("packages."):
         return _pascal_case(name.split(".", 2)[1])
+    if name.startswith("local.plugins."):
+        return _pascal_case(name.split(".", 3)[2])
     for prefix in ("pallas_plugin_", "nonebot_plugin_"):
         if name.startswith(prefix):
             return _pascal_case(name.removeprefix(prefix).split(".", 1)[0])

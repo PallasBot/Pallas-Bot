@@ -215,6 +215,8 @@ def test_display_log_name_normalizes_builtin_and_external_plugin_packages() -> N
     assert display_log_name("nonebot_plugin_apscheduler") == "Apscheduler"
     assert display_log_name("pallas.core.platform.work_jobs.worker") == "WorkAux"
     assert display_log_name("pallas.core.platform.work_jobs.result_committer") == "WorkAux"
+    assert display_log_name("local.plugins.interact") == "Interact"
+    assert display_log_name("local.plugins.afdian.handlers") == "Afdian"
 
 
 def test_repo_file_log_formatter_ends_each_record_with_a_newline() -> None:
