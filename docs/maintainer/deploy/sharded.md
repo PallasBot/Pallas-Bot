@@ -4,7 +4,7 @@
 
 **默认建议**：先用 [单进程部署](single-process.md)（`unified`）+ 辅进程（如本机 Embedding 的 `bot_embed`）。热路径不阻塞时，多账号也可先留在单 ingress；分片是可选进阶，不是人人必会的主路径。
 
-尚未验证单进程瓶颈时，请先用 [单进程部署](single-process.md)。
+尚未验证单进程瓶颈时，先用 [单进程部署](single-process.md)。
 
 ## 适用条件
 
@@ -64,7 +64,7 @@ hub 与所有 worker 必须共用同一份 `data/`，否则会错乱：
 
 ### 2. Redis
 
-4.0 分片关键协调依赖 Redis（单进程不强制）。
+V4 分片关键协调依赖 Redis（单进程不强制）。
 
 `config/pallas.toml` 的 `[env]`：
 
@@ -83,7 +83,7 @@ REDIS_URL = "redis://127.0.0.1:6379/0"
 ## 启动
 
 ::: tip
-优先用仓库脚本，勿手动拼环境变量起多个进程。
+优先用仓库脚本，不要手动拼环境变量起多个进程。
 :::
 
 ```bash
@@ -168,7 +168,7 @@ REDIS_URL = "redis://127.0.0.1:6379/0"
 ## 运维要点
 
 - 分片下 Redis 为必需依赖
-- 生产用脚本或编排统一管理 hub 与 worker；勿只监控 hub
+- 生产用脚本或编排统一管理 hub 与 worker；不要只监控 hub
 - 新增 Bot、迁移协议端、调整 worker 数量后，重新核对注册表与 `ws_url`
 
 ## 相关阅读
@@ -177,4 +177,4 @@ REDIS_URL = "redis://127.0.0.1:6379/0"
 - [单进程部署](single-process.md)
 - [协议端](/maintainer/install/protocol)
 - [分片运行时（开发）](/developer/architecture/shard-runtime)
-- [Docker · 分片](/deploy/docker)
+- [Docker · 分片](/maintainer/deploy/docker)

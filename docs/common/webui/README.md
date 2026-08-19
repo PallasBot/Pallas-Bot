@@ -68,7 +68,7 @@ get_my_config = plugin_webui.get
 | `corpus_federation` | 语料联邦 | 专用 payload |
 | `ingress_fanout` | 入站：全员同响命令 | |
 | `repeater_learn` | 复读：后台语料学习 | |
-| `message_scrub` | 消息审查与入站过滤 | 4.0 默认开启 |
+| `message_scrub` | 消息审查与入站过滤 | V4 默认开启 |
 | `service_gateways` | 外部服务地址 | 画画 / MAA / 点歌 + 连通检测 |
 | `pallas_webui` / `pallas_protocol` / `help` | 各插件子集 | |
 

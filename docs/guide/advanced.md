@@ -21,9 +21,9 @@
 
 | 主题 | 文档 |
 | --- | --- |
-| 配置要点 | [配置要点](/deploy/config) |
-| systemd / 备份 | [标准部署](/deploy/deployment) |
-| Compose 镜像 | [Docker](/deploy/docker) |
+| 配置要点 | [配置要点](/maintainer/reference/config-production) |
+| systemd / 备份 | [标准部署](/maintainer/deploy/deployment) |
+| Compose 镜像 | [Docker](/maintainer/deploy/docker) |
 | 运维总入口 | [运维入口](/maintainer/quickstart) |
 
 ## 原理与开发

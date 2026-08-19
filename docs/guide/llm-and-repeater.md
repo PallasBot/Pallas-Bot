@@ -1,6 +1,16 @@
 # `@牛牛` 与复读
 
-分清两条回复路径：日常接话由 Repeater 使用本机语料；明确 `@牛牛` 才走 LLM 对话（Bot Provider）。Repeater 学到的群内表达可指导 LLM，但 LLM 不反向决定 Repeater 发哪句。
+牛牛有两条回复路径：**复读 / 接话**日常自动触发，由 Repeater 用本机语料生成；**`@牛牛` LLM 对话**走 Bot Provider 的多轮聊天。Repeater 学到的群内表达可指导 LLM，但 LLM 不反向决定 Repeater 发哪句。
+
+```mermaid
+flowchart LR
+    Msg[群消息] --> Gate{明确 @ 牛牛?}
+    Gate -->|否| Rep[复读 / 接话<br>Repeater 检索本机语料]
+    Gate -->|是| LLM[LLM 对话<br>Bot Provider 多轮]
+    Rep --> Out[发出回复]
+    LLM --> Out
+    Rep -. 学到群内表达 .-> LLM
+```
 
 ## 两条路径
 

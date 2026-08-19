@@ -1,6 +1,6 @@
 # Developer
 
-本页帮助你准备开发环境、完成第一个插件，并在需要时了解主仓运行边界。日常部署与运行维护见 [运维入口](/maintainer/quickstart)。
+本页帮助准备开发环境、完成第一个插件，并在需要时了解主仓运行边界。日常部署与运行维护见 [运维入口](/maintainer/quickstart)。
 
 ## 推荐顺序
 
@@ -31,7 +31,16 @@
 | 配置合并 | `pallas.toml` → `.env` → `webui.json` |
 | 分片 | hub / worker / Redis；消息主路径在 worker |
 
-主仓或平台开发时，可按 [架构总览](/developer/architecture/overview) → [统一消息入口](/developer/architecture/message-runtime) → [Bot 内置 Agent 生命周期](/developer/architecture/agent-lifecycle) → [LLM 输出路径](/developer/architecture/llm-output-path) → [分片](/developer/architecture/shard-runtime) → [配置存储](/developer/architecture/config-storage) → [治理](/developer/architecture/plugin-governance) → [插件业务事件日志](/developer/architecture/plugin-event-logging) 的顺序阅读。
+主仓或平台开发时，可按架构文档的顺序阅读：
+
+1. [架构总览](/developer/architecture/overview)
+2. [统一消息入口](/developer/architecture/message-runtime)
+3. [Bot 内置 Agent 生命周期](/developer/architecture/agent-lifecycle)
+4. [LLM 输出路径](/developer/architecture/llm-output-path)
+5. [分片](/developer/architecture/shard-runtime)
+6. [配置存储](/developer/architecture/config-storage)
+7. [治理](/developer/architecture/plugin-governance)
+8. [插件业务事件日志](/developer/architecture/plugin-event-logging)
 
 ## 后续阅读：目录索引
 

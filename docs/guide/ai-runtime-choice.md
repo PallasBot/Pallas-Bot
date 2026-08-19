@@ -1,6 +1,6 @@
 # LLM 对话、媒体与 AI Runtime
 
-Pallas-Bot 的日常 LLM 对话和媒体任务使用不同的运行路径。先按要启用的能力选择组件，再配置对应服务。
+Pallas-Bot 的日常 LLM 对话和媒体任务走不同的运行路径：`@牛牛` 聊天由 Bot 内核直连 Provider，唱歌 / TTS 等媒体能力才需要 Pallas-Bot-AI。按要启用的能力选组件，再配置对应服务。
 
 ## 选择组件
 
@@ -12,6 +12,16 @@ Pallas-Bot 的日常 LLM 对话和媒体任务使用不同的运行路径。先�
 | 遗留 RWKV 酒后对话 | AI Runtime 与旧聊天资源包 | 需要 |
 
 普通聊天由 Bot 进程直接请求 Provider。媒体服务离线不会阻止 `@牛牛` 聊天；反过来，Provider 可用也不能代替媒体运行环境。
+
+```mermaid
+flowchart LR
+    Need{需要什么能力?} -->|@牛牛 聊天| P[Bot 内核 + Provider<br>控制台 AI 配置]
+    Need -->|唱歌 / TTS| A[Pallas-Bot-AI + 媒体包]
+    Need -->|遗留 RWKV| R[Pallas-Bot-AI + 旧聊天资源包]
+    P -->|只配 Provider| Done[完成]
+    A -->|部署 AI Runtime| Done
+    R -->|部署 AI Runtime| Done
+```
 
 ## 配置普通聊天
 
@@ -28,7 +38,7 @@ Provider 的字段说明和接话设置见 [AI 扩展](ai.md) 与 [@牛牛与复
 
 唱歌、TTS 或遗留 RWKV 需要额外部署 Pallas-Bot-AI。部署完成后，在控制台的媒体服务区域配置连接，再安装相应能力包和插件。
 
-媒体安装步骤见 [AI Runtime 安装](/maintainer/install/ai-runtime)。Docker 部署请参阅 [Docker 部署](/deploy/docker)。
+媒体安装步骤见 [AI Runtime 安装](/maintainer/install/ai-runtime)。Docker 部署见 [Docker 部署](/maintainer/deploy/docker)。
 
 ## 排查入口
 

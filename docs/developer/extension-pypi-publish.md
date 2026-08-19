@@ -70,4 +70,4 @@ git add uv.lock && git commit -m "chore(deps): 官方插件改 PyPI 锁定"
 
 ## 升级用户说明
 
-3.x → 4.0 站点若已有 **`local/plugins/`** 副本，**不必**因 PyPI 上线而重装；pip 仅在一键安装 / 统一 venv 时需要。
+3.x → V4 站点若已有 **`local/plugins/`** 副本，**不必**因 PyPI 上线而重装；pip 仅在一键安装 / 统一 venv 时需要。

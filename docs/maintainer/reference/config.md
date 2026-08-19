@@ -1,6 +1,6 @@
 # 配置参考
 
-按配置项查找来源、覆盖顺序、热生效与重启边界。生产检查清单见 [配置要点](/deploy/config)；合并与读取 API 见 [配置存储](/developer/architecture/config-storage)。
+按配置项查找来源、覆盖顺序、热生效与重启边界。生产检查清单见 [配置要点](/maintainer/reference/config-production)；合并与读取 API 见 [配置存储](/developer/architecture/config-storage)。
 
 ## 三类来源
 
@@ -49,7 +49,7 @@
 - 冷却、频率、策略型配置
 - 已接入热重载的插件页配置
 
-::: warning
+::: warning 注意：生效条件
 能否立即生效还取决于：
 
 - 插件是否接入 `install_hot_reload_config`
@@ -119,7 +119,7 @@ uv run python tools/migrate_env_to_pallas.py
 
 | 目标 | 文档 |
 | --- | --- |
-| 生产检查清单 | [配置要点](/deploy/config) |
+| 生产检查清单 | [配置要点](/maintainer/reference/config-production) |
 | 合并顺序与读取 API | [配置存储](/developer/architecture/config-storage) |
 | 本机跑通 | [五分钟跑起来](/guide/quickstart) |
 | 部署形态 | [运维入口](/maintainer/quickstart) |

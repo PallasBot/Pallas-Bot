@@ -11,7 +11,7 @@
 
 ## 升级与维护
 
-### 版本对齐（3.x → 4.0 或日常升级）
+### 版本对齐（3.x → V4 或日常升级）
 
 ```bash
 uv run pallas maintenance run \
@@ -56,7 +56,7 @@ uv run pallas run shard            # 可选进阶：已验证瓶颈或强隔离�
 
 ## 官方插件（CLI 备选）
 
-日常装卸更新请用 **WebUI 插件商店**。CLI 仅在无 UI、脚本化或排障时使用：
+日常装卸更新用 **WebUI 插件商店**。CLI 仅在无 UI、脚本化或排障时使用：
 
 ```bash
 uv run pallas ext list
@@ -112,7 +112,7 @@ uv run pallas doctor
 | `.env` 迁移 | 独立脚本 | 待 `pallas config migrate` |
 | 全栈一键升级 | `maintenance` + 控制台 | Bot 侧 CLI，插件侧 WebUI / `ext update` |
 
-维护者清单：[升级](/maintainer/deploy/upgrade)、[4.0 迁移指南](/guide/4.0-migration)。
+维护者清单：[升级](/maintainer/deploy/upgrade)、[V4 迁移指南](/guide/4.0-migration)。
 
 ## 相关阅读
 

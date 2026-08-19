@@ -1,6 +1,6 @@
 # 写第一个插件
 
-本页带你在 `local/plugins/` 创建第一个可运行的群命令插件。完成后，你会有一个使用公开 `pallas.api.*` 的插件，并了解如何声明命令权限、帮助菜单与冷却。
+在 `local/plugins/` 创建第一个可运行的群命令插件。完成后会得到一个使用公开 `pallas.api.*` 的插件，并了解如何声明命令权限、帮助菜单与冷却。
 
 适合已经能在本机运行 Pallas-Bot、希望先做站点私有插件的开发者。这里先聚焦一条群命令；配置页、热载策略、正式插件骨架和发布方式可以在验收通过后再学习。
 
@@ -21,7 +21,7 @@
 | --- | --- |
 | 环境 | 本机已能运行 Pallas-Bot（见 [五分钟跑起来](/guide/quickstart)） |
 | 目录 | 仓库根下存在或将创建 `local/plugins/` |
-| API | 只 import `pallas.api.*`；勿用 `pallas.core.*` 或旧 `src.*` |
+| API | 只 import `pallas.api.*`；不要用 `pallas.core.*` 或旧 `src.*` |
 
 `config/pallas.toml` 显式声明插件目录（未配置时主线也会扫描 `local/plugins/`）：
 
@@ -139,7 +139,7 @@ async def handle_hello(matcher: Matcher, event: GroupMessageEvent) -> None:
 | 发命令无响应 | 目录未在 `extra_plugin_dirs`、包名与目录不一致、或改代码后未重启 |
 | 启动报 import 错 | 写了 `pallas.core.*` 或历史 `src.*` 路径 |
 | 帮助图无「何人可用」 | `menu_data` 未绑 `command_permission`，或 ID 与 matcher 不一致 |
-| 帮助里写死了「仅群管」等 | 违反 cmd_perm 约定；权限只走 metadata，文案勿写死角色 |
+| 帮助里写死了「仅群管」等 | 违反 cmd_perm 约定；权限只走 metadata，文案不要写死角色 |
 
 ## 相关
 

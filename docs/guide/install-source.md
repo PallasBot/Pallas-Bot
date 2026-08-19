@@ -1,6 +1,8 @@
 # 源码安装
 
-完成本页后，Bot 会连接 PostgreSQL 并启动网页控制台。适合需要从源码运行、修改或参与开发的使用者。
+> 目标：从源码跑起 Pallas-Bot，连接 PostgreSQL 并启动网页控制台
+> 准备：`git`、Python 3.12+（或由 `uv` 安装）、一台可长期运行的机器
+> 完成之后：源码目录可运行，控制台可访问；适合修改或参与开发的使用者
 
 ## 1. 获得可运行的源码目录
 
@@ -19,7 +21,7 @@ uv run pallas sync
 
 命令完成且未报错后，依赖已就绪。
 
-::: details 可选：自检环境
+::: details 可选：环境自检
 ```bash
 uv run pallas doctor
 ```
@@ -31,7 +33,7 @@ uv run pallas doctor
 
 需要一个**空库**，首次启动时会自动建表。下面两种方式任选其一。
 
-::: details 【推荐】Docker 起库
+::: details 推荐：Docker 起库
 ```bash
 docker run -d --name pallas-pg \
   -e POSTGRES_USER=pallas \
@@ -46,7 +48,7 @@ docker exec pallas-pg pg_isready
 `pg_isready` 回复类似 `accepting connections`，说明数据库可以使用。
 :::
 
-::: details 本机自己装 PostgreSQL
+::: details 备选：本机安装 PostgreSQL
 | 系统 | 文档 |
 | --- | --- |
 | Windows | 装 PostgreSQL（Windows） |
@@ -55,7 +57,7 @@ docker exec pallas-pg pg_isready
 建一个空库（示例名 `PallasBot`），账号能建表即可。权限说明见 [deploy/pg](https://github.com/PallasBot/Pallas-Bot/blob/main/deploy/pg/README.md)。
 :::
 
-::: details 可选：库不存在时自动建库
+::: details 可选：自动建库
 在 `[bootstrap.postgres]` 加 `auto_create_db = true`（账号需有 `CREATEDB`）。上面 Docker 方式已经建好库时不必开。
 :::
 
@@ -92,7 +94,7 @@ password = "pallas"
 db = "PallasBot"
 ```
 
-::: warning
+::: warning 注意：配置勿提交
 `pallas.toml` 已在 `.gitignore`，**不要**提交到公开仓库。
 :::
 
@@ -104,13 +106,13 @@ db = "PallasBot"
 uv run pallas
 ```
 
-这等价于 `uv run pallas run unified`。首次运行会创建数据库表，并在日志中打印 Web 控制台初始密码；这是正常现象。
+这等价于 `uv run pallas run unified`。首次运行会创建数据库表，并在日志中打印网页控制台初始密码；这是正常现象。
 
-- 日志中没有数据库 `connection refused`，且已打印**Web 控制台初始密码**，说明启动成功。密码也可在 `data/pallas_console/` 找回。
+- 日志中没有数据库 `connection refused`，且已打印**网页控制台初始密码**，说明启动成功。密码也可在 `data/pallas_console/` 找回。
 - 在浏览器打开 `http://127.0.0.1:8088/pallas/`，使用该密码登录。
 
 ::: tip
-本机用 `127.0.0.1`；挂到服务器请把访问地址换成公网 IP / 域名，并放行 **8088**。
+本机用 `127.0.0.1`；挂到服务器把访问地址换成公网 IP / 域名，并放行 **8088**。
 :::
 
 ## 接下来：登录控制台并连接 QQ

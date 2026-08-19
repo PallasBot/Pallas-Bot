@@ -34,4 +34,4 @@
 
 实现：`db_api.py` + `pallas/core/foundation/db/`；备份脚本见 `tools/scripts/`。
 
-部署说明：[Docker 部署](/deploy/docker) 卷挂载需包含 `data/`。
+部署说明：[Docker 部署](/maintainer/deploy/docker) 卷挂载需包含 `data/`。

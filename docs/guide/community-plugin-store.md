@@ -1,8 +1,10 @@
 # 社区插件商店
 
-从策展索引浏览并安装第三方插件到 `local/plugins/<id>/`。日常总装法见 [安装插件 · 社区和本地插件](install-plugins.md#社区和本地插件)。
+> 目标：浏览策展索引并安装第三方插件到 `local/plugins/<id>/`
+> 准备：可登录的网页控制台；运行环境可执行 `git`
+> 完成之后：社区插件出现在插件目录，重启后生效
 
-与 **官方插件**（pip）并存；**同名时 `local/plugins` 优先**。
+日常总装法见 [安装插件 · 社区和本地插件](install-plugins.md#社区和本地插件)。与 **官方插件**（pip）并存；**同名时 `local/plugins` 优先**。
 
 ## 开始前准备
 
@@ -52,7 +54,7 @@ extra_plugin_dirs = ["local/plugins"]
 向 [**community-plugin-index**](https://github.com/PallasBot/community-plugin-index) 提 PR，在 `index.json` 追加条目。  
 索引只存元数据，不托管源码。未收录仍可用 **从 Git 安装** 或手工目录。
 
-已收录插件发版后，请改索引里同 `id` 条目的 `version`（勿重复追加），步骤见 [写社区插件并上架 · 发版后同步索引](community-plugin-author.md#步骤-6发版后同步索引)。
+已收录插件发版后，改索引里同 `id` 条目的 `version`（不要重复追加），步骤见 [写社区插件并上架 · 发版后同步索引](community-plugin-author.md#步骤-6发版后同步索引)。
 
 ## 成功信号
 
@@ -61,10 +63,10 @@ extra_plugin_dirs = ["local/plugins"]
 
 ## 接下来做什么
 
-- 作者自检与上架 → [写社区插件并上架](community-plugin-author.md)
-- 官方 / 社区总入口 → [安装插件](install-plugins.md)
+- 作者自检与上架见 [写社区插件并上架](community-plugin-author.md)
+- 官方 / 社区总入口见 [安装插件](install-plugins.md)
 
-::: details 索引从哪来（一般不用管）
+::: details 说明：索引来源
 | 优先级 | 来源 |
 | --- | --- |
 | 高 | 环境变量 `COMMUNITY_PLUGIN_INDEX_URL` |
@@ -75,7 +77,7 @@ extra_plugin_dirs = ["local/plugins"]
 远程拉失败会回退本地文件。私有索引可在 `[env]` 设 `COMMUNITY_PLUGIN_INDEX_URL`。
 :::
 
-::: details 和官方插件谁优先
+::: details 说明：与官方插件的关系
 | 类型 | 安装方式 | 优先级 |
 | --- | --- | --- |
 | 社区 / 站点 | `local/plugins/` | 最高 |

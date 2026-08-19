@@ -1,9 +1,13 @@
 # 更新 Pallas-Bot
 
-本页用于更新已经能正常运行的 Pallas-Bot。先按部署方式选择一种路径；Docker 容器只支持正式 Release，不支持 Git 分支或 Commit 更新。
+> 目标：把已经能正常运行的 Pallas-Bot 更新到新版本
+> 准备：已备份 `config/pallas.toml` 和 `data/`（Docker 另备份卷）；先确定自己的部署方式
+> 完成之后：版本更新到目标，Bot 重新运行
 
-::: warning
-更新前备份 `config/pallas.toml` 和 `data/`。本地定制请放在 `local/plugins/`，不要直接修改已跟踪的源码文件，否则拉取上游时可能产生冲突。
+Docker 容器只支持正式 Release，不支持 Git 分支或 Commit 更新。
+
+::: warning 注意：更新前备份
+更新前备份 `config/pallas.toml` 和 `data/`。本地定制放在 `local/plugins/`，不要直接修改已跟踪的源码文件，否则拉取上游时可能产生冲突。
 :::
 
 ## 选择更新方式
@@ -27,7 +31,7 @@ docker compose --env-file ./pallas-bot/config/compose.env up -d
 docker compose --env-file ./pallas-bot/config/compose.env ps
 ```
 
-这是 Docker 的持久更新方式。重建后运行版本与新镜像一致；挂载的 `config/`、`data/` 与 `local/plugins/` 会保留。完整编排与日志命令见 [Docker 部署](/deploy/docker)。
+这是 Docker 的持久更新方式。重建后运行版本与新镜像一致；挂载的 `config/`、`data/` 与 `local/plugins/` 会保留。完整编排与日志命令见 [Docker 部署](/maintainer/deploy/docker)。
 
 Docker 用户也可在控制台“版本与更新”选择正式 Release。Bot 会下载官方 `pallas-bot-<tag>.tar.gz` 并覆盖当前容器内代码：`docker compose restart` 后仍保留，但 `docker compose up -d` 重建容器后会恢复为镜像版本。控制台会同时显示运行版和镜像版。需要长期保留时仍应拉取对应新镜像并重建。
 

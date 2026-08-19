@@ -1,7 +1,7 @@
 # 从旧版 ollama 迁到 llm_chat
 
 3.x 用过 `plugins/ollama` 或 pip 包 `pallas-plugin-llm-chat`？  
-升级后请改用 Bot 内置的 **`llm_chat`** 与 `pallas/product/llm`。普通聊天不再经 Pallas-Bot-AI。
+升级后改用 Bot 内置的 **`llm_chat`** 与 `pallas/product/llm`。普通聊天不再经 Pallas-Bot-AI。
 
 ## 变了什么
 

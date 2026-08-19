@@ -2,7 +2,7 @@
 
 本页按现象排查 LLM 对话、记忆与媒体任务。普通 LLM 聊天走 Bot Provider；Pallas-Bot-AI 仅用于媒体 / 遗留 RWKV。
 
-::: warning
+::: warning 排障：无回复与记忆失效
 `@` 无回复或记不住旧事时，优先查：`LLM_CHAT_ENABLED`、**接入** Provider 是否测通。媒体任务才查 AI Runtime / callback。
 :::
 
@@ -111,10 +111,10 @@ flowchart TD
 1. **群记忆检索**保持开；检索模式建议 `hybrid`（或 `embedding`）。
 2. **向量提供方**选「远程（OpenAI 兼容）」；本机选「本机（fastembed）」并安装依赖（见下）。
 3. 仅当向量提供方为「远程」时，在 **Embedding 线路**点 **添加网关** 选 Provider 或手填；本机 / 占位无需配线路。
-4. 保存后点上方 **探测**：应显示「语义可用」。DeepSeek 官方多数无 `/embeddings`，请换兼容网关。
+4. 保存后点上方 **探测**：应显示「语义可用」。DeepSeek 官方多数无 `/embeddings`，改用兼容网关。
 5. 换模型后旧记忆向量可能对不上，等后台回填或重新写入记忆。
 
-本机依赖（用 pip 装包，勿对含 editable 插件的环境跑会裁剪依赖的 `uv sync --extra`）：
+本机依赖（用 pip 装包，不要对含 editable 插件的环境跑会裁剪依赖的 `uv sync --extra`）：
 
 ```bash
 uv pip install 'fastembed>=0.5'

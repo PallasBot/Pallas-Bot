@@ -1,8 +1,8 @@
-# 4.0 安装验收 Checklist
+# V4 安装验收 Checklist
 
 维护者从 **0** 安装时按本清单走查。每条打勾前记录 **日期 / 环境**（OS、GPU、Docker 版本）；失败项记录现象与日志路径。
 
-相关文档：[Docker 部署](/deploy/docker) · [AI Runtime](ai-runtime.md) · [运维入口](/maintainer/quickstart) · [升级](/maintainer/deploy/upgrade) · [FAQ](/deploy/faq)
+相关文档：[Docker 部署](/maintainer/deploy/docker) · [AI Runtime](ai-runtime.md) · [运维入口](/maintainer/quickstart) · [升级](/maintainer/deploy/upgrade) · [FAQ](/deploy/faq)
 
 ---
 
@@ -24,8 +24,8 @@
 
 ### A1. 准备目录与配置
 
-- [ ] 新建部署目录（例 `~/pallas-deploy`）；Compose 项目目录名勿含中文或空格
-- [ ] 按 [Docker 部署 · 全栈](/deploy/docker) 将文档中的全栈 YAML 另存为 `docker-compose.full.yml`（GPU 另存 `docker-compose.full.gpu.yml`）
+- [ ] 新建部署目录（例 `~/pallas-deploy`）；Compose 项目目录名不要含中文或空格
+- [ ] 按 [Docker 部署 · 全栈](/maintainer/deploy/docker) 将文档中的全栈 YAML 另存为 `docker-compose.full.yml`（GPU 另存 `docker-compose.full.gpu.yml`）
 - [ ] `mkdir -p pallas-bot/config pallas-bot/data pallas-bot-ai/logs`
 - [ ] 复制 `config/pallas.example.toml` → `pallas-bot/config/pallas.toml`
 - [ ] 编辑 `pallas.toml`：`superusers`；`db_backend = "postgresql"` 与 `[bootstrap.postgres]` 一致
@@ -43,7 +43,7 @@ docker compose -f docker-compose.full.yml --env-file ./pallas-bot/config/compose
 - [ ] `docker compose ... ps`：`pallasbot`、`postgres`、`redis` 为 **running/healthy**；启用完整 AI 栈时再核对 `pallasbot-ai`、`ollama`（默认无 `ollama-init`；仅加了 `--profile pull-models` 时可为 **exited 0**）
 - [ ] 唱歌/TTS 等媒体能力才需要 `pallasbot/pallas-bot-ai`；需要完整媒体栈时，在 `compose.env` 设 `PALLAS_AI_IMAGE=pallasbot/pallas-bot-ai:latest` 并叠加 GPU compose
 
-**失败分支**：某服务非 healthy → `docker compose logs <服务名>`；PG 见 [Docker 部署 · PG 排障](/deploy/docker)。
+**失败分支**：某服务非 healthy → `docker compose logs <服务名>`；PG 见 [Docker 部署 · PG 排障](/maintainer/deploy/docker)。
 
 ### A3. 探活
 
@@ -144,7 +144,7 @@ docker compose -f docker-compose.llm.yml up -d
 
 - [ ] 升级前备份：`pallas-bot/data/`、`mongo/data/`、`pallas.toml`
 - [ ] `pallas.toml` 保持 `db_backend = "mongodb"` + `[bootstrap.mongo]`
-- [ ] 使用根目录 **`docker-compose.yml`** 并加 **`--profile mongo`**；勿换 PG 卷
+- [ ] 使用根目录 **`docker-compose.yml`** 并加 **`--profile mongo`**；不要换 PG 卷
 - [ ] `docker compose --env-file ./pallas-bot/config/compose.env --profile mongo up -d` 后 Bot health 正常
 - [ ] 历史群数据、语料、配置仍在（抽一条已知数据核对）
 - [ ] （可选）`uv run python tools/migrate_env_to_pallas.py` 仅从旧 `.env` 迁移一次
@@ -177,7 +177,7 @@ docker compose -f docker-compose.llm.yml up -d
 | Provider 测试失败 / 群无 LLM 回复 | WebUI「AI 配置 → 接入」的 Base URL、密钥、模型；确认 `LLM_CHAT_ENABLED` |
 | 媒体 Runtime health 失败 | `docker compose logs pallasbot-ai`；Redis/Ollama 是否 healthy |
 | 媒体任务无结果 | `AI_SERVER_*`、callback 地址、AI 与 Bot 网络 |
-| 帮助图样式异常 | 勿将整个 `resource` 挂到 `/app/resource`（见 [Docker 部署](/deploy/docker)） |
+| 帮助图样式异常 | 不要将整个 `resource` 挂到 `/app/resource`（见 [Docker 部署](/maintainer/deploy/docker)） |
 
 更多：[FAQ](/deploy/faq) · [排障](/maintainer/operate/troubleshooting) · [LLM 与 AI 运维](/maintainer/operate/llm-and-ai)
 
@@ -187,7 +187,7 @@ docker compose -f docker-compose.llm.yml up -d
 
 - [ ] 三仓 `dev-v2` CI 全绿
 - [ ] 本清单路径 **A + B** 至少在一种环境完整走通并记录
-- [ ] CHANGELOG / 4.0 迁移指南与 compose 默认一致
+- [ ] CHANGELOG / V4 迁移指南与 compose 默认一致
 - [x] `pallas-core` wheel 构建与 PyPI 发布（`.github/workflows/publish-pypi-core.yml`，随 `v*` tag）
 - [ ] 镜像 tag 与 compose 中 `latest` 是否改为固定版本（发布策略）
 

@@ -103,9 +103,9 @@ A: **WebUI「数据库」页**有「数据库备份」面板；若未检测到 `
 
 ## 更新与版本问题
 
-### Docker 和 git clone，更新方式有啥区别？
+### Docker 和 git clone，更新方式有什么区别？
 
-A: **Docker**：代码在镜像里，更新主要是 **`docker compose pull`** 后重建容器，一般没有本机 git 冲突；数据与配置应在卷（`data/`、`config/pallas.toml` 等）里。**git clone**：更新是 **`git pull`**（或控制台「Bot 更新」在检测到 git 工作副本时的等价操作）；若你改过与上游同一已跟踪文件，可能冲突，需本地处理后再拉。详见 [标准部署 - 后续更新](/deploy/deployment) 与 [Docker 部署](/deploy/docker)。
+A: **Docker**：代码在镜像里，更新主要是 **`docker compose pull`** 后重建容器，一般没有本机 git 冲突；数据与配置应在卷（`data/`、`config/pallas.toml` 等）里。**git clone**：更新是 **`git pull`**（或控制台「Bot 更新」在检测到 git 工作副本时的等价操作）；若你改过与上游同一已跟踪文件，可能冲突，需本地处理后再拉。详见 [标准部署 - 后续更新](/maintainer/deploy/deployment) 与 [Docker 部署](/maintainer/deploy/docker)。
 
 ### `git pull --autostash` 能避免所有冲突吗？
 
@@ -149,11 +149,11 @@ A: Compose 默认用**当前文件夹名**作为项目名；目录名为中文�
 - 或启动时显式指定项目名：`docker compose -p pallas-bot up -d`（带 profile 时同理写在 `--profile` 前即可）。
 - PowerShell 也可先执行：`$env:COMPOSE_PROJECT_NAME = "pallas-bot"`。
 
-同一台机器多套实例请使用不同项目名（如 `-p pallas-home2`），避免网络与资源名冲突。更多说明见 [Docker 部署](/deploy/docker) 文档中的「排障」一节。
+同一台机器多套实例请使用不同项目名（如 `-p pallas-home2`），避免网络与资源名冲突。更多说明见 [Docker 部署](/maintainer/deploy/docker) 文档中的「排障」一节。
 
 ### Postgres 容器日志里 `FATAL: database "PallasBot" does not exist` 是什么问题？
 
-A: 表示 **Postgres 里没有叫 `PallasBot` 的库**，而 Bot 的 **`PG_DB`**（默认）正在连它。常见情况是 **`./postgres/data` 卷以前用别的 `POSTGRES_DB` 初始化过**，改配置后不会自动建新库。可对齐 **`PG_DB`** 与已有库名、**删卷重建**（会丢数据）或进容器 **`CREATE DATABASE`**。本地也可设 **`PG_AUTO_CREATE_DB=true`**（需 `CREATEDB`）。详见 [Docker 部署](/deploy/docker)、[deploy/pg/README.md](https://github.com/PallasBot/Pallas-Bot/blob/main/deploy/pg/README.md)。
+A: 表示 **Postgres 里没有叫 `PallasBot` 的库**，而 Bot 的 **`PG_DB`**（默认）正在连它。常见情况是 **`./postgres/data` 卷以前用别的 `POSTGRES_DB` 初始化过**，改配置后不会自动建新库。可对齐 **`PG_DB`** 与已有库名、**删卷重建**（会丢数据）或进容器 **`CREATE DATABASE`**。本地也可设 **`PG_AUTO_CREATE_DB=true`**（需 `CREATEDB`）。详见 [Docker 部署](/maintainer/deploy/docker)、[deploy/pg/README.md](https://github.com/PallasBot/Pallas-Bot/blob/main/deploy/pg/README.md)。
 
 ### PostgreSQL 是否一定要用超级用户 / 管理员账号？
 
@@ -161,15 +161,15 @@ A: **不必。** 默认路径只连目标库做建表与迁移，不会尝试安
 
 ### Docker 里日志写「连接 MongoDB 127.0.0.1:27017」对吗？
 
-A: **在容器里 `127.0.0.1` 只指向容器自己**，连不到 Compose 里的 **`postgres` / `mongodb` 服务**。本仓库 [`docker-compose.yml`](https://github.com/PallasBot/Pallas-Bot/blob/main/docker-compose.yml) 已注入 **`PG_HOST=postgres`**、**`PG_PORT=5432`**（与 **service 名**一致）；`--profile mongo` 时另有 **`MONGO_HOST=mongodb`**、**`MONGO_PORT=27017`**，覆盖 `pallas.toml` 里写的本机地址；若仍看到 `127.0.0.1`，多半是**旧 compose 未更新**或**自建编排未设置**。外置数据库时请删改 compose 里对应项并在 `pallas.toml` 写明真实地址。详见 [Docker 部署](/deploy/docker)。
+A: **在容器里 `127.0.0.1` 只指向容器自己**，连不到 Compose 里的 **`postgres` / `mongodb` 服务**。本仓库 [`docker-compose.yml`](https://github.com/PallasBot/Pallas-Bot/blob/main/docker-compose.yml) 已注入 **`PG_HOST=postgres`**、**`PG_PORT=5432`**（与 **service 名**一致）；`--profile mongo` 时另有 **`MONGO_HOST=mongodb`**、**`MONGO_PORT=27017`**，覆盖 `pallas.toml` 里写的本机地址；若仍看到 `127.0.0.1`，多半是**旧 compose 未更新**或**自建编排未设置**。外置数据库时请删改 compose 里对应项并在 `pallas.toml` 写明真实地址。详见 [Docker 部署](/maintainer/deploy/docker)。
 
 ### Docker 里 `help` 报「样式路径不存在 `/app/resource/styles/default`」？
 
-A: 常见原因是 **volume 把整个 `/app/resource` 挂成宿主机目录**，而宿主机上没有 **`resource/styles/default`**，盖住了镜像里自带的 help 样式。请把 compose 改为**只挂载** **`./pallas-bot/resource/voices:/app/resource/voices`**（与仓库 [`docker-compose.yml`](https://github.com/PallasBot/Pallas-Bot/blob/main/docker-compose.yml) 一致），或在宿主机 `resource` 下补全 **`styles/default`**。详见 [Docker 部署](/deploy/docker) 排障。
+A: 常见原因是 **volume 把整个 `/app/resource` 挂成宿主机目录**，而宿主机上没有 **`resource/styles/default`**，盖住了镜像里自带的 help 样式。请把 compose 改为**只挂载** **`./pallas-bot/resource/voices:/app/resource/voices`**（与仓库 [`docker-compose.yml`](https://github.com/PallasBot/Pallas-Bot/blob/main/docker-compose.yml) 一致），或在宿主机 `resource` 下补全 **`styles/default`**。详见 [Docker 部署](/maintainer/deploy/docker) 排障。
 
 ### 本地 `docker build` 拉 `python:3.12-slim` 报 `registry-1.docker.io` / `EOF`？
 
-A: 多为 **Docker Hub 访问不稳定**（国内常见）。可在仓库根目录使用带 **`BASE_IMAGE`** 的镜像前缀构建，例如：`docker build --build-arg BASE_IMAGE=docker.m.daocloud.io/library/python:3.12-slim -t pallasbot:local .`（以你当前能访问的镜像站为准）；或为 Docker 配置 **registry-mirrors** / 代理。完整的 Compose 镜像覆盖、uv 索引与 WebUI Git 镜像边界见 [Docker 部署 · 下载慢与镜像源](/deploy/docker#下载慢与镜像源)。
+A: 多为 **Docker Hub 访问不稳定**（国内常见）。可在仓库根目录使用带 **`BASE_IMAGE`** 的镜像前缀构建，例如：`docker build --build-arg BASE_IMAGE=docker.m.daocloud.io/library/python:3.12-slim -t pallasbot:local .`（以你当前能访问的镜像站为准）；或为 Docker 配置 **registry-mirrors** / 代理。完整的 Compose 镜像覆盖、uv 索引与 WebUI Git 镜像边界见 [Docker 部署 · 下载慢与镜像源](/maintainer/deploy/docker#下载慢与镜像源)。
 
 ### Docker Compose 起内置 Postgres 时，还要不要在 compose 里再配一套 `POSTGRES_USER`？
 
@@ -177,23 +177,23 @@ A: **不用。** 仓库 [`docker-compose.yml`](https://github.com/PallasBot/Pall
 
 ### Docker 启动报错里提到 `mounting`、`pallas.toml`、`not a directory` 或 `directory onto file` 是什么情况？
 
-A: Compose 把宿主机 **`./pallas-bot/config/pallas.toml`** 挂到容器 **`/app/config/pallas.toml`**，两边都必须是**同一个文件**。若宿主机上该路径被建成了**文件夹**（例如在还没有配置文件时就启动过，或手动建错），就会报这类错。请删除错误目录，从仓库复制 [`config/pallas.example.toml`](https://github.com/PallasBot/Pallas-Bot/tree/main/config/pallas.example.toml) 为**文件**放到该路径，再重新 `docker compose up`。详见 [Docker 部署](/deploy/docker) 中「排障」与配置步骤里的说明。
+A: Compose 把宿主机 **`./pallas-bot/config/pallas.toml`** 挂到容器 **`/app/config/pallas.toml`**，两边都必须是**同一个文件**。若宿主机上该路径被建成了**文件夹**（例如在还没有配置文件时就启动过，或手动建错），就会报这类错。请删除错误目录，从仓库复制 [`config/pallas.example.toml`](https://github.com/PallasBot/Pallas-Bot/tree/main/config/pallas.example.toml) 为**文件**放到该路径，再重新 `docker compose up`。详见 [Docker 部署](/maintainer/deploy/docker) 中「排障」与配置步骤里的说明。
 
 ### 协议端管理里反向 WebSocket 要不要写成「主机为 `pallasbot`」？和 Compose 的 `pallasbot` 是什么关系？
 
-A: **`pallasbot` 只是 Compose 服务名**，DNS 只在**同一 Compose 网络里的容器**之间有效。协议端在 **Linux Docker 模式**下用 `docker run` 起的 NapCat **默认不在**该网络里；若把客户端地址写成 **`ws://pallasbot:<PORT>/onebot/v11/ws`**（明文 WebSocket、主机填服务名），在默认桥接场景下**往往连不上**。插件会把 **主机** 改成解析后的 **`PALLAS_PROTOCOL_DOCKER_ONEBOT_HOST`**（留空时 Linux **`bridge`** 多为**默认网关 IP** 或 **`172.17.0.1`**；**`host` 网络为 `127.0.0.1`**）再写入 **`onebot*.json`**，**不会**自动替你填 `pallasbot`。一般不必为此去「取消」Compose 自定义网络；只有当你**自行**把 NapCat 做成与 Bot **同一 Compose 网络**的 service 时，才适合继续用 **`ws://pallasbot:<PORT>/onebot/v11/ws`** 这类内网写法。详见 [Docker 部署](/deploy/docker) 与 [`pb_protocol` 插件说明](/plugins/pb_protocol) 中「Docker 与反向 WebSocket」一节。
+A: **`pallasbot` 只是 Compose 服务名**，DNS 只在**同一 Compose 网络里的容器**之间有效。协议端在 **Linux Docker 模式**下用 `docker run` 起的 NapCat **默认不在**该网络里；若把客户端地址写成 **`ws://pallasbot:<PORT>/onebot/v11/ws`**（明文 WebSocket、主机填服务名），在默认桥接场景下**往往连不上**。插件会把 **主机** 改成解析后的 **`PALLAS_PROTOCOL_DOCKER_ONEBOT_HOST`**（留空时 Linux **`bridge`** 多为**默认网关 IP** 或 **`172.17.0.1`**；**`host` 网络为 `127.0.0.1`**）再写入 **`onebot*.json`**，**不会**自动替你填 `pallasbot`。一般不必为此去「取消」Compose 自定义网络；只有当你**自行**把 NapCat 做成与 Bot **同一 Compose 网络**的 service 时，才适合继续用 **`ws://pallasbot:<PORT>/onebot/v11/ws`** 这类内网写法。详见 [Docker 部署](/maintainer/deploy/docker) 与 [`pb_protocol` 插件说明](/plugins/pb_protocol) 中「Docker 与反向 WebSocket」一节。
 
-## 4.0 布局与迁移问题
+## V4 布局与迁移问题
 
-<a id="faq-40-layout"></a>
+<a id="faq-v4-layout"></a>
 
 ### 「媒体服务 / AI Runtime」显示不可达，聊天也不能配了吗？
 
 A: **不能混为一谈。** LLM 聊天固定走 Bot 内核 Provider，在 **AI 配置 → 接入** 测通并保存即可，**不要求** `:9099` 可达。媒体服务红灯只影响唱歌/TTS 等媒体任务。排障见 [LLM 与 AI](/maintainer/operate/llm-and-ai)。
 
-### 3.x 的 `src/plugins` 插件在 4.0 还能用吗？
+### 3.x 的 `src/plugins` 插件在 V4 还能用吗？
 
-A: **不能沿用旧加载目录。** 3.x 的 NoneBot `plugin_dirs` 指向 `src/plugins/`；4.0 已改为 `packages/`，不会再扫描 `src/plugins/`。内置玩法迁至 **`packages/`** 与 **`pallas-plugin-*` 官方插件**；站点私有插件放 `local/plugins/`，社区插件应使用 **`pallas.api.*`**。从 3.x 升级请读 [4.0 迁移指南](/guide/4.0-migration)。
+A: **不能沿用旧加载目录。** 3.x 的 NoneBot `plugin_dirs` 指向 `src/plugins/`；V4 已改为 `packages/`，不会再扫描 `src/plugins/`。内置玩法迁至 **`packages/`** 与 **`pallas-plugin-*` 官方插件**；站点私有插件放 `local/plugins/`，社区插件应使用 **`pallas.api.*`**。从 3.x 升级请读 [V4 迁移指南](/guide/4.0-migration)。
 
 ### 社区作者如何只依赖内核、不克隆整仓？
 

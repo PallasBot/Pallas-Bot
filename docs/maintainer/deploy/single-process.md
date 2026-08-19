@@ -46,11 +46,11 @@ uv run pallas logs            # Bot + 可选 embed 辅进程
 
 ## 何时改看分片
 
-多个 Bot 账号同时在线、单进程已卡顿，或需要独立 worker 协调时，再阅读 [分片部署](sharded.md)。完整源码步骤见 [标准部署](/deploy/deployment)。
+多个 Bot 账号同时在线、单进程已卡顿，或需要独立 worker 协调时，再阅读 [分片部署](sharded.md)。完整源码步骤见 [标准部署](/maintainer/deploy/deployment)。
 
 ## 相关文档
 
-- [标准部署](/deploy/deployment)
-- [Docker 部署](/deploy/docker)
+- [标准部署](/maintainer/deploy/deployment)
+- [Docker 部署](/maintainer/deploy/docker)
 - [排障](/maintainer/operate/troubleshooting)
 - [运维入口](/maintainer/quickstart)

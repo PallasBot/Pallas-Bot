@@ -1,6 +1,10 @@
 # 写社区插件并上架
 
-面向插件作者：把仓库整理成商店可识别的形态，自检通过后向索引仓提 PR。用户安装见 [社区插件商店](community-plugin-store.md)；代码结构合同见 [Golden Plugin](/developer/plugin-development/golden-plugin)。
+> 目标：把仓库整理成商店可识别的形态，自检通过后上架到社区插件商店
+> 准备：已完成插件开发；了解 [Golden Plugin](/developer/plugin-development/golden-plugin) 代码合同
+> 完成之后：向 [community-plugin-index](https://github.com/PallasBot/community-plugin-index) 提 PR，收录后用户可安装
+
+用户安装见 [社区插件商店](community-plugin-store.md)。
 
 ## 你要完成什么
 
@@ -52,7 +56,7 @@ my_plugin/
 2. 缺失时，对已装到 `local/plugins/<id>/` 的副本按本地 git 提交标题兜底生成
 
 ::: tip
-建议维护 `CHANGELOG.md`。缺失时用户只能看到原始提交记录；README 中可写当前版本号（如「当前版本：v0.1.0」），勿依赖徽章组件。
+建议维护 `CHANGELOG.md`。缺失时用户只能看到原始提交记录；README 中可写当前版本号（如「当前版本：v0.1.0」），不要依赖徽章组件。
 :::
 
 示范仓库：[`pallas-community-plugin-interact`](https://github.com/TogetsuDo/pallas-community-plugin-interact)（含 `community-index.entry.json`，发版时同步其 `version`）。
@@ -185,7 +189,7 @@ uv run python tools/community_plugin_author.py validate-index /path/to/index.jso
 5. 向索引仓提 PR，标题建议：`chore(index): <id> 升至 vX.Y.Z`。
 
 ::: tip
-`ref` 若指向 `main`，用户重装会拉到最新代码；**商店展示的版本号仍以索引 `version` 为准**。勿新增第二条同 `id` 条目，只改已有那条。
+`ref` 若指向 `main`，用户重装会拉到最新代码；**商店展示的版本号仍以索引 `version` 为准**。不要新增第二条同 `id` 条目，只改已有那条。
 :::
 
 本仓可放一份与索引对齐的 `community-index.entry.json`（见示范仓），发版时先改它，再复制字段到索引 PR，减少漏改。

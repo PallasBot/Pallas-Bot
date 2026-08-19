@@ -1,7 +1,11 @@
 # 为 Pallas-Bot 安装插件
 
+> 目标：装好官方或社区插件，让牛牛获得新玩法
+> 准备：Bot 已能正常运行，可打开控制台；安装社区插件前准备好 git 环境
+> 完成之后：群里发送 **牛牛帮助** 能看到新命令
+
 ::: tip
-安装完成后请**重启 Bot**。重启后，在群里发送 **牛牛帮助**，确认新命令已出现在帮助图中。
+安装完成后**重启 Bot**。重启后，在群里发送 **牛牛帮助**，确认新命令已出现在帮助图中。
 :::
 
 Bot 已能正常运行时，可以按插件来源选择安装方式：
@@ -12,7 +16,7 @@ Bot 已能正常运行时，可以按插件来源选择安装方式：
 | **官方插件** | 决斗、MAA、谁是卧底 | 要单独装 |
 | **社区 / 本地** | 第三方、自己写的 | 商店 git 装，或放 `local/plugins/` |
 
-先安装官方插件时，建议使用控制台。安装社区插件或自己开发的插件，请查看后面的[社区和本地插件](#社区和本地插件)。
+先安装官方插件时，建议使用控制台。安装社区插件或自己开发的插件，见后面的[社区和本地插件](#社区和本地插件)。
 
 ## 推荐：在控制台安装
 
@@ -31,7 +35,7 @@ Bot 已能正常运行时，可以按插件来源选择安装方式：
 | 已加载 | 当前进程里在跑 |
 
 ::: details 找不到「一键安装」
-常见原因是 Docker 精简镜像，或 PATH 中没有 `uv`。可改用[命令行安装](#命令行安装)；Docker 构建时也可带上 extras，见 [Docker 部署](/deploy/docker)。
+常见原因是 Docker 精简镜像，或 PATH 中没有 `uv`。可改用[命令行安装](#命令行安装)；Docker 构建时也可带上 extras，见 [Docker 部署](/maintainer/deploy/docker)。
 :::
 
 ## 命令行安装
@@ -43,7 +47,7 @@ uv run pallas ext list
 uv run pallas ext install pallas-plugin-duel --restart
 ```
 
-`--restart` 会在安装完成后重启 Bot。若不带此参数，请在安装后手动重启。
+`--restart` 会在安装完成后重启 Bot。若不带此参数，安装后需手动重启。
 
 要一次预装常用官方插件：
 
@@ -77,7 +81,7 @@ uv run pallas ext install pallas-plugin-draw
 
 随时 @ LLM 对话（`llm_chat`）和社区统计（`pb_stats`）已在 **core**，不用再装。
 
-::: details Docker extras 对照
+::: details 参考：Docker extras 对照
 | extra | 包含 |
 | --- | --- |
 | `plugins-protocol` | NapCat 协议端、重登 |
@@ -87,7 +91,7 @@ uv run pallas ext install pallas-plugin-draw
 | `plugins-draw` | 画画 |
 | `deploy-all` | 全官方插件 |
 
-镜像构建见 [Docker 部署](/deploy/docker)。
+镜像构建见 [Docker 部署](/maintainer/deploy/docker)。
 :::
 
 ## 社区和本地插件

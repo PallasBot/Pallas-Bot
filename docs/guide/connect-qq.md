@@ -1,8 +1,10 @@
 # 连接 QQ
 
-Pallas-Bot 通过 OneBot V11 反向 WebSocket 接收 QQ 消息。你可以让控制台托管 NapCat / SnowLuma，也可以连接已经部署好的任意 OneBot V11 协议端。
+> 目标：让 Bot 上线 QQ，群内能收到并回复消息
+> 准备：Bot 已运行，能打开 `http://<Bot主机>:8088/pallas/`；一个 OneBot V11 协议端（NapCat / SnowLuma / 自建）
+> 完成之后：协议端账号在线，群里发 **牛牛帮助** 能出图
 
-开始前先确认 Bot 已运行，并能打开 `http://<Bot主机>:8088/pallas/`。端口以 `config/pallas.toml` 的 `[bootstrap] port` 为准。
+Pallas-Bot 通过 OneBot V11 反向 WebSocket 接收 QQ 消息。控制台可托管 NapCat / SnowLuma，也可连接已部署好的任意 OneBot V11 协议端。端口以 `config/pallas.toml` 的 `[bootstrap] port` 为准。
 
 ## 连接地址
 
@@ -38,7 +40,7 @@ ws://<Bot主机>:8088/onebot/v11/ws
 
 ## 方式二：连接外置 OneBot V11
 
-如果 NapCat、Lagrange、LLOneBot 或其他 OneBot V11 实现已经由你管理：
+若 NapCat、Lagrange、LLOneBot 或其他 OneBot V11 实现已由外部管理：
 
 1. 在协议端启用反向 WebSocket。
 2. URL 填本页开头的 `/onebot/v11/ws` 地址。
@@ -48,7 +50,7 @@ ws://<Bot主机>:8088/onebot/v11/ws
 
 ## 验收
 
-把机器人拉进测试群并发送：
+把 Bot 拉进测试群并发送：
 
 ```text
 牛牛帮助

@@ -212,7 +212,7 @@ if provider:
     base_url = resolve_provider_base_url(provider)
 ```
 
-`find_provider()` 默认不返回已禁用 Provider；需要检查已配置但禁用的线路时传 `include_disabled=True`。密钥只用于实际请求，勿写入日志或插件存储。
+`find_provider()` 默认不返回已禁用 Provider；需要检查已配置但禁用的线路时传 `include_disabled=True`。密钥只用于实际求，勿写入日志或插件存储。
 
 ## 多 Bot 在线态
 

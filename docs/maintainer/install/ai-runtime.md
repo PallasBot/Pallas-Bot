@@ -1,6 +1,6 @@
 # AI Runtime
 
-本页说明如何接入可选的 AI Runtime（媒体 / 遗留 RWKV）。普通 LLM 聊天请在 Bot WebUI「AI 配置 → 接入」配置 Provider，不依赖本 Runtime。
+本页说明如何接入 AI Runtime，它提供唱歌 / TTS 等媒体能力与遗留 RWKV 对话。普通 LLM 聊天在 Bot WebUI「AI 配置 → 接入」配置 Provider。
 
 独立仓是 `Pallas-Bot-AI`；Bot 通过任务与 callback 协作，不是主仓内普通插件。
 
@@ -60,7 +60,7 @@ uv run pallas-ai purge-stale    # 仅在需要清理遗留 Celery 任务状态�
 
 `pallas-ai` 是单一命令入口，但 API 与 media worker 仍为独立进程；媒体进程异常或重启不会主动停止 API。
 
-**Windows**：媒体栈依赖 Redis。bootstrap 默认 `docker compose` 拉起，请先安装并启动 [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/)（托盘就绪）；或本机/WSL 自备 Redis 并设置 AI 仓 `.env` 的 `REDIS_URL`。失败时以脚本日志提示为准。
+**Windows**：媒体栈依赖 Redis。bootstrap 默认 `docker compose` 拉起，先安装并启动 [Docker Desktop](https://docs.docker.com/desktop/setup/install/windows-install/)（托盘就绪）；或本机/WSL 自备 Redis 并设置 AI 仓 `.env` 的 `REDIS_URL`。失败时以脚本日志提示为准。
 
 唱歌 / TTS 还需要本机 **ffmpeg** 在 PATH 中（否则日志会出现 `Couldn't find ffmpeg`，音频处理可能失败）。可用：
 
@@ -78,7 +78,7 @@ winget install --id Gyan.FFmpeg -e
 uv run pallas ai setup
 ```
 
-也可在控制台 **AI 配置 · 媒体服务** 使用安装：未安装时「下载并安装」；托管目录（`data/runtimes/pallas-bot-ai`）打开/刷新会 `git fetch` 对比远端，有更新才显示「更新 Runtime」（`git pull --ff-only` 后再 bootstrap），已是最新则只留「仅重装依赖」；成功且连接配置为空时会写入默认 `http://127.0.0.1:9099`。Docker 请在宿主机自行执行（控制台不代跑）。
+也可在控制台 **AI 配置 · 媒体服务** 使用安装：未安装时「下载并安装」；托管目录（`data/runtimes/pallas-bot-ai`）打开/刷新会 `git fetch` 对比远端，有更新才显示「更新 Runtime」（`git pull --ff-only` 后再 bootstrap），已是最新则只留「仅重装依赖」；成功且连接配置为空时会写入默认 `http://127.0.0.1:9099`。Docker 宿主机上自行执行（控制台不代跑）。
 
 用户向手把手与 **能力包**（对话模型拉取、媒体权重 / Docker 换 `latest`）见 [AI 扩展](/guide/ai)。
 
@@ -88,7 +88,7 @@ uv run pallas ai setup
 | Bot 非默认端口 | `--bot-port <port>` |
 | 媒体 + NVIDIA torch | `uv run pallas ai setup --gpu` |
 
-`--gpu` 安装 AI Runtime 的 **torch 2.7.1 + cu128**（支持 RTX 50 / `sm_120`）；驱动需支持 CUDA 12.8。从旧 cu124 环境升级后请「仅重装依赖」或再跑一次带 `--gpu` 的 setup。
+`--gpu` 安装 AI Runtime 的 **torch 2.7.1 + cu128**（支持 RTX 50 / `sm_120`）；驱动需支持 CUDA 12.8。从旧 cu124 环境升级后「仅重装依赖」或再跑一次带 `--gpu` 的 setup。
 
 本地 Ollama 推理（若仍用遗留 LLM worker）用 Ollama 自带 GPU，与 `--gpu`（本仓 PyTorch）无关。
 
@@ -104,7 +104,7 @@ docker compose -f docker-compose.llm.yml up -d
 
 ### 与 Bot 同编排（新装）
 
-使用文档站 [Docker 部署 · 全栈](/deploy/docker) 中的示例 YAML（PostgreSQL + Bot + Redis + Ollama + AI），本地另存后启动。
+使用文档站 [Docker 部署 · 全栈](/maintainer/deploy/docker) 中的示例 YAML（PostgreSQL + Bot + Redis + Ollama + AI），本地另存后启动。
 
 AI 镜像仅用于媒体 / RWKV。Ollama 模型默认不预拉（`--profile pull-models` 可选）。在 WebUI「AI 配置 → 媒体服务」保存连接时，会同步 Bot 侧 `AI_SERVER_HOST` / `AI_SERVER_PORT`，以及 Bearer → `TTS_API_TOKEN`（供 TTS `/v1` 鉴权）；策略页与唱歌/TTS 插件页不再单独填服务地址。
 
@@ -181,7 +181,7 @@ git clone --depth 1 --branch 6.3 https://github.com/PallasBot/DDSP-SVC.git app/w
 | `ddsp_6.2` / `ddsp_6.1` | `resource/sing/models/<id>/<name>.pt` + `config.yaml` | `resource/sing/models/pretrain/contentvec/checkpoint_best_legacy_500.pt`、`resource/sing/models/pretrain/rmvpe/model.pt`，以及音色 `config.yaml` 指向的 NSF / PC-NSF HiFiGAN 目录 |
 | `ddsp_6.3` | 同上；权重需由 6.3 训练 | `resource/sing/models/pretrain/contentvec/pytorch_model.bin`；首次使用会从 [lengyue233/content-vec-best](https://huggingface.co/lengyue233/content-vec-best) 自动下载 |
 
-不要跨版本混用 DDSP `.pt`。`sing_pretrain` 是默认来源；若手工准备，请以该音色的 `config.yaml` 中 `encoder_ckpt` 与 vocoder 路径为准。
+不要跨版本混用 DDSP `.pt`。`sing_pretrain` 是默认来源；若手工准备，以该音色的 `config.yaml` 中 `encoder_ckpt` 与 vocoder 路径为准。
 
 社区训练的 DDSP-SVC / RVC 音色可在 [TogetsuDo on Hugging Face](https://huggingface.co/TogetsuDo) 获取；下载后仍须按本节要求准备匹配的配置与共享权重。
 
@@ -240,7 +240,7 @@ uv run python tools/convert_rvc_hubert.py
 - Bot 发任务的目标地址
 - AI Runtime 回调 Bot 的 callback 地址
 
-::: warning
+::: warning 注意：分片 callback
 分片下 callback 须回到 hub，不要指向任意 worker。
 :::
 

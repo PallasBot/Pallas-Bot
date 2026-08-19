@@ -10,7 +10,7 @@
 | L2 | `pallas.api.platform` | 仅官方或内置插件；确有多 Bot、分片、舰队或媒体 callback 协作需求时使用。 |
 | L3 | `pallas.core.*`、`pallas.console.*`、深层 `pallas.product.*` | 内部实现；不得被社区插件当作长期依赖。 |
 
-`pallas.api` 本身不聚合符号，请从具体子模块 import。L1 的公开符号以模块 `__all__` 为准；`ai_runtime_health` 没有 `__all__`，以该模块中面向插件的健康查询函数为准。L2 的完整导出表见 [Platform API](platform-api.md)，内部边界见 [Internal API](internal-api.md)。
+`pallas.api` 本身不聚合符号，从具体子模块 import。L1 的公开符号以模块 `__all__` 为准；`ai_runtime_health` 没有 `__all__`，以该模块中面向插件的健康查询函数为准。L2 的完整导出表见 [Platform API](platform-api.md)，内部边界见 [Internal API](internal-api.md)。
 
 ## 模块地图
 

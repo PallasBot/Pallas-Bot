@@ -12,7 +12,7 @@
 
 | 进程 | 职责 |
 | --- | --- |
-| Hub | WebUI、协议端管理、注册表、AI/MAA 回调入口；不接牛牛反向 WebSocket |
+| Hub | WebUI、协议端管理、注册表、AI/MAA 回调入口；不接 Bot 反向 WebSocket |
 | Worker | 群消息与玩法主路径；每进程约 `PALLAS_SHARD_BOTS_PER` 只账号 |
 
 跨进程 claim 依赖 Redis（`REDIS_URL` / `PALLAS_COORD_REDIS_URL`）；与 AI 仓可共用。详见 [分片部署](/maintainer/deploy/sharded)。

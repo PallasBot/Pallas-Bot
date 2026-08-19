@@ -96,7 +96,7 @@ flowchart TD
 - 媒体 / RWKV callback 是否到达 hub
 - hub 是否路由到目标 worker
 - 目标 worker 是否在线
-- 参见 [LLM 与 AI](llm-and-ai.md)
+- 见 [LLM 与 AI](llm-and-ai.md)
 
 ### 命令权限或 cooldown 异常
 
@@ -122,7 +122,7 @@ flowchart TD
 | 页面可开、数据错 | API 契约或 worker 聚合 |
 | QQ 在线无回复 | 协议端连接、目标 worker 日志、Redis |
 | 商店已安装无功能 | 未重启或加载路径冲突 |
-| 单 Bot 或单群异常 | 定位对应 worker，勿全局扫描 |
+| 单 Bot 或单群异常 | 定位对应 worker，不要全局扫描 |
 
 ## 无效操作
 

@@ -10,7 +10,7 @@
 | 官方插件 | PyPI 包；日常用 WebUI 插件商店装 / 卸 / 更新 |
 | `local` / community | 站点私有或社区插件，一般放在 `local/plugins/` |
 
-4.0 起多数玩法与站点能力从本体拆成独立 pip 包。
+V4 起多数玩法与站点能力从本体拆成独立 pip 包。
 
 ## 适用场景
 
@@ -74,7 +74,7 @@ uv run pallas --help
 | `pallas-plugin-dream` | 做梦相关能力 |
 | `pallas-plugin-bot-status` | 在吗、报数等状态类能力 |
 
-以下能力已在 4.0 回归 core，无需再装：
+以下能力已在 V4 回归 core，无需再装：
 
 - `llm_chat`
 - `pb_stats`
@@ -93,7 +93,7 @@ uv run pallas --help
 
 优先在 **插件商店** 卸载。无 UI 时用 `pallas ext uninstall`。
 
-::: warning
+::: warning 注意：卸载与重启
 - 卸载 pip 包不会删掉 `local/plugins/` 里的同名副本
 - 装、卸、升级之后都重启一次
 :::

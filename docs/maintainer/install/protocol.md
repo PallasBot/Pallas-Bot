@@ -1,6 +1,6 @@
 # 协议端
 
-本页帮助你把 QQ 账号接到 Pallas-Bot。4.0 一般通过官方插件 `pallas-plugin-protocol` 管理，并在 WebUI 提供控制台页。
+QQ 账号通过**协议端**接入 Pallas-Bot：协议端负责登录 QQ、维护账号实例，向 Bot 发起反向 WebSocket。V4 一般通过官方插件 `pallas-plugin-protocol` 管理，并在 WebUI 提供控制台页。
 
 ## 两层职责
 
@@ -33,7 +33,7 @@ QQ / 协议端实例
   -> 插件与运行时
 ```
 
-::: warning
+::: warning 注意：分片协议
 分片时：
 
 - hub：WebUI、注册表、协议端管理与部分回调

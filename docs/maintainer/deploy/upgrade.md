@@ -9,7 +9,7 @@
 - [ ] 外部依赖：协议端、AI Runtime 是否接入
 - [ ] 备份：`config/pallas.toml`、`data/`；按需备份数据库与协议端实例数据
 
-上列未勾选完成前，勿直接上线升级。
+上列未勾选完成前，不要直接上线升级。
 
 ## 推荐顺序
 
@@ -27,7 +27,7 @@ uv run pallas maintenance run \
 | 附加项 | 操作 |
 | --- | --- |
 | AI Runtime | Pallas-Bot-AI 仓 `git pull` 后执行 `uv run pallas ai setup` |
-| 官方插件 | 一般随已装 pip 保留，升 4.0 不必重装；对齐 PyPI 新版时在控制台 **插件商店** 点「更新」 |
+| 官方插件 | 一般随已装 pip 保留，升 V4 不必重装；对齐 PyPI 新版时在控制台 **插件商店** 点「更新」 |
 
 分步等价：`pallas update bot` → `pallas update webui` → `pallas sync` → `pallas restart`。详见 [CLI 参考](/maintainer/reference/cli)。
 
@@ -138,4 +138,4 @@ PALLAS_DUPLICATE_PREFIX_STRICT = "true"
 - [WebUI](/maintainer/install/webui)
 - [协议端](/maintainer/install/protocol)
 - [LLM 与 AI 运维](/maintainer/operate/llm-and-ai)
-- [3.0 迁移](/about/migration)
+- [3.0 迁移（归档）](/maintainer/reference/migration-archived)
