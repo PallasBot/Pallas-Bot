@@ -185,7 +185,7 @@ async def test_direct_chat_short_social_reads_relationship_but_skips_person_fact
     assert result.relationship == "relationship"
     assert result.person_facts == ""
     assert result.relationship_trace == {"hit_count": 1}
-    assert set(result.stage_durations_ms) == {"memory", "knowledge", "relationship", "person_facts"}
+    assert set(result.stage_durations_ms) == {"memory", "knowledge", "relationship", "person_facts", "mid_term"}
 
 
 @pytest.mark.asyncio
