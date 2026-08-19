@@ -50,7 +50,7 @@ async def run_work_consumer(worker: WorkJobWorker, *, idle_backoff: bool = True)
         if not idle_backoff:
             await asyncio.sleep(_IDLE_BACKOFF_BASE_SEC)
             continue
-        await asyncio.sleep(min(_IDLE_BACKOFF_MAX_SEC, _IDLE_BACKOFF_BASE_SEC * (1.5 ** idle_rounds)))
+        await asyncio.sleep(min(_IDLE_BACKOFF_MAX_SEC, _IDLE_BACKOFF_BASE_SEC * (1.5**idle_rounds)))
 
 
 async def run_work_status_publisher(store, *, consumers: int, metrics) -> None:
