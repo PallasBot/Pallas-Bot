@@ -71,6 +71,7 @@ __plugin_meta__ = PluginMetadata(
                 parameters={"type": "object", "properties": {}},
                 command_template="clear",
                 hints=["忘掉", "清空", "clear", "忘了吧", "清空对话", "忘记刚才"],
+                visibility="deferred",
             ),
         ],
         "knowledge_sources": [
