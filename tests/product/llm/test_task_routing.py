@@ -33,7 +33,7 @@ async def test_resolve_task_route_explicit_model_wins(monkeypatch: pytest.Monkey
 @pytest.mark.asyncio
 async def test_resolve_task_route_bot_kernel_uses_config_model(monkeypatch: pytest.MonkeyPatch) -> None:
     clear_task_route_cache()
-    cfg = LlmConfig(llm_runtime="bot_kernel", llm_model="kernel-demo", llm_base_url="http://x/v1")
+    cfg = LlmConfig(llm_model="kernel-demo", llm_base_url="http://x/v1")
     monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
     monkeypatch.setattr(
         "pallas.product.llm.providers_store.resolve_endpoint_for_task",
@@ -79,7 +79,7 @@ async def test_resolve_task_route_bot_kernel_uses_providers_store(monkeypatch: p
         ],
         "routing": {"chain_fallback": ["primary", "backup"], "tasks": {"llm_chat": "primary"}},
     })
-    cfg = LlmConfig(llm_runtime="bot_kernel", llm_model="", llm_base_url="")
+    cfg = LlmConfig(llm_model="", llm_base_url="")
     monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
 
     route = await resolve_task_route("llm_chat")
@@ -134,7 +134,7 @@ async def test_resolve_task_route_chain_expands_provider_fallbacks(
             "tasks": {"llm_chat": "primary"},
         },
     })
-    cfg = LlmConfig(llm_runtime="bot_kernel", llm_model="", llm_base_url="")
+    cfg = LlmConfig(llm_model="", llm_base_url="")
     monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
 
     chain = await resolve_task_route_chain("llm_chat")
@@ -173,7 +173,7 @@ async def test_resolve_task_route_same_provider_tier_backup_model(
             "tier_backup_models": {"high": "reasoner"},
         },
     })
-    cfg = LlmConfig(llm_runtime="bot_kernel", llm_model="", llm_base_url="")
+    cfg = LlmConfig(llm_model="", llm_base_url="")
     monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
 
     route = await resolve_task_route("llm_chat")
@@ -211,7 +211,7 @@ async def test_turn_decision_uses_low_tier_provider_route(monkeypatch: pytest.Mo
     })
     monkeypatch.setattr(
         "pallas.product.llm.config.get_llm_config",
-        lambda: LlmConfig(llm_runtime="bot_kernel", llm_model="", llm_base_url=""),
+        lambda: LlmConfig(llm_model="", llm_base_url=""),
     )
 
     route = await resolve_task_route("turn_decision")

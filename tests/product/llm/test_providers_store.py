@@ -55,7 +55,7 @@ def test_providers_store_roundtrip(tmp_path: Path, monkeypatch) -> None:
     assert endpoint.model == "deepseek-v4-flash"
     assert bot_providers_configured() is True
 
-    gate = assess_llm_kernel_submit_gate(LlmConfig(llm_runtime="bot_kernel", llm_base_url="", llm_model=""))
+    gate = assess_llm_kernel_submit_gate(LlmConfig(llm_base_url="", llm_model=""))
     assert gate.allowed is True
 
     exported = export_providers_for_api()

@@ -92,7 +92,6 @@ async def test_tools_find_activates_deferred_tool_for_next_round(monkeypatch: py
             "user_id": 3,
         },
         cfg=LlmConfig(
-            llm_runtime="bot_kernel",
             llm_base_url="http://example.test/v1",
             llm_model="demo",
             llm_tools_enabled=True,
@@ -128,7 +127,6 @@ async def test_social_required_tool_fails_closed_without_tool_call(monkeypatch: 
             "user_id": 3,
         },
         cfg=LlmConfig(
-            llm_runtime="bot_kernel",
             llm_base_url="http://example.test/v1",
             llm_model="demo",
             llm_tools_enabled=True,
@@ -175,7 +173,6 @@ async def test_social_required_tool_fails_closed_after_tool_error(monkeypatch: p
             "user_id": 3,
         },
         cfg=LlmConfig(
-            llm_runtime="bot_kernel",
             llm_base_url="http://example.test/v1",
             llm_model="demo",
             llm_tools_enabled=True,
@@ -227,7 +224,6 @@ async def test_social_required_tool_rejects_unrelated_successful_tool(monkeypatc
             "user_id": 3,
         },
         cfg=LlmConfig(
-            llm_runtime="bot_kernel",
             llm_base_url="http://example.test/v1",
             llm_model="demo",
             llm_tools_enabled=True,

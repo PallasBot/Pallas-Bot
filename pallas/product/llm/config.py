@@ -152,15 +152,6 @@ def resolve_conversation_feature_level_raw() -> str:
 
 
 VectorRetrieveMode = Literal["keyword", "embedding", "hybrid", "vector"]
-LlmRuntime = Literal["bot_kernel"]
-
-
-def resolve_llm_runtime() -> LlmRuntime:
-    raw = _env_str("LLM_RUNTIME", "bot_kernel").strip().lower()
-    if raw and raw != "bot_kernel":
-        # 遗留 ai_service 已移除，强制走内核
-        pass
-    return "bot_kernel"
 
 
 def resolve_llm_base_url() -> str:
@@ -209,7 +200,6 @@ class LlmMcpServerConfig(BaseModel):
 class LlmConfig(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="ignore")
 
-    llm_runtime: LlmRuntime = Field(default="bot_kernel")
     llm_base_url: str = Field(default="")
     llm_api_key: str = Field(default="")
     llm_model: str = Field(default="")
@@ -427,7 +417,6 @@ def get_llm_config() -> LlmConfig:
         )
 
         _cached_llm_config = LlmConfig(
-            llm_runtime=resolve_llm_runtime(),
             llm_base_url=resolve_llm_base_url(),
             llm_api_key=resolve_llm_api_key(),
             llm_model=resolve_llm_model(),

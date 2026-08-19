@@ -37,7 +37,6 @@ async def test_tool_loop_keeps_one_system_message_when_background_events_arrive(
         messages=[{"role": "user", "content": "查一下"}],
         metadata={"bot_id": 1, "group_id": 2, "user_id": 3},
         cfg=LlmConfig(
-            llm_runtime="bot_kernel",
             llm_base_url="http://example.test/v1",
             llm_model="demo",
             llm_tools_enabled=False,
@@ -77,7 +76,6 @@ async def test_tool_loop_normalizes_nonleading_system_message_before_tool_contex
         ],
         metadata={"bot_id": 1, "group_id": 2, "user_id": 3},
         cfg=LlmConfig(
-            llm_runtime="bot_kernel",
             llm_base_url="http://example.test/v1",
             llm_model="demo",
             llm_tools_enabled=False,
@@ -254,14 +252,14 @@ def test_kernel_submit_gate_requires_provider(tmp_path, monkeypatch) -> None:
     clear_providers_store_cache()
     clear_llm_config_cache()
 
-    cfg = LlmConfig(llm_runtime="bot_kernel", llm_base_url="", llm_model="")
+    cfg = LlmConfig(llm_base_url="", llm_model="")
     result = assess_llm_kernel_submit_gate(cfg)
     assert result.allowed is False
     assert result.status == "provider_not_configured"
     assert user_message_for_submit_status("provider_not_configured")
 
     ok = assess_llm_kernel_submit_gate(
-        LlmConfig(llm_runtime="bot_kernel", llm_base_url="http://127.0.0.1:11434/v1", llm_model="qwen2.5:7b")
+        LlmConfig(llm_base_url="http://127.0.0.1:11434/v1", llm_model="qwen2.5:7b")
     )
     assert ok.allowed is True
 
@@ -289,7 +287,6 @@ async def test_complete_chat_message_parses_openai_response(monkeypatch: pytest.
 
     monkeypatch.setattr("pallas.product.llm.provider_client.get_llm_shared_httpx_client", fake_client)
     cfg = LlmConfig(
-        llm_runtime="bot_kernel",
         llm_base_url="http://example.test/v1",
         llm_api_key="sk-test",
         llm_model="demo",
@@ -340,7 +337,7 @@ async def test_complete_chat_message_downgrades_incompatible_required_tool_choic
         return FakeClient()
 
     monkeypatch.setattr("pallas.product.llm.provider_client.get_llm_shared_httpx_client", fake_client)
-    cfg = LlmConfig(llm_runtime="bot_kernel", chat_timeout_sec=5.0)
+    cfg = LlmConfig(chat_timeout_sec=5.0)
     tools = [{"type": "function", "function": {"name": "demo", "parameters": {"type": "object"}}}]
 
     first = await complete_chat_message(
@@ -433,7 +430,7 @@ async def test_complete_chat_message_falls_back_to_next_provider(
     message = await complete_chat_message(
         [{"role": "user", "content": "hi"}],
         model="",
-        cfg=LlmConfig(llm_runtime="bot_kernel", chat_timeout_sec=5.0),
+        cfg=LlmConfig(chat_timeout_sec=5.0),
         task="llm_chat",
     )
     assert message["content"] == "fallback-ok"
@@ -473,7 +470,6 @@ async def test_tool_loop_one_round(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("pallas.product.llm.tool_loop.execute_tool_async", fake_execute)
 
     cfg = LlmConfig(
-        llm_runtime="bot_kernel",
         llm_base_url="http://example.test/v1",
         llm_model="demo",
         llm_tools_enabled=True,
@@ -523,7 +519,6 @@ async def test_submit_chat_task_kernel_schedules_deliver(monkeypatch: pytest.Mon
     delivered: list[tuple[str, str, str]] = []
 
     cfg = LlmConfig(
-        llm_runtime="bot_kernel",
         llm_base_url="http://example.test/v1",
         llm_model="demo",
         llm_chat_enabled=True,

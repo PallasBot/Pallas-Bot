@@ -35,7 +35,6 @@ async def test_submit_chat_task_rejects_when_provider_missing(monkeypatch: pytes
     monkeypatch.setattr("pallas.product.llm.client.assess_llm_submit_gate", reject_gate)
 
     cfg = LlmConfig(
-        llm_runtime="bot_kernel",
         llm_chat_enabled=True,
         use_unified_chat_api=True,
     )

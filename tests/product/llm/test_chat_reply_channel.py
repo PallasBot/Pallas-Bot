@@ -137,7 +137,6 @@ async def test_tool_loop_side_effect_discards_freeform(monkeypatch: pytest.Monke
     monkeypatch.setattr("pallas.product.llm.tool_loop.complete_chat_message", fake_complete)
 
     cfg = LlmConfig(
-        llm_runtime="bot_kernel",
         llm_base_url="http://example.test/v1",
         llm_model="demo",
         llm_tools_enabled=True,
@@ -203,7 +202,6 @@ async def test_tool_loop_side_effect_uses_chat_reply(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr("pallas.product.llm.tool_loop.complete_chat_message", fake_complete)
 
     cfg = LlmConfig(
-        llm_runtime="bot_kernel",
         llm_base_url="http://example.test/v1",
         llm_model="demo",
         llm_tools_enabled=True,
