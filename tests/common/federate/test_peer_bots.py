@@ -482,6 +482,8 @@ def test_command_capability_covers_plaintext_call_name_only_exact(monkeypatch):
     # 本机仅有唤名「牛牛」+「牛牛帮助」，不应覆盖对端的「牛牛吃什么」
     assert mod.command_capability_covers_plaintext(frozenset({"牛牛"}), "牛牛吃什么") is False
     assert mod.command_capability_covers_plaintext(frozenset({"牛牛"}), "牛牛") is True
+    assert mod.command_capability_covers_plaintext(frozenset({"帕拉斯"}), "帕拉斯吃什么") is False
+    assert mod.command_capability_covers_plaintext(frozenset({"帕拉斯"}), "帕拉斯") is True
     assert mod.command_capability_covers_plaintext(frozenset({"牛牛吃什么"}), "牛牛吃什么") is True
 
     # prefer_local_owner=true 时，本机不在能力环 → 归属对端

@@ -20,6 +20,7 @@ from pallas.core.platform.federate.config import (
     federate_redis_prefix,
 )
 from pallas.core.platform.federate.redis_settings import get_federate_redis_client
+from pallas.core.platform.ingress.fanout_bypass import GREETING_CALL_NAMES
 from pallas.core.platform.ingress.plugin_command_plaintext import (
     _extract_literal_prefix,
     _iter_trigger_parts,
@@ -358,7 +359,7 @@ def _capability_is_call_name(token: str) -> bool:
     这类 token 若作前缀覆盖，会让本机对一切 ``牛牛*`` 命令声称有能力，
     配合 prefer_local_owner 固定本机当 owner 后，本机无 matcher 会落入 LLM 兜底。
     """
-    return len(token) <= 2 and token.isalpha()
+    return token in GREETING_CALL_NAMES
 
 
 def command_capability_covers_plaintext(capabilities: frozenset[str] | None, plain: str) -> bool:

@@ -6,7 +6,7 @@ from pallas.core.platform.ingress.config import get_ingress_fanout_config
 from pallas.core.platform.ingress.policy_registry import fanout_policy_bypasses_claim
 from pallas.core.platform.shard import context as shard_ctx
 
-_GREETING_ONLY = frozenset({"牛牛", "帕拉斯"})
+GREETING_CALL_NAMES = frozenset({"牛牛", "帕拉斯"})
 
 
 def is_ingress_fanout_plaintext(plain: str) -> bool:
@@ -15,7 +15,7 @@ def is_ingress_fanout_plaintext(plain: str) -> bool:
 
 def is_greeting_fanout_plaintext(plain: str) -> bool:
     text = (plain or "").strip()
-    return text in _GREETING_ONLY and text in get_ingress_fanout_config().fanout_set
+    return text in GREETING_CALL_NAMES and text in get_ingress_fanout_config().fanout_set
 
 
 def ingress_fanout_bypasses_claim(plain: str) -> bool:
