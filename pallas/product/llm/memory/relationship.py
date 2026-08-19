@@ -211,6 +211,11 @@ def clamp_user_relationship_delta(value: float, *, limit: float = _USER_REL_DELT
     return round(max(-bound, min(bound, float(value))), 3)
 
 
+def clamp_affinity(value: float) -> float:
+    """好感度钳制到 [-1.0, 1.0]，三位小数。"""
+    return round(max(-1.0, min(1.0, float(value))), 3)
+
+
 def prefer_relationship_source(existing: str | None, incoming: str) -> str:
     left = str(existing or "").strip() or "auto"
     right = str(incoming or "").strip() or "auto"

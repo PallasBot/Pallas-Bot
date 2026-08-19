@@ -110,6 +110,65 @@ _WARMTH_POS = ("喜欢你", "最喜欢你", "贴贴", "摸摸", "你好棒", "�
 _WARMTH_NEG = ("滚", "别烦我", "讨厌你", "闭嘴", "走开", "别理我", "烦死你")
 _ASSERT_POS = ("来啊", "敢不敢", "你凶", "别装", "顶你")
 _ASSERT_NEG = ("对不起", "抱歉", "别生气", "求你了")
+_AFFINITY_STEP_POS = 0.05
+_AFFINITY_STEP_NEG = 0.08
+_AFFINITY_POS = (
+    "喜欢你",
+    "最喜欢你",
+    "贴贴",
+    "摸摸",
+    "你好棒",
+    "你好厉害",
+    "你好温柔",
+    "好可爱",
+    "你好可爱",
+    "好聪明",
+    "你太牛了",
+    "爱你",
+    "想你了",
+    "你真好",
+    "谢谢你",
+    "夸夸",
+    "辛苦了",
+    "可爱",
+)
+_AFFINITY_NEG = (
+    "滚",
+    "滚出去",
+    "滚出来",
+    "滚蛋",
+    "滚一边去",
+    "滚的远远",
+    "走开",
+    "别说话",
+    "闭嘴",
+    "别烦我",
+    "蠢",
+    "废物",
+    "傻逼",
+    "白痴",
+    "傻牛",
+    "蠢牛",
+    "傻福",
+    "傻",
+    "笨",
+    "坏牛",
+    "臭牛",
+    "飞舞",
+    "死牛子",
+    "毒舌",
+    "嘴毒",
+    "难听",
+    "不好听",
+    "垃圾",
+    "菜",
+    "把你烤了",
+    "做成红烧牛肉面",
+    "杀了你",
+    "揍你",
+    "举办",
+    "开除",
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,6 +259,19 @@ def extract_relationship_attitude_delta(plain_text: str) -> tuple[float, float]:
     if any(token in body for token in _ASSERT_NEG):
         assertiveness -= _AFFECT_STEP
     return round(warmth, 3), round(assertiveness, 3)
+
+
+def extract_relationship_affinity_delta(plain_text: str) -> float:
+    """规则词表评好感度：命中正向词 +0.05、负向词 -0.08；双向命中负向优先。"""
+    body = (plain_text or "").strip()
+    if not body or len(body) > 60:
+        return 0.0
+    neg_hit = any(token in body for token in _AFFINITY_NEG)
+    if neg_hit:
+        return -_AFFINITY_STEP_NEG
+    if any(token in body for token in _AFFINITY_POS):
+        return _AFFINITY_STEP_POS
+    return 0.0
 
 
 def extract_relationship_auto(plain_text: str, *, allow_affect: bool = True) -> RelationshipAutoUpdate | None:
