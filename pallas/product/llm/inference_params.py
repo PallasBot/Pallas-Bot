@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING, Literal, cast
 if TYPE_CHECKING:
     from pallas.product.persona.model import ResolvedPersona
 
-_BASE_TEMPERATURE = 0.55
+# 基础温度：性格差异（chaos/warmth 等）在其上叠加，保证各牛差异同时整体更「活」。
+_BASE_TEMPERATURE = 0.7
 ChatReplyBudgetBand = Literal["casual", "serious", "tool"]
 TaskBudgetKey = Literal[
     "llm_chat",

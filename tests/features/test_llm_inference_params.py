@@ -22,7 +22,7 @@ from pallas.product.persona.model import ResolvedPersona
 def test_derive_llm_inference_params_uses_chat_task_budget() -> None:
     persona = ResolvedPersona(chaos_bias=0.0, warmth=0.0, assertiveness=0.0)
     temperature, token_count = derive_llm_inference_params(persona, mode="normal")
-    assert temperature == 0.55
+    assert temperature == 0.7
     assert token_count == 240
 
 
@@ -30,7 +30,7 @@ def test_derive_llm_inference_params_chaotic_warm() -> None:
     persona = ResolvedPersona(chaos_bias=0.4, warmth=0.3, assertiveness=0.2)
     temperature, token_count = derive_llm_inference_params(persona, mode="normal")
     assert temperature is not None
-    assert temperature > 0.55
+    assert temperature > 0.7
     assert token_count == 240
 
 
