@@ -7,6 +7,7 @@ from typing import Any
 from nonebot import logger
 
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value
+from pallas.core.foundation.logging.throttle import log_rate_limited
 
 
 @lru_cache(maxsize=32)
@@ -52,16 +53,18 @@ class SlowPathTimer:
         total_ms = max(0.0, (current - self._started) * 1000)
         if total_ms < self.threshold_ms:
             return total_ms
-        stage_text = ",".join(f"{name}={elapsed_ms:.1f}ms" for name, elapsed_ms in self._stages) or "-"
+        stage_text = ",".join(f"{name} [{elapsed_ms:.1f}ms]" for name, elapsed_ms in self._stages) or "-"
         field_text = (
-            " ".join(f"{key}={_format_field(value)}" for key, value in sorted(fields.items()) if value is not None)
+            " ".join(f"{key} [{_format_field(value)}]" for key, value in sorted(fields.items()) if value is not None)
             or "-"
         )
-        log_method = getattr(logger, self.log_level, logger.warning)
-        log_method(
-            "{} slow_path elapsed_ms={:.1f} stages={} {}",
+        log_rate_limited(
+            logger,
+            self.log_level,
+            f"slow_path.{self.scope}",
+            "{} 慢路径耗时 [{}ms]，阶段 [{}]，附加 [{}]",
             self.scope,
-            total_ms,
+            f"{total_ms:.1f}",
             stage_text,
             field_text,
         )
