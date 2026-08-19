@@ -31,7 +31,7 @@ def test_format_group_timeline_keeps_speakers_order_and_reply_target() -> None:
         ),
     ])
 
-    assert timeline == "【刚才的群聊】\n- [101] 兔兔：还是笨蛋欸\n- [102] 醉湖 回复 [101]：@牛牛"
+    assert timeline == "【刚才的群聊】\n- 兔兔：还是笨蛋欸\n- 醉湖（回兔兔的话）：@牛牛"
 
 
 def test_format_group_timeline_uses_stable_label_for_legacy_messages() -> None:
@@ -46,6 +46,23 @@ def test_format_group_timeline_uses_stable_label_for_legacy_messages() -> None:
     ])
 
     assert timeline == "【刚才的群聊】\n- 群友#0011：还在吗"
+
+
+def test_format_group_timeline_skips_reply_id_when_target_absent() -> None:
+    timeline = format_group_timeline([
+        Message.model_construct(
+            group_id=1,
+            user_id=22,
+            bot_id=99,
+            plain_text="@牛牛",
+            sender_name="醉湖",
+            message_id=102,
+            reply_to_message_id=999,
+            time=2,
+        )
+    ])
+
+    assert timeline == "【刚才的群聊】\n- 醉湖：@牛牛"
 
 
 @pytest.mark.asyncio

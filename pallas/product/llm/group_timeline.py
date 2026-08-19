@@ -7,8 +7,14 @@ from pallas.product.persona.prompt_guard import sanitize_prompt_block, sanitize_
 
 
 def format_group_timeline(messages: list[Message]) -> str:
-    """将已按时间排序的群消息压缩为带身份的 prompt 块。"""
+    """将已按时间排序的群消息压缩为带身份的 prompt 块。
+
+    去编号：不带 message_id / 引用 id，引用关系口语化成「（回X的话）」，
+    让模型读起来像一段连续群聊，而不是日志摘录。
+    """
     lines = ["【刚才的群聊】"]
+    speaker_by_id: dict[int, str] = {}
+    rendered: list[tuple[Message, str, str]] = []
     for message in messages:
         text = sanitize_prompt_literal(str(message.plain_text or ""), max_len=240)
         if not text:
@@ -16,10 +22,15 @@ def format_group_timeline(messages: list[Message]) -> str:
         sender_name = sanitize_prompt_literal(str(message.sender_name or ""), max_len=40)
         speaker = sender_name or f"群友#{int(message.user_id) % 10000:04d}"
         message_id = int(message.message_id) if message.message_id is not None else 0
-        prefix = f"[{message_id}] " if message_id > 0 else ""
+        if message_id > 0:
+            speaker_by_id[message_id] = speaker
+        rendered.append((message, speaker, text))
+    for message, speaker, text in rendered:
+        tail = ""
         reply_to = int(message.reply_to_message_id) if message.reply_to_message_id is not None else 0
-        reply = f" 回复 [{reply_to}]" if reply_to > 0 else ""
-        lines.append(f"- {prefix}{speaker}{reply}：{text}")
+        if reply_to > 0 and reply_to in speaker_by_id:
+            tail = f"（回{speaker_by_id[reply_to]}的话）"
+        lines.append(f"- {speaker}{tail}：{text}")
     if len(lines) == 1:
         return ""
     return sanitize_prompt_block("\n".join(lines), max_len=2400)

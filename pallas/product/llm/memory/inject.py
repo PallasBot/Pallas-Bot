@@ -263,6 +263,7 @@ async def enrich_system_with_relationship_context(
     group_id: int | None,
     user_id: int,
     cfg: LlmConfig | None = None,
+    include_fallback: bool = True,
 ) -> RelationshipInjectionResult:
     c = cfg or get_llm_config()
     empty_trace = {"hit_count": 0, "sources": [], "entries": [], "fallback": False}
@@ -284,11 +285,13 @@ async def enrich_system_with_relationship_context(
             if lines:
                 sources.append("relationship_note")
                 entries.append({"source": "relationship_note", "content": safe[:120]})
-    if not lines:
+    if not lines and include_fallback:
         lines.append(f"- {_RELATIONSHIP_FALLBACK}")
         sources.append("relationship_fallback")
         entries.append({"source": "relationship_fallback", "content": _RELATIONSHIP_FALLBACK[:120]})
         fallback = True
+    if not lines:
+        return RelationshipInjectionResult(system_prompt=system_prompt, trace=empty_trace)
     block = f"【与当前对话者的关系备注 — {_RELATIONSHIP_PRIORITY_HINT}】\n" + "\n".join(lines)
     base = (system_prompt or "").rstrip()
     prompt = f"{base}\n\n{block}" if base else block

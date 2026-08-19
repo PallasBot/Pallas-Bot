@@ -7,7 +7,11 @@ import pytest
 from pallas.product.llm.assembler.context import assemble_direct_chat_context
 from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.knowledge.models import KnowledgeInjectionResult
-from pallas.product.llm.memory.inject import MemoryInjectionResult
+from pallas.product.llm.memory.inject import (
+    MemoryInjectionResult,
+    PersonFactsInjectionResult,
+    RelationshipInjectionResult,
+)
 
 
 def test_assembler_package_omits_retired_repeater_context() -> None:
@@ -24,11 +28,11 @@ async def test_direct_chat_context_returns_retrieval_blocks_without_expression_a
     monkeypatch.setattr("pallas.product.llm.assembler.context.enrich_system_with_knowledge_sources", knowledge)
     monkeypatch.setattr(
         "pallas.product.llm.assembler.context.enrich_system_with_relationship_context",
-        AsyncMock(return_value=None),
+        AsyncMock(return_value=RelationshipInjectionResult(system_prompt="", trace={"hit_count": 0})),
     )
     monkeypatch.setattr(
         "pallas.product.llm.assembler.context.enrich_system_with_person_facts",
-        AsyncMock(return_value=None),
+        AsyncMock(return_value=PersonFactsInjectionResult(system_prompt="", trace={"hit_count": 0})),
     )
     monkeypatch.setattr("pallas.product.llm.knowledge.embedding_client.embedding_capability_trace", lambda _cfg: {})
     monkeypatch.setattr("pallas.product.llm.knowledge.vector_backend.vector_retrieve_mode", lambda _cfg: "hybrid")
@@ -57,11 +61,11 @@ async def test_direct_chat_context_keeps_retrieval_blocks_separate(monkeypatch) 
     monkeypatch.setattr("pallas.product.llm.assembler.context.enrich_system_with_knowledge_sources", knowledge)
     monkeypatch.setattr(
         "pallas.product.llm.assembler.context.enrich_system_with_relationship_context",
-        AsyncMock(return_value=None),
+        AsyncMock(return_value=RelationshipInjectionResult(system_prompt="", trace={"hit_count": 0})),
     )
     monkeypatch.setattr(
         "pallas.product.llm.assembler.context.enrich_system_with_person_facts",
-        AsyncMock(return_value=None),
+        AsyncMock(return_value=PersonFactsInjectionResult(system_prompt="", trace={"hit_count": 0})),
     )
     monkeypatch.setattr("pallas.product.llm.knowledge.embedding_client.embedding_capability_trace", lambda _cfg: {})
     monkeypatch.setattr("pallas.product.llm.knowledge.vector_backend.vector_retrieve_mode", lambda _cfg: "hybrid")

@@ -66,7 +66,7 @@ async def assemble_direct_chat_context(
         cfg=cfg,
     )
     stage_durations_ms["knowledge"] = int((time.perf_counter() - started) * 1000)
-    if allow_persistent_memory:
+    if group_id is not None and user_id:
         started = time.perf_counter()
         relationship_result = await enrich_system_with_relationship_context(
             "",
@@ -74,8 +74,16 @@ async def assemble_direct_chat_context(
             group_id=group_id,
             user_id=user_id,
             cfg=cfg,
+            include_fallback=allow_persistent_memory,
         )
         stage_durations_ms["relationship"] = int((time.perf_counter() - started) * 1000)
+    else:
+        relationship_result = RelationshipInjectionResult(
+            system_prompt="",
+            trace={"hit_count": 0, "sources": [], "entries": [], "fallback": False},
+        )
+        stage_durations_ms["relationship"] = 0
+    if allow_persistent_memory:
         started = time.perf_counter()
         person_facts_result = await enrich_system_with_person_facts(
             "",
@@ -87,9 +95,7 @@ async def assemble_direct_chat_context(
         stage_durations_ms["person_facts"] = int((time.perf_counter() - started) * 1000)
     else:
         skipped_trace = {"hit_count": 0, "sources": [], "skipped_short_social_turn": True}
-        relationship_result = RelationshipInjectionResult(system_prompt="", trace=skipped_trace)
         person_facts_result = PersonFactsInjectionResult(system_prompt="", trace=skipped_trace)
-        stage_durations_ms["relationship"] = 0
         stage_durations_ms["person_facts"] = 0
     from pallas.product.llm.knowledge.embedding_client import embedding_capability_trace
     from pallas.product.llm.knowledge.vector_backend import vector_retrieve_mode

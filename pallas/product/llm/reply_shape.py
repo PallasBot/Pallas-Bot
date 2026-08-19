@@ -67,9 +67,9 @@ def resolve_reply_shape(
         )
 
     shape = group_expression.reply_shape if group_expression is not None else None
-    preferred_bubbles = max(1, min(2, int(shape.bubble_count_p50 or 2))) if shape else 2
+    preferred_bubbles = max(1, min(3, int(shape.bubble_count_p50 or 2))) if shape else 2
     observed_max = int(shape.bubble_count_p90 or 3) if shape else 3
-    max_bubbles = max(preferred_bubbles, min(3, max(1, observed_max)))
+    max_bubbles = max(preferred_bubbles, min(5, max(1, observed_max)))
     return ReplyShapePolicy(
         preferred_bubbles=preferred_bubbles,
         max_bubbles=max_bubbles,

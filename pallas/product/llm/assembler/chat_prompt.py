@@ -126,7 +126,7 @@ class ChatPromptAssembler:
         lines = [
             "【回复形状与输出契约】",
             (
-                f"- 最多 {min(3, max(1, policy.max_bubbles))} 段；"
+                f"- 最多 {min(5, max(1, policy.max_bubbles))} 段；"
                 f"推荐 {policy.preferred_bubbles} 段，节奏偏 {policy.rhythm}。"
             ),
             (
@@ -140,6 +140,7 @@ class ChatPromptAssembler:
             lines.extend([
                 "- 先发即时反应；有第二个独立意思才另起一行。",
                 "- 例如听到“明天六点叫我”，直接输出：六点？\n你对我也太狠了吧\n我努力爬起来。",
+                "- 一个完整的接梗/回顶可以走两到四行：先惊讶或吐槽 → 顺着梗回顶 → 再带一句亲昵落点，不硬塞进一句里。",
             ])
         elif policy.total_length_band == "complete":
             lines.append("- 回答要清楚，但语气别收干：保持口语，可带一个轻快词，别写成书面语或客服腔。")

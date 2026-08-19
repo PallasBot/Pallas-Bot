@@ -29,6 +29,51 @@ async def test_relationship_inject_fallback_when_empty() -> None:
 
 
 @pytest.mark.asyncio
+async def test_relationship_inject_include_fallback_false_returns_empty_when_no_facts() -> None:
+    cfg = LlmConfig(llm_chat_enabled=True, llm_relationship_notes_enabled=True)
+    with patch(
+        "pallas.product.llm.memory.inject.retrieve_relationship_profile",
+        new=AsyncMock(return_value=None),
+    ):
+        result = await enrich_system_with_relationship_context(
+            "base",
+            bot_id=1,
+            group_id=2,
+            user_id=3,
+            cfg=cfg,
+            include_fallback=False,
+        )
+    assert result.system_prompt == "base"
+    assert result.trace["fallback"] is False
+    assert result.trace["hit_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_relationship_inject_include_fallback_false_still_reads_facts() -> None:
+    cfg = LlmConfig(llm_chat_enabled=True, llm_relationship_notes_enabled=True)
+    profile = RelationshipProfile(
+        content="是本群群主；希望被叫作队长",
+        source="observe",
+    )
+    with patch(
+        "pallas.product.llm.memory.inject.retrieve_relationship_profile",
+        new=AsyncMock(return_value=profile),
+    ):
+        result = await enrich_system_with_relationship_context(
+            "base",
+            bot_id=1,
+            group_id=2,
+            user_id=3,
+            cfg=cfg,
+            include_fallback=False,
+        )
+    assert "是本群群主" in result.system_prompt
+    assert "称呼对方时优先用「队长」" in result.system_prompt
+    assert result.trace["fallback"] is False
+    assert result.trace["hit_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_relationship_inject_facts_and_deltas() -> None:
     cfg = LlmConfig(llm_chat_enabled=True, llm_relationship_notes_enabled=True)
     profile = RelationshipProfile(
