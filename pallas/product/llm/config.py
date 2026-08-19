@@ -304,6 +304,8 @@ class LlmConfig(BaseModel):
     llm_memory_graph_extract_enabled: bool = Field(default=True)
     llm_memory_graph_extract_on_write: bool = Field(default=False)
     llm_memory_hiergraph_max_layers: int = Field(default=3, ge=1, le=6)
+    llm_memory_decay_half_life_days: float = Field(default=30.0, ge=0.0, le=3650.0)
+    llm_memory_decay_min_importance: float = Field(default=0.6, ge=0.0, le=1.0)
     llm_knowledge_sources_enabled: bool = Field(default=True)
     llm_knowledge_file_ingest_enabled: bool = Field(default=True)
     llm_knowledge_top_k: int = Field(default=3, ge=1, le=8)
@@ -536,6 +538,8 @@ def get_llm_config() -> LlmConfig:
             llm_memory_graph_extract_enabled=_env_bool("LLM_MEMORY_GRAPH_EXTRACT_ENABLED", True),
             llm_memory_graph_extract_on_write=_env_bool("LLM_MEMORY_GRAPH_EXTRACT_ON_WRITE", False),
             llm_memory_hiergraph_max_layers=_env_int("LLM_MEMORY_HIERGRAPH_MAX_LAYERS", 3),
+            llm_memory_decay_half_life_days=_env_float("LLM_MEMORY_DECAY_HALF_LIFE_DAYS", 30.0),
+            llm_memory_decay_min_importance=_env_float("LLM_MEMORY_DECAY_MIN_IMPORTANCE", 0.6),
             llm_knowledge_sources_enabled=_env_bool("LLM_KNOWLEDGE_SOURCES_ENABLED", True),
             llm_knowledge_file_ingest_enabled=_env_bool("LLM_KNOWLEDGE_FILE_INGEST_ENABLED", True),
             llm_knowledge_top_k=_env_int("LLM_KNOWLEDGE_TOP_K", 3),

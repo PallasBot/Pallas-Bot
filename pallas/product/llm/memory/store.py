@@ -101,6 +101,13 @@ def memory_lifecycle_overlay(entry_id: int) -> dict[str, Any]:
 
 
 def apply_memory_lifecycle_overlay(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    from pallas.product.llm.config import get_llm_config
+    from pallas.product.llm.memory.retrieve import memory_time_decay_factor
+
+    cfg = get_llm_config()
+    half_life = float(getattr(cfg, "llm_memory_decay_half_life_days", 0.0) or 0.0)
+    min_importance = float(getattr(cfg, "llm_memory_decay_min_importance", 0.6) or 0.6)
+    now = time.time()
     updated: list[dict[str, Any]] = []
     for item in candidates:
         entry_id = item.get("id")
@@ -108,7 +115,14 @@ def apply_memory_lifecycle_overlay(candidates: list[dict[str, Any]]) -> list[dic
         if overlay.get("frozen"):
             continue
         result = dict(item)
-        result["score"] = round(float(result.get("score") or 0) * float(overlay.get("weight") or 1.0))
+        decay = memory_time_decay_factor(
+            item.get("created_at"),
+            half_life_days=half_life,
+            min_importance=min_importance,
+            importance=item.get("importance"),
+            now=now,
+        )
+        result["score"] = round(float(result.get("score") or 0) * float(overlay.get("weight") or 1.0) * decay)
         updated.append(result)
     return sorted(updated, key=lambda candidate: float(candidate.get("score") or 0), reverse=True)
 

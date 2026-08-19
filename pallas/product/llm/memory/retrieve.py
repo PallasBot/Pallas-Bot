@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from typing import Any
 
 from pallas.product.llm.knowledge.vector_backend import VectorRetrieveMode, blend_hybrid_score, vector_retrieve_mode
@@ -96,6 +97,40 @@ def memory_embedding_text(*, keywords: str, content: str) -> str:
     if kw and body:
         return f"{kw}\n{body}"
     return kw or body
+
+
+def memory_time_decay_factor(
+    created_at: object,
+    *,
+    half_life_days: float,
+    min_importance: float,
+    importance: object = 0.0,
+    now: float | None = None,
+) -> float:
+    """低重要性记忆按半衰期衰减；高价值（teach/关系）不衰减。
+
+    返回 0~1 的衰减系数：created_at 距今越久、importance 越低，系数越小。
+    half_life_days<=0 或 importance>=min_importance 时不衰减（返回 1.0）。
+    """
+    if half_life_days <= 0:
+        return 1.0
+    try:
+        imp = float(importance or 0)
+    except (TypeError, ValueError):
+        imp = 0.0
+    if imp >= min_importance:
+        return 1.0
+    try:
+        created = float(created_at or 0)
+    except (TypeError, ValueError):
+        created = 0.0
+    if created <= 0:
+        return 1.0
+    current = float(now) if now is not None else float(time.time())
+    elapsed_days = max(0.0, (current - created) / 86400.0)
+    if elapsed_days <= 0:
+        return 1.0
+    return float(0.5 ** (elapsed_days / max(1e-9, float(half_life_days))))
 
 
 def parse_cached_embedding(raw: Any) -> list[float] | None:
