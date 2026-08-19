@@ -1,8 +1,12 @@
 # 标准部署
 
-完成本页后，你将在本机或 VPS 上从源码跑起 Pallas-Bot，并完成数据库、控制台与 QQ 接入。适合需要长期运行、可改代码或不用 Docker 的场景。首次只想快速验证时，可先看 [快速开始](/guide/quickstart)。
+> 目标：在本机或 VPS 上从源码跑起 Pallas-Bot，完成数据库、控制台与 QQ 接入
+> 准备：一台可长期运行的机器（建议 2 核 / 4GB 起）、`git`、Python 3.12+（或由 `uv` 安装）
+> 完成之后：源码目录可运行，控制台可访问，适合需要长期运行、可改代码或不用 Docker 的场景
 
-相关：[Docker](/deploy/docker) · [配置](/deploy/config) · [连接 QQ](/guide/connect-qq) · [分片](/maintainer/deploy/sharded) · [FAQ](/deploy/faq)
+首次只想快速验证时，可先看 [快速开始](/guide/quickstart)。
+
+相关：[Docker](/maintainer/deploy/docker) · [配置](/maintainer/reference/config-production) · [连接 QQ](/guide/connect-qq) · [分片](/maintainer/deploy/sharded) · [FAQ](/deploy/faq)
 
 ## 部署前准备
 
@@ -12,11 +16,11 @@
 | 系统 | Linux（推荐）或 Windows；长期运行优先 Linux + systemd |
 | QQ 账号 | 协议端使用小号，勿用大号 |
 | 网络 | 服务器可访问数据库端口；外网访问控制台须开放 HTTP 端口（默认 `8088`） |
-| 数据库 | PostgreSQL（4.0 默认）；3.x 升级可沿用 MongoDB |
+| 数据库 | PostgreSQL（V4 默认）；3.x 升级可沿用 MongoDB |
 | 工具 | `git`、`Python 3.12+`（或由 `uv` 安装）、[`uv`](https://docs.astral.sh/uv/) |
 | 配置 | `config/pallas.toml`（从示例复制，必做） |
 
-多 Bot、高负载生产环境可选 [分片](/maintainer/deploy/sharded) 或 [Docker](/deploy/docker)。
+多 Bot、高负载生产环境可选 [分片](/maintainer/deploy/sharded) 或 [Docker](/maintainer/deploy/docker)。
 
 ---
 
@@ -46,7 +50,7 @@ uv sync --extra deploy-shard  # 分片模板，另须配置 REDIS_URL
 
 退出码为 `0`、`.venv` 已创建，且 `uv run python -c "import nonebot"` 无报错时，依赖已就绪。
 
-分片模板：`uv run python tools/apply_deploy_profile.py shard` → 在 `pallas.toml` 的 `[env]` 配置 `REDIS_URL` → `./scripts/run_sharded_bot.sh start`。消息审查 4.0 默认开启，在 WebUI「通用配置 → 消息审查」中调整即可。分片 claim 依赖 Redis；`deploy-shard` 与 `coord-redis` 均安装 `redis` 客户端。
+分片模板：`uv run python tools/apply_deploy_profile.py shard` → 在 `pallas.toml` 的 `[env]` 配置 `REDIS_URL` → `./scripts/run_sharded_bot.sh start`。消息审查 V4 默认开启，在 WebUI「通用配置 → 消息审查」中调整即可。分片 claim 依赖 Redis；`deploy-shard` 与 `coord-redis` 均安装 `redis` 客户端。
 
 单进程不需要 Redis；后台学习任务由数据库 outbox 和 `work aux` 消费。需要分片、本机 Embedding 或 Pallas-Bot-AI 队列时，可先执行 `uv run pallas redis start` 创建或复用共享 Redis。
 
@@ -105,18 +109,18 @@ uv run python tools/migrate_env_to_pallas.py
 
 确认 `config/pallas.toml` 是文件（不是目录），且 `superusers` 与数据库段已填写。勿提交含密钥的文件。
 
-插件与通用项可在 Web 控制台修改（落盘 `data/pallas_config/webui.json`），见 [配置要点](/deploy/config)、[配置存储](/developer/architecture/config-storage)。合并顺序为 `pallas.toml` → `.env` → `webui.json`。
+插件与通用项可在 Web 控制台修改（落盘 `data/pallas_config/webui.json`），见 [配置要点](/maintainer/reference/config-production)、[配置存储](/developer/architecture/config-storage)。合并顺序为 `pallas.toml` → `.env` → `webui.json`。
 
 ---
 
 ## 4. 准备数据库
 
-4.0 新装默认 PostgreSQL（`uv sync` 已含驱动）。3.x 升级、已有 Mongo 数据的站点可继续 MongoDB。
+V4 新装默认 PostgreSQL（`uv sync` 已含驱动）。3.x 升级、已有 Mongo 数据的站点可继续 MongoDB。
 
 - PostgreSQL：[官方下载](https://www.postgresql.org/download/) · [deploy/pg/README.md](https://github.com/PallasBot/Pallas-Bot/blob/main/deploy/pg/README.md)
 - MongoDB（升级沿用）：[Windows](https://www.runoob.com/mongodb/mongodb-window-install.html) · [Linux](https://www.runoob.com/mongodb/mongodb-linux-install.html)
 
-库表由 Pallas-Bot 首次启动自动初始化（PG 须目标库已存在；应用账号不必为超级用户）。PG 排障见 [Docker 部署 · PG](/deploy/docker#排障)。
+库表由 Pallas-Bot 首次启动自动初始化（PG 须目标库已存在；应用账号不必为超级用户）。PG 排障见 [Docker 部署 · PG](/maintainer/deploy/docker#排障)。
 
 启动前确认：
 
@@ -150,7 +154,7 @@ uv run pallas
 
 启动后再执行 `uv run pallas status`，确认 `work 辅进程` 在运行；其日志在 `data/pallas_work/logs/work.log`。消息进程负责命令与实时回复，复读学习等持久化工作由该进程消费。
 
-未配置守护进程时，关闭终端即停止服务。Linux 生产环境使用下文 systemd，或改用 [Docker](/deploy/docker)。
+未配置守护进程时，关闭终端即停止服务。Linux 生产环境使用下文 systemd，或改用 [Docker](/maintainer/deploy/docker)。
 
 ---
 
@@ -202,7 +206,7 @@ WantedBy=multi-user.target
 - 备份：`data/pallas_config/webui.json`、`data/pallas_console/`、协议端实例数据
 - 防火墙：仅对可信网络开放 `8088`
 - 生产：勿长期开启 `pallas_webui_dev_mode`；公网访问须 HTTPS + 强密钥
-- 更新：`git pull` + `uv sync` + 重启；Docker 见 [Docker 部署](/deploy/docker)
+- 更新：`git pull` + `uv sync` + 重启；Docker 见 [Docker 部署](/maintainer/deploy/docker)
 
 定制仅改 `config/pallas.toml`、`data/`、`local/plugins/`。见 [升级与站点定制](/maintainer/deploy/upgrade)。
 
@@ -210,12 +214,12 @@ WantedBy=multi-user.target
 
 ## 多进程分片（可选）
 
-多只牛牛同机长跑且单进程卡顿时，使用 hub + worker，共用 `data/` 与同一份 `config/pallas.toml`。
+多个 Bot 实例同机长跑且单进程卡顿时，使用 hub + worker，共用 `data/` 与同一份 `config/pallas.toml`。
 
 - 启动：`./scripts/run_sharded_bot.sh start`（[分片架构](/maintainer/deploy/sharded)）
 - Redis：**必需**；配置 `REDIS_URL` 并安装 `coord-redis` / `deploy-shard`
 - 控制台与协议端管理仅访问 hub 端口（默认 `8088`）
-- 切换前备份 `data/`；Docker 示例见 [Docker · 分片](/deploy/docker)
+- 切换前备份 `data/`；Docker 示例见 [Docker · 分片](/maintainer/deploy/docker)
 
 ---
 
@@ -227,7 +231,7 @@ WantedBy=multi-user.target
 uv run pallas daemon
 ```
 
-默认每 15 秒探活，连续失败 3 次后重启。可用 `--interval`、`--timeout`、`--fail-threshold` 和 `--cooldown` 调整参数。该命令只守护 unified，分片部署请使用对应的 systemd/Docker 编排。
+默认每 15 秒探活，连续失败 3 次后重启。可用 `--interval`、`--timeout`、`--fail-threshold` 和 `--cooldown` 调整参数。该命令只守护 unified，分片部署使用对应的 systemd/Docker 编排。
 
 ---
 
@@ -269,4 +273,4 @@ uv run pallas daemon
 | 插件命令 | [插件索引](/plugins/) |
 | 控制台配置 | [Web 控制台](/common/webui) |
 | 排障 | [FAQ](/deploy/faq) |
-| Docker | [Docker 部署](/deploy/docker) |
+| Docker | [Docker 部署](/maintainer/deploy/docker) |

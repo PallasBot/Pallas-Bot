@@ -29,7 +29,7 @@
 
 | 页面 | 适合什么时候看 |
 | --- | --- |
-| [Docker 部署](/deploy/docker) | 需要完整的容器部署与日常命令 |
+| [Docker 部署](maintainer/deploy/docker.md) | 需要完整的容器部署与日常命令 |
 | [网页控制台](guide/web-console.md) | 已启动 Bot，准备管理账号、插件和配置 |
 | [运维入口](maintainer/quickstart.md) | 准备升级、排障或运行多个进程 |
 | [写第一个插件](developer/plugin-development/first-plugin.md) | 准备开发站点或社区插件 |

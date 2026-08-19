@@ -1,8 +1,10 @@
 # 配置要点（生产）
 
-完成本页后，你将确认生产环境最少配置、合并优先级，以及需要备份的文件。启动前请核对 `config/pallas.toml` 与可写的 `data/`。
+> 目标：确认生产环境最少配置、合并优先级，以及需要备份的文件
+> 准备：可编辑 `config/pallas.toml`，启动前能核对 `data/` 目录可写
+> 完成之后：能按本页检查清单验收生产配置
 
-相关：[配置存储](/developer/architecture/config-storage) · [标准部署](/deploy/deployment) · [Docker](/deploy/docker) · [FAQ](/deploy/faq)
+相关：[配置存储](/developer/architecture/config-storage) · [标准部署](/maintainer/deploy/deployment) · [Docker](/maintainer/deploy/docker) · [FAQ](/deploy/faq)
 
 ## 最少能跑
 
@@ -53,10 +55,10 @@ db = "PallasBot"
 | --- | --- | --- |
 | `superusers` | 超管 QQ 列表 | 至少一名可信管理员 |
 | `host` / `port` | HTTP 监听 | 反代后仍常为 `0.0.0.0` + 应用端口 |
-| `db_backend` | `postgresql`（4.0 默认）或 `mongodb`（3.x 升级） | 与已安装数据库一致 |
+| `db_backend` | `postgresql`（V4 默认）或 `mongodb`（3.x 升级） | 与已安装数据库一致 |
 | `access_token` | HTTP API 鉴权 | 公网或不可信网络建议设置 |
 
-### PostgreSQL（4.0 默认）
+### PostgreSQL（V4 默认）
 
 ```toml
 [bootstrap]
@@ -87,7 +89,7 @@ password = ""
 db = "PallasBot"
 ```
 
-Docker Compose 升级栈中 Bot 容器内 host 为 **`mongodb`**（compose 注入），见 [Docker 部署](/deploy/docker)。
+Docker Compose 升级栈中 Bot 容器内 host 为 **`mongodb`**（compose 注入），见 [Docker 部署](/maintainer/deploy/docker)。
 
 启动无 `connection refused` / 认证失败、日志完成 `init_db`、控制台无持久 5xx 时，数据库配置可用。
 
@@ -159,8 +161,8 @@ uv run python tools/migrate_env_to_pallas.py
 
 | 主题 | 文档 |
 | --- | --- |
-| 分步部署 | [标准部署](/deploy/deployment) |
-| Docker 卷 | [Docker 部署](/deploy/docker) |
+| 分步部署 | [标准部署](/maintainer/deploy/deployment) |
+| Docker 卷 | [Docker 部署](/maintainer/deploy/docker) |
 | 合并与热重载 | [配置存储](/developer/architecture/config-storage) |
 | 站点插件 | [站点定制](/maintainer/deploy/upgrade) |
 | 配置键索引 | [配置参考](/maintainer/reference/config) |

@@ -30,6 +30,7 @@ FILE_MAP: dict[str, str] = {
     "maintainer/install/ai-runtime.md": "maintainer/install/ai-runtime.md",
     "maintainer/install/ga-install-checklist.md": "maintainer/install/ga-install-checklist.md",
     "maintainer/deploy/single-process.md": "maintainer/deploy/single-process.md",
+    "maintainer/deploy/deployment.md": "maintainer/deploy/deployment.md",
     "maintainer/deploy/docker.md": "maintainer/deploy/docker.md",
     "maintainer/deploy/sharded.md": "maintainer/deploy/sharded.md",
     "maintainer/deploy/upgrade.md": "maintainer/deploy/upgrade.md",
@@ -92,12 +93,10 @@ FILE_MAP: dict[str, str] = {
     "developer/reference/platform-api.md": "developer/reference/platform-api.md",
     "developer/reference/internal-api.md": "developer/reference/internal-api.md",
     "developer/reference/console-api-response.md": "developer/reference/console-api-response.md",
-    # --- Deploy / FAQ（正文在 deploy/ 与 FAQ.md；根目录同名页为 stub，不同步）---
-    "deploy/deployment.md": "deploy/deployment.md",
-    "deploy/docker.md": "deploy/docker.md",
-    "deploy/config.md": "deploy/config.md",
+    # --- Deploy / FAQ（部署正文并入 maintainer/deploy；FAQ 仍映射到 deploy/faq）---
+    "maintainer/reference/config-production.md": "maintainer/reference/config-production.md",
+    "maintainer/reference/migration-archived.md": "maintainer/reference/migration-archived.md",
     "FAQ.md": "deploy/faq.md",
-    "about/migration.md": "about/migration.md",
     # --- common / develop 兼容 ---
     "common/community_stats.md": "common/community_stats.md",
     "common/corpus/README.md": "common/corpus.md",
@@ -354,12 +353,12 @@ def transform_for_vitepress(text: str) -> str:
     )
     text = re.sub(
         r"\]\((?:\.\./)+DockerDeployment\.md([^)]*)\)",
-        r"](/deploy/docker\1)",
+        r"](/maintainer/deploy/docker\1)",
         text,
     )
     text = re.sub(
         r"\]\((?:\.\./)+Deployment\.md([^)]*)\)",
-        r"](/deploy/deployment\1)",
+        r"](/maintainer/deploy/deployment\1)",
         text,
     )
     text = re.sub(
@@ -369,7 +368,7 @@ def transform_for_vitepress(text: str) -> str:
     )
     text = re.sub(
         r"\]\((?:\.\./)+Config\.md([^)]*)\)",
-        r"](/deploy/config\1)",
+        r"](/maintainer/reference/config-production\1)",
         text,
     )
     text = re.sub(
@@ -392,11 +391,11 @@ def transform_for_vitepress(text: str) -> str:
         r"](/plugins/pb_protocol\1)",
         text,
     )
-    text = re.sub(r"\]\(Deployment\.md([^)]*)\)", r"](/deploy/deployment\1)", text)
-    text = re.sub(r"\]\(DockerDeployment\.md([^)]*)\)", r"](/deploy/docker\1)", text)
-    text = re.sub(r"\]\(Config\.md([^)]*)\)", r"](/deploy/config\1)", text)
+    text = re.sub(r"\]\(Deployment\.md([^)]*)\)", r"](/maintainer/deploy/deployment\1)", text)
+    text = re.sub(r"\]\(DockerDeployment\.md([^)]*)\)", r"](/maintainer/deploy/docker\1)", text)
+    text = re.sub(r"\]\(Config\.md([^)]*)\)", r"](/maintainer/reference/config-production\1)", text)
     text = re.sub(r"\]\(FAQ\.md([^)]*)\)", r"](/deploy/faq\1)", text)
-    text = re.sub(r"\]\(Migration-v3\.md([^)]*)\)", r"](/about/migration\1)", text)
+    text = re.sub(r"\]\(Migration-v3\.md([^)]*)\)", r"](/maintainer/reference/migration-archived\1)", text)
     text = re.sub(
         r"\]\(\.\./README\.md([^)]*)\)",
         r"](https://github.com/PallasBot/Pallas-Bot/blob/main/README.md\1)",
@@ -432,9 +431,9 @@ def transform_for_vitepress(text: str) -> str:
         r"](https://github.com/PallasBot/Pallas-Bot/blob/main/Dockerfile\1)",
         text,
     )
-    text = re.sub(r"\]\(DockerDeployment\.md([^)]*)\)", r"](/deploy/docker\1)", text)
+    text = re.sub(r"\]\(DockerDeployment\.md([^)]*)\)", r"](/maintainer/deploy/docker\1)", text)
     text = re.sub(r"\]\(FAQ\.md([^)]*)\)", r"](/deploy/faq\1)", text)
-    text = re.sub(r"\]\(Migration-v3\.md([^)]*)\)", r"](/about/migration\1)", text)
+    text = re.sub(r"\]\(Migration-v3\.md([^)]*)\)", r"](/maintainer/reference/migration-archived\1)", text)
     text = re.sub(
         r"\]\(\.\./\.\./\.\./resource/([^)#]+)\)",
         r"](https://github.com/PallasBot/Pallas-Bot/tree/main/resource/\1)",
@@ -502,9 +501,9 @@ def transform_for_vitepress(text: str) -> str:
         text,
     )
     text = re.sub(r"\]\(4\.0-start\.md([^)]*)\)", r"](/guide/4.0-start\1)", text)
-    text = re.sub(r"\]\(\.\./Config\.md([^)]*)\)", r"](/deploy/config\1)", text)
-    text = re.sub(r"\]\(\.\./Deployment\.md([^)]*)\)", r"](/deploy/deployment\1)", text)
-    text = re.sub(r"\]\(\.\./Migration-v3\.md([^)]*)\)", r"](/about/migration\1)", text)
+    text = re.sub(r"\]\(\.\./Config\.md([^)]*)\)", r"](/maintainer/reference/config-production\1)", text)
+    text = re.sub(r"\]\(\.\./Deployment\.md([^)]*)\)", r"](/maintainer/deploy/deployment\1)", text)
+    text = re.sub(r"\]\(\.\./Migration-v3\.md([^)]*)\)", r"](/maintainer/reference/migration-archived\1)", text)
     text = re.sub(r"\]\(develop/([a-z0-9_/-]+)\.md([^)]*)\)", r"](/develop/\1\2)", text)
     text = re.sub(r"\]\(\.\./develop/([a-z0-9_/-]+)\.md([^)]*)\)", r"](/develop/\1\2)", text)
     # 已带 maintainer/developer 前缀的链接
