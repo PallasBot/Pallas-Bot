@@ -62,6 +62,28 @@ pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 覆盖 `pallas/`
 - **可选部署模板**：`deploy/` 目录 + `uv sync --extra deploy-shard`；应用 `uv run python tools/apply_deploy_profile.py shard`（分片）。消息审查 4.0 默认开启，无需模板。
 - **Docker Compose 数据库**：仍可用 [`config/compose.env.example`](config/compose.env.example)（仅编排插值，非 Bot 主配置）。
 
+## 运行产物与数据目录（Agent 必读）
+
+日志、持久化、前端资源均落在 **仓库根下 `data/`**（`PROJECT_ROOT / "data"`，见 `pallas/core/foundation/paths/__init__.py` 的 `DATA_ROOT` / `plugin_data_dir()`）。查运行问题时先确认部署形态（unified / 分片 / Docker），再按下面锚点定位。
+
+| 用途 | 路径 |
+| --- | --- |
+| Bot 主日志（统一运行时） | `data/pallas_unified/logs/bot.log`；历史 NoneBot 用 `data/bot/nonebot_*.log` |
+| 业务工作 aux 日志 | `data/pallas_work/logs/work.log`（下载/后台任务） |
+| embed 辅进程日志 | `data/pallas_embed/logs/embed.log`（本机 Embedding + Redis 时） |
+| 分片日志 / 状态 | `data/pallas_shard/logs/{hub,worker-*}.log`、`registry.json`、`stats/` |
+| 配置落盘 | `config/pallas.toml`、`data/pallas_config/webui.json`（WebUI 覆盖最高）、快照 `config/pallas.webui.export.toml` |
+| 控制台鉴权 | `data/pallas_console/`：`auth_state.json`（密钥哈希）、`session_secret.bin`、`api_keys.json`（长期 API Key 哈希） |
+| WebUI 前端产物 | `data/pb_webui/public-react/`（挂载基址 `/pallas/`） |
+| 知识源 | `data/pallas_knowledge/` |
+| 表达/口头禅库 | `data/pb_webui/expression_bank/`（`pending/|merged/` 分片，append+定期合并） |
+| LLM 反馈/行为 | `data/pb_webui/llm_repeater_feedback/`、`llm_behavior/` |
+| 数据库 | PostgreSQL 容器（db `PallasBot`，user `togetsudo`） |
+
+速查命令：`uv run pallas logs`（默认 Bot+embed）、`uv run pallas logs -f`、`uv run pallas status`。排障顺序与关键路径详见 [docs/maintainer/operate/logs.md](docs/maintainer/operate/logs.md) 与 [docs/maintainer/operate/troubleshooting.md](docs/maintainer/operate/troubleshooting.md)。
+
+控制台 API 长期调用：`uv run pallas console token`（签发）、`pallas console tokens` / `pallas console revoke <id>`；请求带 `X-Pallas-Api-Key: pls_...` header（如 `curl -H 'X-Pallas-Api-Key: pls_...' http://<host>:<port>/pallas/api/...`）。
+
 ## Agent 工作约定
 
 ### 修改范围
