@@ -9,6 +9,7 @@ from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.memory.affinity_scorer import score_affinity_with_llm
 from pallas.product.llm.memory.relationship import clamp_affinity
 from pallas.product.llm.memory.relationship_auto import extract_relationship_affinity_delta
+from pallas.product.llm.memory.relationship_persist import maybe_persist_relationship_from_utterance
 from pallas.product.llm.memory.relationship_store import RelationshipProfile
 
 
@@ -162,3 +163,45 @@ async def test_score_affinity_with_llm_truncates_long_input() -> None:
     assert result is not None
     quoted = captured["prompt"].split("群友的话：", 1)[1]
     assert len(quoted) <= 60
+
+
+@pytest.mark.asyncio
+async def test_persist_rules_affinity_no_llm_when_hit() -> None:
+    cfg = LlmConfig(llm_chat_enabled=True, llm_relationship_notes_enabled=True)
+    upsert = AsyncMock(return_value=True)
+    with (
+        patch(
+            "pallas.product.llm.memory.relationship_persist.upsert_relationship_profile",
+            new=upsert,
+        ),
+        patch(
+            "pallas.product.llm.memory.relationship_persist.score_affinity_with_llm",
+            new=AsyncMock(return_value={"affinity_delta": -0.6, "confidence": 0.9, "reason": "反讽"}),
+        ) as llm,
+    ):
+        ok = await maybe_persist_relationship_from_utterance(1, 2, 3, "傻牛滚出去", speak_trigger="to_me", cfg=cfg)
+    assert ok is True
+    assert llm.await_count == 0
+    kwargs = upsert.await_args.kwargs
+    assert kwargs["affinity_delta_add"] == -0.08
+
+
+@pytest.mark.asyncio
+async def test_persist_llm_affinity_when_rule_miss() -> None:
+    cfg = LlmConfig(llm_chat_enabled=True, llm_relationship_notes_enabled=True)
+    upsert = AsyncMock(return_value=True)
+    with (
+        patch(
+            "pallas.product.llm.memory.relationship_persist.upsert_relationship_profile",
+            new=upsert,
+        ),
+        patch(
+            "pallas.product.llm.memory.relationship_persist.score_affinity_with_llm",
+            new=AsyncMock(return_value={"affinity_delta": -0.6, "confidence": 0.9, "reason": "反讽"}),
+        ) as llm,
+    ):
+        ok = await maybe_persist_relationship_from_utterance(1, 2, 3, "你还不感谢我", speak_trigger="followup", cfg=cfg)
+    assert ok is True
+    assert llm.await_count == 1
+    kwargs = upsert.await_args.kwargs
+    assert kwargs["affinity_delta_add"] == -0.6
