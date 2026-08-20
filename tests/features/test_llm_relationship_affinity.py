@@ -54,3 +54,13 @@ def test_relationship_note_document_has_affinity() -> None:
 
     fields = set(LlmRelationshipNote.model_fields)
     assert "affinity" in fields
+
+
+from pallas.product.llm.memory.relationship_store import RelationshipProfile
+
+
+def test_relationship_profile_has_affinity() -> None:
+    profile = RelationshipProfile(affinity=-0.5)
+    assert profile.affinity == -0.5
+    assert profile.has_affinity is True
+    assert RelationshipProfile().has_affinity is False

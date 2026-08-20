@@ -16,6 +16,7 @@ from sqlalchemy import delete, select
 from pallas.core.foundation.db.repository_pg import LlmRelationshipNoteRow, get_session
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.memory.relationship import (
+    clamp_affinity,
     clamp_user_relationship_delta,
     merge_relationship_facts,
     normalize_relationship_note,
@@ -33,6 +34,7 @@ class RelationshipProfile:
     content: str = ""
     warmth_delta: float = 0.0
     assertiveness_delta: float = 0.0
+    affinity: float = 0.0
     source: str = "auto"
     weight: float = 1.0
 
@@ -43,6 +45,10 @@ class RelationshipProfile:
     @property
     def has_affect(self) -> bool:
         return self.warmth_delta != 0.0 or self.assertiveness_delta != 0.0
+
+    @property
+    def has_affinity(self) -> bool:
+        return self.affinity != 0.0
 
 
 def is_relationship_store_available() -> bool:
@@ -74,6 +80,10 @@ def _delta_limit(cfg: LlmConfig) -> float:
     return float(getattr(cfg, "llm_relationship_affect_delta_max", 0.15) or 0.15)
 
 
+def _affinity_limit(cfg: LlmConfig) -> float:
+    return float(getattr(cfg, "llm_relationship_affinity_delta_max", 0.15) or 0.15)
+
+
 async def upsert_relationship_profile(
     bot_id: int,
     group_id: int | None,
@@ -83,6 +93,7 @@ async def upsert_relationship_profile(
     source: str = "auto",
     warmth_delta_add: float = 0.0,
     assertiveness_delta_add: float = 0.0,
+    affinity_delta_add: float = 0.0,
     merge_content: bool = True,
     cfg: LlmConfig | None = None,
 ) -> bool:
@@ -100,6 +111,7 @@ async def upsert_relationship_profile(
             source=source,
             warmth_delta_add=warmth_delta_add,
             assertiveness_delta_add=assertiveness_delta_add,
+            affinity_delta_add=affinity_delta_add,
             merge_content=merge_content,
             cfg=cfg,
         )
@@ -108,7 +120,7 @@ async def upsert_relationship_profile(
     c = cfg or get_llm_config()
     incoming = normalize_relationship_note(content or "", max_len=c.llm_relationship_content_max_len)
     has_fact = bool(incoming)
-    has_delta = warmth_delta_add != 0.0 or assertiveness_delta_add != 0.0
+    has_delta = warmth_delta_add != 0.0 or assertiveness_delta_add != 0.0 or affinity_delta_add != 0.0
     if not has_fact and not has_delta:
         return False
     scope_gid = normalize_group_scope(group_id)
@@ -144,6 +156,9 @@ async def upsert_relationship_profile(
                 float(existing.assertiveness_delta or 0.0) + float(assertiveness_delta_add),
                 limit=limit,
             )
+            existing.affinity = clamp_affinity(
+                float(getattr(existing, "affinity", 0.0) or 0.0) + float(affinity_delta_add)
+            )
             existing.weight = 1.0
             existing.updated_at = now
         else:
@@ -160,6 +175,7 @@ async def upsert_relationship_profile(
                         float(assertiveness_delta_add),
                         limit=limit,
                     ),
+                    affinity=clamp_affinity(float(affinity_delta_add)),
                     created_at=now,
                     updated_at=now,
                 )
@@ -233,12 +249,14 @@ async def retrieve_relationship_profile(
         float(getattr(row, "assertiveness_delta", 0.0) or 0.0),
         limit=_delta_limit(c),
     )
-    if not content and warmth == 0.0 and assertiveness == 0.0:
+    affinity = clamp_affinity(float(getattr(row, "affinity", 0.0) or 0.0))
+    if not content and warmth == 0.0 and assertiveness == 0.0 and affinity == 0.0:
         return None
     return RelationshipProfile(
         content=content,
         warmth_delta=warmth,
         assertiveness_delta=assertiveness,
+        affinity=affinity,
         source=str(row.source or "").strip() or "auto",
         weight=weight,
     )
@@ -349,12 +367,64 @@ async def list_relationship_notes(
             "weight": float(row.weight or 0.0),
             "warmth_delta": float(getattr(row, "warmth_delta", 0.0) or 0.0),
             "assertiveness_delta": float(getattr(row, "assertiveness_delta", 0.0) or 0.0),
+            "affinity": float(getattr(row, "affinity", 0.0) or 0.0),
             "created_at": int(row.created_at or 0),
             "updated_at": int(row.updated_at or 0),
         })
         if len(items) >= max_limit:
             break
     return items
+
+
+async def set_affinity(
+    bot_id: int,
+    group_id: int | None,
+    user_id: int,
+    affinity: float,
+    *,
+    cfg: LlmConfig | None = None,
+) -> bool:
+    """WebUI 覆盖：把 affinity 设绝对值；无档案时仅建 affinity 行。"""
+    if not is_relationship_store_available() or not user_id:
+        return False
+    if _use_mongodb_backend():
+        from pallas.product.llm.memory.relationship_store_mongo import set_affinity_mongo
+
+        return await set_affinity_mongo(bot_id, group_id, user_id, affinity, cfg=cfg)
+    if not _use_postgresql_backend():
+        return False
+    scope_gid = normalize_group_scope(group_id)
+    now = int(time.time())
+    value = clamp_affinity(float(affinity))
+    async with get_session() as session:
+        existing = (
+            await session.execute(
+                select(LlmRelationshipNoteRow).where(
+                    LlmRelationshipNoteRow.bot_id == int(bot_id),
+                    LlmRelationshipNoteRow.group_id == scope_gid,
+                    LlmRelationshipNoteRow.user_id == int(user_id),
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            existing.affinity = value
+            existing.updated_at = now
+        else:
+            session.add(
+                LlmRelationshipNoteRow(
+                    bot_id=int(bot_id),
+                    group_id=scope_gid,
+                    user_id=int(user_id),
+                    content="",
+                    source="auto",
+                    weight=1.0,
+                    affinity=value,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+        await session.commit()
+    return True
 
 
 async def delete_relationship_note(note_id: int, *, bot_id: int | None = None) -> bool:
