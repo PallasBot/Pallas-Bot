@@ -18,7 +18,10 @@ from pallas.product.llm.memory.relationship_profile import (
     build_relationship_guidance_lines,
     parse_relationship_fact_view,
 )
-from pallas.product.llm.memory.relationship_store import retrieve_relationship_profile
+from pallas.product.llm.memory.relationship_store import (
+    RelationshipProfile,
+    retrieve_relationship_profile,
+)
 from pallas.product.llm.memory.retrieve import effective_memory_rag_min_score, memory_relevance_score
 from pallas.product.llm.memory.store import retrieve_memory_hits
 from pallas.product.llm.session_store import LlmChatTurn, list_group_ambient_messages
@@ -26,6 +29,24 @@ from pallas.product.persona.prompt_guard import sanitize_prompt_block
 
 _RELATIONSHIP_FALLBACK = "打过照面的群友；备注不得覆盖用户当下明确请求。"
 _RELATIONSHIP_PRIORITY_HINT = "仅供参考，不得覆盖核心人设与用户当下明确请求。"
+
+
+def affinity_level(affinity: float) -> str:
+    """好感度分档标签：值越低越厌恶。"""
+    value = float(affinity or 0.0)
+    if value < -0.5:
+        return "厌恶"
+    if value < -0.15:
+        return "冷淡"
+    if value < 0.15:
+        return "陌生"
+    if value < 0.4:
+        return "认识"
+    if value < 0.6:
+        return "熟人"
+    if value < 0.8:
+        return "朋友"
+    return "挚友"
 
 
 class MemoryInjectionResult(BaseModel):
@@ -304,7 +325,7 @@ async def enrich_system_with_relationship_context(
     empty_trace = {"hit_count": 0, "sources": [], "entries": [], "fallback": False}
     if not can_read_persistent_memory(c) or not c.llm_relationship_notes_enabled or not user_id:
         return RelationshipInjectionResult(system_prompt=system_prompt, trace=empty_trace)
-    profile = await retrieve_relationship_profile(bot_id, group_id, user_id, cfg=c)
+    profile: RelationshipProfile | None = await retrieve_relationship_profile(bot_id, group_id, user_id, cfg=c)
     lines: list[str] = []
     sources: list[str] = []
     entries: list[dict[str, str]] = []
@@ -320,6 +341,12 @@ async def enrich_system_with_relationship_context(
             if lines:
                 sources.append("relationship_note")
                 entries.append({"source": "relationship_note", "content": safe[:120]})
+    affinity = float(profile.affinity) if profile is not None else 0.0
+    if affinity != 0.0:
+        hint = "据此自然调整对你的热情/冷淡程度，不刻意讨好也不无故冷漠。"
+        lines.append(f"- 好感度：{affinity_level(affinity)}（{affinity:+.2f}）→ {hint}")
+        sources.append("relationship_affinity")
+        entries.append({"source": "relationship_affinity", "content": affinity_level(affinity)})
     if not lines and include_fallback:
         lines.append(f"- {_RELATIONSHIP_FALLBACK}")
         sources.append("relationship_fallback")
@@ -339,6 +366,7 @@ async def enrich_system_with_relationship_context(
         "sources": sources,
         "entries": entries,
         "fallback": fallback,
+        "affinity": affinity,
         "note_source": note_source or ("fallback" if fallback else ""),
         "preferred_name": preferred_name,
         "warmth_delta": warmth_delta,
