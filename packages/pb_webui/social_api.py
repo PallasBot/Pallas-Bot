@@ -387,7 +387,13 @@ async def _get_doubt_friends_for_self_id(self_id: int) -> list[dict[str, Any]]:
     except Exception as e:  # noqa: BLE001
         logger.debug("[WebUI] get_doubt_friends_add_request failed for bot [{}]: [{}]", self_id, e)
         return []
-    return _rows_from_doubt_friends_api(raw)
+    rows = _rows_from_doubt_friends_api(raw)
+    for row in rows:
+        if not str(row.get("flag") or "").strip():
+            uid = row.get("uid")
+            if uid is not None and str(uid).strip():
+                row["flag"] = str(uid).strip()
+    return rows
 
 
 async def _stranger_nickname_for_self_id(self_id: int, user_id: int) -> str:
@@ -509,6 +515,8 @@ async def _call_get_doubt_friends(bot: object) -> list[dict[str, Any]]:
         except (TypeError, ValueError):
             continue
         flag = x.get("flag")
+        if flag is None:
+            flag = x.get("uid")
         if flag is None:
             continue
         flag_str = str(flag).strip()
