@@ -24,6 +24,7 @@ TaskBudgetKey = Literal[
     "memory_graph_hiergraph",
     "catchphrase_extract",
     "offline_quality_eval",
+    "llm.relationship.affinity",
 ]
 
 _TASK_TOKEN_BUDGETS: dict[TaskBudgetKey, int] = {
@@ -40,6 +41,7 @@ _TASK_TOKEN_BUDGETS: dict[TaskBudgetKey, int] = {
     "memory_graph_hiergraph": 1500,
     "catchphrase_extract": 200,
     "offline_quality_eval": 96,
+    "llm.relationship.affinity": 128,
 }
 _CHAT_TOOLS_TOKEN_BUDGET = 360
 _CHAT_REPLY_TOKEN_BUDGETS: dict[ChatReplyBudgetBand, int] = {

@@ -11,6 +11,7 @@ from pallas.product.llm.inference_params import task_token_budget
 from pallas.product.llm.provider_client import complete_chat_message
 
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL | re.IGNORECASE)
+_AFFINITY_INPUT_MAX_LEN = 60
 
 
 async def score_affinity_with_llm(
@@ -21,13 +22,10 @@ async def score_affinity_with_llm(
 ) -> dict[str, Any] | None:
     """判断一句话对 bot 的好感倾向，返回 {affinity_delta, confidence, reason}；失败返回 None。"""
     c = cfg or get_llm_config()
-    text = (plain_text or "").strip()
+    text = (plain_text or "").strip()[:_AFFINITY_INPUT_MAX_LEN]
     if not text:
         return None
-    try:
-        budget = task_token_budget(task)
-    except ValueError:
-        budget = 128
+    budget = task_token_budget(task)
     prompt = (
         "你正在判断群友对牛牛的好感倾向。注意反讽：比如「哇！好聪明」表面夸实际贬，"
         "「你还不感谢我」是命令式索取不算好感。"

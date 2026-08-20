@@ -90,3 +90,75 @@ async def test_score_affinity_with_llm_handles_bad_json() -> None:
     ):
         result = await score_affinity_with_llm("随便说", task="llm.relationship.affinity")
     assert result is None
+
+
+@pytest.mark.asyncio
+async def test_score_affinity_with_llm_clamps_bounds() -> None:
+    payload = json.dumps({"affinity_delta": 1.5, "confidence": 2.0, "reason": "x"})
+    with patch(
+        "pallas.product.llm.memory.affinity_scorer.complete_chat_message",
+        new=AsyncMock(return_value={"content": payload}),
+    ):
+        result = await score_affinity_with_llm("太爱你了", task="llm.relationship.affinity")
+    assert result["affinity_delta"] == 1.0
+    assert result["confidence"] == 1.0
+
+
+@pytest.mark.asyncio
+async def test_score_affinity_with_llm_handles_non_numeric() -> None:
+    payload = json.dumps({"affinity_delta": "很讨厌", "confidence": 0.5, "reason": "x"})
+    with patch(
+        "pallas.product.llm.memory.affinity_scorer.complete_chat_message",
+        new=AsyncMock(return_value={"content": payload}),
+    ):
+        result = await score_affinity_with_llm("随便说", task="llm.relationship.affinity")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_score_affinity_with_llm_handles_non_dict() -> None:
+    with patch(
+        "pallas.product.llm.memory.affinity_scorer.complete_chat_message",
+        new=AsyncMock(return_value={"content": "[1, 2, 3]"}),
+    ):
+        result = await score_affinity_with_llm("随便说", task="llm.relationship.affinity")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_score_affinity_with_llm_handles_empty_content() -> None:
+    with patch(
+        "pallas.product.llm.memory.affinity_scorer.complete_chat_message",
+        new=AsyncMock(return_value={"content": ""}),
+    ):
+        result = await score_affinity_with_llm("随便说", task="llm.relationship.affinity")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_score_affinity_with_llm_handles_provider_error() -> None:
+    with patch(
+        "pallas.product.llm.memory.affinity_scorer.complete_chat_message",
+        new=AsyncMock(side_effect=RuntimeError("provider down")),
+    ):
+        result = await score_affinity_with_llm("随便说", task="llm.relationship.affinity")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_score_affinity_with_llm_truncates_long_input() -> None:
+    long_text = "我爱你" * 100
+    captured: dict = {}
+
+    async def fake_complete(messages, **kwargs):
+        captured["prompt"] = messages[0]["content"]
+        return {"content": json.dumps({"affinity_delta": 0.3, "confidence": 0.8, "reason": "x"})}
+
+    with patch(
+        "pallas.product.llm.memory.affinity_scorer.complete_chat_message",
+        new=AsyncMock(side_effect=fake_complete),
+    ):
+        result = await score_affinity_with_llm(long_text, task="llm.relationship.affinity")
+    assert result is not None
+    quoted = captured["prompt"].split("群友的话：", 1)[1]
+    assert len(quoted) <= 60
