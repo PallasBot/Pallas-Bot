@@ -81,7 +81,11 @@ from pallas.product.llm.memory.ops import (
     preview_memory_retrieve,
     upsert_memory_preference,
 )
-from pallas.product.llm.memory.relationship_store import delete_relationship_note, list_relationship_notes
+from pallas.product.llm.memory.relationship_store import (
+    delete_relationship_note,
+    list_relationship_notes,
+    set_affinity,
+)
 from pallas.product.llm.memory.store import delete_memory_entry, list_memory_entries, save_memory_entry
 from pallas.product.llm.model_admin import (
     fetch_llm_task_stats,
@@ -275,6 +279,7 @@ __all__ = [
     "save_tool_overrides",
     "search_memory_graph",
     "session_ops_patch_dict",
+    "set_affinity",
     "set_feedback_entry_correction",
     "set_feedback_entry_eligibility",
     "set_runtime_num_gpu",

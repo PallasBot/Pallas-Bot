@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from pallas.product.llm import ops_api
 from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.memory.affinity_scorer import score_affinity_with_llm
 from pallas.product.llm.memory.relationship import clamp_affinity
@@ -225,3 +226,8 @@ async def test_persist_llm_neutral_affinity_skips_upsert_delta() -> None:
     assert ok is False
     assert llm.await_count == 1
     upsert.assert_not_awaited()
+
+
+def test_ops_api_exports_set_affinity() -> None:
+    assert "set_affinity" in ops_api.__all__
+    assert callable(getattr(ops_api, "set_affinity", None))

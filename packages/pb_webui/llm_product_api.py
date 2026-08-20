@@ -22,6 +22,7 @@ from pallas.product.llm.ops_api import (
     list_recent_conversation_traces,
     list_relationship_notes,
     resolve_promotion_candidate_with_writeback,
+    set_affinity,
     set_feedback_entry_correction,
     set_feedback_entry_eligibility,
 )
@@ -670,6 +671,27 @@ def register_llm_product_router(
         if not ok:
             raise HTTPException(status_code=404, detail="未找到该关系备注")
         return JSONResponse({"ok": True, "data": {"id": note_id}})
+
+    @router.post(f"{x}/llm/conversation-kernel/relationship-notes/set-affinity", include_in_schema=True)
+    async def _llm_conversation_kernel_relationship_notes_set_affinity(
+        body: dict[str, Any],
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        bot_id = int(body.get("bot_id") or 0)
+        group_id = int(body.get("group_id") or 0)
+        user_id = int(body.get("user_id") or 0)
+        affinity = float(body.get("affinity") or 0.0)
+        if bot_id <= 0 or user_id <= 0:
+            raise HTTPException(status_code=400, detail="bot_id and group_id required")
+        try:
+            ok = await set_affinity(bot_id, group_id or None, user_id, affinity)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        if not ok:
+            raise HTTPException(status_code=404, detail="设置好感度失败")
+        return JSONResponse({"ok": True, "data": {"affinity": affinity}})
 
     @router.get(f"{x}/llm/conversation-kernel/knowledge-sources", include_in_schema=True)
     async def _llm_conversation_kernel_knowledge_sources_get() -> JSONResponse:
