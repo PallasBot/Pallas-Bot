@@ -8,9 +8,8 @@ from pallas.core.foundation.fs_lock import interprocess_file_lock
 from pallas.product.llm.config import get_llm_config
 from pallas.product.persona.expression_bank import (
     ExpressionEntry,
-    _load_expression_entries,
-    _write_expression_entries,
-    expression_entries_path,
+    _group_id_from_entry_id,
+    _shard_path,
     list_group_expressions,
 )
 
@@ -38,6 +37,39 @@ def list_pending_expressions(group_id: int, *, limit: int = 50) -> list[Expressi
     return list_expression_candidates(group_id, limit=limit)
 
 
+def _resolve_group_entry(
+    group_id: int,
+    entry_id: str,
+    *,
+    action: ResolveAction,
+    reason: str = "",
+) -> ExpressionEntry | None:
+    """Apply the resolve update as a delta event appended to the group shard."""
+    pending_path = _shard_path(group_id, pending=True)
+    from pallas.product.persona.expression_bank import _iter_rows, _write_lines_append
+
+    with interprocess_file_lock(pending_path.with_suffix(pending_path.suffix + ".lock")):
+        rows = list(_iter_rows(pending_path))
+        current = next((row for row in rows if row.entry_id == entry_id), None)
+        # Authority may live in merged shard if no pending delta references it yet.
+        if current is None:
+            from pallas.product.persona.expression_bank import _group_combined_rows
+
+            current = next(
+                (row for row in _group_combined_rows(group_id) if row.entry_id == entry_id),
+                None,
+            )
+        if current is None:
+            return None
+        if action == "approve":
+            updated = current.model_copy(update={"status": "active", "rejected_reason": ""})
+        else:
+            rejected_reason = str(reason or "rejected").strip() or "rejected"
+            updated = current.model_copy(update={"status": "rejected", "rejected_reason": rejected_reason})
+        _write_lines_append(pending_path, [updated])
+        return updated
+
+
 def resolve_expression(
     entry_id: str,
     *,
@@ -47,21 +79,10 @@ def resolve_expression(
     target_id = str(entry_id or "").strip()
     if not target_id or action not in ("approve", "reject"):
         return None
-    path = expression_entries_path()
-    with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
-        rows = _load_expression_entries()
-        for index, entry in enumerate(rows):
-            if entry.entry_id != target_id:
-                continue
-            if action == "approve":
-                updated = entry.model_copy(update={"status": "active", "rejected_reason": ""})
-            else:
-                rejected_reason = str(reason or "rejected").strip() or "rejected"
-                updated = entry.model_copy(update={"status": "rejected", "rejected_reason": rejected_reason})
-            rows[index] = updated
-            _write_expression_entries(path, rows)
-            return updated
-    return None
+    gid = _group_id_from_entry_id(target_id)
+    if gid <= 0:
+        return None
+    return _resolve_group_entry(gid, target_id, action=action, reason=reason)
 
 
 def maybe_auto_promote_for_group(group_id: int) -> list[ExpressionEntry]:

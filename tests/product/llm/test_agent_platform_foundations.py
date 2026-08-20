@@ -99,19 +99,20 @@ def test_catchphrase_rejects_weak_soft_agree(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     assert propose_catchphrase_from_bot_success(1001, 11, "行行行", "口头禅") is None
     # 旧数据：人工写入弱填充后应被 purge
-    from pallas.product.persona.catchphrase_bank import CatchphraseEntry, _load, _save
+    from pallas.product.persona.catchphrase_bank import CatchphraseEntry, _save
 
-    rows = _load()
-    rows.append(
-        CatchphraseEntry(
-            entry_id="catch-weak-test",
-            bot_id=1001,
-            saying="行行行",
-            occasion="口头禅",
-            status="active",
-        )
+    _save(
+        1001,
+        [
+            CatchphraseEntry(
+                entry_id="catch-1001-weak-test",
+                bot_id=1001,
+                saying="行行行",
+                occasion="口头禅",
+                status="active",
+            )
+        ],
     )
-    _save(rows)
     assert reject_weak_filler_catchphrases(1001) >= 1
     assert all(row.status == "rejected" for row in list_catchphrases(1001) if row.saying == "行行行")
 
