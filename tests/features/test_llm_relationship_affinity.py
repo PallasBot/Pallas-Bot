@@ -200,8 +200,28 @@ async def test_persist_llm_affinity_when_rule_miss() -> None:
             new=AsyncMock(return_value={"affinity_delta": -0.6, "confidence": 0.9, "reason": "反讽"}),
         ) as llm,
     ):
-        ok = await maybe_persist_relationship_from_utterance(1, 2, 3, "你还不感谢我", speak_trigger="followup", cfg=cfg)
+        ok = await maybe_persist_relationship_from_utterance(9, 8, 7, "你还不感谢我", speak_trigger="followup", cfg=cfg)
     assert ok is True
     assert llm.await_count == 1
     kwargs = upsert.await_args.kwargs
     assert kwargs["affinity_delta_add"] == -0.6
+
+
+@pytest.mark.asyncio
+async def test_persist_llm_neutral_affinity_skips_upsert_delta() -> None:
+    cfg = LlmConfig(llm_chat_enabled=True, llm_relationship_notes_enabled=True)
+    upsert = AsyncMock(return_value=True)
+    with (
+        patch(
+            "pallas.product.llm.memory.relationship_persist.upsert_relationship_profile",
+            new=upsert,
+        ),
+        patch(
+            "pallas.product.llm.memory.relationship_persist.score_affinity_with_llm",
+            new=AsyncMock(return_value={"affinity_delta": 0.0, "confidence": 0.9, "reason": "中性"}),
+        ) as llm,
+    ):
+        ok = await maybe_persist_relationship_from_utterance(5, 6, 7, "你还不感谢我", speak_trigger="followup", cfg=cfg)
+    assert ok is False
+    assert llm.await_count == 1
+    upsert.assert_not_awaited()

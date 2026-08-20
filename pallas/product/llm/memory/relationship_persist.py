@@ -16,7 +16,6 @@ from pallas.product.llm.memory.relationship_auto import (
 from pallas.product.llm.memory.relationship_store import upsert_relationship_profile
 
 _HARD_SPEAK_TRIGGERS = frozenset({"to_me", "mention", "followup"})
-_LLM_AFFINITY_COOLDOWN_SEC = 60
 _llm_affinity_last_scored: dict[tuple[int, int, int], float] = {}
 
 
@@ -63,7 +62,7 @@ async def maybe_persist_relationship_from_utterance(
             if now - last >= cooldown:
                 _llm_affinity_last_scored[key] = now
                 scored = await score_affinity_with_llm(plain_text, cfg=c)
-                if scored is not None and scored.get("affinity_delta"):
+                if scored is not None and scored.get("affinity_delta") is not None:
                     affinity_add = float(scored["affinity_delta"])
                     affinity_source = "llm"
 
