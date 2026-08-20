@@ -195,6 +195,7 @@ FIELD_LABELS: dict[str, str] = {
     "llm_relationship_affinity_enabled": "好感度记录",
     "llm_relationship_affinity_delta_max": "单次好感度变动上限",
     "llm_relationship_affinity_llm_cooldown_s": "好感度大模型判定冷却（秒）",
+    "llm_relationship_affinity_llm_daily_limit": "好感度大模型判定每日上限",
     "llm_relationship_affinity_daily_decay_step": "好感度每日回落幅度",
     "llm_relationship_affinity_silence_threshold": "好感度静默阈值",
     "llm_relationship_affinity_silence_max_penalty": "好感度静默最大扣分",

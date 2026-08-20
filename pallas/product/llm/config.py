@@ -336,6 +336,7 @@ class LlmConfig(BaseModel):
     llm_relationship_affinity_enabled: bool = Field(default=True)
     llm_relationship_affinity_delta_max: float = Field(default=0.15, ge=0.0, le=1.0)
     llm_relationship_affinity_llm_cooldown_s: int = Field(default=60, ge=0, le=86400)
+    llm_relationship_affinity_llm_daily_limit: int = Field(default=300, ge=0, le=100000)
     llm_relationship_affinity_daily_decay_step: float = Field(default=0.02, ge=0.0, le=1.0)
     llm_relationship_affinity_silence_threshold: float = Field(default=-0.3, ge=-1.0, le=0.0)
     llm_relationship_affinity_silence_max_penalty: int = Field(default=30, ge=0, le=200)
@@ -577,15 +578,10 @@ def get_llm_config() -> LlmConfig:
             llm_relationship_affinity_enabled=_env_bool("LLM_RELATIONSHIP_AFFINITY_ENABLED", True),
             llm_relationship_affinity_delta_max=_env_float("LLM_RELATIONSHIP_AFFINITY_DELTA_MAX", 0.15),
             llm_relationship_affinity_llm_cooldown_s=_env_int("LLM_RELATIONSHIP_AFFINITY_LLM_COOLDOWN_S", 60),
-            llm_relationship_affinity_daily_decay_step=_env_float(
-                "LLM_RELATIONSHIP_AFFINITY_DAILY_DECAY_STEP", 0.02
-            ),
-            llm_relationship_affinity_silence_threshold=_env_float(
-                "LLM_RELATIONSHIP_AFFINITY_SILENCE_THRESHOLD", -0.3
-            ),
-            llm_relationship_affinity_silence_max_penalty=_env_int(
-                "LLM_RELATIONSHIP_AFFINITY_SILENCE_MAX_PENALTY", 30
-            ),
+            llm_relationship_affinity_llm_daily_limit=_env_int("LLM_RELATIONSHIP_AFFINITY_LLM_DAILY_LIMIT", 300),
+            llm_relationship_affinity_daily_decay_step=_env_float("LLM_RELATIONSHIP_AFFINITY_DAILY_DECAY_STEP", 0.02),
+            llm_relationship_affinity_silence_threshold=_env_float("LLM_RELATIONSHIP_AFFINITY_SILENCE_THRESHOLD", -0.3),
+            llm_relationship_affinity_silence_max_penalty=_env_int("LLM_RELATIONSHIP_AFFINITY_SILENCE_MAX_PENALTY", 30),
             llm_session_summary_enabled=_env_bool("LLM_SESSION_SUMMARY_ENABLED", True),
             llm_session_summary_threshold=_env_int("LLM_SESSION_SUMMARY_THRESHOLD", 40),
             llm_session_summary_keep_messages=_env_int("LLM_SESSION_SUMMARY_KEEP_MESSAGES", 16),

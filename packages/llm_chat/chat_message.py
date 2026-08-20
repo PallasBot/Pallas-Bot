@@ -60,12 +60,12 @@ from pallas.product.llm.kernel import (
     resolve_conversation_feature_level,
 )
 from pallas.product.llm.memory import (
-    maybe_persist_relationship_from_utterance,
     parse_memory_teach,
     parse_relationship_teach,
     resolve_relationship_teach_target_id,
     save_memory_entry,
     save_relationship_note,
+    schedule_persist_relationship_from_utterance,
 )
 from pallas.product.llm.memory.auto_episode import maybe_auto_save_episode
 from pallas.product.llm.memory.auto_ip_knowledge import schedule_auto_save_ip_knowledge
@@ -371,9 +371,9 @@ async def handle_llm_chat(
             await send_message(LLM_CHAT_RELATIONSHIP_SAVED_REPLY)
             return
 
-    # 硬触发后静默沉淀关系事实/态度；ambient 不写
+    # 硬触发后静默沉淀关系事实/态度（后台执行，避免好感度 LLM 定分阻塞主回复）；ambient 不写
     try:
-        await maybe_persist_relationship_from_utterance(
+        schedule_persist_relationship_from_utterance(
             int(bot.self_id),
             group_id,
             user_id,
@@ -382,7 +382,7 @@ async def handle_llm_chat(
             cfg=llm_cfg,
         )
     except Exception:
-        logger.debug("relationship silent persist skipped")
+        logger.debug("relationship silent persist skip schedule failed")
 
     if not begin_chat_turn(int(bot.self_id), group_id, user_id):
         stash_pending_chat(int(bot.self_id), group_id, user_id, plain or msg, message_id=message_id)
@@ -580,9 +580,7 @@ async def prepare_and_submit_llm_chat_turn(
             from pallas.product.llm.memory.relationship_store import retrieve_relationship_profile
 
             try:
-                _profile = await retrieve_relationship_profile(
-                    int(bot.self_id), group_id, user_id, cfg=llm_cfg
-                )
+                _profile = await retrieve_relationship_profile(int(bot.self_id), group_id, user_id, cfg=llm_cfg)
             except Exception:
                 _profile = None
             if _profile is not None:

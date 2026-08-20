@@ -21,6 +21,7 @@ def test_affinity_config_defaults() -> None:
     assert cfg.llm_relationship_affinity_enabled is True
     assert cfg.llm_relationship_affinity_delta_max == 0.15
     assert cfg.llm_relationship_affinity_llm_cooldown_s == 60
+    assert cfg.llm_relationship_affinity_llm_daily_limit == 300
     assert cfg.llm_relationship_affinity_daily_decay_step == 0.02
     assert cfg.llm_relationship_affinity_silence_threshold == -0.3
     assert cfg.llm_relationship_affinity_silence_max_penalty == 30
@@ -257,6 +258,43 @@ async def test_persist_llm_neutral_affinity_skips_upsert_delta() -> None:
     upsert.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_persist_llm_affinity_respects_daily_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm.memory.relationship_persist import clear_affinity_state_for_tests
+
+    clear_affinity_state_for_tests()
+    cfg = LlmConfig(
+        llm_chat_enabled=True,
+        llm_relationship_notes_enabled=True,
+        llm_relationship_affinity_llm_daily_limit=1,
+        llm_relationship_affinity_llm_cooldown_s=0,
+    )
+    upsert = AsyncMock(return_value=True)
+
+    async def fake_llm(*_a, **_k):
+        return {"affinity_delta": -0.6, "confidence": 0.9, "reason": "反讽"}
+
+    for index, key in enumerate(((9, 8, 7), (10, 8, 7))):
+        with (
+            patch(
+                "pallas.product.llm.memory.relationship_persist.upsert_relationship_profile",
+                new=upsert,
+            ),
+            patch(
+                "pallas.product.llm.memory.relationship_persist.score_affinity_with_llm",
+                new=AsyncMock(side_effect=fake_llm),
+            ) as llm,
+        ):
+            ok = await maybe_persist_relationship_from_utterance(*key, "你还不感谢我", speak_trigger="followup", cfg=cfg)
+        if index == 0:
+            assert ok is True
+            assert llm.await_count == 1
+        else:
+            assert ok is False
+            assert llm.await_count == 0
+    clear_affinity_state_for_tests()
+
+
 def test_ops_api_exports_set_affinity() -> None:
     assert "set_affinity" in ops_api.__all__
     assert callable(getattr(ops_api, "set_affinity", None))
@@ -268,6 +306,7 @@ def test_webui_config_maps_affinity_fields() -> None:
     assert webui.llm_relationship_affinity_enabled == cfg.llm_relationship_affinity_enabled
     assert webui.llm_relationship_affinity_delta_max == cfg.llm_relationship_affinity_delta_max
     assert webui.llm_relationship_affinity_llm_cooldown_s == cfg.llm_relationship_affinity_llm_cooldown_s
+    assert webui.llm_relationship_affinity_llm_daily_limit == cfg.llm_relationship_affinity_llm_daily_limit
     assert webui.llm_relationship_affinity_daily_decay_step == cfg.llm_relationship_affinity_daily_decay_step
     assert webui.llm_relationship_affinity_silence_threshold == cfg.llm_relationship_affinity_silence_threshold
     assert webui.llm_relationship_affinity_silence_max_penalty == cfg.llm_relationship_affinity_silence_max_penalty
@@ -279,6 +318,7 @@ def test_memory_ops_config_maps_affinity_fields() -> None:
     assert ops.llm_relationship_affinity_enabled is True
     assert ops.llm_relationship_affinity_delta_max == 0.15
     assert ops.llm_relationship_affinity_llm_cooldown_s == 60
+    assert ops.llm_relationship_affinity_llm_daily_limit == 300
     assert ops.llm_relationship_affinity_daily_decay_step == 0.02
     assert ops.llm_relationship_affinity_silence_threshold == -0.3
     assert ops.llm_relationship_affinity_silence_max_penalty == 30

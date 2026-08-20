@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import time
+import asyncio
 
 from nonebot import logger
 
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.memory.affinity_scorer import score_affinity_with_llm
+from pallas.product.llm.memory.rate_limit import DailyBudget, WriteCooldown
 from pallas.product.llm.memory.relationship_auto import (
     extract_relationship_affinity_delta,
     extract_relationship_attitude_delta,
@@ -16,7 +17,16 @@ from pallas.product.llm.memory.relationship_auto import (
 from pallas.product.llm.memory.relationship_store import upsert_relationship_profile
 
 _HARD_SPEAK_TRIGGERS = frozenset({"to_me", "mention", "followup"})
-_llm_affinity_last_scored: dict[tuple[int, int, int], float] = {}
+_affinity_llm_last_scored = WriteCooldown()
+_affinity_llm_daily_budget = DailyBudget()
+
+
+def _affinity_llm_daily_budget_ok(*, cfg: LlmConfig) -> bool:
+    return _affinity_llm_daily_budget.ok(int(getattr(cfg, "llm_relationship_affinity_llm_daily_limit", 0) or 0))
+
+
+def _bump_affinity_llm_daily_budget(*, cfg: LlmConfig) -> None:
+    _affinity_llm_daily_budget.bump(int(getattr(cfg, "llm_relationship_affinity_llm_daily_limit", 0) or 0))
 
 
 async def maybe_persist_relationship_from_utterance(
@@ -56,15 +66,15 @@ async def maybe_persist_relationship_from_utterance(
         affinity_add = extract_relationship_affinity_delta(plain_text)
         if affinity_add == 0.0:
             key = (int(bot_id), int(group_id or 0), int(user_id))
-            last = _llm_affinity_last_scored.get(key, 0.0)
-            now = time.time()
             cooldown = max(0, int(getattr(c, "llm_relationship_affinity_llm_cooldown_s", 60) or 60))
-            if now - last >= cooldown:
-                _llm_affinity_last_scored[key] = now
-                scored = await score_affinity_with_llm(plain_text, cfg=c)
-                if scored is not None and scored.get("affinity_delta") is not None:
-                    affinity_add = float(scored["affinity_delta"])
-                    affinity_source = "llm"
+            if _affinity_llm_last_scored.ok(key, cooldown):
+                _affinity_llm_last_scored.mark(key)
+                if _affinity_llm_daily_budget_ok(cfg=c):
+                    scored = await score_affinity_with_llm(plain_text, cfg=c)
+                    if scored is not None and scored.get("affinity_delta") is not None:
+                        affinity_add = float(scored["affinity_delta"])
+                        affinity_source = "llm"
+                        _bump_affinity_llm_daily_budget(cfg=c)
 
     if not fact and warmth_add == 0.0 and assertiveness_add == 0.0 and affinity_add == 0.0:
         return False
@@ -101,3 +111,37 @@ async def maybe_persist_relationship_from_utterance(
             affinity_source,
         )
     return ok
+
+
+def schedule_persist_relationship_from_utterance(
+    bot_id: int,
+    group_id: int | None,
+    user_id: int,
+    plain_text: str,
+    *,
+    speak_trigger: str = "",
+    cfg: LlmConfig | None = None,
+) -> None:
+    """后台化静默沉淀，避免好感度 LLM 兜底定分阻塞主回复链路。"""
+    c = cfg or get_llm_config()
+    if not user_id or not c.llm_relationship_notes_enabled:
+        return
+    try:
+        asyncio.get_running_loop().create_task(
+            maybe_persist_relationship_from_utterance(
+                int(bot_id),
+                group_id,
+                int(user_id),
+                plain_text,
+                speak_trigger=speak_trigger,
+                cfg=c,
+            ),
+            name=f"relationship_persist:{int(bot_id)}:{int(group_id or 0)}:{int(user_id)}",
+        )
+    except RuntimeError:
+        return
+
+
+def clear_affinity_state_for_tests() -> None:
+    _affinity_llm_last_scored.clear()
+    _affinity_llm_daily_budget.reset()

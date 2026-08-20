@@ -32,7 +32,10 @@ from .person_facts import (
 )
 from .planner import MemoryPlan, plan_memory_retrieval
 from .relationship import extract_at_target, parse_relationship_teach, resolve_relationship_teach_target_id
-from .relationship_persist import maybe_persist_relationship_from_utterance
+from .relationship_persist import (
+    maybe_persist_relationship_from_utterance,
+    schedule_persist_relationship_from_utterance,
+)
 from .relationship_store import (
     is_relationship_store_available,
     retrieve_relationship_note,
@@ -61,6 +64,7 @@ __all__ = [
     "retrieve_relationship_profile",
     "save_memory_entry",
     "save_relationship_note",
+    "schedule_persist_relationship_from_utterance",
     "upsert_relationship_profile",
     "ConsentRecord",
     "can_use_global_person_facts",

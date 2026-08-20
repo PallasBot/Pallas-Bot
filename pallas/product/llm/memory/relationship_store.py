@@ -337,9 +337,7 @@ async def list_relationship_notes(
     if _use_mongodb_backend():
         from pallas.product.llm.memory.relationship_store_mongo import list_relationship_notes_mongo
 
-        return await list_relationship_notes_mongo(
-            bot_id, group_id, query=query, limit=limit, cfg=cfg
-        )
+        return await list_relationship_notes_mongo(bot_id, group_id, query=query, limit=limit, cfg=cfg)
     if not _use_postgresql_backend():
         return []
     c = cfg or get_llm_config()
@@ -380,9 +378,7 @@ async def list_relationship_notes(
             "affinity": decay_affinity_toward_neutral(
                 float(getattr(row, "affinity", 0.0) or 0.0),
                 int(row.updated_at or 0),
-                daily_step=float(
-                    getattr(c, "llm_relationship_affinity_daily_decay_step", 0.02) or 0.02
-                ),
+                daily_step=float(getattr(c, "llm_relationship_affinity_daily_decay_step", 0.02) or 0.02),
             ),
             "created_at": int(row.created_at or 0),
             "updated_at": int(row.updated_at or 0),

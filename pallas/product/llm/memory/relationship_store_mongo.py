@@ -92,9 +92,7 @@ async def upsert_relationship_profile_mongo(
             float(getattr(existing, "assertiveness_delta", 0.0) or 0.0) + float(assertiveness_delta_add),
             limit=limit,
         )
-        existing.affinity = clamp_affinity(
-            float(getattr(existing, "affinity", 0.0) or 0.0) + float(affinity_delta_add)
-        )
+        existing.affinity = clamp_affinity(float(getattr(existing, "affinity", 0.0) or 0.0) + float(affinity_delta_add))
         existing.weight = 1.0
         existing.updated_at = now
         await existing.save()
@@ -279,9 +277,7 @@ async def list_relationship_notes_mongo(
             "affinity": decay_affinity_toward_neutral(
                 float(getattr(row, "affinity", 0.0) or 0.0),
                 int(row.updated_at or 0),
-                daily_step=float(
-                    getattr(c, "llm_relationship_affinity_daily_decay_step", 0.02) or 0.02
-                ),
+                daily_step=float(getattr(c, "llm_relationship_affinity_daily_decay_step", 0.02) or 0.02),
             ),
             "created_at": int(row.created_at or 0),
             "updated_at": int(row.updated_at or 0),

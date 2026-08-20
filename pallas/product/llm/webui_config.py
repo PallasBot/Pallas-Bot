@@ -1049,6 +1049,16 @@ class LlmWebuiConfig(BaseModel):
             "只有规则命中不了的话才走大模型",
         ),
     )
+    llm_relationship_affinity_llm_daily_limit: int = Field(
+        default=300,
+        ge=0,
+        le=100000,
+        description=field_help(
+            "每天最多让大模型判定几次好感度",
+            "默认 300。防止规则判不出时无上限调用大模型产生费用；0=不限制",
+            "与冷却间隔共同约束；超出后当天不再用大模型判定",
+        ),
+    )
     llm_relationship_affinity_daily_decay_step: float = Field(
         default=0.02,
         ge=0.0,
@@ -1200,6 +1210,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_relationship_affinity_enabled=cfg.llm_relationship_affinity_enabled,
         llm_relationship_affinity_delta_max=cfg.llm_relationship_affinity_delta_max,
         llm_relationship_affinity_llm_cooldown_s=cfg.llm_relationship_affinity_llm_cooldown_s,
+        llm_relationship_affinity_llm_daily_limit=cfg.llm_relationship_affinity_llm_daily_limit,
         llm_relationship_affinity_daily_decay_step=cfg.llm_relationship_affinity_daily_decay_step,
         llm_relationship_affinity_silence_threshold=cfg.llm_relationship_affinity_silence_threshold,
         llm_relationship_affinity_silence_max_penalty=cfg.llm_relationship_affinity_silence_max_penalty,
