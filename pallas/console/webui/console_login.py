@@ -158,6 +158,97 @@ def _write_auth_state(password_hash: bytes, password_salt: bytes) -> None:
     _atomic_write_text(auth_state_path(), json.dumps(state, ensure_ascii=False, indent=2))
 
 
+_API_KEYS = "api_keys.json"
+API_KEY_PREFIX = "pls_"
+
+
+def api_keys_path() -> Path:
+    return console_auth_dir() / _API_KEYS
+
+
+def _load_api_keys() -> list[dict[str, Any]]:
+    p = api_keys_path()
+    if not p.is_file():
+        return []
+    try:
+        raw = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    rows = raw.get("keys") if isinstance(raw, dict) else None
+    if not isinstance(rows, list):
+        return []
+    return [r for r in rows if isinstance(r, dict)]
+
+
+def _write_api_keys(rows: list[dict[str, Any]]) -> None:
+    state = {
+        "v": 1,
+        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "keys": rows,
+    }
+    _atomic_write_text(api_keys_path(), json.dumps(state, ensure_ascii=False, indent=2))
+
+
+def _hash_api_key(secret: str) -> str:
+    return hashlib.sha256(str(secret or "").encode("utf-8")).hexdigest()
+
+
+def issue_api_key(*, label: str = "") -> tuple[str, str]:
+    """签发一个长期 API Key，返回 (明文, id)。明文仅在本次返回。"""
+    raw = secrets.token_urlsafe(32)
+    secret = f"{API_KEY_PREFIX}{raw}"
+    key_id = secrets.token_hex(6)
+    rows = _load_api_keys()
+    now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    rows.append({
+        "id": key_id,
+        "label": str(label or "").strip(),
+        "hash": _hash_api_key(secret),
+        "created_at": now,
+        "last_used_at": "",
+    })
+    _write_api_keys(rows)
+    return secret, key_id
+
+
+def verify_api_key(secret: str | None) -> bool:
+    s = (secret or "").strip()
+    if not s.startswith(API_KEY_PREFIX):
+        return False
+    want = _hash_api_key(s)
+    rows = _load_api_keys()
+    for row in rows:
+        if hmac.compare_digest(str(row.get("hash") or ""), want):
+            now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            if str(row.get("last_used_at") or "") != now:
+                row["last_used_at"] = now
+                _write_api_keys(rows)
+            return True
+    return False
+
+
+def revoke_api_key(key_id: str) -> bool:
+    rows = _load_api_keys()
+    alive = [r for r in rows if str(r.get("id") or "") != str(key_id or "").strip()]
+    if len(alive) == len(rows):
+        return False
+    _write_api_keys(alive)
+    return True
+
+
+def list_api_keys() -> list[dict[str, Any]]:
+    """列出 API Key 元数据（不含 hash / 明文）。"""
+    return [
+        {
+            "id": str(r.get("id") or ""),
+            "label": str(r.get("label") or ""),
+            "created_at": str(r.get("created_at") or ""),
+            "last_used_at": str(r.get("last_used_at") or ""),
+        }
+        for r in _load_api_keys()
+    ]
+
+
 def _load_setup_state() -> dict[str, Any] | None:
     p = setup_state_path()
     if not p.is_file():
@@ -321,8 +412,9 @@ def extract_session_from_request(
     header_token: str | None,
     query_token: str | None,
     cookie_token: str | None = None,
+    api_key: str | None = None,
 ) -> str | None:
-    """优先级：专用 Cookie → 各端 Header/Query/Cookie 槽位中的会话串。"""
+    """优先级：专用 Cookie → 各端 Header/Query/Cookie 槽位中的会话串，或长期 API Key。"""
     for k in (SESSION_COOKIE_NAME,):
         v = (cookies.get(k) or "").strip()
         if v and verify_session_token(v):
@@ -331,6 +423,8 @@ def extract_session_from_request(
         s = (v or "").strip()
         if s and verify_session_token(s):
             return s
+    if api_key is not None and verify_api_key(api_key):
+        return api_key
     return None
 
 

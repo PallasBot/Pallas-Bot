@@ -90,11 +90,13 @@ def register_extended_api(
     async def _pallas_token_dep(
         token: str | None = Query(default=None),
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+        x_pallas_api_key: str | None = Header(default=None, alias="X-Pallas-Api-Key"),
     ) -> None:
         _require_pallas_token_configured(
             plugin_config,
             x_pallas_token=x_pallas_token,
             token=token,
+            x_pallas_api_key=x_pallas_api_key,
         )
 
     router_pub = APIRouter(tags=["Pallas-Bot 控制台"])

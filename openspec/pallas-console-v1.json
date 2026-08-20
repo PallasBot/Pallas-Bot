@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.3.5-6-g9c68599b",
+    "version": "v4.3.6-3-g04181ed1-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -85,6 +85,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -160,6 +176,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -220,6 +252,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -358,6 +406,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -422,6 +486,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -498,6 +578,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -585,6 +681,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -651,6 +763,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -751,6 +879,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -815,6 +959,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -902,6 +1062,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -1016,6 +1192,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -1078,6 +1270,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -1154,6 +1362,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -1228,6 +1452,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -1304,6 +1544,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -1364,6 +1620,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -1440,6 +1712,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -1500,6 +1788,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -1610,6 +1914,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -1672,6 +1992,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -1748,6 +2084,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -1822,6 +2174,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -1944,6 +2312,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -2004,6 +2388,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -2079,6 +2479,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -2193,6 +2609,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -2313,6 +2745,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -2386,6 +2834,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -2446,6 +2910,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -2531,6 +3011,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -2612,6 +3108,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -2725,6 +3237,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -2829,6 +3357,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -2894,6 +3438,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -2958,6 +3518,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -3106,6 +3682,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -3190,6 +3782,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -3319,6 +3927,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -3436,6 +4060,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -3581,6 +4221,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -3641,6 +4297,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -3716,6 +4388,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -3851,6 +4539,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -3911,6 +4615,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -3987,6 +4707,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -4061,6 +4797,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -4137,6 +4889,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -4211,6 +4979,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -4336,6 +5120,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -4396,6 +5196,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -4472,6 +5288,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -4547,6 +5379,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -4621,6 +5469,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -4740,6 +5604,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -4802,6 +5682,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -4877,6 +5773,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -4992,6 +5904,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -5054,6 +5982,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -5130,6 +6074,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -5204,6 +6164,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -5323,6 +6299,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -5385,6 +6377,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -5461,6 +6469,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -5535,6 +6559,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -5636,6 +6676,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -5756,6 +6812,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -5816,6 +6888,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -5891,6 +6979,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -5987,6 +7091,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -6047,6 +7167,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -6185,6 +7321,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -6277,6 +7429,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -6339,6 +7507,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -6471,6 +7655,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -6533,6 +7733,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -6609,6 +7825,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -6671,6 +7903,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -6735,6 +7983,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -6797,6 +8061,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -6872,6 +8152,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -6937,6 +8233,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -6999,6 +8311,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -7077,6 +8405,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -7139,6 +8483,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -7217,6 +8577,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -7282,6 +8658,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -7344,6 +8736,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -7425,6 +8833,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -7488,6 +8912,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -7550,6 +8990,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -7648,6 +9104,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -7733,6 +9205,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -7793,6 +9281,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -7874,6 +9378,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -7976,6 +9496,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -8039,6 +9575,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -8101,6 +9653,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -8232,6 +9800,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -8341,6 +9925,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -8404,6 +10004,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -8521,6 +10137,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -8584,6 +10216,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -8646,6 +10294,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -8750,6 +10414,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -8853,6 +10533,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -8924,6 +10620,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -8997,6 +10709,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -9068,6 +10796,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -9151,6 +10895,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -9226,6 +10986,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -9288,6 +11064,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -9362,6 +11154,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -9434,6 +11242,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -9508,6 +11332,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -9581,6 +11421,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -9652,6 +11508,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -9725,6 +11597,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -9796,6 +11684,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -9869,6 +11773,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -9931,6 +11851,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -10004,6 +11940,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -10102,6 +12054,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -10164,6 +12132,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -10229,6 +12213,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -10292,6 +12292,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -10354,6 +12370,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -10428,6 +12460,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -10500,6 +12548,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -10574,6 +12638,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -10646,6 +12726,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -10720,6 +12816,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -10792,6 +12904,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -10866,6 +12994,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -10939,6 +13083,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -11001,6 +13161,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -11074,6 +13250,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -11155,6 +13347,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -11234,6 +13442,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -11324,6 +13548,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -11406,6 +13646,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -11478,6 +13734,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -11559,6 +13831,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -11619,6 +13907,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -11693,6 +13997,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -11753,6 +14073,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -11827,6 +14163,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -11887,6 +14239,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -11970,6 +14338,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -12041,6 +14425,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -12126,6 +14526,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -12197,6 +14613,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -12282,6 +14714,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -12355,6 +14803,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -12427,6 +14891,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -12496,6 +14976,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -12579,6 +15075,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -12650,6 +15162,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -12726,6 +15254,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -12801,6 +15345,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -12861,6 +15421,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -12932,6 +15508,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -13006,6 +15598,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -13070,6 +15678,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -13153,6 +15777,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -13226,6 +15866,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -13288,6 +15944,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -13362,6 +16034,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -13425,6 +16113,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -13487,6 +16191,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -13561,6 +16281,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -13621,6 +16357,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -13705,6 +16457,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -13787,6 +16555,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -13856,6 +16640,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -13945,6 +16745,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -14064,6 +16880,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -14127,6 +16959,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -14189,6 +17037,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -14271,6 +17135,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -14346,6 +17226,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -14418,6 +17314,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -14480,6 +17392,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -14544,6 +17472,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -14607,6 +17551,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -14667,6 +17627,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -14743,6 +17719,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -14806,6 +17798,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -14866,6 +17874,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -14942,6 +17966,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -15002,6 +18042,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -15077,6 +18133,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -15212,6 +18284,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -15330,6 +18418,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -15392,6 +18496,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -15517,6 +18637,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -15579,6 +18715,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -15654,6 +18806,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -15809,6 +18977,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -15880,6 +19064,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -15963,6 +19163,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -16034,6 +19250,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -16144,6 +19376,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -16256,6 +19504,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -16320,6 +19584,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -16420,6 +19700,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -16507,6 +19803,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -16569,6 +19881,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -16681,6 +20009,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -16743,6 +20087,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -16866,6 +20226,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -16928,6 +20304,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -17003,6 +20395,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -17136,6 +20544,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -17260,6 +20684,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -17320,6 +20760,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -17396,6 +20852,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -17459,6 +20931,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -17521,6 +21009,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -17596,6 +21100,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -17681,6 +21201,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -17755,6 +21291,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -17892,6 +21444,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -17954,6 +21522,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -18030,6 +21614,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -18105,6 +21705,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -18179,6 +21795,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -18276,6 +21908,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -18338,6 +21986,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -18462,6 +22126,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -18575,6 +22255,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -18709,6 +22405,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -18771,6 +22483,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -18837,6 +22565,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -18899,6 +22643,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -18975,6 +22735,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -19049,6 +22825,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -19134,6 +22926,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -19199,6 +23007,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -19262,6 +23086,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -19324,6 +23164,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -19422,6 +23278,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -19485,6 +23357,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -19547,6 +23435,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -19621,6 +23525,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -19693,6 +23613,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -19756,6 +23692,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -19816,6 +23768,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -19890,6 +23858,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -19963,6 +23947,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -20026,6 +24026,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -20100,6 +24116,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -20171,6 +24203,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -20252,6 +24300,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -20332,6 +24396,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -20395,6 +24475,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -20497,6 +24593,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -20559,6 +24671,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -20633,6 +24761,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -20730,6 +24874,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -20790,6 +24950,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -20885,6 +25061,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -20957,6 +25149,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -21032,6 +25240,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -21096,6 +25320,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -21172,6 +25412,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -21247,6 +25503,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -21321,6 +25593,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -21407,6 +25695,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -21491,6 +25795,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -21563,6 +25883,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -21626,6 +25962,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -21688,6 +26040,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -21761,6 +26129,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -21830,6 +26214,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -21934,6 +26334,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -22006,6 +26422,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -22075,6 +26507,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -22161,6 +26609,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -22233,6 +26697,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -22302,6 +26782,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -22386,6 +26882,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -22449,6 +26961,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -22509,6 +27037,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -22582,6 +27126,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -22674,6 +27234,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -22787,6 +27363,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -22850,6 +27442,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -22912,6 +27520,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -22986,6 +27610,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -23057,6 +27697,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -23130,6 +27786,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -23193,6 +27865,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -23255,6 +27943,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -23329,6 +28033,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -23391,6 +28111,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -23465,6 +28201,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -23527,6 +28279,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -23601,6 +28369,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -23673,6 +28457,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -23768,6 +28568,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -23855,6 +28671,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -23941,6 +28773,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -24036,6 +28884,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -24098,6 +28962,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -24173,6 +29053,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "requestBody": {
@@ -24246,6 +29142,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -24308,6 +29220,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -24372,6 +29300,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -24460,6 +29404,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -24522,6 +29482,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -24596,6 +29572,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -24658,6 +29650,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -24758,6 +29766,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -24820,6 +29844,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -24904,6 +29944,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -24966,6 +30022,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -25030,6 +30102,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -25092,6 +30180,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -25156,6 +30260,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -25218,6 +30338,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -25291,6 +30427,22 @@
               ],
               "title": "X-Pallas-Token"
             }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
           }
         ],
         "responses": {
@@ -25362,6 +30514,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
@@ -25493,6 +30661,22 @@
                 }
               ],
               "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
             }
           }
         ],
