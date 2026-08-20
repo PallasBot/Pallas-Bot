@@ -47,7 +47,7 @@ jobs:
           spec.loader.exec_module(mod)
           cases = {
               "[x](../../../plugins/pb_protocol/README.md)": "[x](/plugins/pb_protocol)",
-              "[x](../../../DockerDeployment.md)": "[x](/deploy/docker)",
+              "[x](../../../DockerDeployment.md)": "[x](/maintainer/deploy/docker)",
               "[x](../community_stats.md)": "[x](/common/community_stats)",
               "[x](../cmd_perm/README.md)": "[x](/common/cmd_perm)",
               "[x](api/README.md)": "[x](/common/webui/api/)",
