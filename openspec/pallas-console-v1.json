@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.3.4-58-g0cda3261-dirty",
+    "version": "v4.3.4-97-g56ac5ee6",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -17923,6 +17923,81 @@
         ],
         "summary": " Llm Conversation Kernel Relationship Notes Delete",
         "operationId": "_llm_conversation_kernel_relationship_notes_delete_pallas_api_llm_conversation_kernel_relationship_notes_delete_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/llm/conversation-kernel/relationship-notes/set-affinity": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Conversation Kernel Relationship Notes Set Affinity",
+        "operationId": "_llm_conversation_kernel_relationship_notes_set_affinity_pallas_api_llm_conversation_kernel_relationship_notes_set_affinity_post",
         "parameters": [
           {
             "name": "token",
