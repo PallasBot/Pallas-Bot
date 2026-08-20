@@ -684,7 +684,7 @@ def register_llm_product_router(
         user_id = int(body.get("user_id") or 0)
         affinity = float(body.get("affinity") or 0.0)
         if bot_id <= 0 or user_id <= 0:
-            raise HTTPException(status_code=400, detail="bot_id and group_id required")
+            raise HTTPException(status_code=400, detail="bot_id and user_id required")
         try:
             ok = await set_affinity(bot_id, group_id or None, user_id, affinity)
         except Exception as e:  # noqa: BLE001
