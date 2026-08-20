@@ -575,6 +575,15 @@ async def prepare_and_submit_llm_chat_turn(
             and bool(tool_meta.get("tool_schemas"))
             and str(tool_meta.get("tool_choice_prefer") or "").strip().lower() == "required"
         )
+        affinity_value = None
+        if speak_trigger not in ("to_me", "alias", "mention", "followup"):
+            from pallas.product.llm.memory.relationship_store import retrieve_relationship_profile
+
+            _profile = await retrieve_relationship_profile(
+                int(bot.self_id), group_id, user_id, cfg=llm_cfg
+            )
+            if _profile is not None:
+                affinity_value = _profile.affinity
         necessity = evaluate_reply_necessity_gate(
             text=focus_text,
             is_to_me=is_to_me,
@@ -583,6 +592,7 @@ async def prepare_and_submit_llm_chat_turn(
             is_mentioned=speak_trigger == "mention",
             is_followup=speak_trigger == "followup",
             recent_bot_reply_count=recent_bot_reply_count,
+            user_affinity=affinity_value,
         )
         if group_id is not None:
             from packages.repeater.opportunity_trace import append_conversation_decision_trace

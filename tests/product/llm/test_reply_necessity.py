@@ -166,3 +166,37 @@ def test_is_short_vent_accepts_compact_complaints() -> None:
 def test_is_short_vent_rejects_noise_and_long_text() -> None:
     assert not is_short_vent("哈哈哈")
     assert not is_short_vent("这件事已经让我非常烦了，而且我还没想好怎么处理")
+
+
+def test_affinity_penalizes_ambient_low_affinity() -> None:
+    base = evaluate_reply_necessity_gate(
+        text="今天天气不错",
+        bot_id=1,
+    )
+    penalized = evaluate_reply_necessity_gate(
+        text="今天天气不错",
+        bot_id=1,
+        user_affinity=-1.0,
+    )
+    assert penalized.score < base.score
+    assert "affinity" in penalized.detail
+
+
+def test_affinity_does_not_penalize_to_me() -> None:
+    gate = evaluate_reply_necessity_gate(
+        text="@bot 这个怎么弄？",
+        bot_id=1,
+        is_to_me=True,
+        user_affinity=-1.0,
+    )
+    assert gate.decision == "proceed"
+    assert "affinity" not in gate.detail
+
+
+def test_affinity_no_penalty_above_threshold() -> None:
+    gate = evaluate_reply_necessity_gate(
+        text="今天天气不错",
+        bot_id=1,
+        user_affinity=0.0,
+    )
+    assert "affinity" not in gate.detail

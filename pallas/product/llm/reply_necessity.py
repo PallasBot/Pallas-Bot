@@ -140,6 +140,9 @@ def score_reply_necessity(
     is_mentioned: bool = False,
     is_followup: bool = False,
     recent_bot_reply_count: int = 0,
+    user_affinity: float | None = None,
+    affinity_silence_threshold: float = -0.3,
+    affinity_silence_max_penalty: int = 30,
 ) -> ReplyNecessityScore:
     plain = str(text or "").strip()
     score = 0
@@ -198,6 +201,16 @@ def score_reply_necessity(
     if 2 <= len(plain) <= 24:
         score += 5
         parts.append("len_ok+5")
+    if (
+        user_affinity is not None
+        and user_affinity < affinity_silence_threshold
+        and not (is_to_me or is_mentioned or is_followup)
+    ):
+        ratio = (affinity_silence_threshold - user_affinity) / (1.0 + affinity_silence_threshold)
+        penalty = int(round(max(0.0, min(1.0, ratio)) * float(affinity_silence_max_penalty)))
+        if penalty > 0:
+            score -= penalty
+            parts.append(f"affinity-{penalty}")
 
     return ReplyNecessityScore(score=score, detail=",".join(parts) or "base")
 
@@ -214,6 +227,9 @@ def evaluate_reply_necessity_gate(
     is_followup: bool = False,
     recent_bot_reply_count: int = 0,
     threshold: int = REPLY_NECESSITY_TRIGGER_SCORE,
+    user_affinity: float | None = None,
+    affinity_silence_threshold: float = -0.3,
+    affinity_silence_max_penalty: int = 30,
 ) -> ReplyNecessityGateResult:
     scored = score_reply_necessity(
         text=text,
@@ -225,6 +241,9 @@ def evaluate_reply_necessity_gate(
         is_mentioned=is_mentioned,
         is_followup=is_followup,
         recent_bot_reply_count=recent_bot_reply_count,
+        user_affinity=user_affinity,
+        affinity_silence_threshold=affinity_silence_threshold,
+        affinity_silence_max_penalty=affinity_silence_max_penalty,
     )
     decision: ReplyNecessityGateDecision = "proceed" if scored.score >= int(threshold) else "skip"
     return ReplyNecessityGateResult(decision=decision, score=scored.score, detail=scored.detail)
