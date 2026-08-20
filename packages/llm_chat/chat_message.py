@@ -579,9 +579,12 @@ async def prepare_and_submit_llm_chat_turn(
         if speak_trigger not in ("to_me", "alias", "mention", "followup"):
             from pallas.product.llm.memory.relationship_store import retrieve_relationship_profile
 
-            _profile = await retrieve_relationship_profile(
-                int(bot.self_id), group_id, user_id, cfg=llm_cfg
-            )
+            try:
+                _profile = await retrieve_relationship_profile(
+                    int(bot.self_id), group_id, user_id, cfg=llm_cfg
+                )
+            except Exception:
+                _profile = None
             if _profile is not None:
                 affinity_value = _profile.affinity
         necessity = evaluate_reply_necessity_gate(
