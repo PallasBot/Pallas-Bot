@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import Mock
 
 from pallas.console.cli import process_util
 
@@ -66,3 +67,15 @@ def test_bash_missing_message_mentions_git_and_system32() -> None:
     if process_util.is_windows():
         assert "Git" in msg
         assert "System32" in msg
+
+
+def test_windows_stop_pid_discards_taskkill_output(monkeypatch) -> None:
+    run = Mock()
+    monkeypatch.setattr(process_util.subprocess, "run", run)
+
+    process_util._windows_stop_pid(123, force=True, timeout_s=1.0)
+
+    kwargs = run.call_args.kwargs
+    assert kwargs["stdout"] is process_util.subprocess.DEVNULL
+    assert kwargs["stderr"] is process_util.subprocess.DEVNULL
+    assert "text" not in kwargs
