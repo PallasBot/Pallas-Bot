@@ -236,8 +236,8 @@ def _windows_stop_pid(pid: int, *, force: bool, timeout_s: float) -> None:
         subprocess.run(  # noqa: S603
             ["taskkill", *flags],
             check=False,
-            capture_output=True,
-            text=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
     except OSError:
         return
@@ -252,8 +252,8 @@ def _windows_stop_pid(pid: int, *, force: bool, timeout_s: float) -> None:
         subprocess.run(  # noqa: S603
             ["taskkill", "/PID", str(pid), "/T", "/F"],
             check=False,
-            capture_output=True,
-            text=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
     except OSError:
         pass
