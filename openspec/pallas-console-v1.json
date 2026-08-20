@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.3.6-3-g04181ed1-dirty",
+    "version": "v4.3.6-7-g9430982a-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -34813,6 +34813,16 @@
           "drunk": {
             "type": "string",
             "title": "Drunk",
+            "default": ""
+          },
+          "affect_refine": {
+            "type": "string",
+            "title": "Affect Refine",
+            "default": ""
+          },
+          "turn_decision": {
+            "type": "string",
+            "title": "Turn Decision",
             "default": ""
           }
         },
