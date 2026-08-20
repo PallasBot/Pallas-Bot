@@ -98,6 +98,8 @@ def _tcp_listen_pids_ss(port: int) -> list[int]:
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
     except FileNotFoundError:
         return []
@@ -131,6 +133,8 @@ def _tcp_listen_pids_netstat(port: int) -> list[int]:
             check=False,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
     except FileNotFoundError:
         return []

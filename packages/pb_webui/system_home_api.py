@@ -494,6 +494,8 @@ def cpu_model() -> str | None:
             model = subprocess.check_output(
                 ["sysctl", "-n", "machdep.cpu.brand_string"],
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=1,
             )
             if model := " ".join(model.split()):

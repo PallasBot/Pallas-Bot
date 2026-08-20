@@ -408,6 +408,8 @@ def run_git_command_sync(*args: str, cwd: str | None = None) -> tuple[int, str, 
             cwd=cwd,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=_GIT_CMD_TIMEOUT_S,
             check=False,
         )

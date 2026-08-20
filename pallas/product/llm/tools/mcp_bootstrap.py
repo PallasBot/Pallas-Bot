@@ -165,6 +165,8 @@ class _StdioMcpSession(_McpSessionBase):
             "stdout": subprocess.PIPE,
             "stderr": subprocess.PIPE,
             "text": True,
+            "encoding": "utf-8",
+            "errors": "replace",
             "bufsize": 1,
         }
         if sys.platform == "win32":

@@ -150,6 +150,8 @@ def plugin_directory_git_origin(plugin_dir: Path) -> str:
             cwd=plugin_dir,
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=2,
             check=False,
         )
