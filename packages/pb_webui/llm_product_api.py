@@ -26,6 +26,7 @@ from pallas.product.llm.ops_api import (
     set_affinity,
     set_feedback_entry_correction,
     set_feedback_entry_eligibility,
+    set_relationship_note_content,
 )
 from pallas.product.persona.expression_bank import ExpressionStatus, list_group_expressions
 from pallas.product.persona.expression_promote import resolve_expression
@@ -697,6 +698,32 @@ def register_llm_product_router(
             raise HTTPException(status_code=404, detail="设置好感度失败")
         clamped = clamp_affinity(affinity)
         return JSONResponse({"ok": True, "data": {"affinity": clamped}})
+
+    @router.post(f"{x}/llm/conversation-kernel/relationship-notes/set-content", include_in_schema=True)
+    async def _llm_conversation_kernel_relationship_notes_set_content(
+        body: dict[str, Any],
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        try:
+            bot_id = int(body.get("bot_id") or 0)
+            group_id = int(body.get("group_id") or 0)
+            user_id = int(body.get("user_id") or 0)
+            content = str(body.get("content") or "").strip()
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="invalid numeric fields") from None
+        if bot_id <= 0 or user_id <= 0:
+            raise HTTPException(status_code=400, detail="bot_id and user_id required")
+        if not content:
+            raise HTTPException(status_code=400, detail="content required")
+        try:
+            ok = await set_relationship_note_content(bot_id, group_id or None, user_id, content)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        if not ok:
+            raise HTTPException(status_code=404, detail="未找到该关系备注")
+        return JSONResponse({"ok": True, "data": {"bot_id": bot_id, "user_id": user_id}})
 
     @router.get(f"{x}/llm/conversation-kernel/knowledge-sources", include_in_schema=True)
     async def _llm_conversation_kernel_knowledge_sources_get() -> JSONResponse:
