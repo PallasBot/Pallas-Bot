@@ -34,8 +34,8 @@ description: >
 
 - 发版 PR：`dev` → `main`。
 - **先合 WebUI 并出 tag，再合 Bot**；Bot Release 从 WebUI `main` 最新 `v*` 捆绑 `dist.zip`。
-- **WebUI**：合入 `main` 后由 Release **自动**打 `v*` tag 并出包。
-- **Bot**：合入 `main` 后由 **Auto Tag Release** 工作流检测本次 push 引入的 `chore(release): vX.Y.Z` 提交（squash 或 merge commit 均识别），命中即自动打 `vX.Y.Z` tag 并触发 `Release`（出 GitHub Release / 捆绑 `dist.zip` / Docker）。未命中（本次 push 无发版提交、或 tag 已存在）则跳过；需要补发时对 `Release` 工作流 `workflow_dispatch`，传入 `version=vX.Y.Z`（可选 `webui_tag=v…`）。勿空等 auto-tag。
+- **WebUI**：合入 `main` 后由 Release **自动**递增版本并打 `v*` tag（`release.yml` 监听 **PR merged 到 main** 或 push `v*` tag / `workflow_dispatch` 触发；PR 合入时默认 patch 递增 `package.json` 并打 tag）。WebUI 的 `chore(release)` 提交本身不触发打 tag，由 Release 工作流在合并后处理。
+- **Bot**：合入 `main` 后由 **Auto Tag Release** 工作流（`auto-tag-release.yml`）检测 **push 到 main 的 HEAD 提交**是否为 `chore(release): vX.Y.Z`（squash 合入时 HEAD 即发版提交；merge commit 时取 HEAD^2=dev tip；main 直发 HEAD 即发版提交同样命中），命中即自动打 `vX.Y.Z` tag 并触发 `Release`（出 GitHub Release / 捆绑 `dist.zip` / Docker）。未命中（HEAD 非发版提交、或 tag 已存在）则跳过；需要补发时对 `Release` 工作流 `workflow_dispatch`，传入 `version=vX.Y.Z`（可选 `webui_tag=v…`）。勿空等 auto-tag。
 - 开 Bot 发版 PR 前：本地 `dev` **先快进 / 对齐** `origin/main`（避免 `dev` 落后于 `main` 的纯文档/合入提交漏在 PR 外或把无关 diff 搅进来），再叠本版功能与发版提交。
 - 本版尚未合入 `dev` 的功能（如 feature 分支）：先合入 / cherry-pick 到 `dev`，再做发版提交。
 
@@ -74,6 +74,25 @@ description: >
 - CHANGELOG 顶部保持简洁：写标题与（可选）Releases 链接即可，**不要**写「遵循 Keep a Changelog / 语义化版本」一类套话。
 - **公告材料来源**：优先用 CHANGELOG 里维护者提前写的备忘说明 + 发版前梳理出的新功能/配置项；用面向用户的话重组，别照抄 commit 明细。
 
+### Bot 公告格式（按功能分类 + 二级列表）
+
+公告按**功能分类**组织，**同一功能的多个点用二级列表**；不要同一分类标签反复并列独立条目，也不要把功能点硬塞成一条长句。
+
+```markdown
+### 更新公告
+
+- **功能分类**：
+  - 该功能的一个变化点，简洁一句
+  - 同一功能的另一个变化点
+- **另一分类**：
+  - 一个变化点
+- 捆绑控制台 WebUI v0.9.x（Bot 捆绑控制台时单列一条）
+```
+
+- 每条公告简洁，**不写环境变量名、默认值、预算数值**（配置项点名留给 `### Added` / docs）。
+- 条目不用句号结尾（与 4.3.x 既有风格一致）。
+- `### Added` / `### Fixed` / `### Changed` 作面向开发者明细：每条 `* type(scope): 描述` **独立一行**、不换行拼接；可按需排序归组。
+
 ### WebUI 须写最低 Bot 版本
 
 WebUI 更新公告**第一条（或靠前）**须写明本版控制台依赖的 **最低 Bot 版本**（如「需要 Bot ≥ x.y.z；请勿只升控制台」）。版本取本轮一并发布（或已发布）的 Bot 版本；无后端契约变化时可写「仍需 Bot ≥ …」。**Bot 自己的 CHANGELOG 不必写「需要 Bot ≥ …」。**
@@ -83,6 +102,7 @@ WebUI 更新公告**第一条（或靠前）**须写明本版控制台依赖的 
 1. 在 `CHANGELOG.md` 的 `<!-- entries -->` 下写 `## [Unreleased]`，正文按更新公告写（**含最低 Bot 版本**；可先有功能 commit，再补公告 / 发版 commit）。
 2. 提交 `chore(release): vX.Y.Z` 且为 **`dev` tip**（预期合入后版本；**不要**手改 `package.json` version，由合入 `main` 的 Release 递增并打 tag）。
 3. 开 PR：`--base main --head dev`，标题=发版 commit，正文=变更。
+4. PR 合并后由 Release 工作流自动递增 `package.json` 并打 `vX.Y.Z` tag、出 GitHub Release 资产。确认出现 tag 与资产后再收尾（同步 `dev`←`main`、清分支）。未自动触发时 `workflow_dispatch` 传 `bump=patch`。
 
 ## Bot
 
@@ -99,7 +119,7 @@ WebUI 更新公告**第一条（或靠前）**须写明本版控制台依赖的 
 
 1. 改版本号与 CHANGELOG（仍是发版文件），**amend 进 `main` 最新提交**，保持单提交形态。
 2. `git push origin main`：最新提交未推送时 amend 无需强推；若已推送，须维护者授权后才 `--force-with-lease`。
-3. 推送后**手动打签名 annotated tag** `vX.Y.Z`（Auto Tag Release 靠检测发版 commit 触发，`main` 直发不满足时手动补齐）。
+3. **推送后 Auto Tag Release 自动打 tag**（`auto-tag-release.yml` 检测 push 到 `main` 的 HEAD 提交是否为 `chore(release): vX.Y.Z`；main 直发若 HEAD 是发版提交同样命中，无需手动）。若 HEAD 不是发版提交（如 amend 未成功或 push 的是普通提交），**手动打签名 annotated tag** `vX.Y.Z` 并确认 `Release` 工作流出包。
 4. 打 tag 后确认 `Release` 工作流出包；WebUI 仍按标准流程先发并出 tag，再发 Bot。
 
 ## 错开发版
