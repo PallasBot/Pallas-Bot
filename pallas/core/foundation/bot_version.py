@@ -51,6 +51,8 @@ def get_bot_current_version() -> dict[str, str]:
             cwd=root,
             stderr=subprocess.DEVNULL,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         ).strip()
     except Exception:  # noqa: BLE001
         pass
@@ -60,6 +62,8 @@ def get_bot_current_version() -> dict[str, str]:
             cwd=root,
             stderr=subprocess.DEVNULL,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         ).strip()
     except Exception:  # noqa: BLE001
         pass
@@ -105,6 +109,8 @@ def get_pallas_bot_version_for_health() -> str:
             cwd=root,
             stderr=subprocess.DEVNULL,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=3.0,
         ).strip()
         if desc:

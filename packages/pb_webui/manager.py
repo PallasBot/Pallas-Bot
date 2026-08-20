@@ -488,6 +488,8 @@ def inspect_bot_deployment() -> dict[str, str | bool | int]:
                 cwd=root,
                 stderr=subprocess.DEVNULL,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
             ).strip()
             == "true"
         )
@@ -511,6 +513,8 @@ def inspect_bot_deployment() -> dict[str, str | bool | int]:
             cwd=root,
             stderr=subprocess.DEVNULL,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         ).strip()
         info["current_branch"] = branch
     except Exception:  # noqa: BLE001
@@ -522,6 +526,8 @@ def inspect_bot_deployment() -> dict[str, str | bool | int]:
             cwd=root,
             stderr=subprocess.DEVNULL,
             text=True,
+            encoding="utf-8",
+            errors="replace",
         )
         lines = [ln for ln in porcelain.splitlines() if ln.strip()]
         info["dirty_file_count"] = len(lines)
@@ -554,6 +560,8 @@ def bot_git_head_and_release_shas(latest_tag: str) -> tuple[str, str] | None:
             cwd=root,
             stderr=subprocess.DEVNULL,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=8.0,
         ).strip()
 
@@ -575,6 +583,8 @@ def bot_git_rev_list_count(revision_range: str) -> int:
             cwd=root,
             stderr=subprocess.DEVNULL,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=8.0,
         ).strip()
     except Exception:  # noqa: BLE001
@@ -596,6 +606,8 @@ def _git_rev_parse_text(*args: str, timeout_s: float = 8.0) -> str | None:
             cwd=_BOT_ROOT,
             stderr=subprocess.DEVNULL,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout_s,
         ).strip()
     except Exception:  # noqa: BLE001
@@ -639,6 +651,8 @@ def resolve_bot_upstream_ref(*, preferred_branch: str = "") -> str:
             cwd=root,
             stderr=subprocess.DEVNULL,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=8.0,
         ).strip()
     except Exception:  # noqa: BLE001

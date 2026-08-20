@@ -78,6 +78,8 @@ def git_rev_parse_text(*args: str, timeout_s: float = 8.0) -> str | None:
             cwd=bot_repo_root(),
             stderr=subprocess.DEVNULL,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout_s,
         ).strip()
     except Exception:  # noqa: BLE001
@@ -105,6 +107,8 @@ def list_bot_remote_branches() -> list[str]:
             cwd=bot_repo_root(),
             stderr=subprocess.DEVNULL,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=8.0,
         )
     except Exception:  # noqa: BLE001
@@ -130,6 +134,8 @@ def get_bot_head_info() -> dict[str, str] | None:
             cwd=bot_repo_root(),
             stderr=subprocess.DEVNULL,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=8.0,
         ).strip()
     except Exception:  # noqa: BLE001
@@ -142,6 +148,8 @@ def get_bot_head_info() -> dict[str, str] | None:
             cwd=bot_repo_root(),
             stderr=subprocess.DEVNULL,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=8.0,
         ).strip()
         if "|" in log_line:
@@ -237,6 +245,8 @@ def git_run_sync(*args: str, timeout_s: float = 8.0) -> tuple[int, str, str]:
             cwd=bot_repo_root(),
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             timeout=timeout_s,
             check=False,
         )

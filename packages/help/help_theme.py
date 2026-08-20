@@ -168,6 +168,8 @@ def resolve_help_font_path() -> Path:
                 ["fc-match", "-f", "%{file}", family],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 check=False,
                 timeout=5,
             )
@@ -182,6 +184,8 @@ def resolve_help_font_path() -> Path:
                 ["fc-match", "-f", "%{file}", family],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 check=False,
                 timeout=5,
             )
