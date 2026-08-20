@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import json
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
 from pallas.product.llm.config import LlmConfig
+from pallas.product.llm.memory.affinity_scorer import score_affinity_with_llm
 from pallas.product.llm.memory.relationship import clamp_affinity
 from pallas.product.llm.memory.relationship_auto import extract_relationship_affinity_delta
 from pallas.product.llm.memory.relationship_store import RelationshipProfile
@@ -62,3 +68,25 @@ def test_relationship_profile_has_affinity() -> None:
     assert profile.affinity == -0.5
     assert profile.has_affinity is True
     assert RelationshipProfile().has_affinity is False
+
+
+@pytest.mark.asyncio
+async def test_score_affinity_with_llm_parses_json() -> None:
+    payload = json.dumps({"affinity_delta": -0.6, "confidence": 0.9, "reason": "反讽"})
+    with patch(
+        "pallas.product.llm.memory.affinity_scorer.complete_chat_message",
+        new=AsyncMock(return_value={"content": f"```json\n{payload}\n```"}),
+    ):
+        result = await score_affinity_with_llm("你还不感谢我", task="llm.relationship.affinity")
+    assert result["affinity_delta"] == -0.6
+    assert result["confidence"] == 0.9
+
+
+@pytest.mark.asyncio
+async def test_score_affinity_with_llm_handles_bad_json() -> None:
+    with patch(
+        "pallas.product.llm.memory.affinity_scorer.complete_chat_message",
+        new=AsyncMock(return_value={"content": "不是 JSON"}),
+    ):
+        result = await score_affinity_with_llm("随便说", task="llm.relationship.affinity")
+    assert result is None
