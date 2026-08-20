@@ -108,6 +108,7 @@ pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 覆盖 `pallas/`
 - **必须考虑窄屏（≤560px）**：面板标题栏、「添加到侧栏」、表格与批量操作在窄屏下仍须可用、布局不杂乱。
 - WebUI 约定见 **Pallas-Bot-WebUI** 仓库根目录 `AGENTS.md`（窄屏自检清单与参考页面）；全局断点与 override 在 WebUI `src/styles/app.css` 的 `@media (max-width: 560px)`。
 - 勿只验证桌面宽屏即认为 UI 已完成。
+- **新增暴露到 WebUI 的配置项**：必须同步 `pallas/console/webui/field_labels.py` 的中文名与 `field_help` 说明，否则控制台会显示空键名。约定见 [docs/common/webui/README.md](docs/common/webui/README.md)。
 
 ### 插件命令权限与帮助文案（cmd_perm）
 
