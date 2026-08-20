@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import re
+import time
 
 from pallas.product.persona.prompt_guard import sanitize_prompt_block
 
@@ -214,6 +215,27 @@ def clamp_user_relationship_delta(value: float, *, limit: float = _USER_REL_DELT
 def clamp_affinity(value: float) -> float:
     """好感度钳制到 [-1.0, 1.0]，三位小数。"""
     return round(max(-1.0, min(1.0, float(value))), 3)
+
+
+def decay_affinity_toward_neutral(
+    affinity: float,
+    updated_at: int,
+    *,
+    daily_step: float = 0.02,
+    now: int | None = None,
+) -> float:
+    """好感度随时间向 0 回落：每过一整天下调 daily_step，跨 0 归 0。"""
+    current = clamp_affinity(affinity)
+    if current == 0.0:
+        return 0.0
+    ts = int(now) if now is not None else int(time.time())
+    days = max(0, (ts - int(updated_at or 0)) // 86400)
+    if days <= 0 or daily_step <= 0:
+        return current
+    step = float(daily_step) * days
+    if current > 0:
+        return clamp_affinity(max(0.0, current - step))
+    return clamp_affinity(min(0.0, current + step))
 
 
 def prefer_relationship_source(existing: str | None, incoming: str) -> str:

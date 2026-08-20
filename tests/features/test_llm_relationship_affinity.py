@@ -8,7 +8,7 @@ import pytest
 from pallas.product.llm import ops_api
 from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.memory.affinity_scorer import score_affinity_with_llm
-from pallas.product.llm.memory.relationship import clamp_affinity
+from pallas.product.llm.memory.relationship import clamp_affinity, decay_affinity_toward_neutral
 from pallas.product.llm.memory.relationship_auto import extract_relationship_affinity_delta
 from pallas.product.llm.memory.relationship_persist import maybe_persist_relationship_from_utterance
 from pallas.product.llm.memory.relationship_store import RelationshipProfile
@@ -31,6 +31,33 @@ def test_clamp_affinity() -> None:
     assert clamp_affinity(-1.5) == -1.0
     assert clamp_affinity(0.3) == 0.3
     assert clamp_affinity(0.12345) == 0.123
+
+
+def test_decay_affinity_toward_neutral_no_elapsed() -> None:
+    now = 1_700_000_000
+    assert decay_affinity_toward_neutral(0.5, now, daily_step=0.02, now=now) == 0.5
+    assert decay_affinity_toward_neutral(-0.3, now, daily_step=0.02, now=now) == -0.3
+
+
+def test_decay_affinity_toward_neutral_positive() -> None:
+    now = 1_700_000_000
+    updated = now - 3 * 86400
+    assert decay_affinity_toward_neutral(0.5, updated, daily_step=0.02, now=now) == 0.44
+    assert decay_affinity_toward_neutral(0.05, updated, daily_step=0.02, now=now) == 0.0
+
+
+def test_decay_affinity_toward_neutral_negative() -> None:
+    now = 1_700_000_000
+    updated = now - 2 * 86400
+    assert decay_affinity_toward_neutral(-0.3, updated, daily_step=0.02, now=now) == -0.26
+    assert decay_affinity_toward_neutral(-0.03, updated, daily_step=0.02, now=now) == 0.0
+
+
+def test_decay_affinity_toward_neutral_clamps() -> None:
+    now = 1_700_000_000
+    updated = now - 100 * 86400
+    assert decay_affinity_toward_neutral(1.0, updated, daily_step=0.02, now=now) == 0.0
+    assert decay_affinity_toward_neutral(0.02, updated, daily_step=0.02, now=now) == 0.0
 
 
 def test_extract_relationship_affinity_delta_positive() -> None:

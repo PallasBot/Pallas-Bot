@@ -18,6 +18,7 @@ from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.memory.relationship import (
     clamp_affinity,
     clamp_user_relationship_delta,
+    decay_affinity_toward_neutral,
     merge_relationship_facts,
     normalize_relationship_note,
     prefer_relationship_source,
@@ -249,7 +250,12 @@ async def retrieve_relationship_profile(
         float(getattr(row, "assertiveness_delta", 0.0) or 0.0),
         limit=_delta_limit(c),
     )
-    affinity = clamp_affinity(float(getattr(row, "affinity", 0.0) or 0.0))
+    affinity = decay_affinity_toward_neutral(
+        clamp_affinity(float(getattr(row, "affinity", 0.0) or 0.0)),
+        int(row.updated_at or 0),
+        daily_step=float(getattr(c, "llm_relationship_affinity_daily_decay_step", 0.02) or 0.02),
+        now=now,
+    )
     if not content and warmth == 0.0 and assertiveness == 0.0 and affinity == 0.0:
         return None
     return RelationshipProfile(
@@ -324,15 +330,19 @@ async def list_relationship_notes(
     *,
     query: str = "",
     limit: int = 50,
+    cfg: LlmConfig | None = None,
 ) -> list[dict[str, object]]:
     if not is_relationship_store_available():
         return []
     if _use_mongodb_backend():
         from pallas.product.llm.memory.relationship_store_mongo import list_relationship_notes_mongo
 
-        return await list_relationship_notes_mongo(bot_id, group_id, query=query, limit=limit)
+        return await list_relationship_notes_mongo(
+            bot_id, group_id, query=query, limit=limit, cfg=cfg
+        )
     if not _use_postgresql_backend():
         return []
+    c = cfg or get_llm_config()
     max_limit = max(1, min(int(limit), 200))
     async with get_session(read_only=True) as session:
         stmt = select(LlmRelationshipNoteRow).where(LlmRelationshipNoteRow.bot_id == int(bot_id))
@@ -367,7 +377,13 @@ async def list_relationship_notes(
             "weight": float(row.weight or 0.0),
             "warmth_delta": float(getattr(row, "warmth_delta", 0.0) or 0.0),
             "assertiveness_delta": float(getattr(row, "assertiveness_delta", 0.0) or 0.0),
-            "affinity": float(getattr(row, "affinity", 0.0) or 0.0),
+            "affinity": decay_affinity_toward_neutral(
+                float(getattr(row, "affinity", 0.0) or 0.0),
+                int(row.updated_at or 0),
+                daily_step=float(
+                    getattr(c, "llm_relationship_affinity_daily_decay_step", 0.02) or 0.02
+                ),
+            ),
             "created_at": int(row.created_at or 0),
             "updated_at": int(row.updated_at or 0),
         })
