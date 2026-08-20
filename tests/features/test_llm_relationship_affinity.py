@@ -3,6 +3,7 @@ from __future__ import annotations
 from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.memory.relationship import clamp_affinity
 from pallas.product.llm.memory.relationship_auto import extract_relationship_affinity_delta
+from pallas.product.llm.memory.relationship_store import RelationshipProfile
 
 
 def test_affinity_config_defaults() -> None:
@@ -54,9 +55,6 @@ def test_relationship_note_document_has_affinity() -> None:
 
     fields = set(LlmRelationshipNote.model_fields)
     assert "affinity" in fields
-
-
-from pallas.product.llm.memory.relationship_store import RelationshipProfile
 
 
 def test_relationship_profile_has_affinity() -> None:
