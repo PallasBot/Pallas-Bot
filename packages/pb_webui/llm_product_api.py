@@ -8,6 +8,7 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from pallas.product.llm.memory.relationship import clamp_affinity
 from pallas.product.llm.ops_api import (
     build_conversation_kernel_status,
     clear_feedback_entry_correction,
@@ -679,10 +680,13 @@ def register_llm_product_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        bot_id = int(body.get("bot_id") or 0)
-        group_id = int(body.get("group_id") or 0)
-        user_id = int(body.get("user_id") or 0)
-        affinity = float(body.get("affinity") or 0.0)
+        try:
+            bot_id = int(body.get("bot_id") or 0)
+            group_id = int(body.get("group_id") or 0)
+            user_id = int(body.get("user_id") or 0)
+            affinity = float(body.get("affinity") or 0.0)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="invalid numeric fields") from None
         if bot_id <= 0 or user_id <= 0:
             raise HTTPException(status_code=400, detail="bot_id and user_id required")
         try:
@@ -691,7 +695,8 @@ def register_llm_product_router(
             raise HTTPException(status_code=500, detail=str(e)) from e
         if not ok:
             raise HTTPException(status_code=404, detail="设置好感度失败")
-        return JSONResponse({"ok": True, "data": {"affinity": affinity}})
+        clamped = clamp_affinity(affinity)
+        return JSONResponse({"ok": True, "data": {"affinity": clamped}})
 
     @router.get(f"{x}/llm/conversation-kernel/knowledge-sources", include_in_schema=True)
     async def _llm_conversation_kernel_knowledge_sources_get() -> JSONResponse:
