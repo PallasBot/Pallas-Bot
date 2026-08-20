@@ -85,6 +85,7 @@ from pallas.product.llm.memory.relationship_store import (
     delete_relationship_note,
     list_relationship_notes,
     set_affinity,
+    set_relationship_note_content,
 )
 from pallas.product.llm.memory.store import delete_memory_entry, list_memory_entries, save_memory_entry
 from pallas.product.llm.model_admin import (
@@ -282,6 +283,7 @@ __all__ = [
     "set_affinity",
     "set_feedback_entry_correction",
     "set_feedback_entry_eligibility",
+    "set_relationship_note_content",
     "set_runtime_num_gpu",
     "soft_delete_category",
     "soft_delete_edge",

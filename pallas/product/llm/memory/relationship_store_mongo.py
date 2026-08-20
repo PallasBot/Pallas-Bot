@@ -143,6 +143,34 @@ async def save_relationship_note_mongo(
     )
 
 
+async def set_relationship_note_content_mongo(
+    bot_id: int,
+    group_id: int | None,
+    user_id: int,
+    content: str,
+    *,
+    cfg: LlmConfig | None = None,
+) -> bool:
+    """WebUI 覆盖：手动改写关系备注文本（不 merge、不动好感度）。"""
+    if not user_id:
+        return False
+    c = cfg or get_llm_config()
+    incoming = normalize_relationship_note(content or "", max_len=c.llm_relationship_content_max_len)
+    scope_gid = normalize_group_scope(group_id)
+    now = int(time.time())
+    row = await LlmRelationshipNote.find_one({
+        "bot_id": int(bot_id),
+        "group_id": scope_gid,
+        "user_id": int(user_id),
+    })
+    if row is None:
+        return False
+    row.content = incoming
+    row.updated_at = now
+    await row.save()
+    return True
+
+
 async def retrieve_relationship_profile_mongo(
     bot_id: int,
     group_id: int | None,
@@ -262,7 +290,8 @@ async def list_relationship_notes_mongo(
     for row in rows:
         content = str(row.content or "").strip()
         source = str(row.source or "").strip() or "teach"
-        if needle and needle not in content.casefold() and needle not in source.casefold():
+        user_hit = str(row.user_id or "").strip().casefold()
+        if needle and needle not in content.casefold() and needle not in source.casefold() and needle not in user_hit:
             continue
         items.append({
             "id": int(row.note_id),
