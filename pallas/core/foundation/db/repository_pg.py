@@ -384,6 +384,7 @@ class LlmRelationshipNoteRow(Base):
     weight: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
     warmth_delta: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     assertiveness_delta: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    affinity: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
     updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
@@ -685,6 +686,10 @@ def _ensure_pg_llm_relationship_delta_columns(connection) -> None:
     if "assertiveness_delta" not in names:
         connection.execute(
             text("ALTER TABLE llm_relationship_note ADD COLUMN assertiveness_delta DOUBLE PRECISION NOT NULL DEFAULT 0")
+        )
+    if "affinity" not in names:
+        connection.execute(
+            text("ALTER TABLE llm_relationship_note ADD COLUMN affinity DOUBLE PRECISION NOT NULL DEFAULT 0")
         )
 
 

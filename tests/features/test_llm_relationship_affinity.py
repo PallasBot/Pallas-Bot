@@ -40,3 +40,17 @@ def test_extract_relationship_affinity_delta_negative_wins_over_positive() -> No
 def test_extract_relationship_affinity_delta_neutral() -> None:
     assert extract_relationship_affinity_delta("牛牛帮我唱歌") == 0.0
     assert extract_relationship_affinity_delta("今天天气不错") == 0.0
+
+
+def test_relationship_note_row_has_affinity() -> None:
+    from pallas.core.foundation.db.repository_pg import LlmRelationshipNoteRow
+
+    col_names = {column.name for column in LlmRelationshipNoteRow.__table__.columns}
+    assert "affinity" in col_names
+
+
+def test_relationship_note_document_has_affinity() -> None:
+    from pallas.core.foundation.db.modules import LlmRelationshipNote
+
+    fields = set(LlmRelationshipNote.model_fields)
+    assert "affinity" in fields
