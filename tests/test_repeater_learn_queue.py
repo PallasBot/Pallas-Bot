@@ -121,3 +121,76 @@ async def test_wait_pg_pool_headroom_for_learn_uses_more_conservative_pressure_t
     await lq.wait_pg_pool_headroom_for_learn()
 
     assert seen == [0.25]
+
+
+def _fake_group_event() -> object:
+    return type(
+        "Event",
+        (),
+        {"group_id": 1001, "message_id": "9001", "self_id": 9001, "user_id": 3001},
+    )()
+
+
+@pytest.mark.asyncio
+async def test_message_queue_independent_from_learn_queue(monkeypatch):
+    from packages.repeater import learn_queue as lq
+
+    lq.clear_repeater_learn_runtime_state()
+    mq = lq.message_queue()
+    lq_ = lq.learn_queue()
+    assert mq is not lq_
+    assert mq.maxsize == lq_.maxsize
+
+
+@pytest.mark.asyncio
+async def test_message_persist_job_goes_to_message_queue(monkeypatch):
+    from packages.repeater import learn_queue as lq
+
+    lq.clear_repeater_learn_runtime_state()
+    mq = lq.message_queue()
+    lq_ = lq.learn_queue()
+    ok = lq.enqueue_message_persist_job({"plain_text": "hi"}, _fake_group_event())
+    assert ok is True
+    assert mq.qsize() == 1
+    assert lq_.qsize() == 0
+    job = mq.get_nowait()
+    assert job.kind == "repeater.message"
+    assert job.payload["message"]["plain_text"] == "hi"
+    mq.task_done()
+
+
+@pytest.mark.asyncio
+async def test_message_persist_uses_own_queue_when_learn_queue_full(monkeypatch):
+    from packages.repeater import learn_queue as lq
+
+    monkeypatch.setattr(lq, "learn_queue_max_size", lambda: 1)
+    lq.clear_repeater_learn_runtime_state()
+    lq_ = lq.learn_queue()
+    mq = lq.message_queue()
+    first = lq.WorkJob.create(kind="repeater.learn", payload={}, idempotency_key="x")
+    await lq_.put(first)
+    ok = lq.enqueue_message_persist_job({"plain_text": "still in"}, _fake_group_event())
+    assert ok is True
+    assert mq.qsize() == 1
+    lq_.get_nowait()
+    lq_.task_done()
+
+
+@pytest.mark.asyncio
+async def test_next_outbox_job_prefers_message_queue(monkeypatch):
+    from packages.repeater import learn_queue as lq
+
+    lq.clear_repeater_learn_runtime_state()
+    mq = lq.message_queue()
+    lq_ = lq.learn_queue()
+    learn_job = lq.WorkJob.create(kind="repeater.learn", payload={}, idempotency_key="l")
+    msg_job = lq.WorkJob.create(kind="repeater.message", payload={}, idempotency_key="m")
+    await lq_.put(learn_job)
+    await mq.put(msg_job)
+
+    first = await lq._next_outbox_job()
+    assert first is msg_job
+    mq.task_done()
+    second = await lq._next_outbox_job()
+    assert second is learn_job
+    lq_.task_done()

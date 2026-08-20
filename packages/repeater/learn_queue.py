@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
 _LEARN_PLUGIN = "repeater_learn"
 _queue: asyncio.Queue[WorkJob] | None = None
+_message_queue: asyncio.Queue[WorkJob] | None = None
 _sem: asyncio.Semaphore | None = None
 _sem_limit: int | None = None
 _worker_tasks: list[asyncio.Task[None]] = []
@@ -71,10 +72,11 @@ def learn_queue_max_size() -> int:
 
 def clear_repeater_learn_runtime_state() -> None:
     """清信号量/队列缓存；配合 WebUI 热重载或 worker 重启。"""
-    global _queue, _sem, _sem_limit
+    global _queue, _message_queue, _sem, _sem_limit
     _sem = None
     _sem_limit = None
     _queue = None
+    _message_queue = None
 
 
 def learn_sem() -> asyncio.Semaphore:
@@ -91,6 +93,14 @@ def learn_queue() -> asyncio.Queue[WorkJob]:
     if _queue is None:
         _queue = asyncio.Queue(maxsize=learn_queue_max_size())
     return _queue
+
+
+def message_queue() -> asyncio.Queue[WorkJob]:
+    """message 落库独立队列，与 learn 共享 worker 但消费优先。"""
+    global _message_queue
+    if _message_queue is None:
+        _message_queue = asyncio.Queue(maxsize=learn_queue_max_size())
+    return _message_queue
 
 
 def learn_queue_under_pressure() -> bool:
@@ -114,12 +124,12 @@ def is_nul_payload_error(exc: Exception) -> bool:
 
 async def run_learn_consumer() -> None:
     while True:
-        first = await learn_queue().get()
+        first = await _next_outbox_job()
         jobs = [first]
         try:
             while len(jobs) < _FLUSH_BATCH_SIZE:
                 try:
-                    jobs.append(learn_queue().get_nowait())
+                    jobs.append(_next_outbox_job_nowait())
                 except asyncio.QueueEmpty:
                     break
             await wait_pg_pool_headroom_for_learn()
@@ -150,7 +160,29 @@ async def run_learn_consumer() -> None:
                 break
         finally:
             for _job in jobs:
-                learn_queue().task_done()
+                _source_queue_for(_job).task_done()
+
+
+async def _next_outbox_job() -> WorkJob:
+    """message 队列优先；为空时再取 learn 队列。"""
+    try:
+        return message_queue().get_nowait()
+    except asyncio.QueueEmpty:
+        return await learn_queue().get()
+
+
+def _next_outbox_job_nowait() -> WorkJob:
+    try:
+        return message_queue().get_nowait()
+    except asyncio.QueueEmpty:
+        return learn_queue().get_nowait()
+
+
+def _source_queue_for(job: WorkJob) -> asyncio.Queue[WorkJob]:
+    """按 job 归属找源队列，确保 task_done 落在正确队列。"""
+    if job.kind == "repeater.message":
+        return message_queue()
+    return learn_queue()
 
 
 async def enqueue_repeater_learn(chat: Chat, event: GroupMessageEvent) -> bool:
@@ -200,14 +232,14 @@ async def enqueue_repeater_learn(chat: Chat, event: GroupMessageEvent) -> bool:
 
 
 def enqueue_message_persist_job(message_dict: dict[str, object], event: GroupMessageEvent) -> bool:
-    """message 落库独立于 learn 压力：进同一 outbox，但压力只跳过 learn 入队。"""
+    """message 落库独立于 learn 压力：进独立队列，由同一批 worker 优先消费。"""
     job = WorkJob.create(
         kind="repeater.message",
         payload={"message": message_dict},
         idempotency_key=f"repeater.message:{int(event.group_id)}:{int(event.message_id)}",
     )
     try:
-        learn_queue().put_nowait(job)
+        message_queue().put_nowait(job)
     except asyncio.QueueFull:
         from pallas.core.platform.ingress.hotpath_metrics import record_message_persist_skipped_full
 
@@ -337,13 +369,14 @@ async def start_repeater_learn_worker() -> None:
 
 def discard_buffered_repeater_jobs() -> None:
     dropped = 0
-    while True:
-        try:
-            learn_queue().get_nowait()
-        except asyncio.QueueEmpty:
-            break
-        learn_queue().task_done()
-        dropped += 1
+    for source in (message_queue(), learn_queue()):
+        while True:
+            try:
+                source.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+            source.task_done()
+            dropped += 1
     if dropped:
         from pallas.core.platform.ingress.hotpath_metrics import record_learn_dropped_shutdown
 
@@ -356,7 +389,9 @@ async def stop_repeater_learn_worker() -> None:
     _worker_tasks = []
     if tasks:
         try:
-            await asyncio.wait_for(learn_queue().join(), timeout=_SHUTDOWN_DRAIN_SEC)
+            await asyncio.wait_for(
+                asyncio.gather(message_queue().join(), learn_queue().join()), timeout=_SHUTDOWN_DRAIN_SEC
+            )
         except TimeoutError:
             pass
         for t in tasks:
