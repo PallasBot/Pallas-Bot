@@ -1021,6 +1021,64 @@ class LlmWebuiConfig(BaseModel):
             "用法常配合 @ 某人；关闭后已有备注也可能不再参与",
         ),
     )
+    llm_relationship_affinity_enabled: bool = Field(
+        default=True,
+        description=field_help(
+            "要不要记录每位群友对牛牛的好感度",
+            "开=被@、点名或追问时按语气调整好感，对话更有人情味（推荐）；关=不做好感度记录",
+            "好感度会显示在对话的关系备注里，并影响牛牛对低好感者是否接话",
+        ),
+    )
+    llm_relationship_affinity_delta_max: float = Field(
+        default=0.15,
+        ge=0.0,
+        le=1.0,
+        description=field_help(
+            "单次好感度变动的最大幅度",
+            "默认 0.15。越大，一两句话就能明显拉近/拉远关系；越小越平滑",
+            "好感度本身在 -1 到 +1 之间",
+        ),
+    )
+    llm_relationship_affinity_llm_cooldown_s: int = Field(
+        default=60,
+        ge=0,
+        le=86400,
+        description=field_help(
+            "规则词表判不出好感时，交给大模型判定的最小间隔（秒）",
+            "默认 60。太小会频繁调大模型；越大越省调用，但反应会变慢",
+            "只有规则命中不了的话才走大模型",
+        ),
+    )
+    llm_relationship_affinity_daily_decay_step: float = Field(
+        default=0.02,
+        ge=0.0,
+        le=1.0,
+        description=field_help(
+            "好感度每天向中立回落的幅度",
+            "默认 0.02，让冷淡/热情随时间慢慢淡出；0=不回落后只升不降",
+            "若想手动纠偏，可在关系档案里直接改好感度",
+        ),
+    )
+    llm_relationship_affinity_silence_threshold: float = Field(
+        default=-0.3,
+        ge=-1.0,
+        le=0.0,
+        description=field_help(
+            "好感度低于多少时，牛牛对非点名发言开始爱搭不理",
+            "默认 -0.3。只有低到这条线以下，牛牛才会更少接对方的闲聊",
+            "被@、点名、追问仍会正常回复",
+        ),
+    )
+    llm_relationship_affinity_silence_max_penalty: int = Field(
+        default=30,
+        ge=0,
+        le=200,
+        description=field_help(
+            "好感度极低时，接话积极性的最多扣分",
+            "默认 30。越大，对低好感者越沉默；0=好感度不影响接话",
+            "配合上方的静默阈值使用",
+        ),
+    )
 
 
 def get_llm_webui_config() -> LlmWebuiConfig:
@@ -1139,4 +1197,10 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_memory_hit_boost_enabled=cfg.llm_memory_hit_boost_enabled,
         llm_memory_hit_boost_sec=cfg.llm_memory_hit_boost_sec,
         llm_relationship_notes_enabled=cfg.llm_relationship_notes_enabled,
+        llm_relationship_affinity_enabled=cfg.llm_relationship_affinity_enabled,
+        llm_relationship_affinity_delta_max=cfg.llm_relationship_affinity_delta_max,
+        llm_relationship_affinity_llm_cooldown_s=cfg.llm_relationship_affinity_llm_cooldown_s,
+        llm_relationship_affinity_daily_decay_step=cfg.llm_relationship_affinity_daily_decay_step,
+        llm_relationship_affinity_silence_threshold=cfg.llm_relationship_affinity_silence_threshold,
+        llm_relationship_affinity_silence_max_penalty=cfg.llm_relationship_affinity_silence_max_penalty,
     )

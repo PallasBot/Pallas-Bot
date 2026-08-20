@@ -12,6 +12,8 @@ from pallas.product.llm.memory.relationship import clamp_affinity
 from pallas.product.llm.memory.relationship_auto import extract_relationship_affinity_delta
 from pallas.product.llm.memory.relationship_persist import maybe_persist_relationship_from_utterance
 from pallas.product.llm.memory.relationship_store import RelationshipProfile
+from pallas.product.llm.ops_config import get_llm_memory_ops_config
+from pallas.product.llm.webui_config import get_llm_webui_config
 
 
 def test_affinity_config_defaults() -> None:
@@ -231,3 +233,25 @@ async def test_persist_llm_neutral_affinity_skips_upsert_delta() -> None:
 def test_ops_api_exports_set_affinity() -> None:
     assert "set_affinity" in ops_api.__all__
     assert callable(getattr(ops_api, "set_affinity", None))
+
+
+def test_webui_config_maps_affinity_fields() -> None:
+    cfg = LlmConfig()
+    webui = get_llm_webui_config()
+    assert webui.llm_relationship_affinity_enabled == cfg.llm_relationship_affinity_enabled
+    assert webui.llm_relationship_affinity_delta_max == cfg.llm_relationship_affinity_delta_max
+    assert webui.llm_relationship_affinity_llm_cooldown_s == cfg.llm_relationship_affinity_llm_cooldown_s
+    assert webui.llm_relationship_affinity_daily_decay_step == cfg.llm_relationship_affinity_daily_decay_step
+    assert webui.llm_relationship_affinity_silence_threshold == cfg.llm_relationship_affinity_silence_threshold
+    assert webui.llm_relationship_affinity_silence_max_penalty == cfg.llm_relationship_affinity_silence_max_penalty
+
+
+def test_memory_ops_config_maps_affinity_fields() -> None:
+    webui = get_llm_webui_config()
+    ops = get_llm_memory_ops_config(webui)
+    assert ops.llm_relationship_affinity_enabled is True
+    assert ops.llm_relationship_affinity_delta_max == 0.15
+    assert ops.llm_relationship_affinity_llm_cooldown_s == 60
+    assert ops.llm_relationship_affinity_daily_decay_step == 0.02
+    assert ops.llm_relationship_affinity_silence_threshold == -0.3
+    assert ops.llm_relationship_affinity_silence_max_penalty == 30
