@@ -480,6 +480,7 @@ async def prepare_and_submit_llm_chat_turn(
             cfg=llm_cfg,
             persona=persona_for_gate,
             bot_id=int(bot.self_id),
+            group_id=group_id,
         )
         gate_decision = gate_result.decision
         if gate_decision == "skip":

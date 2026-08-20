@@ -72,18 +72,27 @@ def evaluate_llm_reply_gate_result(
     cfg: LlmConfig | None = None,
     persona: ResolvedPersona | None = None,
     bot_id: int | None = None,
+    group_id: int | None = None,
 ) -> ReplyGateResult:
     from pallas.product.llm.reply_necessity import (
         is_bystander_plain_text,
         is_incomplete_utterance,
         is_noise_fragment,
     )
+    from pallas.product.llm.silence import trigger_silence
 
     c = cfg or get_llm_config()
     if not c.llm_reply_gate_enabled:
         return ReplyGateResult("proceed", "disabled")
     plain = strip_cq_codes(user_text)
     if is_shut_up_request(user_text):
+        if c.llm_shut_up_silence_enabled and bot_id is not None and group_id is not None:
+            trigger_silence(
+                bot_id,
+                group_id,
+                min_sec=int(c.llm_shut_up_silence_min_sec),
+                max_sec=int(c.llm_shut_up_silence_max_sec),
+            )
         return ReplyGateResult("skip", "shut_up")
     if not plain and is_mostly_face_or_emoji(user_text):
         return ReplyGateResult("skip", "face")
@@ -107,12 +116,14 @@ def evaluate_llm_reply_gate(
     cfg: LlmConfig | None = None,
     persona: ResolvedPersona | None = None,
     bot_id: int | None = None,
+    group_id: int | None = None,
 ) -> ReplyGateDecision:
     return evaluate_llm_reply_gate_result(
         user_text,
         cfg=cfg,
         persona=persona,
         bot_id=bot_id,
+        group_id=group_id,
     ).decision
 
 

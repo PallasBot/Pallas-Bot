@@ -247,6 +247,9 @@ class LlmConfig(BaseModel):
     llm_reply_gate_enabled: bool = Field(default=True)
     llm_current_turn_decision_enabled: bool = Field(default=False)
     llm_reply_gate_min_chars: int = Field(default=1, ge=0, le=32)
+    llm_shut_up_silence_enabled: bool = Field(default=True)
+    llm_shut_up_silence_min_sec: int = Field(default=30, ge=1, le=3600)
+    llm_shut_up_silence_max_sec: int = Field(default=300, ge=1, le=86400)
     llm_chat_queue_merge: bool = Field(default=True)
     llm_output_filter_enabled: bool = Field(default=True)
     llm_output_filter_chat_hard_phrases: list[str] = Field(default_factory=list)
@@ -478,6 +481,9 @@ def get_llm_config() -> LlmConfig:
             llm_reply_gate_enabled=_env_bool("LLM_REPLY_GATE_ENABLED", True),
             llm_current_turn_decision_enabled=_env_bool("LLM_CURRENT_TURN_DECISION_ENABLED", False),
             llm_reply_gate_min_chars=_env_int("LLM_REPLY_GATE_MIN_CHARS", 1),
+            llm_shut_up_silence_enabled=_env_bool("LLM_SHUT_UP_SILENCE_ENABLED", True),
+            llm_shut_up_silence_min_sec=_env_int("LLM_SHUT_UP_SILENCE_MIN_SEC", 30),
+            llm_shut_up_silence_max_sec=_env_int("LLM_SHUT_UP_SILENCE_MAX_SEC", 300),
             llm_chat_queue_merge=_env_bool("LLM_CHAT_QUEUE_MERGE", True),
             llm_output_filter_enabled=_env_bool("LLM_OUTPUT_FILTER_ENABLED", True),
             llm_output_filter_chat_hard_phrases=_env_str_list_or_default(
