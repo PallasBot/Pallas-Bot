@@ -36,7 +36,7 @@ def test_persona_export_endpoint_only_accepts_current_parameters(monkeypatch) ->
     operation = app.openapi()["paths"]["/pallas/api/common-config/llm/persona/export"]["get"]
     names = {item["name"] for item in operation["parameters"]}
 
-    assert names == {"bot_id", "group_id", "plain_text", "mode", "token", "X-Pallas-Token"}
+    assert names == {"bot_id", "group_id", "plain_text", "mode", "token", "X-Pallas-Token", "X-Pallas-Api-Key"}
 
 
 @pytest.mark.asyncio

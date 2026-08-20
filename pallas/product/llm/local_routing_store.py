@@ -20,6 +20,7 @@ _EMPTY_TASKS = {
     "llm_chat": "",
     "drunk": "",
     "affect_refine": "",
+    "turn_decision": "",
 }
 
 

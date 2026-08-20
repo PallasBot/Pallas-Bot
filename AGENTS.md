@@ -21,24 +21,6 @@ uv run ruff check pallas/ packages/
 uv run ruff format --check pallas/ packages/
 ```
 
-## Agent skills
-
-### Issue tracker
-
-Issues live in GitHub Issues. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Triage uses the default five labels. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-This repository uses a single-context layout. See `docs/agents/domain.md`.
-
-pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 覆盖 `pallas/`、`packages/`、`local/plugins/`**；`check_plugin_imports.py` 校验 import 规则；每次 commit 跑 **`sync-console-openapi`** 自动导出 `openspec`（同级有 WebUI 仓则 gen 类型）；`.env` 全局排除。详见 [workflow.md](docs/developer/workflow.md)。
-
-控制台 OpenAPI（改 API / 路由后）：`uv run python tools/sync_console_openapi.py` → `openspec/pallas-console-v1.json`；在线 `/pallas/api/openapi.json`；契约细则见 [webui.md · OpenAPI](docs/developer/webui.md#openapi-契约)。合并顺序：先合 Bot（含 openspec）→ 再合 WebUI 类型。
-
 ## 文档与排障入口
 
 - **开发指南**：[docs/developer/index.md](docs/developer/index.md)（环境、流程、插件与 WebUI）。
@@ -50,6 +32,7 @@ pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 覆盖 `pallas/`
 - **内核插件统一化**：[docs/developer/plugin-development/golden-plugin.md](docs/developer/plugin-development/golden-plugin.md)（core golden 模板、`pb_*` 命名、分期 PR）。
 - **热重载分级**：[docs/developer/plugin-development/reload-and-activation.md](docs/developer/plugin-development/reload-and-activation.md)（配置 / 元数据 / 代码；`reload_policy`）。
 - **常见问题与部署排障**：[docs/FAQ.md](docs/FAQ.md)。
+- **Agent 协作**：[Issue 跟踪](docs/agents/issue-tracker.md)、[Triage 标签](docs/agents/triage-labels.md)、[仓库信息布局](docs/agents/domain.md)。
 
 ## 运行配置（Agent 必读）
 
@@ -61,6 +44,28 @@ pre-commit 策略：**全仓**基础文件卫生检查；**Ruff 覆盖 `pallas/`
 - **分片可选 Redis**：在 `pallas.toml` 的 `[env]` 配置 `REDIS_URL`；`run_sharded_bot.sh` 自动探测。`redis` 客户端已在主依赖（多机协同 / 分片共用）。
 - **可选部署模板**：`deploy/` 目录 + `uv sync --extra deploy-shard`；应用 `uv run python tools/apply_deploy_profile.py shard`（分片）。消息审查 4.0 默认开启，无需模板。
 - **Docker Compose 数据库**：仍可用 [`config/compose.env.example`](config/compose.env.example)（仅编排插值，非 Bot 主配置）。
+
+## 运行产物与数据目录（Agent 必读）
+
+日志、持久化、前端资源均落在 **仓库根下 `data/`**（`PROJECT_ROOT / "data"`，见 `pallas/core/foundation/paths/__init__.py` 的 `DATA_ROOT` / `plugin_data_dir()`）。查运行问题时先确认部署形态（unified / 分片 / Docker），再按下面锚点定位。
+
+| 用途 | 路径 |
+| --- | --- |
+| Bot 主日志（统一运行时） | `data/pallas_unified/logs/bot.log`；历史 NoneBot 用 `data/bot/nonebot_*.log` |
+| 业务工作 aux 日志 | `data/pallas_work/logs/work.log`（下载/后台任务） |
+| embed 辅进程日志 | `data/pallas_embed/logs/embed.log`（本机 Embedding + Redis 时） |
+| 分片日志 / 状态 | `data/pallas_shard/logs/{hub,worker-*}.log`、`registry.json`、`stats/` |
+| 配置落盘 | `config/pallas.toml`、`data/pallas_config/webui.json`（WebUI 覆盖最高）、快照 `config/pallas.webui.export.toml` |
+| 控制台鉴权 | `data/pallas_console/`：`auth_state.json`（密钥哈希）、`session_secret.bin`、`api_keys.json`（长期 API Key 哈希） |
+| WebUI 前端产物 | `data/pb_webui/public-react/`（挂载基址 `/pallas/`） |
+| 知识源 | `data/pallas_knowledge/` |
+| 表达/口头禅库 | `data/pb_webui/expression_bank/`（`pending/|merged/` 分片，append+定期合并） |
+| LLM 反馈/行为 | `data/pb_webui/llm_repeater_feedback/`、`llm_behavior/` |
+| 数据库 | PostgreSQL 容器（db `PallasBot`，user `togetsudo`） |
+
+速查命令：`uv run pallas logs`（默认 Bot+embed）、`uv run pallas logs -f`、`uv run pallas status`。排障顺序与关键路径详见 [docs/maintainer/operate/logs.md](docs/maintainer/operate/logs.md) 与 [docs/maintainer/operate/troubleshooting.md](docs/maintainer/operate/troubleshooting.md)。
+
+控制台 API 长期调用：`uv run pallas console token`（签发）、`pallas console tokens` / `pallas console revoke <id>`；请求带 `X-Pallas-Api-Key: pls_...` header（如 `curl -H 'X-Pallas-Api-Key: pls_...' http://<host>:<port>/pallas/api/...`）。
 
 ## Agent 工作约定
 
@@ -167,8 +172,9 @@ packages/<name>/
 
 本地安装：`uvx pre-commit install`（或系统/venv 中的 `pre-commit install`）。
 
-- 基础文件卫生检查覆盖全仓；Ruff 覆盖 `pallas/`、`packages/`、`local/plugins/`
-- 每次 commit 会跑 `sync-console-openapi`（写出 `openspec/pallas-console-v1.json`；同级有 WebUI 则 gen 类型；有改动需重新 stage）。手动同步见上文「控制台 OpenAPI」
+- 基础文件卫生检查覆盖全仓；Ruff 覆盖 `pallas/`、`packages/`、`local/plugins/`；`check_plugin_imports.py` 校验 import 规则；`.env` 全局排除。详见 [workflow.md](docs/developer/workflow.md)。
+- 每次 commit 会跑 **`sync-console-openapi`**（写出 `openspec/pallas-console-v1.json`；同级有 WebUI 则 gen 类型；有改动需重新 stage）。手动同步见下。
+- 控制台 OpenAPI（改 API / 路由后）：`uv run python tools/sync_console_openapi.py` → `openspec/pallas-console-v1.json`；在线 `/pallas/api/openapi.json`；契约细则见 [webui.md · OpenAPI](docs/developer/webui.md#openapi-契约)。合并顺序：先合 Bot（含 openspec）→ 再合 WebUI 类型。
 
 **hooks 版本手动更新**（不启 pre-commit.ci 自动升级；默认会 weekly，且需 org 装 App）：
 

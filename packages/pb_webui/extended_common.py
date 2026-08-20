@@ -84,8 +84,9 @@ def require_pallas_token_configured(
     *,
     x_pallas_token: str | None,
     token: str | None,
+    x_pallas_api_key: str | None = None,
 ) -> None:
-    """所有控制台 API 共享的鉴权入口：与协议端共用会话。"""
+    """所有控制台 API 共享的鉴权入口：与协议端共用会话，或按长期 API Key 放行。"""
     if bool(getattr(plugin_config, "pallas_webui_dev_mode", False)):
         return
     req = current_http_request()
@@ -97,6 +98,7 @@ def require_pallas_token_configured(
         header_token=x_pallas_token,
         query_token=token,
         cookie_token=None,
+        api_key=x_pallas_api_key,
     ):
         return
     if not is_console_auth_configured():

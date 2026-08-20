@@ -1,10 +1,21 @@
-"""Persistent per-group expression bank entries."""
+"""Persistent per-group expression bank entries.
+
+Storage layout (per group sharded, append + periodic merge):
+  expression_bank/pending/<group_id>.jsonl   deltas appended on write
+  expression_bank/merged/<group_id>.jsonl    compacted authority
+
+Writes append O(1) deltas into pending. Readers fold (merged + pending) for
+their own group, so data is visible immediately without a merge. A periodic
+merge compacts pending into merged and truncates pending.
+"""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import re
+import time
 from pathlib import Path
 from typing import Literal
 
@@ -16,6 +27,8 @@ from pallas.product.persona.occasion import normalize_occasion_tag
 ExpressionSource = Literal["group_observe", "llm_success"]
 ExpressionStatus = Literal["shadow", "active", "rejected"]
 ExpressionKey = tuple[str, str]
+
+_ENTRY_ID_RE = re.compile(r"^expr-(\d+)-", re.ASCII)
 
 
 class ExpressionEntry(BaseModel):
@@ -56,8 +69,60 @@ def expression_bank_base_dir() -> Path:
     return path
 
 
+def _pending_dir() -> Path:
+    path = expression_bank_base_dir() / "pending"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _merged_dir() -> Path:
+    path = expression_bank_base_dir() / "merged"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 def expression_entries_path() -> Path:
+    """Legacy single-file path; kept for one-time migration and compatibility."""
     return expression_bank_base_dir() / "entries.jsonl"
+
+
+def _shard_path(group_id: int, *, pending: bool) -> Path:
+    shard_dir = _pending_dir() if pending else _merged_dir()
+    return shard_dir / f"{int(group_id)}.jsonl"
+
+
+def _group_id_from_entry_id(entry_id: str) -> int:
+    match = _ENTRY_ID_RE.match(str(entry_id or ""))
+    if match:
+        return int(match.group(1))
+    return 0
+
+
+def _write_lines_append(path: Path, rows: list[ExpressionEntry]) -> None:
+    body = "".join(json.dumps(item.model_dump(mode="json"), ensure_ascii=False) + "\n" for item in rows)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(body)
+
+
+def _write_lines_atomic(path: Path, rows: list[ExpressionEntry]) -> None:
+    from pallas.core.foundation.fs_lock import atomic_write_text
+
+    body = "".join(json.dumps(item.model_dump(mode="json"), ensure_ascii=False) + "\n" for item in rows)
+    atomic_write_text(path, body)
+
+
+def _iter_rows(path: Path):
+    if not path.exists():
+        return
+    with path.open(encoding="utf-8", errors="replace") as handle:
+        for raw_line in handle:
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                yield ExpressionEntry.model_validate(json.loads(line))
+            except (TypeError, ValueError):
+                continue
 
 
 def normalize_expression_key(occasion: str, saying: str) -> ExpressionKey:
@@ -73,95 +138,182 @@ def build_entry_id(group_id: int, key: ExpressionKey) -> str:
     return f"expr-{int(group_id)}-{digest}"
 
 
-def _iter_expression_entries(path: Path):
-    with path.open(encoding="utf-8", errors="replace") as handle:
-        for raw_line in handle:
-            line = raw_line.strip()
-            if not line:
-                continue
-            try:
-                yield ExpressionEntry.model_validate(json.loads(line))
-            except (TypeError, ValueError):
-                continue
+def _merge_rows(existing: list[ExpressionEntry], deltas: list[ExpressionEntry]) -> list[ExpressionEntry]:
+    index: dict[str, ExpressionEntry] = {}
+    for row in existing:
+        index[row.entry_id] = row
+    for delta in deltas:
+        current = index.get(delta.entry_id)
+        if current is None:
+            # Deltas with empty saying are pure feedback/outcome updates; only
+            # material entries create new rows.
+            if delta.saying:
+                index[delta.entry_id] = delta
+            continue
+        new_outcomes = [outcome for outcome in delta.applied_outcome_ids if outcome not in current.applied_outcome_ids]
+        feedback = {key: dict(value) for key, value in current.scene_feedback.items()}
+        if new_outcomes:
+            for scene, stats in delta.scene_feedback.items():
+                merged_stats = feedback.setdefault(scene, {"uses": 0, "score": 0})
+                merged_stats["uses"] = int(merged_stats.get("uses", 0)) + int(stats.get("uses", 0))
+                merged_stats["score"] = int(merged_stats.get("score", 0)) + int(stats.get("score", 0))
+        combined_outcomes = list({*current.applied_outcome_ids, *delta.applied_outcome_ids})
+        if not delta.saying:
+            # Pure outcome update keeps all material fields untouched.
+            index[delta.entry_id] = current.model_copy(
+                update={"scene_feedback": feedback, "applied_outcome_ids": combined_outcomes}
+            )
+            continue
+        source = "llm_success" if "llm_success" in {current.source, delta.source} else "group_observe"
+        status = current.status if current.status == "rejected" else delta.status
+        merged = current.model_copy(
+            update={
+                "support": max(1, int(current.support)) + max(0, int(delta.support)),
+                "source": source,
+                "status": status,
+                "updated_at": max(current.updated_at, delta.updated_at),
+                "scene_feedback": feedback,
+                "applied_outcome_ids": combined_outcomes,
+                "rejected_reason": delta.rejected_reason or current.rejected_reason,
+            }
+        )
+        index[delta.entry_id] = merged
+    return list(index.values())
 
 
-def _load_expression_entries() -> list[ExpressionEntry]:
-    path = expression_entries_path()
-    if not path.exists():
-        return []
-    return list(_iter_expression_entries(path))
+def _append_shard(group_id: int, entries: list[ExpressionEntry]) -> None:
+    from pallas.core.foundation.fs_lock import interprocess_file_lock
+
+    if not entries:
+        return
+    path = _shard_path(group_id, pending=True)
+    with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
+        _write_lines_append(path, entries)
 
 
-def _write_expression_entries(path: Path, rows: list[ExpressionEntry]) -> None:
-    from pallas.core.foundation.fs_lock import atomic_write_text
+def _group_combined_rows(group_id: int) -> list[ExpressionEntry]:
+    """Fold pending deltas over merged authority for one group."""
+    merged = list(_iter_rows(_shard_path(group_id, pending=False)))
+    pending = list(_iter_rows(_shard_path(group_id, pending=True)))
+    if not pending:
+        return merged
+    return _merge_rows(merged, pending)
 
-    body = "".join(json.dumps(item.model_dump(mode="json"), ensure_ascii=False) + "\n" for item in rows)
-    atomic_write_text(path, body)
+
+def merge_group_expressions(group_id: int) -> None:
+    """Compress this group's pending deltas into merged and truncate pending."""
+    from pallas.core.foundation.fs_lock import interprocess_file_lock
+
+    gid = int(group_id)
+    path = _shard_path(gid, pending=True)
+    with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
+        pending = list(_iter_rows(path))
+        if not pending:
+            return
+        merged = _merge_rows(list(_iter_rows(_shard_path(gid, pending=False))), pending)
+        _write_lines_atomic(_shard_path(gid, pending=False), merged)
+        path.unlink(missing_ok=True)
+
+
+def merge_all_pending_expressions(limit: int = 256) -> int:
+    """Compress up to `limit` groups with pending deltas. Returns count merged."""
+    merged_count = 0
+    for path in sorted(_pending_dir().glob("*.jsonl")):
+        if merged_count >= max(0, int(limit)):
+            break
+        name = path.name
+        if not name.endswith(".jsonl") or name == ".jsonl":
+            continue
+        try:
+            gid = int(path.stem)
+        except ValueError:
+            continue
+        merge_group_expressions(gid)
+        merged_count += 1
+    return merged_count
 
 
 def append_or_merge_expression(entry: ExpressionEntry) -> ExpressionEntry:
-    """Store an entry, merging support for the same group and normalized key."""
-    from pallas.core.foundation.fs_lock import interprocess_file_lock
-
+    """Append a delta (O(1)) and return the folded entry for this group."""
     key = normalize_expression_key(entry.occasion, entry.saying)
     canonical_entry = entry.model_copy(
         update={
             "entry_id": build_entry_id(entry.group_id, key),
+            "group_id": int(entry.group_id),
             "occasion": key[0],
             "saying": key[1],
             "support": max(1, int(entry.support)),
         }
     )
-    path = expression_entries_path()
+    gid = int(canonical_entry.group_id)
+    from pallas.core.foundation.fs_lock import interprocess_file_lock
+
+    path = _shard_path(gid, pending=True)
     with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
-        rows = _load_expression_entries()
-        for index, current in enumerate(rows):
-            if current.group_id != canonical_entry.group_id:
-                continue
-            if normalize_expression_key(current.occasion, current.saying) != key:
-                continue
-            incoming_source = canonical_entry.source
-            source = "llm_success" if "llm_success" in {current.source, incoming_source} else "group_observe"
-            status = current.status if current.status == "rejected" else canonical_entry.status
-            merged = current.model_copy(
-                update={
-                    "support": max(1, int(current.support)) + canonical_entry.support,
-                    "source": source,
-                    "status": status,
-                    "updated_at": max(current.updated_at, canonical_entry.updated_at),
-                }
-            )
-            rows[index] = merged
-            _write_expression_entries(path, rows)
-            return merged
-        rows.append(canonical_entry)
-        _write_expression_entries(path, rows)
-    return canonical_entry
+        combined = _merge_rows(_group_combined_rows(gid), [canonical_entry])
+        matched = next((row for row in combined if row.entry_id == canonical_entry.entry_id), canonical_entry)
+        _write_lines_append(path, [canonical_entry])
+        return matched
 
 
 def record_expression_outcome(entry_ids: list[str], *, scene: str, score_delta: int, outcome_id: str) -> None:
     targets = {str(item).strip() for item in entry_ids if str(item).strip()}
     if not targets:
         return
-    path = expression_entries_path()
-    from pallas.core.foundation.fs_lock import interprocess_file_lock
-
-    with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
-        rows = _load_expression_entries()
-        changed = False
-        for index, row in enumerate(rows):
-            if row.entry_id not in targets or outcome_id in row.applied_outcome_ids:
-                continue
-            feedback = {key: dict(value) for key, value in row.scene_feedback.items()}
-            stat = feedback.setdefault(normalize_occasion_tag(scene), {"uses": 0, "score": 0})
-            stat["uses"] = int(stat.get("uses", 0)) + 1
-            stat["score"] = int(stat.get("score", 0)) + int(score_delta)
-            rows[index] = row.model_copy(
-                update={"scene_feedback": feedback, "applied_outcome_ids": [*row.applied_outcome_ids, outcome_id]}
+    scene_key = normalize_occasion_tag(str(scene or ""))
+    now = int(time.time())
+    by_group: dict[int, list[ExpressionEntry]] = {}
+    for target in targets:
+        gid = _group_id_from_entry_id(target)
+        if gid <= 0:
+            continue
+        by_group.setdefault(gid, []).append(
+            ExpressionEntry(
+                entry_id=target,
+                group_id=gid,
+                occasion="",
+                saying="",
+                support=0,
+                source="group_observe",
+                channel="",
+                scene_tier="",
+                status="shadow",
+                affect_hint="",
+                created_at=now,
+                updated_at=now,
+                scene_feedback={scene_key: {"uses": 1, "score": int(score_delta)}} if scene_key else {},
+                applied_outcome_ids=[outcome_id],
             )
-            changed = True
-        if changed:
-            _write_expression_entries(path, rows)
+        )
+    for gid, deltas in sorted(by_group.items()):
+        _append_shard(gid, deltas)
+
+
+def migrate_legacy_expression_entries() -> bool:
+    """One-time migration from the legacy single-file entries.jsonl to shards.
+
+    Returns whether a legacy file was found and migrated.
+    """
+    legacy = expression_entries_path()
+    if not legacy.exists():
+        return False
+    rows = list(_iter_rows(legacy))
+    by_group: dict[int, list[ExpressionEntry]] = {}
+    for row in rows:
+        by_group.setdefault(int(row.group_id), []).append(row)
+    for gid, group_rows in sorted(by_group.items()):
+        merged = _merge_rows([], group_rows)
+        _write_lines_atomic(_shard_path(gid, pending=False), merged)
+    legacy.replace(legacy.with_suffix(".jsonl.migrated.bak"))
+    return True
+
+
+def _load_all_rows() -> list[ExpressionEntry]:
+    """Read every group's folded state; used by legacy consumers, not hot paths."""
+    rows: list[ExpressionEntry] = []
+    for path in sorted(_merged_dir().glob("*.jsonl")):
+        rows.extend(_iter_rows(path))
+    return rows
 
 
 def list_group_expressions(
@@ -170,10 +322,7 @@ def list_group_expressions(
     status: ExpressionStatus | None = None,
     limit: int = 50,
 ) -> list[ExpressionEntry]:
+    """Return this group's entries (pending folded over merged)."""
     target_group_id = int(group_id)
-    rows = [
-        item
-        for item in _load_expression_entries()
-        if item.group_id == target_group_id and (status is None or item.status == status)
-    ]
+    rows = [item for item in _group_combined_rows(target_group_id) if status is None or item.status == status]
     return rows[-max(1, int(limit)) :]

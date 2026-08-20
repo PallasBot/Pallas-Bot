@@ -379,6 +379,8 @@ def rows_from_doubt_friends_api(result: object) -> list[dict]:
 def uid_flag_from_doubt_friend_row(item: dict) -> tuple[str, str] | None:
     flag = item.get("flag")
     if flag is None:
+        flag = item.get("uid")
+    if flag is None:
         return None
     flag_str = str(flag).strip()
     if not flag_str:

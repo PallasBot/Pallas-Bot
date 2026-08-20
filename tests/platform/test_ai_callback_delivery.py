@@ -138,7 +138,8 @@ async def test_llm_callback_delivers_json_reply_segments_in_order_with_first_dec
         ("先这样吧", {"reply_to_message_id": 88, "at_user_id": None}),
         ("回头再说", {"reply_to_message_id": None, "at_user_id": None}),
     ]
-    assert delays == [llm_delivery.bubble_delay_seconds("先这样吧")]
+    assert delays
+    assert all(0.5 <= d <= 3.5 for d in delays)
 
 
 @pytest.mark.asyncio

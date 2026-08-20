@@ -521,6 +521,34 @@ class LlmWebuiConfig(BaseModel):
             "开启后请到「接入 → 任务编排」里给「本轮动作决策」选提供方与模型",
         ),
     )
+    llm_shut_up_silence_enabled: bool = Field(
+        default=True,
+        description=field_help(
+            "群里说「闭嘴」等话，让牛牛随机静默一小段时间再说话",
+            "开=听到闭嘴类话术按群静默（推荐）；关=只跳过当前这句，不进入静默",
+            "静默期内仍会正常执行命令；说「说话/回话」可提前解除",
+        ),
+    )
+    llm_shut_up_silence_min_sec: int = Field(
+        default=30,
+        ge=1,
+        le=3600,
+        description=field_help(
+            "一次闭嘴静默的最短时长（秒）",
+            "默认 30 秒。实际时长为最短到最长之间随机",
+            "上限见下方最大值；范围内随机选取",
+        ),
+    )
+    llm_shut_up_silence_max_sec: int = Field(
+        default=300,
+        ge=1,
+        le=86400,
+        description=field_help(
+            "一次闭嘴静默的最长时长（秒）",
+            "默认 300 秒（5 分钟）。实际时长为最短到最长之间随机",
+            "设成与最小值相同则固定不变",
+        ),
+    )
     llm_chat_queue_merge: bool = Field(
         default=True,
         description=field_help(
@@ -1150,6 +1178,9 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         conversation_feature_level=cfg.conversation_feature_level or "",  # type: ignore[arg-type]
         llm_reply_gate_enabled=cfg.llm_reply_gate_enabled,
         llm_current_turn_decision_enabled=cfg.llm_current_turn_decision_enabled,
+        llm_shut_up_silence_enabled=cfg.llm_shut_up_silence_enabled,
+        llm_shut_up_silence_min_sec=cfg.llm_shut_up_silence_min_sec,
+        llm_shut_up_silence_max_sec=cfg.llm_shut_up_silence_max_sec,
         llm_chat_queue_merge=cfg.llm_chat_queue_merge,
         llm_chat_queue_enabled=cfg.llm_chat_queue_enabled,
         llm_chat_queue_max=cfg.llm_chat_queue_max,

@@ -146,6 +146,15 @@ def bind_group_style_refresh_lifecycle() -> None:
 
     @driver.on_startup
     async def _start_group_style_refresh_worker() -> None:
+        try:
+            from pallas.product.persona.catchphrase_bank import migrate_legacy_catchphrases
+            from pallas.product.persona.expression_bank import migrate_legacy_expression_entries
+
+            await asyncio.to_thread(migrate_legacy_expression_entries)
+            await asyncio.to_thread(migrate_legacy_catchphrases)
+        except Exception as exc:
+            logger.warning("expression/catchphrase bank legacy migration failed: {}", exc)
+
         async def _run() -> None:
             while True:
                 try:
@@ -158,6 +167,14 @@ def bind_group_style_refresh_lifecycle() -> None:
                     from pallas.product.persona.cross_group_refresh import refresh_dirty_bot_cross_group_batch
 
                     await refresh_dirty_bot_cross_group_batch()
+                    try:
+                        from pallas.product.persona.catchphrase_bank import merge_all_catchphrase_pending
+                        from pallas.product.persona.expression_bank import merge_all_pending_expressions
+
+                        await asyncio.to_thread(merge_all_pending_expressions)
+                        await asyncio.to_thread(merge_all_catchphrase_pending)
+                    except Exception as exc:
+                        logger.warning("expression/catchphrase bank compaction failed: {}", exc)
                 except Exception as exc:
                     logger.warning("group_style_refresh batch loop failed: {}", exc)
                 await asyncio.sleep(_DEFAULT_REFRESH_INTERVAL_SEC)

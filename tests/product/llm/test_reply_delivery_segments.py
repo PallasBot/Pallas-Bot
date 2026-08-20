@@ -9,9 +9,25 @@ from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.webui_config import LlmWebuiConfig
 
 
-def test_bubble_delay_is_short_and_bounded() -> None:
-    assert llm_delivery.bubble_delay_seconds("好") < llm_delivery.bubble_delay_seconds("这是一段稍长一些的回复内容")
-    assert llm_delivery.bubble_delay_seconds("很长" * 100) <= 0.6
+def test_bubble_delay_is_human_like_and_bounded() -> None:
+    import random
+
+    short = llm_delivery.bubble_delay_seconds("好", rng=random.Random(1))
+    long = llm_delivery.bubble_delay_seconds("这是一段稍长一些的回复内容", rng=random.Random(1))
+    very_long = llm_delivery.bubble_delay_seconds("很长" * 100, rng=random.Random(1))
+
+    assert short < long
+    assert short >= 0.5
+    assert short <= 3.5
+    assert long >= 0.5
+    assert long <= 3.5
+    assert very_long <= 3.5
+
+    # 随机性：相同长度不同种子产生不同间隔
+    seeds = [
+        llm_delivery.bubble_delay_seconds("好", rng=random.Random(i)) for i in range(5)
+    ]
+    assert len(set(seeds)) > 1
 
 
 def test_reply_postprocess_schema_no_longer_advertises_sentence_splitting() -> None:

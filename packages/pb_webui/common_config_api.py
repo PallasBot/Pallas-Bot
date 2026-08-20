@@ -443,6 +443,8 @@ class _LlmLocalRoutingTaskModelsBody(BaseModel):
 
     llm_chat: str = ""
     drunk: str = ""
+    affect_refine: str = ""
+    turn_decision: str = ""
 
 
 class _LlmLocalRoutingConfigBody(BaseModel):

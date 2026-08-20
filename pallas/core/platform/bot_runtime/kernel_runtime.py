@@ -27,4 +27,7 @@ def register_kernel_runtime() -> None:
         register_ingress_dispatch_runtime()
         register_service_gateways_runtime()
         register_duplicate_prefix_startup_check()
+        from pallas.product.llm.silence_gate import register_silence_gate_runtime
+
+        register_silence_gate_runtime()
     _KERNEL_REGISTERED = True

@@ -304,26 +304,40 @@ def test_settle_behavior_run_outcome_updates_pattern_score(tmp_path, monkeypatch
 
 
 def test_settle_behavior_run_outcome_updates_entries_once(tmp_path, monkeypatch) -> None:
-    from pallas.product.persona.catchphrase_bank import CatchphraseEntry, _save as save_catchphrases
+    from pallas.product.persona.catchphrase_bank import CatchphraseEntry
+    from pallas.product.persona.catchphrase_bank import _save as save_catchphrases
     from pallas.product.persona.expression_bank import ExpressionEntry, append_or_merge_expression
 
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     expression = append_or_merge_expression(
         ExpressionEntry(
-            entry_id="expr-1", group_id=1, occasion="吐槽加班", saying="太难了",
-            source="group_observe", channel="group", scene_tier="", status="active",
-            affect_hint="", created_at=1, updated_at=1,
+            entry_id="expr-1-000000000000",
+            group_id=1,
+            occasion="吐槽加班",
+            saying="太难了",
+            source="group_observe",
+            channel="group",
+            scene_tier="",
+            status="active",
+            affect_hint="",
+            created_at=1,
+            updated_at=1,
         )
     )
-    save_catchphrases([CatchphraseEntry(entry_id="catch-1", bot_id=1, saying="好耶", status="active")])
-    append_behavior_run(BehaviorRun(
-        request_id="entry-feedback", scene=BehaviorScene.VENTING,
-        selected_expression_ids=[expression.entry_id], selected_catchphrase_ids=["catch-1"],
-    ))
+    save_catchphrases(1, [CatchphraseEntry(entry_id="catch-1-000000000000", bot_id=1, saying="好耶", status="active")])
+    append_behavior_run(
+        BehaviorRun(
+            request_id="entry-feedback",
+            scene=BehaviorScene.VENTING,
+            selected_expression_ids=[expression.entry_id],
+            selected_catchphrase_ids=["catch-1-000000000000"],
+        )
+    )
     assert settle_behavior_run_outcome("entry-feedback", final_outcome=BehaviorOutcome.ENGAGED) is not None
     assert settle_behavior_run_outcome("entry-feedback", final_outcome=BehaviorOutcome.ENGAGED) is None
     from pallas.product.persona.catchphrase_bank import list_catchphrases
     from pallas.product.persona.expression_bank import list_group_expressions
+
     assert list_group_expressions(1)[0].scene_feedback["venting"] == {"uses": 1, "score": 2}
     assert list_catchphrases(1)[0].scene_feedback["venting"] == {"uses": 1, "score": 2}
 
@@ -331,15 +345,17 @@ def test_settle_behavior_run_outcome_updates_entries_once(tmp_path, monkeypatch)
 def test_catchphrase_prompt_returns_selected_entries(tmp_path, monkeypatch) -> None:
     from pallas.product.persona.catchphrase_bank import (
         CatchphraseEntry,
-        _save as save_catchphrases,
         compile_catchphrase_prompt_with_entries,
+    )
+    from pallas.product.persona.catchphrase_bank import (
+        _save as save_catchphrases,
     )
 
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
-    save_catchphrases([CatchphraseEntry(entry_id="catch-selected", bot_id=1, saying="好耶", status="active")])
+    save_catchphrases(1, [CatchphraseEntry(entry_id="catch-1-000000000000", bot_id=1, saying="好耶", status="active")])
     lines, rows = compile_catchphrase_prompt_with_entries(1, user_text="好耶", scene="smalltalk")
     assert lines
-    assert [row.entry_id for row in rows] == ["catch-selected"]
+    assert [row.entry_id for row in rows] == ["catch-1-000000000000"]
 
 
 def test_behavior_run_annotation_update(tmp_path, monkeypatch) -> None:

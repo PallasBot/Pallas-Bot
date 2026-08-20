@@ -18,6 +18,8 @@ from pallas.product.persona.catchphrase_extract import (
 )
 from pallas.product.persona.occasion import OccasionTag, normalize_occasion_tag
 
+_ENTRY_ID_RE = re.compile(r"^catch-(\d+)-", re.ASCII)
+
 
 class CatchphraseEntry(BaseModel):
     entry_id: str
@@ -50,59 +52,207 @@ def _path() -> Path:
     return path
 
 
-def _load() -> list[CatchphraseEntry]:
-    if not _path().exists():
-        return []
-    rows = []
-    for line in _path().read_text(encoding="utf-8").splitlines():
+def _base_dir() -> Path:
+    root = (
+        Path(os.environ["PALLAS_DATA_DIR"])
+        if os.environ.get("PALLAS_DATA_DIR")
+        else plugin_data_dir("pb_webui", create=True)
+    )
+    path = root / "expression_bank" / "catchphrase_bank"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _pending_dir() -> Path:
+    path = _base_dir() / "pending"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _merged_dir() -> Path:
+    path = _base_dir() / "merged"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _shard_path(bot_id: int, *, pending: bool) -> Path:
+    shard_dir = _pending_dir() if pending else _merged_dir()
+    return shard_dir / f"{int(bot_id)}.jsonl"
+
+
+def _bot_id_from_entry_id(entry_id: str) -> int:
+    match = _ENTRY_ID_RE.match(str(entry_id or ""))
+    return int(match.group(1)) if match else 0
+
+
+def _iter_rows(path):
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
         try:
-            rows.append(CatchphraseEntry.model_validate(json.loads(line)))
+            yield CatchphraseEntry.model_validate(json.loads(line))
         except (TypeError, ValueError):
             pass
-    return rows
 
 
-def _save(rows: list[CatchphraseEntry]) -> None:
-    _path().write_text(
-        "".join(json.dumps(row.model_dump(mode="json"), ensure_ascii=False) + "\n" for row in rows), encoding="utf-8"
-    )
+def _fold(merged: list[CatchphraseEntry], pending: list[CatchphraseEntry]) -> list[CatchphraseEntry]:
+    index = {row.entry_id: row for row in merged}
+    for delta in pending:
+        current = index.get(delta.entry_id)
+        if current is None:
+            index[delta.entry_id] = delta
+            continue
+        groups = sorted(set(current.groups_seen + delta.groups_seen))
+        feedback = {key: dict(value) for key, value in current.scene_feedback.items()}
+        new_outcomes = [o for o in delta.applied_outcome_ids if o not in current.applied_outcome_ids]
+        if new_outcomes:
+            for scene, stats in delta.scene_feedback.items():
+                merged_stats = feedback.setdefault(scene, {"uses": 0, "score": 0})
+                merged_stats["uses"] = int(merged_stats.get("uses", 0)) + int(stats.get("uses", 0))
+                merged_stats["score"] = int(merged_stats.get("score", 0)) + int(stats.get("score", 0))
+        status = current.status if current.status == "rejected" else delta.status
+        current = current.model_copy(
+            update={
+                "support": current.support + max(0, delta.support),
+                "groups_seen": groups,
+                "status": status,
+                "updated_at": max(current.updated_at, delta.updated_at),
+                "scene_feedback": feedback,
+                "applied_outcome_ids": list({*current.applied_outcome_ids, *delta.applied_outcome_ids}),
+            }
+        )
+        index[delta.entry_id] = current
+    return list(index.values())
+
+
+def _load(bot_id: int) -> list[CatchphraseEntry]:
+    merged = list(_iter_rows(_shard_path(bot_id, pending=False)))
+    pending = list(_iter_rows(_shard_path(bot_id, pending=True)))
+    return _fold(merged, pending)
+
+
+def _save(bot_id: int, rows: list[CatchphraseEntry]) -> None:
+    body = "".join(json.dumps(row.model_dump(mode="json"), ensure_ascii=False) + "\n" for row in rows)
+    _shard_path(bot_id, pending=False).write_text(body, encoding="utf-8")
+
+
+def _append(bot_id: int, entries: list[CatchphraseEntry]) -> None:
+    from pallas.core.foundation.fs_lock import interprocess_file_lock
+
+    if not entries:
+        return
+    path = _shard_path(bot_id, pending=True)
+    with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
+        body = "".join(json.dumps(item.model_dump(mode="json"), ensure_ascii=False) + "\n" for item in entries)
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(body)
+
+
+def _canonical_catchphrase_entry_id(row: CatchphraseEntry) -> str:
+    prefix = f"catch-{int(row.bot_id)}-"
+    if row.entry_id.startswith(prefix):
+        return row.entry_id
+    tail = str(re.sub(r"^catch-", "", row.entry_id or "")).strip()
+    return f"{prefix}{tail or uuid.uuid4().hex[:12]}"
+
+
+def migrate_legacy_catchphrases() -> bool:
+    legacy = _path()
+    if not legacy.exists():
+        return False
+    by_bot: dict[int, list[CatchphraseEntry]] = {}
+    for row in _iter_rows(legacy):
+        by_bot.setdefault(int(row.bot_id), []).append(row)
+    for bid, rows in sorted(by_bot.items()):
+        rows = [row.model_copy(update={"entry_id": _canonical_catchphrase_entry_id(row)}) for row in rows]
+        _save(bid, rows)
+    legacy.replace(legacy.with_suffix(".jsonl.migrated.bak"))
+    return True
+
+
+def merge_catchphrase_bot(bot_id: int) -> None:
+    from pallas.core.foundation.fs_lock import interprocess_file_lock
+
+    path = _shard_path(bot_id, pending=True)
+    with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
+        pending = list(_iter_rows(path))
+        if not pending:
+            return
+        merged = _fold(list(_iter_rows(_shard_path(bot_id, pending=False))), pending)
+        _save(bot_id, merged)
+        path.unlink(missing_ok=True)
+
+
+def merge_all_catchphrase_pending(limit: int = 256) -> int:
+    merged_count = 0
+    for path in sorted(_pending_dir().glob("*.jsonl")):
+        if merged_count >= max(0, int(limit)):
+            break
+        try:
+            bid = int(path.stem)
+        except ValueError:
+            continue
+        merge_catchphrase_bot(bid)
+        merged_count += 1
+    return merged_count
 
 
 def propose_catchphrase_from_bot_success(
     bot_id: int, group_id: int, saying: str, occasion: str = ""
 ) -> CatchphraseEntry | None:
-    """写入一条已校验的短口癖；非整句接话应先经 extract。"""
+    """Append an O(1) delta for a valid short catchphrase; returns the folded entry."""
     text = clean_catchphrase_text(saying)
     if int(bot_id) <= 0 or int(group_id) <= 0 or not is_catchphrase_habit(text):
         return None
+    bid = int(bot_id)
+    existing_id: str | None = None
     from pallas.core.foundation.fs_lock import interprocess_file_lock
 
-    path = _path()
+    path = _shard_path(bid, pending=True)
     with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
-        rows = _load()
-        current = next((row for row in rows if row.bot_id == int(bot_id) and row.saying == text), None)
-        if current is None:
-            current = CatchphraseEntry(
-                entry_id=f"catch-{uuid.uuid4().hex[:12]}",
-                bot_id=int(bot_id),
+        for row in _load(bid):
+            if row.bot_id == bid and row.saying == text:
+                existing_id = row.entry_id
+                break
+        if existing_id is None:
+            delta = CatchphraseEntry(
+                entry_id=f"catch-{bid}-{uuid.uuid4().hex[:12]}",
+                bot_id=bid,
                 saying=text,
                 occasion=normalize_occasion_tag(clean_catchphrase_text(occasion))[:20],
                 groups_seen=[int(group_id)],
             )
-            rows.append(current)
+            _append_lines_locked(path, [delta])
         else:
-            groups = sorted(set(current.groups_seen) | {int(group_id)})
-            update: dict = {"support": current.support + 1, "groups_seen": groups, "updated_at": int(time.time())}
-            if occasion and not current.occasion:
-                update["occasion"] = normalize_occasion_tag(clean_catchphrase_text(occasion))[:20]
-            current = current.model_copy(update=update)
-            rows[rows.index(next(row for row in rows if row.entry_id == current.entry_id))] = current
-        _save(rows)
-        return current
+            folded = next((row for row in _load(bid) if row.entry_id == existing_id), None)
+            if folded is None:
+                return None
+            support = int(folded.support) + 1
+            groups = sorted(set(folded.groups_seen) | {int(group_id)})
+            update: dict = {
+                "support": support,
+                "groups_seen": groups,
+                "updated_at": int(time.time()),
+            }
+            occasion_norm = normalize_occasion_tag(clean_catchphrase_text(occasion))[:20]
+            if occasion_norm and not folded.occasion:
+                update["occasion"] = occasion_norm
+            delta = folded.model_copy(update=update)
+            _append_lines_locked(path, [delta])
+        folded = _fold(list(_iter_rows(_shard_path(bid, pending=False))), [delta])
+        return folded[0] if folded else delta
+
+
+def _append_lines_locked(path: Path, entries: list[CatchphraseEntry]) -> None:
+    body = "".join(json.dumps(item.model_dump(mode="json"), ensure_ascii=False) + "\n" for item in entries)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(body)
 
 
 def propose_catchphrases_from_utterance(bot_id: int, group_id: int, text: str) -> list[CatchphraseEntry]:
-    """从成功回复抽取短口癖并写入候选（规则路径）。"""
     out: list[CatchphraseEntry] = []
     for saying, occasion in extract_catchphrase_candidates(text):
         entry = propose_catchphrase_from_bot_success(bot_id, group_id, saying, occasion)
@@ -116,7 +266,6 @@ _LLM_MINE_COOLDOWN_SEC = 600
 
 
 def schedule_llm_catchphrase_mine(bot_id: int, group_id: int, text: str) -> None:
-    """有事件循环时后台 LLM 补充抽取；按 bot+群冷却，失败静默。"""
     if int(bot_id) <= 0 or int(group_id) <= 0 or len(clean_catchphrase_text(text)) < 8:
         return
     key = (int(bot_id), int(group_id))
@@ -148,91 +297,127 @@ def is_auto_promote_eligible(entry: CatchphraseEntry) -> bool:
     return (entry.support >= 3 and len(entry.groups_seen) >= 2) or entry.support >= 5
 
 
+def _find_entry_any_shard(entry_id: str) -> CatchphraseEntry | None:
+    bid = _bot_id_from_entry_id(entry_id)
+    if bid > 0:
+        for row in _load(bid):
+            if row.entry_id == entry_id:
+                return row
+        return None
+    for path in sorted(_merged_dir().glob("*.jsonl")):
+        for row in _iter_rows(path):
+            if row.entry_id == entry_id:
+                return row
+        for row in _iter_rows(_shard_path(int(path.stem), pending=True)):
+            if row.entry_id == entry_id:
+                return row
+    return None
+
+
 def promote_catchphrase(entry_id: str, *, force: bool = False) -> CatchphraseEntry | None:
     from pallas.core.foundation.fs_lock import interprocess_file_lock
 
-    path = _path()
+    target_id = str(entry_id or "").strip()
+    if not target_id:
+        return None
+    bid = _bot_id_from_entry_id(target_id)
+    if bid <= 0:
+        return None
+    path = _shard_path(bid, pending=True)
     with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
-        rows = _load()
-        for index, row in enumerate(rows):
-            if row.entry_id != entry_id:
-                continue
-            if not is_catchphrase_habit(row.saying) or (not force and not is_auto_promote_eligible(row)):
-                return None
-            rows[index] = row.model_copy(update={"status": "active", "updated_at": int(time.time())})
-            _save(rows)
-            return rows[index]
-    return None
+        current = next((row for row in _load(bid) if row.entry_id == target_id), None)
+        if current is None:
+            return None
+        if not is_catchphrase_habit(current.saying) or (not force and not is_auto_promote_eligible(current)):
+            return None
+        delta = current.model_copy(update={"status": "active", "updated_at": int(time.time())})
+        _append_lines_locked(path, [delta])
+        return delta
 
 
 def reject_catchphrase(entry_id: str) -> CatchphraseEntry | None:
     from pallas.core.foundation.fs_lock import interprocess_file_lock
 
-    path = _path()
+    target_id = str(entry_id or "").strip()
+    if not target_id:
+        return None
+    bid = _bot_id_from_entry_id(target_id)
+    if bid <= 0:
+        return None
+    path = _shard_path(bid, pending=True)
     with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
-        rows = _load()
-        for index, row in enumerate(rows):
-            if row.entry_id == entry_id:
-                rows[index] = row.model_copy(update={"status": "rejected", "updated_at": int(time.time())})
-                _save(rows)
-                return rows[index]
-    return None
+        current = next((row for row in _load(bid) if row.entry_id == target_id), None)
+        if current is None:
+            return None
+        delta = current.model_copy(update={"status": "rejected", "updated_at": int(time.time())})
+        _append_lines_locked(path, [delta])
+        return delta
 
 
 def list_catchphrases(bot_id: int | None = None, *, status: str | None = None) -> list[CatchphraseEntry]:
-    return [
-        row
-        for row in _load()
-        if (bot_id is None or row.bot_id == int(bot_id)) and (status is None or row.status == status)
-    ]
+    if bot_id is None:
+        rows: list[CatchphraseEntry] = []
+        for path in sorted(_merged_dir().glob("*.jsonl")):
+            rows.extend(_load(int(path.stem)))
+        return [row for row in rows if status is None or row.status == status]
+    return [row for row in _load(int(bot_id)) if status is None or row.status == status]
 
 
 def record_catchphrase_outcome(entry_ids: list[str], *, scene: str, score_delta: int, outcome_id: str) -> None:
     targets = {str(item).strip() for item in entry_ids if str(item).strip()}
     if not targets:
         return
-    from pallas.core.foundation.fs_lock import atomic_write_text, interprocess_file_lock
-
-    path = _path()
-    with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
-        rows = _load()
-        changed = False
-        for index, row in enumerate(rows):
-            if row.entry_id not in targets or outcome_id in row.applied_outcome_ids:
-                continue
-            feedback = {key: dict(value) for key, value in row.scene_feedback.items()}
-            stat = feedback.setdefault(normalize_occasion_tag(scene), {"uses": 0, "score": 0})
-            stat["uses"] = int(stat.get("uses", 0)) + 1
-            stat["score"] = int(stat.get("score", 0)) + int(score_delta)
-            rows[index] = row.model_copy(
-                update={"scene_feedback": feedback, "applied_outcome_ids": [*row.applied_outcome_ids, outcome_id]}
+    scene_key = normalize_occasion_tag(str(scene or ""))
+    now = int(time.time())
+    by_bot: dict[int, list[CatchphraseEntry]] = {}
+    for target in targets:
+        bid = _bot_id_from_entry_id(target)
+        if bid <= 0:
+            continue
+        by_bot.setdefault(bid, []).append(
+            CatchphraseEntry(
+                entry_id=target,
+                bot_id=bid,
+                saying="",
+                support=0,
+                groups_seen=[],
+                status="candidate",
+                sources=["llm_success"],
+                created_at=now,
+                updated_at=now,
+                scene_feedback={scene_key: {"uses": 1, "score": int(score_delta)}} if scene_key else {},
+                applied_outcome_ids=[outcome_id],
             )
-            changed = True
-        if changed:
-            body = "".join(json.dumps(row.model_dump(mode="json"), ensure_ascii=False) + "\n" for row in rows)
-            atomic_write_text(path, body)
+        )
+    for bid, deltas in sorted(by_bot.items()):
+        _append(bid, deltas)
 
 
 def reject_weak_filler_catchphrases(bot_id: int | None = None) -> int:
-    """把已入库的万能软答应口癖标为 rejected，切断正反馈。"""
+    """Mark boring soft-reply catchphrases as rejected, cutting positive feedback."""
     from pallas.core.foundation.fs_lock import interprocess_file_lock
     from pallas.product.persona.soft_agree_fillers import is_weak_catchphrase_saying
 
-    path = _path()
-    with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
-        rows = _load()
-        changed = 0
-        now = int(time.time())
-        for index, row in enumerate(rows):
-            if bot_id is not None and row.bot_id != int(bot_id):
-                continue
-            if row.status == "rejected" or not is_weak_catchphrase_saying(row.saying):
-                continue
-            rows[index] = row.model_copy(update={"status": "rejected", "updated_at": now})
-            changed += 1
-        if changed:
-            _save(rows)
-        return changed
+    targets: list[int]
+    if bot_id is not None:
+        targets = [int(bot_id)]
+    else:
+        targets = [int(path.stem) for path in sorted(_merged_dir().glob("*.jsonl"))]
+    changed = 0
+    now = int(time.time())
+    for bid in targets:
+        path = _shard_path(bid, pending=True)
+        with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
+            rows = _load(bid)
+            rejected_deltas: list[CatchphraseEntry] = []
+            for row in rows:
+                if row.status == "rejected" or not is_weak_catchphrase_saying(row.saying):
+                    continue
+                rejected_deltas.append(row.model_copy(update={"status": "rejected", "updated_at": now}))
+                changed += 1
+            if rejected_deltas:
+                _append_lines_locked(path, rejected_deltas)
+    return changed
 
 
 _SCENE_OCCASION_TOKENS: dict[str, tuple[str, ...]] = {
@@ -260,7 +445,6 @@ def score_catchphrase_for_turn(
     user_text: str = "",
     scene: str = "",
 ) -> int | None:
-    """按用户句与场景给口癖打分；无关则 None。"""
     if entry.status == "rejected" or not is_catchphrase_habit(entry.saying):
         return None
     occasion = clean_catchphrase_text(entry.occasion) or "日常接话"
@@ -290,7 +474,6 @@ def score_catchphrase_for_turn(
     }:
         score -= 10
     if kw_hits == 0 and scene_key and not scene_matches:
-        # 无关键词且场合不对：仅保留高支持自称梗作弱候选
         if entry.occasion == "自称梗" and entry.support >= 3:
             score -= 15
         else:
@@ -336,7 +519,6 @@ def compile_catchphrase_prompt_with_entries(
     scene: str = "",
     limit: int = 2,
 ) -> tuple[list[str], list[CatchphraseEntry]]:
-    """按本轮场合选入口癖；无线索时不强行塞入多条。"""
     if int(limit) <= 0:
         return [], []
     if str(user_text or "").strip() or str(scene or "").strip():
@@ -347,7 +529,6 @@ def compile_catchphrase_prompt_with_entries(
             limit=limit,
         )
     else:
-        # 无线索时最多保留 1 条高支持口癖
         rows = [row for row in list_catchphrases(int(bot_id), status="active") if is_catchphrase_habit(row.saying)]
         rows.sort(key=lambda row: (-int(row.support), -int(row.updated_at)))
         rows = rows[: min(1, int(limit))]

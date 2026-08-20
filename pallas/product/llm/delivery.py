@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import random
 import re
 import time
 from contextlib import nullcontext
@@ -68,9 +69,16 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
 
-def bubble_delay_seconds(previous_segment: str) -> float:
-    """Return a brief bounded pause after a visible chat bubble."""
-    return min(0.6, 0.12 + min(len(str(previous_segment or "").strip()), 48) * 0.01)
+def bubble_delay_seconds(previous_segment: str, *, rng: random.Random | None = None) -> float:
+    """Simulate a human pause between chat bubbles: short lines fire fast, long lines linger.
+
+    Base grows with segment length (short ~0.8s, long ~2.7s), then a ±35% jitter is
+    applied, clamped to [0.5, 3.5] seconds so bursts never feel robotic or too slow.
+    """
+    length = min(len(str(previous_segment or "").strip()), 48)
+    base = 0.8 + length * 0.04
+    jitter = (rng or random).uniform(0.65, 1.35)
+    return round(max(0.5, min(3.5, base * jitter)), 2)
 
 
 async def sleep_between_bubbles(
