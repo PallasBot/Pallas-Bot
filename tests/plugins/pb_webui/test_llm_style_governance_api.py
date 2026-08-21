@@ -127,6 +127,30 @@ async def test_group_style_manage_clear_resumes_learning(monkeypatch, tmp_path) 
 
 
 @pytest.mark.asyncio
+async def test_group_style_manage_rebuild_requires_write_token_and_returns_status(monkeypatch, tmp_path) -> None:
+    refreshed: list[int] = []
+
+    async def _refresh(group_id: int) -> bool:
+        refreshed.append(group_id)
+        return True
+
+    monkeypatch.setattr(
+        "pallas.product.persona.group_style_refresh.refresh_group_style_profile",
+        _refresh,
+    )
+    client, _ = await _client(monkeypatch, tmp_path)
+    async with client:
+        response = await client.post(
+            GROUP_STYLE_MANAGE,
+            json={"bot_id": 100, "group_id": 42, "action": "rebuild"},
+        )
+
+    assert response.status_code == 200, response.text
+    assert refreshed == [42]
+    assert response.json()["data"] == {"collection_enabled": True, "injection_enabled": True}
+
+
+@pytest.mark.asyncio
 async def test_group_style_manage_collection_requires_enabled(monkeypatch, tmp_path) -> None:
     client, _ = await _client(monkeypatch, tmp_path)
     async with client:

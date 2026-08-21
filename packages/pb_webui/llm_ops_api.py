@@ -93,7 +93,7 @@ StickerLabelMaintenanceResult = _StickerLabelRequeueResult | _StickerLabelPauseR
 class _GroupStyleManageBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    action: Literal["collection", "injection", "clear"]
+    action: Literal["collection", "injection", "clear", "rebuild"]
     bot_id: int | None = None
     group_id: int | None = None
     enabled: bool | None = None
@@ -659,10 +659,16 @@ def register_llm_ops_router(
                     enabled=body.enabled,
                 )
             else:
-                data = await style_governance.clear_group_style(
-                    group_id=group_id,
-                    continue_learning=True if body.continue_learning is None else body.continue_learning,
-                )
+                if body.action == "clear":
+                    data = await style_governance.clear_group_style(
+                        group_id=group_id,
+                        continue_learning=True if body.continue_learning is None else body.continue_learning,
+                    )
+                else:
+                    from pallas.product.persona.group_style_refresh import refresh_group_style_profile
+
+                    await refresh_group_style_profile(group_id)
+                    data = style_governance.group_style_status(bot_id=bot_id, group_id=group_id)
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001
