@@ -73,6 +73,9 @@ from pallas.core.platform.multi_bot.fleet import (
     get_fleet_bot_ids,
     invalidate_fleet_bot_cache,
 )
+from pallas.core.platform.multi_bot.group_admin_capability import (
+    resolve_group_admin_capability,
+)
 from pallas.core.platform.multi_bot.group_fleet_probe import (
     list_local_fleet_bots_in_group,
     register_fleet_probe,
@@ -167,6 +170,7 @@ __all__ = [
     "get_catalog_bot_ids",
     "get_fleet_bot_ids",
     "get_session_seen_bot_ids",
+    "resolve_group_admin_capability",
     # 多机协同名册
     "FederatePeerBotRoster",
     "get_federate_bot_rosters",
