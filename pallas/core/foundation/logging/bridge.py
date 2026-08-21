@@ -380,6 +380,11 @@ def format_business_event(action: str, result: str, /, **fields: object) -> str:
         )
     if action == "发送队列" and result == "失败":
         return f"[SendQueue] Bot [{fields.get('bot')}] failed {fields.get('api')}: {fields.get('error')}"
+    if action == "语料回填批次" and result == "已完成":
+        return (
+            f"[Corpus] backfill batch completed, pushed [{fields.get('pushed')}], "
+            f"skipped [{fields.get('skipped')}], cursor [{fields.get('cursor') or '-'}]"
+        )
     if action == "发送队列" and result == "可能已投递":
         return (
             f"[SendQueue] Bot [{fields.get('bot')}] send {fields.get('api')} timed out, "
