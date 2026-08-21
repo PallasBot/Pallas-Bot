@@ -38,6 +38,7 @@
 
 ## 横切能力
 
+- [ ] 权限/冷却/存储/热载声明已按 [横切能力全景](../../../developer/architecture/cross-cutting-concerns.md) 对齐
 - [ ] 读用户原文学习/生成类已评估 message_scrub
 - [ ] 高频路径无同步阻塞；日志用 `{}` / f-string
 - [ ] 普通 LLM 聊天相关：走 Bot Provider（`bot_kernel`）；**勿**假设依赖 Pallas-Bot-AI / `ai_service` / `features/llm`

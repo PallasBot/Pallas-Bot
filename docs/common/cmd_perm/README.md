@@ -121,6 +121,7 @@ from pallas.api.metadata import SCENE_GROUP, join_usage, usage_line
 
 ## 后续阅读
 
+- [平台横切能力全景](/developer/architecture/cross-cutting-concerns)
 - [命令冷却](/common/command_limits)
 - [牛牛帮助（含双菜单）](/plugins/help/#普通菜单与超管菜单)
 - [写第一个插件](/developer/plugin-development/first-plugin)

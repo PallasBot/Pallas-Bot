@@ -61,6 +61,10 @@ FILE_MAP: dict[str, str] = {
     "developer/architecture/plugin-event-logging.md": (
         "developer/architecture/plugin-event-logging.md"
     ),
+    "developer/architecture/work-aux.md": "developer/architecture/work-aux.md",
+    "developer/architecture/cross-cutting-concerns.md": (
+        "developer/architecture/cross-cutting-concerns.md"
+    ),
     "developer/plugin-development/getting-started.md": (
         "developer/plugin-development/getting-started.md"
     ),
