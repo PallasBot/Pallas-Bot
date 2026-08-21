@@ -6,7 +6,7 @@ import random
 import pytest
 
 from pallas.product.llm.inference_params import chat_reply_token_budget
-from pallas.product.llm.reply_shape import resolve_reply_shape
+from pallas.product.llm.reply_shape import resolve_reply_shape, resolve_short_reply_split_decision
 from pallas.product.llm.turn_policy import TurnPolicy
 from pallas.product.persona.group_expression_profile import GroupExpressionProfile, GroupReplyShapeHint
 
@@ -47,6 +47,53 @@ def test_casual_seeded_bubble_count_is_deterministic() -> None:
     first = resolve_reply_shape(make_turn_policy(), None, rng=random.Random(7))
     second = resolve_reply_shape(make_turn_policy(), None, rng=random.Random(7))
     assert first.preferred_bubbles == second.preferred_bubbles
+
+
+def test_short_band_split_decision_randomizes_keep_single() -> None:
+    kept = split = 0
+    for seed in range(200):
+        keep = resolve_short_reply_split_decision(
+            band="short",
+            randomize_enabled=True,
+            keep_rate=0.4,
+            rng=random.Random(seed),
+        )
+        if keep:
+            kept += 1
+        else:
+            split += 1
+    assert kept > 0
+    assert split > 0
+
+
+def test_short_band_split_decision_disabled_or_non_short_always_splits() -> None:
+    assert not resolve_short_reply_split_decision(
+        band="short",
+        randomize_enabled=False,
+        keep_rate=0.4,
+        rng=random.Random(0),
+    )
+    assert not resolve_short_reply_split_decision(
+        band="complete",
+        randomize_enabled=True,
+        keep_rate=1.0,
+    )
+
+
+def test_short_band_split_decision_seeded_is_deterministic() -> None:
+    first = resolve_short_reply_split_decision(
+        band="short",
+        randomize_enabled=True,
+        keep_rate=0.4,
+        rng=random.Random(7),
+    )
+    second = resolve_short_reply_split_decision(
+        band="short",
+        randomize_enabled=True,
+        keep_rate=0.4,
+        rng=random.Random(7),
+    )
+    assert first == second
 
 
 def test_group_shape_can_supply_three_beat_ceiling_and_rhythm() -> None:

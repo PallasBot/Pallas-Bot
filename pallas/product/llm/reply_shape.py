@@ -42,6 +42,25 @@ def resolve_group_rhythm(group_expression: GroupExpressionProfile | None) -> str
     return best_name
 
 
+def resolve_short_reply_split_decision(
+    *,
+    band: str,
+    randomize_enabled: bool,
+    keep_rate: float,
+    rng: random.Random | None = None,
+) -> bool:
+    """短回复 band 下是否保留单段不拆（shape 阶段决策，delivery 只执行拆分）。"""
+    if band != "short":
+        return False
+    if not randomize_enabled:
+        return False
+    rate = max(0.0, min(1.0, float(keep_rate)))
+    if rate <= 0:
+        return False
+    dice = rng if rng is not None else random
+    return dice.random() < rate
+
+
 def resolve_reply_shape(
     turn_policy: TurnPolicy,
     group_expression: GroupExpressionProfile | None,

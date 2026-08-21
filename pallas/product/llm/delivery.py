@@ -503,13 +503,16 @@ async def deliver_llm_callback_success(
             has_cjk_space_separator,
             split_short_reply_segments,
         )
+        from pallas.product.llm.reply_shape import resolve_short_reply_split_decision
 
         single_reply = reply_segments[0]
         cfg = get_llm_config()
+        keep_as_single = resolve_short_reply_split_decision(
+            band=band,
+            randomize_enabled=cfg.llm_reply_split_randomize_enabled,
+            keep_rate=cfg.llm_reply_split_randomize_keep_rate,
+        )
         if band == "short":
-            keep_as_single = (
-                cfg.llm_reply_split_randomize_enabled and random.random() < cfg.llm_reply_split_randomize_keep_rate
-            )
             if not keep_as_single:
                 reply_segments = split_short_reply_segments(single_reply)
         elif "\n" in single_reply or has_cjk_space_separator(single_reply):
