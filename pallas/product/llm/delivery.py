@@ -505,8 +505,13 @@ async def deliver_llm_callback_success(
         )
 
         single_reply = reply_segments[0]
+        cfg = get_llm_config()
         if band == "short":
-            reply_segments = split_short_reply_segments(single_reply)
+            keep_as_single = (
+                cfg.llm_reply_split_randomize_enabled and random.random() < cfg.llm_reply_split_randomize_keep_rate
+            )
+            if not keep_as_single:
+                reply_segments = split_short_reply_segments(single_reply)
         elif "\n" in single_reply or has_cjk_space_separator(single_reply):
             reply_segments = split_short_reply_segments(
                 single_reply,

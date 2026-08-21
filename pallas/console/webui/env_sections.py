@@ -316,6 +316,8 @@ def _llm_section() -> WebuiEnvSection:
             "llm_reply_postprocess_enabled": "LLM_REPLY_POSTPROCESS_ENABLED",
             "llm_reply_typo_enabled": "LLM_REPLY_TYPO_ENABLED",
             "llm_reply_typo_rate": "LLM_REPLY_TYPO_RATE",
+            "llm_reply_split_randomize_enabled": "LLM_REPLY_SPLIT_RANDOMIZE_ENABLED",
+            "llm_reply_split_randomize_keep_rate": "LLM_REPLY_SPLIT_RANDOMIZE_KEEP_RATE",
             "llm_sticker_fit_enabled": "LLM_STICKER_FIT_ENABLED",
             "llm_chat_sticker_enabled": "LLM_CHAT_STICKER_ENABLED",
             "llm_chat_sticker_cooldown_sec": "LLM_CHAT_STICKER_COOLDOWN_SEC",

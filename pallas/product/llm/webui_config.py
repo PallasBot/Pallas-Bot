@@ -647,6 +647,22 @@ class LlmWebuiConfig(BaseModel):
             "设为 0 可保留句号；设为 1 则符合条件时总是省略",
         ),
     )
+    llm_reply_split_randomize_enabled: bool = Field(
+        default=True,
+        description=field_help(
+            "短回复要不要偶尔整条一句发出（不打散成多气泡）",
+            "开=约按下方概率随机保留整条；关=一律按现有规则拆分",
+            "用于缓解「X？ Y」式两气泡模板感；默认开",
+        ),
+    )
+    llm_reply_split_randomize_keep_rate: float = Field(
+        default=0.4,
+        description=field_help(
+            "保留整条不发多气泡的概率（0～1）",
+            "默认 0.4；开启随机化时生效",
+            "设 0=总是拆分；设 1=短回复基本不拆",
+        ),
+    )
     llm_reply_mention_cooldown_sec: int = Field(
         default=900,
         description=field_help(
@@ -1173,6 +1189,8 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_reply_postprocess_enabled=cfg.llm_reply_postprocess_enabled,
         llm_reply_trim_terminal_period_enabled=cfg.llm_reply_trim_terminal_period_enabled,
         llm_reply_trim_terminal_period_rate=cfg.llm_reply_trim_terminal_period_rate,
+        llm_reply_split_randomize_enabled=cfg.llm_reply_split_randomize_enabled,
+        llm_reply_split_randomize_keep_rate=cfg.llm_reply_split_randomize_keep_rate,
         llm_reply_mention_cooldown_sec=cfg.llm_reply_mention_cooldown_sec,
         llm_reply_typo_enabled=cfg.llm_reply_typo_enabled,
         llm_reply_typo_rate=cfg.llm_reply_typo_rate,

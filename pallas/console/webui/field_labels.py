@@ -245,6 +245,8 @@ FIELD_LABELS: dict[str, str] = {
     "llm_reply_postprocess_enabled": "回复后处理",
     "llm_reply_typo_enabled": "偶发近音错别字",
     "llm_reply_typo_rate": "单字错别字概率",
+    "llm_reply_split_randomize_enabled": "短回复随机整句发出",
+    "llm_reply_split_randomize_keep_rate": "整句发出的概率",
     "llm_sticker_fit_enabled": "表情适配与反馈",
     "llm_chat_sticker_enabled": "Bot 表情图",
     "llm_chat_sticker_cooldown_sec": "表情图冷却（秒）",

@@ -54,7 +54,10 @@ async def test_delivery_splits_long_plain_short_reply_at_sentence_boundaries(
     monkeypatch.setattr(
         llm_delivery,
         "get_llm_config",
-        lambda: LlmConfig(llm_reply_trim_terminal_period_enabled=False),
+        lambda: LlmConfig(
+            llm_reply_trim_terminal_period_enabled=False,
+            llm_reply_split_randomize_enabled=False,
+        ),
     )
 
     reply_text, _text_delivered, _delivered = await llm_delivery.deliver_llm_callback_success(
@@ -103,6 +106,7 @@ async def test_drunk_reply_splits_into_bubbles_and_extracts_sticker(monkeypatch:
         lambda: LlmConfig(
             llm_reply_trim_terminal_period_enabled=False,
             llm_chat_sticker_enabled=False,
+            llm_reply_split_randomize_enabled=False,
         ),
     )
 
@@ -140,7 +144,10 @@ async def test_delivery_keeps_complete_reply_as_one_bubble(monkeypatch: pytest.M
     monkeypatch.setattr(
         llm_delivery,
         "get_llm_config",
-        lambda: LlmConfig(llm_reply_trim_terminal_period_enabled=False),
+        lambda: LlmConfig(
+            llm_reply_trim_terminal_period_enabled=False,
+            llm_reply_split_randomize_enabled=False,
+        ),
     )
 
     await llm_delivery.deliver_llm_callback_success(
@@ -167,7 +174,7 @@ async def test_delivery_keeps_complete_reply_as_one_bubble(monkeypatch: pytest.M
 
 
 @pytest.mark.asyncio
-async def test_delivery_registers_each_successful_text_bubble_for_reply_context(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_delivery_registers_each_successful_text_bubble_for_reply_context(monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: E501
     sender = AsyncMock(
         side_effect=[
             type("Receipt", (), {"delivered": True, "message_id": 70001})(),
@@ -186,7 +193,10 @@ async def test_delivery_registers_each_successful_text_bubble_for_reply_context(
     monkeypatch.setattr(
         llm_delivery,
         "get_llm_config",
-        lambda: LlmConfig(llm_reply_trim_terminal_period_enabled=False),
+        lambda: LlmConfig(
+            llm_reply_trim_terminal_period_enabled=False,
+            llm_reply_split_randomize_enabled=False,
+        ),
     )
 
     await llm_delivery.deliver_llm_callback_success(
@@ -230,7 +240,10 @@ async def test_delivery_splits_complete_multiline_reply_into_bubbles(monkeypatch
     monkeypatch.setattr(
         llm_delivery,
         "get_llm_config",
-        lambda: LlmConfig(llm_reply_trim_terminal_period_enabled=False),
+        lambda: LlmConfig(
+            llm_reply_trim_terminal_period_enabled=False,
+            llm_reply_split_randomize_enabled=False,
+        ),
     )
 
     reply_text, _text_delivered, _delivered = await llm_delivery.deliver_llm_callback_success(
@@ -272,7 +285,10 @@ async def test_delivery_splits_short_cjk_space_reply_into_bubbles(monkeypatch: p
     monkeypatch.setattr(
         llm_delivery,
         "get_llm_config",
-        lambda: LlmConfig(llm_reply_trim_terminal_period_enabled=False),
+        lambda: LlmConfig(
+            llm_reply_trim_terminal_period_enabled=False,
+            llm_reply_split_randomize_enabled=False,
+        ),
     )
 
     reply_text, _text_delivered, _delivered = await llm_delivery.deliver_llm_callback_success(
@@ -314,7 +330,10 @@ async def test_delivery_splits_complete_cjk_space_reply_into_bubbles(monkeypatch
     monkeypatch.setattr(
         llm_delivery,
         "get_llm_config",
-        lambda: LlmConfig(llm_reply_trim_terminal_period_enabled=False),
+        lambda: LlmConfig(
+            llm_reply_trim_terminal_period_enabled=False,
+            llm_reply_split_randomize_enabled=False,
+        ),
     )
 
     reply_text, _text_delivered, _delivered = await llm_delivery.deliver_llm_callback_success(
@@ -358,7 +377,10 @@ async def test_delivery_splits_cjk_space_without_band(monkeypatch: pytest.Monkey
     monkeypatch.setattr(
         llm_delivery,
         "get_llm_config",
-        lambda: LlmConfig(llm_reply_trim_terminal_period_enabled=False),
+        lambda: LlmConfig(
+            llm_reply_trim_terminal_period_enabled=False,
+            llm_reply_split_randomize_enabled=False,
+        ),
     )
 
     reply_text, _text_delivered, _delivered = await llm_delivery.deliver_llm_callback_success(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import random
 
 import pytest
 
@@ -25,11 +26,27 @@ def make_turn_policy(*, seriousness: str = "casual", needs_tool: bool = False) -
 def test_casual_chat_defaults_to_one_or_two_short_bubbles() -> None:
     policy = resolve_reply_shape(make_turn_policy(), None)
 
-    assert 1 <= policy.preferred_bubbles <= 2
+    assert 1 <= policy.preferred_bubbles <= 3
     assert policy.max_bubbles <= 5
     assert (policy.target_chars_min, policy.target_chars_max) == (4, 18)
     assert policy.total_length_band == "short"
     assert policy.max_output_tokens == chat_reply_token_budget("casual")
+
+
+def test_casual_chat_without_profile_randomizes_bubble_count_across_range() -> None:
+    seen: set[int] = set()
+    for seed in range(200):
+        policy = resolve_reply_shape(make_turn_policy(), None, rng=random.Random(seed))
+        seen.add(policy.preferred_bubbles)
+        assert policy.max_bubbles <= 5
+        assert policy.total_length_band == "short"
+    assert seen == {1, 2, 3}
+
+
+def test_casual_seeded_bubble_count_is_deterministic() -> None:
+    first = resolve_reply_shape(make_turn_policy(), None, rng=random.Random(7))
+    second = resolve_reply_shape(make_turn_policy(), None, rng=random.Random(7))
+    assert first.preferred_bubbles == second.preferred_bubbles
 
 
 def test_group_shape_can_supply_three_beat_ceiling_and_rhythm() -> None:
