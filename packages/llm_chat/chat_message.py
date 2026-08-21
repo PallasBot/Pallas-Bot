@@ -716,12 +716,14 @@ async def prepare_and_submit_llm_chat_turn(
         )
         direct_context_started = time.perf_counter()
         group_timeline = ""
-        if group_id is not None and (is_to_me or speak_trigger in {"alias", "mention", "followup"}):
+        if group_id is not None and (is_to_me or speak_trigger in {"alias", "mention", "followup", "ambient"}):
             try:
+                ambient = speak_trigger == "ambient"
                 group_timeline = await build_recent_group_timeline(
                     int(group_id),
                     current_message_id=message_id or None,
                     self_bot_id=int(bot.self_id),
+                    limit=4 if ambient else 8,
                 )
             except Exception:
                 logger.debug("group timeline context skipped for group [{}]", group_id)
