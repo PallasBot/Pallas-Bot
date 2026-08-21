@@ -45,6 +45,7 @@ def test_chat_prompt_assembler_uses_fixed_order_without_aliases_or_duplicates() 
         "【安全约束",
         "【核心人格】",
         "【自称】",
+        "【回复形状与输出契约】",
         "【本轮策略】",
         "【刚才的群聊】",
         "【长期记忆】",
@@ -52,7 +53,6 @@ def test_chat_prompt_assembler_uses_fixed_order_without_aliases_or_duplicates() 
         "【关系】",
         "【偏好】",
         "【群表达指导】",
-        "【回复形状与输出契约】",
     ]
     assert [prompt.index(section) for section in sections] == sorted(prompt.index(section) for section in sections)
     assert prompt.count("我一直都在呀") == 1
@@ -101,7 +101,7 @@ def test_chat_prompt_assembler_renders_behavior_strategy_reference_and_baseline(
     assert "类似「对方吐槽工作压力」时，真人会先短句接住情绪，再问一句具体的事，结果对方愿意多讲。" in prompt
     assert "类似「群里问吃什么」时，真人会直接给具体建议。" in prompt
     assert "本群真人单条短气泡为主" in prompt
-    assert prompt.index("【群表达指导】") < prompt.index("【真人接话参考】") < prompt.index("【回复形状与输出契约】")
+    assert prompt.index("【回复形状与输出契约】") < prompt.index("【群表达指导】") < prompt.index("【真人接话参考】")
 
 
 def test_chat_prompt_assembler_keeps_quote_replies_within_casual_shape() -> None:

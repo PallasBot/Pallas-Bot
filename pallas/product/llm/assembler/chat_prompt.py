@@ -47,12 +47,12 @@ class ChatPromptAssembler:
             PROMPT_INJECTION_GUARD,
             core_persona,
             self_identity,
+            self.reply_shape_block(reply_shape),
             self._turn_policy_block(turn_policy),
             *context.blocks(),
             self._group_expression_block(group_expression),
             self._group_behavior_reference_block(group_expression),
             self._tool_context_block(tool_context),
-            self.reply_shape_block(reply_shape),
         ]
         return self._join_unique(sections)
 
