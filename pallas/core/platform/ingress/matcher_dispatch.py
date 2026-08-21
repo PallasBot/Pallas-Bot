@@ -324,9 +324,7 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
             apply_dispatch = isinstance(event, GroupMessageEvent)
             resolution = resolve_route_for_event(event) if apply_dispatch else None
             command_traffic = event_command_traffic(event, state, resolution=resolution) if apply_dispatch else True
-            traffic_token = command_traffic_ctx.set(
-                bool(apply_dispatch and command_traffic)
-            )
+            traffic_token = command_traffic_ctx.set(bool(apply_dispatch and command_traffic))
             dispatch_duration_ms = None
             if apply_dispatch:
                 direct_matcher_exclude_modules = frozenset()
