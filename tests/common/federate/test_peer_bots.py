@@ -725,6 +725,22 @@ def test_log_incompatible_federate_ingress_peers_silent_without_shared_group(mon
     assert warnings == []
 
 
+def test_log_incompatible_federate_command_capability_peers_warns_for_incompatible_peer(monkeypatch):
+    """命令能力旧协议对端输出升级告警。"""
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "collect_local_present_group_ids", lambda: [733291779])
+    warnings: list[tuple[str, tuple]] = []
+    monkeypatch.setattr(mod.logger, "warning", lambda msg, *args: warnings.append((msg, args)))
+
+    mod._cache_deployment_ids = frozenset({"dep-alone"})
+    mod._cache_deployment_capability_protocols = {"dep-alone": 1}
+    mod._cache_deployment_present_groups = {"dep-alone": frozenset({626266902})}
+
+    mod.log_incompatible_federate_command_capability_peers()
+    assert len(warnings) == 1
+    assert warnings[0][1] == ("dep-alone", 2)
+
+
 def test_collect_local_federate_command_capabilities_includes_explicit_command_prefixes(
     monkeypatch,
 ):
