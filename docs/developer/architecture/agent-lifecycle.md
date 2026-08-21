@@ -46,6 +46,19 @@ WebUI 可覆盖单工具的描述、hints 与可见性（**AI 配置 → 接话 
 
 这是运行时降级策略，不应把配置中的 `hybrid` 直接当成实际检索方式。排障时查看运行追踪和 [LLM 与 AI 运维](/maintainer/operate/llm-and-ai)。
 
+### 接话触发的上下文差异
+
+非 `@` 接话（无 to_me）走感知判定后才进入生成路径。感知触发方式（`speak_trigger`）不同，会话与时间线注入也有差：
+
+| speak_trigger | 触发场景 | 群聊时间线注入 |
+| --- | --- | --- |
+| `followup` | `@` 后限时窗口内同人补话 | 8 条 |
+| `mention` | 消息含牛牛别名 | 8 条 |
+| `alias` | 别名硬触发 | 8 条 |
+| `ambient` | 无人提及，环境感知抽签接话 | 4 条（短时间线，防话痨偏题） |
+
+`to_me` 及上述硬触发均注入完整群聊时间线；`ambient` 感知接话只注入最近 4 条短时间线，其余上下文（会话、记忆、关系、知识）组装与 `to_me` 一致。实现见 `packages/llm_chat/chat_message.py` 的 `build_recent_group_timeline` 调用。
+
 ### 观察队列、人物事实与口癖
 
 除传统群记忆条目外，运行时还可维护：
