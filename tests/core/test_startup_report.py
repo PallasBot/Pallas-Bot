@@ -65,10 +65,10 @@ def test_emit_startup_summary_logs_runtime_and_facts(monkeypatch: pytest.MonkeyP
         startup_report.emit_startup_summary()
         texts = [call.args[1] for call in mock_info.call_args_list]
         assert "[初始化] Pallas-Bot 已就绪" in texts
-        assert "[初始化] 版本：v4.0.0" in texts
-        assert "[初始化] 进程：分片 Hub" in texts
-        assert "[初始化] 监听：127.0.0.1:8088" in texts
-        assert "[初始化] 数据库：SQLite" in texts
+        assert "[初始化] 版本 [v4.0.0]" in texts
+        assert "[初始化] 进程 [分片 Hub]" in texts
+        assert "[初始化] 监听 [127.0.0.1:8088]" in texts
+        assert "[初始化] 数据库 [SQLite]" in texts
         assert "[初始化] 已成功载入 12 个插件：本地 1 | 内置 10 | 额外目录 1" in texts
         assert all("\n" not in t for t in texts)
 
@@ -99,8 +99,8 @@ def test_runtime_base_lines_includes_log_level_and_command_start(
     )
 
     lines = startup_report._runtime_base_lines()
-    assert "日志级别：DEBUG" in lines
-    assert any(line.startswith("命令前缀：") for line in lines)
+    assert "日志级别 [DEBUG]" in lines
+    assert any(line.startswith("命令前缀 [") for line in lines)
 
 
 def test_emit_startup_summary_logs_warning_block(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -133,9 +133,9 @@ def test_emit_startup_summary_logs_warning_block(monkeypatch: pytest.MonkeyPatch
         startup_report.emit_startup_summary()
 
         info_texts = [call.args[1] for call in mock_info.call_args_list]
-        assert "[初始化] 进程：分片 Worker" in info_texts
-        assert "[初始化] 分片：#3" in info_texts
-        assert "[初始化] 监听：0.0.0.0:8090" in info_texts
+        assert "[初始化] 进程 [分片 Worker]" in info_texts
+        assert "[初始化] 分片 [#3]" in info_texts
+        assert "[初始化] 监听 [0.0.0.0:8090]" in info_texts
         assert "[控制台] 已就绪：http://127.0.0.1:8090/pallas/" in info_texts
 
         mock_warning.assert_called_once()

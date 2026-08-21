@@ -336,9 +336,9 @@ def _runtime_base_lines() -> list[str]:
     cfg = driver.config
     role = str(bot_role())
     lines = [
-        f"版本：{get_pallas_bot_version_for_reporting()}",
-        f"进程：{_role_label(role)}",
-        f"日志级别：{str(repo_env_raw_value('LOG_LEVEL') or 'INFO').upper()}",
+        f"版本 [{get_pallas_bot_version_for_reporting()}]",
+        f"进程 [{_role_label(role)}]",
+        f"日志级别 [{str(repo_env_raw_value('LOG_LEVEL') or 'INFO').upper()}]",
     ]
 
     command_start: list[str] = []
@@ -350,21 +350,21 @@ def _runtime_base_lines() -> list[str]:
         raw = str(getattr(cfg, "command_start", "") or "")
         command_start = [part.strip() for part in raw.split() if part.strip()]
     if command_start:
-        lines.append(f"命令前缀：{_format_command_start(command_start)}")
+        lines.append(f"命令前缀 [{_format_command_start(command_start)}]")
 
     if is_sharded_worker():
         shard_id = str(os.environ.get("PALLAS_SHARD_ID", "") or "").strip()
         if shard_id:
-            lines.append(f"分片：#{shard_id}")
+            lines.append(f"分片 [#{shard_id}]")
 
     host = str(getattr(cfg, "host", "") or "").strip() or "0.0.0.0"
     port = getattr(cfg, "port", None)
     if port not in (None, ""):
-        lines.append(f"监听：{host}:{port}")
+        lines.append(f"监听 [{host}:{port}]")
 
     backend = str(os.environ.get("DB_BACKEND", "") or "").strip().lower()
     if backend:
-        lines.append(f"数据库：{_db_label(backend)}")
+        lines.append(f"数据库 [{_db_label(backend)}]")
 
     return lines
 
