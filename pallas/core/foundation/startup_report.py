@@ -321,8 +321,15 @@ def _format_fact(key: str, value: str) -> str:
     return value
 
 
+def _format_command_start(start: list[str] | tuple[str, ...] | None) -> str:
+    """把 command_start 整理成可读序列，空串展示为「（无）」；如 [\"\", \"/\"]。"""
+    texts = [repr(item) if item else "（无）" for item in (start or [])]
+    return "、".join(texts) if texts else "（无）"
+
+
 def _runtime_base_lines() -> list[str]:
     from pallas.core.foundation.bot_version import get_pallas_bot_version_for_reporting
+    from pallas.core.foundation.config.repo_settings import repo_env_raw_value
     from pallas.core.platform.bot_runtime.roles import bot_role, is_sharded_worker
 
     driver = get_driver()
@@ -331,7 +338,19 @@ def _runtime_base_lines() -> list[str]:
     lines = [
         f"版本：{get_pallas_bot_version_for_reporting()}",
         f"进程：{_role_label(role)}",
+        f"日志级别：{str(repo_env_raw_value('LOG_LEVEL') or 'INFO').upper()}",
     ]
+
+    command_start: list[str] = []
+    try:
+        from pallas.core.foundation.command_start_config import get_command_start_config
+
+        command_start = list(get_command_start_config().command_start or [])
+    except Exception:
+        raw = str(getattr(cfg, "command_start", "") or "")
+        command_start = [part.strip() for part in raw.split() if part.strip()]
+    if command_start:
+        lines.append(f"命令前缀：{_format_command_start(command_start)}")
 
     if is_sharded_worker():
         shard_id = str(os.environ.get("PALLAS_SHARD_ID", "") or "").strip()

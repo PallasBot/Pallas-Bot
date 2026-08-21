@@ -73,6 +73,36 @@ def test_emit_startup_summary_logs_runtime_and_facts(monkeypatch: pytest.MonkeyP
         assert all("\n" not in t for t in texts)
 
 
+def test_runtime_base_lines_includes_log_level_and_command_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import pallas.core.foundation.startup_report as startup_report
+
+    monkeypatch.setattr(
+        startup_report,
+        "get_driver",
+        lambda: SimpleNamespace(config=SimpleNamespace(host="127.0.0.1", port=8088)),
+    )
+    monkeypatch.setattr(
+        "pallas.core.foundation.bot_version.get_pallas_bot_version_for_reporting",
+        lambda: "v4.0.0",
+    )
+    monkeypatch.setattr("pallas.core.platform.bot_runtime.roles.bot_role", lambda: "hub")
+    monkeypatch.setattr("pallas.core.platform.bot_runtime.roles.is_sharded_worker", lambda: False)
+    monkeypatch.setattr(
+        "pallas.core.foundation.config.repo_settings.repo_env_raw_value",
+        lambda name: "debug" if name == "LOG_LEVEL" else None,
+    )
+    monkeypatch.setattr(
+        "pallas.core.foundation.command_start_config.get_command_start_config",
+        lambda: SimpleNamespace(command_start=["", "/"]),
+    )
+
+    lines = startup_report._runtime_base_lines()
+    assert "日志级别：DEBUG" in lines
+    assert any(line.startswith("命令前缀：") for line in lines)
+
+
 def test_emit_startup_summary_logs_warning_block(monkeypatch: pytest.MonkeyPatch) -> None:
     import pallas.core.foundation.startup_report as startup_report
 
