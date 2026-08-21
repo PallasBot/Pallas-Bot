@@ -23,6 +23,7 @@ from pallas.core.shared.reply_command_rule import (
     extract_reply_id_from_raw_message,
 )
 from pallas.core.shared.utils.array2cqcode import try_convert_to_cqcode
+from pallas.product.llm.repeater_feedback import apply_llm_negative_feedback_for_bot_message
 
 from ..ban_state import REPEATER_BAN_ACK_SENT_STATE_KEY
 from ..model import Chat
@@ -30,6 +31,35 @@ from ..model import Chat
 _CQ_URL_STRIP_RE = re.compile(r"(\[CQ\:.+)(?:,url=*)(\])")
 _RECALL_TOKEN_RE = re.compile(r"\[[^\]]*\]|\w+")
 _BAN_ACK_TEXT = "这对角可能会不小心撞倒些家具，我会尽量小心。"
+
+
+async def apply_llm_negative_feedback_safely(
+    *,
+    bot_id: int | str,
+    group_id: int | str,
+    bot_message_id: int | str,
+    actor_id: int | str,
+    reason: str,
+) -> None:
+    try:
+        await apply_llm_negative_feedback_for_bot_message(
+            bot_id=str(bot_id),
+            group_id=str(group_id),
+            bot_message_id=str(bot_message_id),
+            actor_id=str(actor_id),
+            reason=reason,
+        )
+    except Exception:
+        from pallas.core.foundation.logging import log_rate_limited
+
+        log_rate_limited(
+            logger,
+            "warning",
+            "repeater.ban.llm_negative_feedback_failed",
+            "LLM negative feedback failed for bot [{}] in group [{}]",
+            bot_id,
+            group_id,
+        )
 
 
 async def finish_ban_ack(finish, event: GroupMessageEvent | GroupRecallNoticeEvent) -> None:
@@ -165,6 +195,14 @@ async def handle_ban_reply(bot: Bot, event: GroupMessageEvent, state: T_State):
                 )
             )
 
+    if event.reply:
+        await apply_llm_negative_feedback_safely(
+            bot_id=event.self_id,
+            group_id=event.group_id,
+            bot_message_id=event.reply.message_id,
+            actor_id=event.user_id,
+            reason="not_allowed_reply",
+        )
     banned = await Chat.ban(event.group_id, event.self_id, raw_message, str(event.user_id))
     if banned:
         logger.info(
@@ -201,6 +239,13 @@ async def handle_ban_recalled(bot: Bot, event: GroupRecallNoticeEvent, state: T_
         )
     )
 
+    await apply_llm_negative_feedback_safely(
+        bot_id=event.self_id,
+        group_id=event.group_id,
+        bot_message_id=event.message_id,
+        actor_id=event.operator_id,
+        reason="admin_recall",
+    )
     banned = await Chat.ban(event.group_id, event.self_id, raw_message, str(f"recall by {event.operator_id}"))
     if banned:
         logger.info(
@@ -230,6 +275,14 @@ async def handle_ban_latest(bot: Bot, event: GroupMessageEvent, state: T_State):
             "[Repeater] Failed to recall mute target for bot [{}] in group [{}]", event.self_id, event.group_id
         )
 
+    if event.reply:
+        await apply_llm_negative_feedback_safely(
+            bot_id=event.self_id,
+            group_id=event.group_id,
+            bot_message_id=event.reply.message_id,
+            actor_id=event.user_id,
+            reason="not_allowed_latest",
+        )
     if await Chat.ban(event.group_id, event.self_id, "", str(event.user_id)):
         logger.info(
             format_plugin_event(

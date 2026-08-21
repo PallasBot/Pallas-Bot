@@ -6,7 +6,7 @@ import pytest
 
 from pallas.product.llm.client import delete_llm_chat_session, resolve_chat_messages, submit_chat_task
 from pallas.product.llm.config import LlmConfig
-from pallas.product.llm.models import ChatSubmitRequest, ChatSubmitResult
+from pallas.product.llm.models import ChatCompletionMessage, ChatSubmitRequest, ChatSubmitResult
 from pallas.product.llm.task_routing import TaskRouteSpec
 
 
@@ -265,6 +265,39 @@ async def test_submit_chat_task_kernel_uses_pg_session_messages(monkeypatch: pyt
 
 
 @pytest.mark.asyncio
+async def test_submit_chat_task_does_not_rebudget_prepared_messages_after_config_reload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    submit_kernel = AsyncMock(return_value=ChatSubmitResult(task_id="task-prepared", status="processing", ok=True))
+    monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_llm_chat_task", submit_kernel)
+    monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: False)
+    monkeypatch.setattr(
+        "pallas.product.llm.client.get_llm_config",
+        lambda: LlmConfig(llm_chat_enabled=True, llm_governance_enabled=False, llm_chat_char_budget=1),
+    )
+    prepared_messages = [
+        ChatCompletionMessage(role="user", content="【群环境摘录】\n群友消息"),
+        ChatCompletionMessage(role="user", content="【用户消息】当前提问"),
+    ]
+    task_snapshot = {"ambient_turns": [{"turn_id": "ambient:1"}]}
+
+    result = await submit_chat_task(
+        ChatSubmitRequest(
+            request_id="req-prepared",
+            session_id="sess-prepared",
+            user_text="当前提问",
+            system_prompt="系统提示",
+            prepared_messages=prepared_messages,
+        )
+    )
+
+    assert result.ok is True
+    submitted = submit_kernel.await_args.kwargs["messages"]
+    assert submitted == [item.model_dump() for item in prepared_messages]
+    assert task_snapshot["ambient_turns"]
+
+
+@pytest.mark.asyncio
 async def test_resolve_chat_messages_passes_short_social_history_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.product.llm.models import ChatCompletionMessage
 
@@ -437,6 +470,11 @@ def test_resolve_llm_chat_enabled_priority(monkeypatch: pytest.MonkeyPatch) -> N
         clear_llm_config_cache,
         resolve_legacy_rwkv_drunk_chat_enabled,
         resolve_llm_chat_enabled,
+    )
+
+    monkeypatch.setattr(
+        "pallas.product.llm.feedback_embedding_cache.schedule_feedback_trigger_backfill",
+        lambda: None,
     )
 
     def set_env(values: dict[str, str | None]) -> None:

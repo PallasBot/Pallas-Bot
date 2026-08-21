@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from unittest.mock import AsyncMock
 
 import pytest
@@ -42,7 +43,7 @@ async def test_memory_inject_does_not_pad_ambient_when_persistent_hits(
     )
     monkeypatch.setattr(
         "pallas.product.llm.memory.inject.retrieve_memory_hits",
-        AsyncMock(return_value=[{"content": "你把漂亮牛牛揪出来", "score": 68, "source": "auto_episode"}]),
+        AsyncMock(return_value=[{"id": 91, "content": "你把漂亮牛牛揪出来", "score": 68, "source": "auto_episode"}]),
     )
     ambient_mock = AsyncMock(
         return_value=[
@@ -54,7 +55,66 @@ async def test_memory_inject_does_not_pad_ambient_when_persistent_hits(
     result = await enrich_system_with_memory_context("base", bot_id=1, group_id=2, query_text="漂亮牛牛", cfg=cfg)
     assert result.trace["hit_count"] == 1
     assert "漂亮牛牛" in result.system_prompt
+    assert result.trace["entries"] == [
+        {
+            "entry_id": "memory:91",
+            "source": "auto_episode",
+            "score": 68,
+            "text_hash": hashlib.sha256("你把漂亮牛牛揪出来".encode()).hexdigest(),
+            "text_preview": "你把漂亮牛牛揪出来",
+        }
+    ]
     ambient_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_knowledge_inject_trace_uses_stable_chunk_id(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm.knowledge.inject import enrich_system_with_knowledge_sources
+
+    cfg = LlmConfig(llm_chat_enabled=True, llm_knowledge_sources_enabled=True)
+    hit = RetrievedKnowledgeChunk(
+        source_id="help.faq",
+        chunk_id="help.faq:abc123",
+        title="帮助",
+        content="怎么清空记录",
+        score=80,
+    )
+    monkeypatch.setattr("pallas.product.llm.knowledge.inject.can_read_generic_knowledge", lambda _cfg=None: True)
+    monkeypatch.setattr(
+        "pallas.product.llm.knowledge.inject.retrieve_from_knowledge_sources", lambda *_args, **_kwargs: [hit]
+    )
+
+    result = await enrich_system_with_knowledge_sources(
+        "base", bot_id=1, group_id=2, user_id=3, query_text="怎么清空记录", cfg=cfg
+    )
+
+    assert result.trace["chunks"] == [
+        {"source_id": "help.faq", "chunk_id": "help.faq:abc123", "title": "帮助", "score": 80}
+    ]
+
+
+@pytest.mark.asyncio
+async def test_retrieval_traces_exclude_entries_not_rendered_into_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm.knowledge.inject import enrich_system_with_knowledge_sources
+
+    cfg = LlmConfig(llm_chat_enabled=True, llm_memory_rag_enabled=True, llm_knowledge_sources_enabled=True)
+    monkeypatch.setattr("pallas.product.llm.memory.inject.can_read_persistent_memory", lambda _cfg=None: True)
+    monkeypatch.setattr(
+        "pallas.product.llm.memory.inject.retrieve_memory_hits",
+        AsyncMock(return_value=[{"id": 1, "content": "\x00", "score": 80, "source": "teach"}]),
+    )
+    memory = await enrich_system_with_memory_context("base", bot_id=1, group_id=2, query_text="记住", cfg=cfg)
+    assert memory.trace["entries"] == []
+
+    hit = RetrievedKnowledgeChunk(source_id="help.faq", chunk_id="help.faq:bad", title="帮助", content="\x00", score=80)
+    monkeypatch.setattr("pallas.product.llm.knowledge.inject.can_read_generic_knowledge", lambda _cfg=None: True)
+    monkeypatch.setattr(
+        "pallas.product.llm.knowledge.inject.retrieve_from_knowledge_sources", lambda *_args, **_kwargs: [hit]
+    )
+    knowledge = await enrich_system_with_knowledge_sources(
+        "base", bot_id=1, group_id=2, user_id=3, query_text="怎么清空", cfg=cfg
+    )
+    assert knowledge.trace["chunks"] == []
 
 
 @pytest.mark.asyncio

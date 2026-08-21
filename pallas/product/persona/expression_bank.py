@@ -57,27 +57,35 @@ class ExpressionEntry(BaseModel):
         return normalize_occasion_tag(str(value or ""))
 
 
-def expression_bank_base_dir() -> Path:
+def _expression_bank_base_dir(*, create: bool) -> Path:
     env_dir = str(os.environ.get("PALLAS_DATA_DIR") or "").strip()
     if env_dir:
         root = Path(env_dir)
-        root.mkdir(parents=True, exist_ok=True)
+        if create:
+            root.mkdir(parents=True, exist_ok=True)
         path = root / "expression_bank"
     else:
-        path = plugin_data_dir("pb_webui", create=True) / "expression_bank"
-    path.mkdir(parents=True, exist_ok=True)
+        path = plugin_data_dir("pb_webui", create=create) / "expression_bank"
+    if create:
+        path.mkdir(parents=True, exist_ok=True)
     return path
 
 
-def _pending_dir() -> Path:
-    path = expression_bank_base_dir() / "pending"
-    path.mkdir(parents=True, exist_ok=True)
+def expression_bank_base_dir() -> Path:
+    return _expression_bank_base_dir(create=True)
+
+
+def _pending_dir(*, create: bool = True) -> Path:
+    path = _expression_bank_base_dir(create=create) / "pending"
+    if create:
+        path.mkdir(parents=True, exist_ok=True)
     return path
 
 
-def _merged_dir() -> Path:
-    path = expression_bank_base_dir() / "merged"
-    path.mkdir(parents=True, exist_ok=True)
+def _merged_dir(*, create: bool = True) -> Path:
+    path = _expression_bank_base_dir(create=create) / "merged"
+    if create:
+        path.mkdir(parents=True, exist_ok=True)
     return path
 
 
@@ -86,8 +94,8 @@ def expression_entries_path() -> Path:
     return expression_bank_base_dir() / "entries.jsonl"
 
 
-def _shard_path(group_id: int, *, pending: bool) -> Path:
-    shard_dir = _pending_dir() if pending else _merged_dir()
+def _shard_path(group_id: int, *, pending: bool, create: bool = True) -> Path:
+    shard_dir = _pending_dir(create=create) if pending else _merged_dir(create=create)
     return shard_dir / f"{int(group_id)}.jsonl"
 
 
@@ -165,7 +173,13 @@ def _merge_rows(existing: list[ExpressionEntry], deltas: list[ExpressionEntry]) 
             )
             continue
         source = "llm_success" if "llm_success" in {current.source, delta.source} else "group_observe"
-        status = current.status if current.status == "rejected" else delta.status
+        is_status_delta = int(delta.support) == 0
+        if is_status_delta:
+            status = delta.status
+            rejected_reason = delta.rejected_reason
+        else:
+            status = current.status if current.status == "rejected" else delta.status
+            rejected_reason = delta.rejected_reason or current.rejected_reason
         merged = current.model_copy(
             update={
                 "support": max(1, int(current.support)) + max(0, int(delta.support)),
@@ -174,7 +188,7 @@ def _merge_rows(existing: list[ExpressionEntry], deltas: list[ExpressionEntry]) 
                 "updated_at": max(current.updated_at, delta.updated_at),
                 "scene_feedback": feedback,
                 "applied_outcome_ids": combined_outcomes,
-                "rejected_reason": delta.rejected_reason or current.rejected_reason,
+                "rejected_reason": rejected_reason,
             }
         )
         index[delta.entry_id] = merged
@@ -191,10 +205,10 @@ def _append_shard(group_id: int, entries: list[ExpressionEntry]) -> None:
         _write_lines_append(path, entries)
 
 
-def _group_combined_rows(group_id: int) -> list[ExpressionEntry]:
+def _group_combined_rows(group_id: int, *, create: bool = True) -> list[ExpressionEntry]:
     """Fold pending deltas over merged authority for one group."""
-    merged = list(_iter_rows(_shard_path(group_id, pending=False)))
-    pending = list(_iter_rows(_shard_path(group_id, pending=True)))
+    merged = list(_iter_rows(_shard_path(group_id, pending=False, create=create)))
+    pending = list(_iter_rows(_shard_path(group_id, pending=True, create=create)))
     if not pending:
         return merged
     return _merge_rows(merged, pending)
@@ -287,6 +301,33 @@ def record_expression_outcome(entry_ids: list[str], *, scene: str, score_delta: 
         )
     for gid, deltas in sorted(by_group.items()):
         _append_shard(gid, deltas)
+
+
+def expression_scene_feedback_score(entry_id: str, *, scene: str) -> int:
+    target_id = str(entry_id or "").strip()
+    group_id = _group_id_from_entry_id(target_id)
+    scene_key = normalize_occasion_tag(str(scene or ""))
+    if not target_id or group_id <= 0 or not scene_key:
+        return 0
+    entry = next(
+        (item for item in _group_combined_rows(group_id, create=False) if item.entry_id == target_id),
+        None,
+    )
+    if entry is None:
+        return 0
+    return int(entry.scene_feedback.get(scene_key, {}).get("score", 0))
+
+
+def get_group_expression(*, group_id: int, entry_id: str) -> ExpressionEntry | None:
+    """Return one exact entry from its group shard without creating storage directories."""
+    target_group_id = int(group_id)
+    target_entry_id = str(entry_id or "").strip()
+    if not target_entry_id or _group_id_from_entry_id(target_entry_id) != target_group_id:
+        return None
+    return next(
+        (item for item in _group_combined_rows(target_group_id, create=False) if item.entry_id == target_entry_id),
+        None,
+    )
 
 
 def migrate_legacy_expression_entries() -> bool:

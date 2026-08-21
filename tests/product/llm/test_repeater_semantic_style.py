@@ -771,6 +771,64 @@ def test_cached_semantic_style_resolution_reads_prompt_block_and_direct_candidat
     assert resolution.source_example_id == "source:legacy"
     assert resolution.direct_candidate == "没救了"
     assert "本群表达校准" in resolution.prompt_block
+    assert [item.source_example_id for item in resolution.matched_example_sources] == ["source:legacy"]
+
+
+def test_cached_semantic_style_resolution_excludes_source_at_negative_threshold(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+    from pallas.product.llm.injection_feedback import apply_negative_outcome
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr("pallas.product.llm.injection_feedback.time.time", lambda: 100)
+    mod.clear_semantic_style_cache_for_tests()
+    mod._write_profiles({
+        (99, 42, "group_chat"): mod.SemanticStyleProfile(
+            bot_id=99,
+            group_id=42,
+            scene="group_chat",
+            direct_pairs=[
+                {"trigger_text": "又炸了", "reply_text": "保留", "source_example_id": "keep"},
+                {"trigger_text": "又炸了", "reply_text": "移除", "source_example_id": "drop"},
+            ],
+            human_only=True,
+        )
+    })
+    for index in range(2):
+        apply_negative_outcome(
+            outcome_id=f"semantic-{index}",
+            bot_id=99,
+            group_id=42,
+            reply_text="不合适",
+            injection_snapshot={"semantic_examples": [{"example_id": "drop", "reply": "移除"}]},
+            now=100,
+        )
+    request_id = next(
+        item
+        for item in (f"request-{index}" for index in range(100))
+        if mod.semantic_style_injection_enabled(item, bot_id=99, group_id=42)
+    )
+
+    resolution = mod.resolve_cached_semantic_style(99, 42, "group_chat", request_id=request_id, query_text="又炸了")
+
+    assert [pair.reply_text for pair in resolution.matched_example_sources] == ["保留"]
+
+
+def test_semantic_feedback_keeps_source_above_negative_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import injection_feedback
+    from pallas.product.llm.repeater_semantic_style import (
+        SemanticStyleDirectPair,
+        filter_semantic_style_pairs_by_feedback,
+    )
+
+    monkeypatch.setattr(injection_feedback, "effective_source_score", lambda *_args: -3.9)
+
+    pairs = filter_semantic_style_pairs_by_feedback(
+        [SemanticStyleDirectPair(trigger_text="前句", reply_text="保留", source_example_id="keep")],
+        bot_id=99,
+        group_id=42,
+    )
+
+    assert [pair.reply_text for pair in pairs] == ["保留"]
 
 
 def test_cached_semantic_style_resolution_skips_profile_without_human_provenance(tmp_path, monkeypatch) -> None:
@@ -1659,6 +1717,7 @@ def test_matched_examples_rank_by_similarity_and_strategy_is_fallback(tmp_path, 
         query_text="好烦，又跟对象吵架了",
     )
 
+    assert [item.source_example_id for item in resolution.matched_example_sources] == ["sim:1"]
     # 相似度召回优先于"最近两条"，且策略只在无相似示例时兜底
     assert resolution.matched_examples == [("好烦，又跟对象吵架了", "哈哈")]
     assert resolution.behavior_strategies == []
@@ -1670,6 +1729,7 @@ def test_matched_examples_rank_by_similarity_and_strategy_is_fallback(tmp_path, 
         request_id=request_id,
         query_text="对象又吵架了真烦",
     )
+    assert unrelated.matched_example_sources == []
     # 相似但未达示例阈值时，策略兜底生效；完全无关则不注入
     assert unrelated.matched_examples == []
     assert [item.action for item in unrelated.behavior_strategies] == ["用笑声开头缓和气氛"]

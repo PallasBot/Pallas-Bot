@@ -22,7 +22,9 @@ async def resolve_chat_messages(
     cfg: LlmConfig | None = None,
 ) -> list[ChatCompletionMessage]:
     c = cfg or get_llm_config()
-    if is_llm_session_store_available() and request.bot_id is not None and request.user_id is not None:
+    if request.prepared_messages is not None:
+        messages = list(request.prepared_messages)
+    elif is_llm_session_store_available() and request.bot_id is not None and request.user_id is not None:
         messages = await build_llm_chat_messages(
             int(request.bot_id),
             request.group_id,
@@ -60,7 +62,7 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
     if not messages:
         return ChatSubmitResult(status="empty_user_message", ok=False)
 
-    if c.llm_chat_char_budget > 0:
+    if request.prepared_messages is None and c.llm_chat_char_budget > 0:
         messages = trim_messages_to_char_budget(
             messages,
             system_prompt=request.system_prompt,

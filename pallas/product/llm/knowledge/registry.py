@@ -242,6 +242,7 @@ def retrieve_from_knowledge_sources(
         hits.extend(
             RetrievedKnowledgeChunk(
                 source_id=row.source_id,
+                chunk_id=chunk.chunk_id,
                 title=chunk.title,
                 content=chunk.content,
                 score=chunk.score,

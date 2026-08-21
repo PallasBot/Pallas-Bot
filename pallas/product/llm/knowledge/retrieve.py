@@ -30,6 +30,7 @@ def retrieve_chunks_keyword(
         scored.append(
             RetrievedKnowledgeChunk(
                 source_id=decl.source_id,
+                chunk_id=chunk.stable_chunk_id(decl.source_id),
                 title=title,
                 content=content,
                 score=score,

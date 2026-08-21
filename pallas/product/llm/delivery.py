@@ -372,6 +372,7 @@ def maybe_append_llm_repeater_feedback(
     from pallas.product.llm.repeater_feedback import (
         append_feedback_entry,
         build_feedback_entry,
+        feedback_reply_max_len,
         normalize_feedback_llm_route,
         should_collect_llm_repeater_feedback,
     )
@@ -386,14 +387,25 @@ def maybe_append_llm_repeater_feedback(
     semantic_source_example_id = str(task.get("semantic_style_source_example_id") or "").strip()
     if not semantic_source_bound or not direct_candidate or str(reply_text or "").strip() != direct_candidate:
         semantic_source_example_id = ""
-    if not should_collect_llm_repeater_feedback(
-        task_type=str(task.get("task_type") or "").strip(),
+    task_type = str(task.get("task_type") or "").strip()
+    collect_for_learning = should_collect_llm_repeater_feedback(
+        task_type=task_type,
         group_id=group_id,
         user_text=user_text,
         reply_text=reply_text,
         source_tags=source_tags,
-    ):
+    )
+    retain_for_message_lookup = bool(
+        task_type == LLM_CHAT_TASK_TYPE
+        and group_id > 0
+        and int(bot_message_id or 0) > 0
+        and str(reply_text or "").strip()
+    )
+    if not collect_for_learning and not retain_for_message_lookup:
         return
+    reply_preview = str(reply_text or "").strip()[: feedback_reply_max_len(task_type=task_type)].rstrip()
+    if not collect_for_learning:
+        semantic_source_example_id = ""
     try:
         append_feedback_entry(
             build_feedback_entry(
@@ -403,17 +415,19 @@ def maybe_append_llm_repeater_feedback(
                 group_id=group_id,
                 user_id=int(task.get("user_id") or 0),
                 user_text=user_text,
-                reply_text=reply_text,
+                reply_text=reply_preview,
                 behavior_scene=str(task.get("behavior_scene") or "").strip(),
                 scene_tier=str(task.get("scene_tier") or "").strip(),
                 behavior_actions=list(task.get("behavior_actions") or []),
                 llm_route=normalize_feedback_llm_route(task.get("llm_route")),
                 source_tags=source_tags,
-                eligible_for_bias=True,
-                eligible_for_writeback=str(task.get("scene_tier") or "").strip().lower() == "strong",
+                eligible_for_bias=collect_for_learning,
+                eligible_for_writeback=collect_for_learning
+                and str(task.get("scene_tier") or "").strip().lower() == "strong",
                 bot_message_id=int(bot_message_id or 0),
                 semantic_source_example_id=semantic_source_example_id,
                 semantic_scene="group_chat",
+                injection_snapshot=task.get("injection_snapshot"),
             )
         )
     except Exception as e:

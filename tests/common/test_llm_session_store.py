@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock
 
 import pytest
@@ -7,6 +8,7 @@ import pytest
 from pallas.product.llm.behavior import BehaviorAction, BehaviorOutcome, BehaviorPattern, BehaviorRun, BehaviorScene
 from pallas.product.llm.behavior_store import append_behavior_run, list_behavior_patterns, save_behavior_patterns
 from pallas.product.llm.config import LlmConfig, clear_llm_config_cache
+from pallas.product.llm.injection_feedback import apply_negative_outcome
 from pallas.product.llm.session_models import LlmChatTurn
 from pallas.product.llm.session_store import (
     append_llm_message,
@@ -21,6 +23,16 @@ from pallas.product.llm.session_store import (
     sanitize_stored_content,
     user_ttl_seconds,
 )
+
+
+@pytest.fixture(scope="module", autouse=True)
+def disable_feedback_trigger_backfill() -> None:
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(
+            "pallas.product.llm.feedback_embedding_cache.schedule_feedback_trigger_backfill",
+            lambda: None,
+        )
+        yield
 
 
 def test_sanitize_stored_content_strips_control_chars() -> None:
@@ -124,6 +136,116 @@ async def test_build_llm_chat_messages_user_thread_and_ambient(pg_engine, monkey
     assert "my-new" in messages[-1].content
     assert any("群环境摘录" in item.content for item in messages)
     assert any("my-old" in item.content for item in messages)
+
+
+@pytest.mark.asyncio
+async def test_build_llm_chat_messages_returns_exact_selected_ambient_turns(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = LlmConfig(llm_session_enabled=True, llm_session_group_window=4)
+    ambient = [
+        LlmChatTurn(role="user", content="群友消息", user_id=200, created_at=11),
+        LlmChatTurn(role="assistant", content="机器人回复", user_id=10001, created_at=12),
+        LlmChatTurn(role="user", content="当前用户消息", user_id=300, created_at=13),
+    ]
+    monkeypatch.setattr("pallas.product.llm.session_store.can_read_runtime_state", lambda _cfg: True)
+    monkeypatch.setattr(
+        "pallas.product.llm.session_store.list_group_ambient_messages",
+        AsyncMock(return_value=ambient),
+    )
+    monkeypatch.setattr("pallas.product.llm.session_store.list_user_llm_messages", AsyncMock(return_value=[]))
+    selected: list[dict[str, object]] = []
+
+    messages = await build_llm_chat_messages(
+        10001,
+        100,
+        300,
+        "当前提问",
+        cfg=cfg,
+        ambient_turns_out=selected,
+    )
+
+    assert "群环境摘录" in messages[0].content
+    assert [item["user_id"] for item in selected] == [200, 10001]
+    assert all(str(item["turn_id"]).startswith("ambient:") for item in selected)
+    assert all(len(str(item["text_hash"])) == 64 for item in selected)
+    assert [item["text_preview"] for item in selected] == ["群友消息", "机器人回复"]
+    json.dumps(selected)
+
+
+@pytest.mark.asyncio
+async def test_build_llm_chat_messages_filters_blacklisted_ambient_before_snapshot(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    cfg = LlmConfig(llm_session_enabled=True, llm_session_group_window=4)
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    apply_negative_outcome(
+        outcome_id="ambient-filter",
+        bot_id=10001,
+        group_id=100,
+        reply_text="别提茄子",
+        injection_snapshot={"ambient_turns": [{"turn_id": "old", "text_preview": "茄子又来了"}]},
+        now=1,
+    )
+    ambient = [
+        LlmChatTurn(role="user", content="茄子又来了", user_id=200, created_at=11),
+        LlmChatTurn(role="user", content="正常消息", user_id=201, created_at=12),
+    ]
+    monkeypatch.setattr("pallas.product.llm.session_store.can_read_runtime_state", lambda _cfg: True)
+    monkeypatch.setattr(
+        "pallas.product.llm.session_store.list_group_ambient_messages",
+        AsyncMock(return_value=ambient),
+    )
+    monkeypatch.setattr("pallas.product.llm.session_store.list_user_llm_messages", AsyncMock(return_value=[]))
+    selected: list[dict[str, object]] = []
+
+    messages = await build_llm_chat_messages(10001, 100, 300, "当前提问", cfg=cfg, ambient_turns_out=selected)
+
+    assert "正常消息" in messages[0].content
+    assert "茄子又来了" not in messages[0].content
+    assert [item["text_preview"] for item in selected] == ["正常消息"]
+
+
+@pytest.mark.asyncio
+async def test_build_llm_chat_messages_keeps_ambient_when_feedback_filter_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = LlmConfig(llm_session_enabled=True, llm_session_group_window=4)
+    ambient = [LlmChatTurn(role="user", content="保留消息", user_id=200, created_at=11)]
+    monkeypatch.setattr("pallas.product.llm.session_store.can_read_runtime_state", lambda _cfg: True)
+    monkeypatch.setattr(
+        "pallas.product.llm.session_store.list_group_ambient_messages",
+        AsyncMock(return_value=ambient),
+    )
+    monkeypatch.setattr("pallas.product.llm.session_store.list_user_llm_messages", AsyncMock(return_value=[]))
+    monkeypatch.setattr(
+        "pallas.product.llm.injection_feedback.filter_ambient_turns",
+        lambda *_args: (_ for _ in ()).throw(OSError("ledger unavailable")),
+    )
+
+    messages = await build_llm_chat_messages(10001, 100, 300, "当前提问", cfg=cfg)
+
+    assert "保留消息" in messages[0].content
+
+
+@pytest.mark.asyncio
+async def test_build_llm_chat_messages_excludes_ambient_turn_clipped_from_block(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cfg = LlmConfig(llm_session_enabled=True, llm_session_group_window=4, user_message_max_len=64)
+    ambient = [
+        LlmChatTurn(role="user", content="甲" * 54, user_id=200, created_at=11),
+        LlmChatTurn(role="user", content="乙乙乙", user_id=201, created_at=12),
+    ]
+    monkeypatch.setattr("pallas.product.llm.session_store.can_read_runtime_state", lambda _cfg: True)
+    monkeypatch.setattr(
+        "pallas.product.llm.session_store.list_group_ambient_messages",
+        AsyncMock(return_value=ambient),
+    )
+    monkeypatch.setattr("pallas.product.llm.session_store.list_user_llm_messages", AsyncMock(return_value=[]))
+    selected: list[dict[str, object]] = []
+
+    await build_llm_chat_messages(10001, 100, 300, "当前提问", cfg=cfg, ambient_turns_out=selected)
+
+    assert [item["user_id"] for item in selected] == [200]
 
 
 @pytest.mark.asyncio

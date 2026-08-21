@@ -2,12 +2,13 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from packages.pb_webui import extended_api as mod
 from packages.pb_webui.config import Config
 from pallas.product.llm.repeater_feedback import LlmRepeaterFeedbackEntry
+from pallas.product.persona.expression_bank import ExpressionEntry
 
 
 def _build_client(monkeypatch) -> TestClient:
@@ -245,3 +246,359 @@ def test_llm_repeater_feedback_manage_correct_api(monkeypatch) -> None:
     payload = response.json()
     assert payload["ok"] is True
     assert payload["data"]["corrected_reply_text"] == "别闹"
+
+
+def _expression_entry(*, entry_id: str = "expr-123-abc") -> ExpressionEntry:
+    return ExpressionEntry(
+        entry_id=entry_id,
+        group_id=123,
+        occasion="调侃",
+        saying="少来。",
+        source="llm_success",
+        channel="group",
+        scene_tier="strong",
+        status="rejected",
+        affect_hint="playful",
+        created_at=1718700001,
+        updated_at=1718700002,
+    )
+
+
+def test_injection_governance_get_returns_requested_scope(monkeypatch) -> None:
+    thread_calls: list[str] = []
+
+    def fake_list_injection_governance_status(*, bot_id: int, group_id: int):
+        assert (bot_id, group_id) == (10001, 123)
+        return "ok", {"bot_id": bot_id, "group_id": group_id, "outcomes": ["outcome-1"]}
+
+    async def fake_to_thread(function, /, *args, **kwargs):
+        thread_calls.append(function.__name__)
+        return function(*args, **kwargs)
+
+    monkeypatch.setattr(
+        "packages.pb_webui.llm_product_api.list_injection_governance_status",
+        fake_list_injection_governance_status,
+    )
+    monkeypatch.setattr("packages.pb_webui.llm_product_api.asyncio.to_thread", fake_to_thread)
+
+    response = _build_client(monkeypatch).get(
+        "/pallas/api/llm/repeater-feedback/governance",
+        params={"bot_id": 10001, "group_id": 123},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json() == {
+        "ok": True,
+        "data": {"bot_id": 10001, "group_id": 123, "outcomes": ["outcome-1"]},
+    }
+    assert thread_calls == ["fake_list_injection_governance_status"]
+
+
+def test_injection_governance_get_rejects_missing_or_invalid_scope(monkeypatch) -> None:
+    client = _build_client(monkeypatch)
+
+    assert client.get("/pallas/api/llm/repeater-feedback/governance", params={"group_id": 123}).status_code == 400
+    assert (
+        client.get(
+            "/pallas/api/llm/repeater-feedback/governance",
+            params={"bot_id": "bad", "group_id": 123},
+        ).status_code
+        == 400
+    )
+
+
+def test_injection_governance_get_returns_500_for_ledger_read_failure(monkeypatch) -> None:
+    def fail_read(path):
+        raise OSError("ledger read failed")
+
+    monkeypatch.setattr(
+        "pallas.product.llm.injection_feedback._iter_outcomes",
+        fail_read,
+    )
+
+    response = _build_client(monkeypatch).get(
+        "/pallas/api/llm/repeater-feedback/governance",
+        params={"bot_id": 10001, "group_id": 123},
+    )
+
+    assert response.status_code == 500
+
+
+def test_injection_governance_get_missing_ledger_is_empty_without_storage_mutation(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+
+    response = _build_client(monkeypatch).get(
+        "/pallas/api/llm/repeater-feedback/governance",
+        params={"bot_id": 10001, "group_id": 123},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["outcomes"] == []
+    assert not (tmp_path / "llm_repeater_feedback").exists()
+
+
+def test_injection_governance_manage_requires_action_specific_id(monkeypatch) -> None:
+    client = _build_client(monkeypatch)
+    scope = {"bot_id": "10001", "group_id": "123"}
+
+    for action, key in (
+        ("undo_outcome", "outcome_id"),
+        ("restore_semantic", "outcome_id"),
+        ("restore_expression", "entry_id"),
+    ):
+        response = client.post(
+            "/pallas/api/llm/repeater-feedback/governance/manage",
+            json={"action": action, **scope},
+        )
+        assert response.status_code == 400, response.text
+        assert key in response.json()["detail"]
+
+
+def test_injection_governance_manage_undo_uses_exact_scope(monkeypatch) -> None:
+    calls: list[tuple[str, int, int]] = []
+
+    def fake_undo_negative_outcome_status(*, outcome_id: str, bot_id: int, group_id: int) -> str:
+        calls.append((outcome_id, bot_id, group_id))
+        return "undone" if outcome_id == "outcome-1" else "missing"
+
+    monkeypatch.setattr(
+        "packages.pb_webui.llm_product_api.undo_negative_outcome_status",
+        fake_undo_negative_outcome_status,
+    )
+    client = _build_client(monkeypatch)
+
+    missing = client.post(
+        "/pallas/api/llm/repeater-feedback/governance/manage",
+        json={"action": "undo_outcome", "outcome_id": "foreign", "bot_id": "10001", "group_id": "123"},
+    )
+    restored = client.post(
+        "/pallas/api/llm/repeater-feedback/governance/manage",
+        json={"action": "undo_outcome", "outcome_id": "outcome-1", "bot_id": "10001", "group_id": "123"},
+    )
+
+    assert missing.status_code == 404
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["data"] == {"undone": True, "outcome_id": "outcome-1"}
+    assert calls == [("foreign", 10001, 123), ("outcome-1", 10001, 123)]
+
+
+def test_injection_governance_manage_restore_semantic_undoes_scoped_outcome(monkeypatch) -> None:
+    calls: list[tuple[str, int, int]] = []
+
+    def fake_undo_negative_outcome_status(*, outcome_id: str, bot_id: int, group_id: int) -> str:
+        calls.append((outcome_id, bot_id, group_id))
+        return "undone"
+
+    monkeypatch.setattr(
+        "packages.pb_webui.llm_product_api.undo_negative_outcome_status",
+        fake_undo_negative_outcome_status,
+    )
+
+    response = _build_client(monkeypatch).post(
+        "/pallas/api/llm/repeater-feedback/governance/manage",
+        json={
+            "action": "restore_semantic",
+            "outcome_id": "outcome-1",
+            "bot_id": "10001",
+            "group_id": "123",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"] == {
+        "undone": True,
+        "outcome_id": "outcome-1",
+        "semantic_restored": True,
+    }
+    assert calls == [("outcome-1", 10001, 123)]
+
+
+def test_injection_governance_restore_semantic_validates_optional_source_example(monkeypatch) -> None:
+    undo_calls: list[dict[str, int | str]] = []
+    monkeypatch.setattr(
+        "packages.pb_webui.llm_product_api.list_injection_governance_status",
+        lambda **kwargs: (
+            "ok",
+            {"outcomes": [{"outcome_id": "outcome-1", "decisions": [{"source_id": "semantic-example-1"}]}]},
+        ),
+    )
+    monkeypatch.setattr(
+        "packages.pb_webui.llm_product_api.undo_negative_outcome_status",
+        lambda **kwargs: undo_calls.append(kwargs) or True,
+    )
+
+    response = _build_client(monkeypatch).post(
+        "/pallas/api/llm/repeater-feedback/governance/manage",
+        json={
+            "action": "restore_semantic",
+            "outcome_id": "outcome-1",
+            "source_example_id": "foreign-example",
+            "bot_id": "10001",
+            "group_id": "123",
+        },
+    )
+
+    assert response.status_code == 404
+    assert undo_calls == []
+
+
+def test_injection_governance_restore_semantic_accepts_matching_source_example(monkeypatch) -> None:
+    governance_calls: list[tuple[int, int]] = []
+    undo_calls: list[tuple[str, int, int]] = []
+
+    def fake_list_injection_governance_status(*, bot_id: int, group_id: int):
+        governance_calls.append((bot_id, group_id))
+        return "ok", {"outcomes": [{"outcome_id": "outcome-1", "decisions": [{"source_id": "semantic-example-1"}]}]}
+
+    def fake_undo_negative_outcome_status(*, outcome_id: str, bot_id: int, group_id: int) -> str:
+        undo_calls.append((outcome_id, bot_id, group_id))
+        return "undone"
+
+    monkeypatch.setattr(
+        "packages.pb_webui.llm_product_api.list_injection_governance_status",
+        fake_list_injection_governance_status,
+    )
+    monkeypatch.setattr(
+        "packages.pb_webui.llm_product_api.undo_negative_outcome_status",
+        fake_undo_negative_outcome_status,
+    )
+
+    response = _build_client(monkeypatch).post(
+        "/pallas/api/llm/repeater-feedback/governance/manage",
+        json={
+            "action": "restore_semantic",
+            "outcome_id": "outcome-1",
+            "source_example_id": "semantic-example-1",
+            "bot_id": "10001",
+            "group_id": "123",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert governance_calls == [(10001, 123)]
+    assert undo_calls == [("outcome-1", 10001, 123)]
+
+
+def test_injection_governance_manage_restore_expression_checks_group_before_restore(monkeypatch) -> None:
+    calls: list[tuple[str, str]] = []
+
+    def fake_get_group_expression(*, group_id: int, entry_id: str):
+        return _expression_entry() if entry_id == "expr-123-abc" and group_id == 123 else None
+
+    def fake_resolve_expression(entry_id: str, *, action: str, reason: str = ""):
+        calls.append((entry_id, action))
+        return _expression_entry().model_copy(update={"status": "shadow", "rejected_reason": ""})
+
+    monkeypatch.setattr(
+        "packages.pb_webui.llm_product_api.get_group_expression",
+        fake_get_group_expression,
+    )
+    monkeypatch.setattr(
+        "packages.pb_webui.llm_product_api.resolve_expression",
+        fake_resolve_expression,
+    )
+    client = _build_client(monkeypatch)
+
+    foreign = client.post(
+        "/pallas/api/llm/repeater-feedback/governance/manage",
+        json={"action": "restore_expression", "entry_id": "expr-999-foreign", "bot_id": "10001", "group_id": "123"},
+    )
+    missing = client.post(
+        "/pallas/api/llm/repeater-feedback/governance/manage",
+        json={"action": "restore_expression", "entry_id": "expr-123-missing", "bot_id": "10001", "group_id": "123"},
+    )
+    restored = client.post(
+        "/pallas/api/llm/repeater-feedback/governance/manage",
+        json={"action": "restore_expression", "entry_id": "expr-123-abc", "bot_id": "10001", "group_id": "123"},
+    )
+
+    assert foreign.status_code == 404
+    assert missing.status_code == 404
+    assert restored.status_code == 200, restored.text
+    assert restored.json()["data"] == {"entry_id": "expr-123-abc", "status": "shadow"}
+    assert calls == [("expr-123-abc", "restore")]
+
+
+def test_injection_governance_manage_returns_500_for_ledger_storage_failure(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "packages.pb_webui.llm_product_api.undo_negative_outcome_status",
+        lambda **kwargs: "storage_error",
+    )
+
+    response = _build_client(monkeypatch).post(
+        "/pallas/api/llm/repeater-feedback/governance/manage",
+        json={"action": "undo_outcome", "outcome_id": "outcome-1", "bot_id": "10001", "group_id": "123"},
+    )
+
+    assert response.status_code == 500
+
+
+def test_expression_bank_resolve_api_accepts_restore(monkeypatch) -> None:
+    calls: list[tuple[str, str]] = []
+
+    def fake_resolve_expression(entry_id: str, *, action: str, reason: str = ""):
+        calls.append((entry_id, action))
+        return _expression_entry().model_copy(update={"status": "shadow", "rejected_reason": ""})
+
+    monkeypatch.setattr(
+        "packages.pb_webui.llm_product_api.resolve_expression",
+        fake_resolve_expression,
+    )
+
+    response = _build_client(monkeypatch).post(
+        "/pallas/api/llm/expression-bank/resolve",
+        json={"entry_id": "expr-123-abc", "action": "restore"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["status"] == "shadow"
+    assert calls == [("expr-123-abc", "restore")]
+
+
+def test_injection_governance_manage_checks_write_token(monkeypatch) -> None:
+    from packages.pb_webui import llm_product_api
+
+    checked: list[bool] = []
+    monkeypatch.setattr(
+        llm_product_api,
+        "check_pallas_write_token",
+        lambda *args, **kwargs: checked.append(True),
+    )
+    monkeypatch.setattr(
+        llm_product_api,
+        "undo_negative_outcome_status",
+        lambda **kwargs: "undone",
+    )
+
+    response = _build_client(monkeypatch).post(
+        "/pallas/api/llm/repeater-feedback/governance/manage",
+        json={"action": "undo_outcome", "outcome_id": "outcome-1", "bot_id": "10001", "group_id": "123"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert checked == [True]
+
+
+def test_injection_governance_manage_rejects_invalid_write_token_before_undo(monkeypatch) -> None:
+    from packages.pb_webui import llm_product_api
+
+    undo_called = False
+
+    def deny(*args, **kwargs) -> None:
+        raise HTTPException(status_code=403, detail="invalid write token")
+
+    def fake_undo(**kwargs) -> bool:
+        nonlocal undo_called
+        undo_called = True
+        return True
+
+    monkeypatch.setattr(llm_product_api, "check_pallas_write_token", deny)
+    monkeypatch.setattr(llm_product_api, "undo_negative_outcome_status", fake_undo)
+
+    response = _build_client(monkeypatch).post(
+        "/pallas/api/llm/repeater-feedback/governance/manage",
+        json={"action": "undo_outcome", "outcome_id": "outcome-1", "bot_id": "10001", "group_id": "123"},
+    )
+
+    assert response.status_code == 403
+    assert undo_called is False

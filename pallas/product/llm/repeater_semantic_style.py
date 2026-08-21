@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from pallas.core.foundation.db import make_local_context_repository, make_message_repository
 from pallas.core.foundation.fs_lock import atomic_write_text, interprocess_file_lock
+from pallas.core.foundation.logging import log_rate_limited
 from pallas.core.foundation.paths import plugin_data_dir
 from pallas.core.foundation.startup_report import register_startup_ready, register_startup_scheduled
 from pallas.core.platform.work_jobs.models import WorkJob
@@ -209,10 +210,12 @@ class SemanticStyleResolution(BaseModel):
     style_anchor: str = ""
     prompt_block: str = ""
     matched_examples: list[tuple[str, str]] = Field(default_factory=list)
+    matched_example_sources: list[SemanticStyleDirectPair] = Field(default_factory=list)
     direct_candidate: str = ""
     source_example_id: str = ""
     baseline_note: str = ""
     behavior_strategies: list[BehaviorStrategy] = Field(default_factory=list)
+    style_profile: dict[str, Any] = Field(default_factory=dict)
 
 
 class SemanticStyleOverride(BaseModel):
@@ -1401,6 +1404,43 @@ def semantic_style_collection_enabled(*, bot_id: int | None = None, group_id: in
     return load_semantic_style_settings(bot_id=bot_id, group_id=group_id).collection_enabled
 
 
+def semantic_style_source_example_id(pair: SemanticStyleDirectPair) -> str:
+    source_id = str(pair.source_example_id or "").strip()
+    if source_id:
+        return source_id
+    payload = f"{pair.trigger_text}\x00{pair.reply_text}".encode()
+    return f"semantic:{hashlib.sha256(payload).hexdigest()}"
+
+
+def filter_semantic_style_pairs_by_feedback(
+    pairs: Iterable[SemanticStyleDirectPair], *, bot_id: int, group_id: int | None
+) -> list[SemanticStyleDirectPair]:
+    normalized = [
+        pair.model_copy(update={"source_example_id": semantic_style_source_example_id(pair)}) for pair in pairs
+    ]
+    if group_id is None or int(group_id) <= 0:
+        return normalized
+    try:
+        from pallas.product.llm.injection_feedback import effective_source_score
+
+        return [
+            pair
+            for pair in normalized
+            if effective_source_score(int(bot_id), int(group_id), "semantic", pair.source_example_id) > -4.0
+        ]
+    except Exception as exc:
+        log_rate_limited(
+            logger,
+            "warning",
+            "llm.injection_governance.semantic_filter_failed",
+            "semantic injection governance filter failed for bot [{}] and group [{}]: [{}]",
+            bot_id,
+            group_id,
+            exc,
+        )
+        return normalized
+
+
 def resolve_cached_semantic_style(
     bot_id: int,
     group_id: int | None,
@@ -1415,18 +1455,19 @@ def resolve_cached_semantic_style(
     profile = cached_semantic_style_profile(bot_id, group_id, scene)
     if profile is None or not profile.human_only:
         return SemanticStyleResolution()
+    direct_pairs = filter_semantic_style_pairs_by_feedback(profile.direct_pairs, bot_id=bot_id, group_id=group_id)
     rewrite_seed = profile.rewrite_seeds[-1] if profile.rewrite_seeds else ""
     if not rewrite_seed and profile.direct_examples:
         rewrite_seed = profile.direct_examples[-1]
     direct_pair = select_semantic_style_direct_pair(
-        profile.direct_pairs,
+        direct_pairs,
         query_text=query_text,
         recent_assistant_replies=recent_assistant_replies,
     )
     safe_matched = [
         pair
         for pair in select_semantic_style_matched_pairs(
-            profile.direct_pairs,
+            direct_pairs,
             query_text=query_text,
             recent_assistant_replies=recent_assistant_replies,
             limit=_MATCHED_EXAMPLE_LIMIT,
@@ -1453,10 +1494,12 @@ def resolve_cached_semantic_style(
         style_anchor=safe_anchor,
         prompt_block=append_cached_semantic_style_block("", safe_anchor, safe_seed),
         matched_examples=matched_examples,
+        matched_example_sources=safe_matched,
         direct_candidate=safe_direct_candidate,
-        source_example_id=direct_pair.source_example_id if direct_pair is not None else "",
+        source_example_id=semantic_style_source_example_id(direct_pair) if direct_pair is not None else "",
         baseline_note=build_rhythm_baseline_note(profile),
         behavior_strategies=behavior_strategies[:_BEHAVIOR_STRATEGY_MAX_HITS],
+        style_profile=semantic_style_profile_summary(profile) or {},
     )
 
 

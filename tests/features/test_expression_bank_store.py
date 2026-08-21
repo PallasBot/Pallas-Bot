@@ -102,3 +102,39 @@ def test_append_or_merge_does_not_revive_rejected_entry(monkeypatch, tmp_path) -
     assert unchanged.status == "rejected"
     assert unchanged.support == 3
     assert unchanged.rejected_reason == "manual review"
+
+
+def test_expression_scene_feedback_score_for_missing_entry_does_not_create_storage(monkeypatch, tmp_path) -> None:
+    store = expression_bank()
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+
+    assert store.expression_scene_feedback_score("expr-10001-missing", scene="banter") == 0
+    assert not (tmp_path / "expression_bank").exists()
+
+
+def test_get_group_expression_reads_exact_entry_without_creating_missing_group_storage(monkeypatch, tmp_path) -> None:
+    store = expression_bank()
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+
+    for index in range(201):
+        store.append_or_merge_expression(
+            store.ExpressionEntry(
+                entry_id=f"entry-{index}",
+                group_id=10001,
+                occasion="吐槽加班",
+                saying=f"我也想下班啊{index}",
+                source="group_observe",
+                channel="group",
+                scene_tier="casual",
+                status="shadow",
+                affect_hint="tired",
+                created_at=index,
+                updated_at=index,
+            )
+        )
+
+    target = store.list_group_expressions(10001, limit=201)[0]
+
+    assert store.get_group_expression(group_id=10001, entry_id=target.entry_id) == target
+    assert store.get_group_expression(group_id=10002, entry_id=target.entry_id) is None
+    assert not (tmp_path / "expression_bank" / "pending" / "10002.jsonl").exists()

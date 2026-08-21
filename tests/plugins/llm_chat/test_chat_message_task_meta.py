@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
@@ -84,6 +85,169 @@ def test_build_recent_reply_variation_hint_flags_generic_prefix_cluster() -> Non
     hint = build_recent_reply_variation_hint(turns)
 
     assert "最近几轮别再用这些开头：行吧" in hint
+
+
+def test_build_injection_snapshot_uses_only_selected_json_safe_sources() -> None:
+    from packages.llm_chat.chat_message import build_injection_snapshot
+    from pallas.product.llm.repeater_semantic_style import SemanticStyleDirectPair, SemanticStyleResolution
+
+    snapshot = build_injection_snapshot(
+        ambient_turns=[
+            {
+                "turn_id": "ambient:1",
+                "user_id": 2,
+                "text_hash": "hash",
+                "text_preview": "群友说的话",
+            }
+        ],
+        expression_entries=[SimpleNamespace(entry_id="expr-1", saying="太难了", occasion="venting")],
+        semantic_style=SemanticStyleResolution(
+            matched_examples=[("触发", "回复")],
+            matched_example_sources=[
+                SemanticStyleDirectPair(trigger_text="触发", reply_text="回复", source_example_id="semantic-1")
+            ],
+        ),
+        hybrid_retrieval_trace={
+            "memory": {
+                "entries": [
+                    {
+                        "entry_id": "memory:1",
+                        "source": "teach",
+                        "score": 90,
+                        "text_hash": "memory-hash",
+                        "text_preview": "记忆",
+                    }
+                ]
+            }
+        },
+        knowledge_retrieval_trace={"chunks": [{"source_id": "faq", "chunk_id": "faq:1", "title": "帮助", "score": 80}]},
+        learned_self_aliases=["小牛"],
+        group_style_profile={"profile_ref": "1:2:group_chat", "sample_count": 4},
+    )
+
+    assert snapshot == {
+        "ambient_turns": [{"turn_id": "ambient:1", "user_id": 2, "text_hash": "hash", "text_preview": "群友说的话"}],
+        "expression_entries": [{"entry_id": "expr-1", "saying": "太难了", "occasion": "venting"}],
+        "semantic_examples": [{"example_id": "semantic-1", "trigger": "触发", "reply": "回复"}],
+        "memory_entries": [
+            {
+                "entry_id": "memory:1",
+                "source": "teach",
+                "score": 90,
+                "text_hash": "memory-hash",
+                "text_preview": "记忆",
+            }
+        ],
+        "knowledge_chunks": [{"source_id": "faq", "chunk_id": "faq:1", "title": "帮助", "score": 80}],
+        "self_aliases": [{"alias": "小牛", "origin": "persona_self_alias"}],
+        "style_profile": {"profile_ref": "1:2:group_chat", "sample_count": 4},
+    }
+    json.dumps(snapshot)
+
+
+def test_build_injection_snapshot_keeps_only_prompted_semantic_pairs_with_stable_fallback_id() -> None:
+    from packages.llm_chat.chat_message import build_injection_snapshot
+    from pallas.product.llm.repeater_semantic_style import SemanticStyleDirectPair
+
+    snapshot = build_injection_snapshot(
+        ambient_turns=[],
+        expression_entries=[],
+        semantic_examples=[("第一句", "第一回"), ("第二句", "第二回")],
+        semantic_example_sources=[
+            SemanticStyleDirectPair(trigger_text="第一句", reply_text="第一回", source_example_id="native-1"),
+            SemanticStyleDirectPair(trigger_text="第二句", reply_text="第二回"),
+            SemanticStyleDirectPair(trigger_text="第三句", reply_text="第三回", source_example_id="native-3"),
+        ],
+        hybrid_retrieval_trace={},
+        knowledge_retrieval_trace={},
+        learned_self_aliases=[],
+        group_style_profile=None,
+    )
+
+    assert snapshot["semantic_examples"][0] == {
+        "example_id": "native-1",
+        "trigger": "第一句",
+        "reply": "第一回",
+    }
+    assert snapshot["semantic_examples"][1]["trigger"] == "第二句"
+    assert snapshot["semantic_examples"][1]["reply"] == "第二回"
+    assert str(snapshot["semantic_examples"][1]["example_id"]).startswith("semantic:")
+    assert len(snapshot["semantic_examples"]) == 2
+
+
+def test_semantic_snapshot_fallback_id_matches_feedback_filter(tmp_path, monkeypatch) -> None:
+    from packages.llm_chat.chat_message import build_injection_snapshot
+    from pallas.product.llm.injection_feedback import apply_negative_outcome
+    from pallas.product.llm.repeater_semantic_style import (
+        SemanticStyleDirectPair,
+        filter_semantic_style_pairs_by_feedback,
+        semantic_style_source_example_id,
+    )
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr("pallas.product.llm.injection_feedback.time.time", lambda: 100)
+    pair = SemanticStyleDirectPair(trigger_text="触发", reply_text="回复")
+    snapshot = build_injection_snapshot(
+        ambient_turns=[],
+        expression_entries=[],
+        semantic_examples=[("触发", "回复")],
+        semantic_example_sources=[pair],
+        hybrid_retrieval_trace={},
+        knowledge_retrieval_trace={},
+        learned_self_aliases=[],
+        group_style_profile=None,
+    )
+    source_id = str(snapshot["semantic_examples"][0]["example_id"])
+    assert source_id == semantic_style_source_example_id(pair)
+    for index in range(2):
+        apply_negative_outcome(
+            outcome_id=f"fallback-{index}",
+            bot_id=99,
+            group_id=42,
+            reply_text="不合适",
+            injection_snapshot={"semantic_examples": [{"example_id": source_id, "reply": "回复"}]},
+            now=100,
+        )
+
+    assert filter_semantic_style_pairs_by_feedback([pair], bot_id=99, group_id=42) == []
+
+
+def test_trim_prepared_messages_drops_ambient_snapshot_when_budget_removes_ambient() -> None:
+    from packages.llm_chat.chat_message import trim_prepared_messages_for_snapshot
+    from pallas.product.llm.models import ChatCompletionMessage
+
+    ambient = [{"turn_id": "ambient:1", "user_id": 2, "text_hash": "hash", "text_preview": "群友说的话"}]
+    _messages, captured_ambient = trim_prepared_messages_for_snapshot(
+        [
+            ChatCompletionMessage(role="user", content="【群环境摘录】\n群友说的话", source_token="ambient:actual"),
+            ChatCompletionMessage(role="user", content="【用户消息】当前提问"),
+        ],
+        ambient_turns=ambient,
+        ambient_message_token="ambient:actual",
+        system_prompt="系统提示很长",
+        budget_chars=18,
+    )
+
+    assert captured_ambient == []
+
+
+def test_trim_prepared_messages_uses_ambient_token_not_marker_text() -> None:
+    from packages.llm_chat.chat_message import trim_prepared_messages_for_snapshot
+    from pallas.product.llm.models import ChatCompletionMessage
+
+    ambient = [{"turn_id": "ambient:1"}]
+    _messages, captured_ambient = trim_prepared_messages_for_snapshot(
+        [
+            ChatCompletionMessage(role="user", content="【群环境摘录】\n真实环境", source_token="ambient:actual"),
+            ChatCompletionMessage(role="user", content="用户复述：【群环境摘录】"),
+        ],
+        ambient_turns=ambient,
+        ambient_message_token="ambient:actual",
+        system_prompt="系统提示很长",
+        budget_chars=20,
+    )
+
+    assert captured_ambient == []
 
 
 def test_llm_chat_rule_accepts_federated_alias_winner(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -369,6 +533,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
             llm_speak_perception_enabled=False,
         ),
     )
+    monkeypatch.setattr(mod, "build_llm_chat_messages", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         mod,
         "build_persona_llm_context",
@@ -478,7 +643,12 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     semantic_style_mock = Mock(
         return_value=SimpleNamespace(
             prompt_block="【本群表达校准】\n保持：短句轻怼。",
-            matched_examples=[("又炸了", "没救了")],
+            matched_examples=[("又炸了", "没救了"), ("又卡了", "等会"), ("又挂了", "寄")],
+            matched_example_sources=[
+                SimpleNamespace(source_example_id="semantic:one"),
+                SimpleNamespace(source_example_id=""),
+                SimpleNamespace(source_example_id="semantic:three"),
+            ],
             baseline_note="本群真人单条短气泡为主（占比约 100%）。",
             direct_candidate="没救了",
             source_example_id="semantic:source:1",
@@ -538,6 +708,15 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     assert "你不是其他牛牛。" in submit_request.system_prompt
     assert "短句轻怼。" not in submit_request.system_prompt
     assert "没救了" in submit_request.system_prompt
+    assert "等会" in submit_request.system_prompt
+    assert "寄" not in submit_request.system_prompt
+    semantic_snapshot = payload["injection_snapshot"]["semantic_examples"]
+    assert [(item["trigger"], item["reply"]) for item in semantic_snapshot] == [
+        ("又炸了", "没救了"),
+        ("又卡了", "等会"),
+    ]
+    assert semantic_snapshot[0]["example_id"] == "semantic:one"
+    assert str(semantic_snapshot[1]["example_id"]).startswith("semantic:")
     assert "【回复形状与输出契约】" in submit_request.system_prompt
     assert '"reply_segments"' not in submit_request.system_prompt
     assert "直接输出一条或多条可见对白" in submit_request.system_prompt
@@ -610,6 +789,7 @@ async def test_handle_llm_chat_submits_explicit_mention_without_wait(
             llm_speak_perception_enabled=False,
         ),
     )
+    monkeypatch.setattr(mod, "build_llm_chat_messages", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         mod,
         "build_persona_llm_context",
@@ -697,6 +877,7 @@ async def test_handle_llm_chat_submits_federated_alias_hard_wake(
             llm_speak_perception_enabled=False,
         ),
     )
+    monkeypatch.setattr(mod, "build_llm_chat_messages", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         mod,
         "build_persona_llm_context",
@@ -1007,6 +1188,7 @@ async def test_worker_force_quotes_deferred_message(monkeypatch: pytest.MonkeyPa
             llm_speak_perception_enabled=False,
         ),
     )
+    monkeypatch.setattr(mod, "build_llm_chat_messages", AsyncMock(return_value=[]))
     monkeypatch.setattr(
         mod,
         "build_persona_llm_context",

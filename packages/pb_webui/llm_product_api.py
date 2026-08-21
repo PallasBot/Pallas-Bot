@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from pallas.product.llm.injection_feedback import list_injection_governance_status, undo_negative_outcome_status
 from pallas.product.llm.memory.relationship import clamp_affinity
 from pallas.product.llm.ops_api import (
     build_conversation_kernel_status,
@@ -28,7 +30,7 @@ from pallas.product.llm.ops_api import (
     set_feedback_entry_eligibility,
     set_relationship_note_content,
 )
-from pallas.product.persona.expression_bank import ExpressionStatus, list_group_expressions
+from pallas.product.persona.expression_bank import ExpressionStatus, get_group_expression, list_group_expressions
 from pallas.product.persona.expression_promote import resolve_expression
 
 from .console_openapi_models import _ApiOkResponse
@@ -57,6 +59,36 @@ class _SemanticStyleOverridesPatch(BaseModel):
     nonsense: bool | None = None
     direct: bool | None = None
     image: bool | None = None
+
+
+class InjectionGovernanceManageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["undo_outcome", "restore_expression", "restore_semantic"]
+    bot_id: str
+    group_id: str
+    outcome_id: str | None = None
+    entry_id: str | None = None
+    source_example_id: str | None = None
+
+
+class _ExpressionBankResolveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    entry_id: str
+    action: Literal["approve", "reject", "restore"]
+    reason: str = ""
+
+
+def _injection_governance_scope(*, bot_id: str, group_id: str) -> tuple[int, int]:
+    try:
+        parsed_bot_id = int(str(bot_id).strip())
+        parsed_group_id = int(str(group_id).strip())
+    except (TypeError, ValueError) as e:
+        raise HTTPException(status_code=400, detail="bot_id 和 group_id 必须为正整数") from e
+    if parsed_bot_id <= 0 or parsed_group_id <= 0:
+        raise HTTPException(status_code=400, detail="bot_id 和 group_id 必须为正整数")
+    return parsed_bot_id, parsed_group_id
 
 
 class _SemanticStyleOverridesData(BaseModel):
@@ -343,6 +375,101 @@ def register_llm_product_router(
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
+    @router.get(f"{x}/llm/repeater-feedback/governance", include_in_schema=True)
+    async def _llm_repeater_feedback_governance_get(
+        bot_id: str | None = Query(default=None, description="Bot QQ"),
+        group_id: str | None = Query(default=None, description="群号"),
+    ) -> JSONResponse:
+        parsed_bot_id, parsed_group_id = _injection_governance_scope(
+            bot_id=bot_id or "",
+            group_id=group_id or "",
+        )
+        try:
+            status, data = await asyncio.to_thread(
+                list_injection_governance_status,
+                bot_id=parsed_bot_id,
+                group_id=parsed_group_id,
+            )
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        if status == "storage_error":
+            raise HTTPException(status_code=500, detail="治理账本读取失败")
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/llm/repeater-feedback/governance/manage", include_in_schema=True)
+    async def _llm_repeater_feedback_governance_manage(
+        body: InjectionGovernanceManageRequest,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        bot_id, group_id = _injection_governance_scope(bot_id=body.bot_id, group_id=body.group_id)
+        action = body.action
+        if action == "restore_expression":
+            entry_id = str(body.entry_id or "").strip()
+            if not entry_id:
+                raise HTTPException(status_code=400, detail="entry_id 必填")
+            try:
+                entry = await asyncio.to_thread(
+                    get_group_expression,
+                    group_id=group_id,
+                    entry_id=entry_id,
+                )
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(status_code=500, detail=str(e)) from e
+            if entry is None:
+                raise HTTPException(status_code=404, detail="未找到该群表达记录")
+            try:
+                updated = await asyncio.to_thread(resolve_expression, entry_id, action="restore")
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(status_code=500, detail=str(e)) from e
+            if updated is None:
+                raise HTTPException(status_code=404, detail="未找到该群表达记录")
+            return JSONResponse({"ok": True, "data": {"entry_id": entry_id, "status": updated.status}})
+
+        outcome_id = str(body.outcome_id or "").strip()
+        if not outcome_id:
+            raise HTTPException(status_code=400, detail="outcome_id 必填")
+        source_example_id = str(body.source_example_id or "").strip()
+        if action == "restore_semantic" and source_example_id:
+            try:
+                status, governance = await asyncio.to_thread(
+                    list_injection_governance_status,
+                    bot_id=bot_id,
+                    group_id=group_id,
+                )
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(status_code=500, detail=str(e)) from e
+            if status == "storage_error":
+                raise HTTPException(status_code=500, detail="治理账本读取失败")
+            outcome = next(
+                (row for row in governance.get("outcomes", []) if str(row.get("outcome_id") or "") == outcome_id),
+                None,
+            )
+            if outcome is None or not any(
+                str(decision.get("source_id") or "") == source_example_id
+                for decision in outcome.get("decisions", [])
+                if isinstance(decision, dict)
+            ):
+                raise HTTPException(status_code=404, detail="未找到该语义样本对应的治理结果")
+        try:
+            undo_status = await asyncio.to_thread(
+                undo_negative_outcome_status,
+                outcome_id=outcome_id,
+                bot_id=bot_id,
+                group_id=group_id,
+            )
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        if undo_status == "storage_error":
+            raise HTTPException(status_code=500, detail="治理账本写入失败")
+        if undo_status != "undone":
+            raise HTTPException(status_code=404, detail="未找到该群治理结果")
+        data: dict[str, bool | str] = {"undone": True, "outcome_id": outcome_id}
+        if action == "restore_semantic":
+            data["semantic_restored"] = True
+        return JSONResponse({"ok": True, "data": data})
+
     @router.post(f"{x}/llm/repeater-feedback/manage", include_in_schema=True)
     async def _llm_repeater_feedback_manage(
         body: dict[str, Any],
@@ -480,22 +607,20 @@ def register_llm_product_router(
 
     @router.post(f"{x}/llm/expression-bank/resolve", include_in_schema=True)
     async def _llm_expression_bank_resolve(
-        body: dict[str, Any],
+        body: _ExpressionBankResolveRequest,
         token: str | None = Query(default=None),
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        entry_id = str(body.get("entry_id") or "").strip()
-        action = str(body.get("action") or "").strip().lower()
+        entry_id = body.entry_id.strip()
+        action = body.action
         if not entry_id:
             raise HTTPException(status_code=400, detail="entry_id required")
-        if action not in {"approve", "reject"}:
-            raise HTTPException(status_code=400, detail="action must be approve or reject")
         try:
             updated = resolve_expression(
                 entry_id,
-                action=action,  # type: ignore[arg-type]
-                reason=str(body.get("reason") or "").strip(),
+                action=action,
+                reason=body.reason.strip(),
             )
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
