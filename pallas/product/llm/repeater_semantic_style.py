@@ -38,6 +38,7 @@ BOT_STYLE_PROMOTION_RECENT_SAMPLE_COUNT = 8
 SEMANTIC_STYLE_BACKFILL_WINDOW_SEC = 30 * 24 * 60 * 60
 SEMANTIC_STYLE_BACKFILL_JOB_TTL_SEC = 7 * 24 * 60 * 60
 SEMANTIC_STYLE_BACKFILL_MAX_PER_DAY = 128
+SEMANTIC_STYLE_BACKFILL_ENABLED = False
 SEMANTIC_STYLE_REALTIME_MAX_PER_DAY = 320
 SEMANTIC_STYLE_REALTIME_MAX_PER_SCOPE_PER_DAY = 20
 SEMANTIC_STYLE_REALTIME_SAMPLE_DIVISOR = 8
@@ -155,6 +156,9 @@ class SemanticStyleExample(BaseModel):
     trigger_text: str
     reply_text: str
     label: SemanticStyleLabel
+    source_kind: Literal["human_pair", "legacy_unknown"] = "legacy_unknown"
+    trigger_user_id: int = 0
+    reply_user_id: int = 0
     bot_style_positive: bool = False
     annotation_source: Literal["llm_v2", "legacy_persisted_v1"] = "llm_v2"
     legacy_reuse: Literal["direct", "rewrite", "style", ""] = ""
@@ -194,6 +198,7 @@ class SemanticStyleProfile(BaseModel):
     bot_style_promoted: bool = False
     visual_sample_count: int = 0
     behavior_strategies: list[BehaviorStrategy] = Field(default_factory=list)
+    human_only: bool = False
     updated_at: int = 0
 
 
@@ -432,13 +437,30 @@ def semantic_style_answer_samples(answers: Iterable[object]) -> set[str]:
     return samples
 
 
+def is_human_semantic_style_pair(*, trigger_user_id: object, reply_user_id: object, bot_id: object) -> bool:
+    """真人接话参考只接受两端都非本机或协作 bot 的消息。"""
+    try:
+        trigger_id = int(trigger_user_id)
+        reply_id = int(reply_user_id)
+        self_id = int(bot_id)
+    except (TypeError, ValueError):
+        return False
+    if trigger_id <= 0 or reply_id <= 0 or self_id <= 0:
+        return False
+    from pallas.product.llm.sender_identity import is_peer_bot
+
+    return trigger_id != self_id and reply_id != self_id and not is_peer_bot(trigger_id) and not is_peer_bot(reply_id)
+
+
 async def collect_semantic_style_backfill_candidates(
     *,
     now: int | None = None,
     bot_ids: Iterable[int] | None = None,
     cursor: SemanticStyleBackfillCursor | None = None,
 ) -> list[dict[str, object]]:
-    """从本机消息与已学习 Answer 交叉还原历史 bot 接话关系。"""
+    """历史数据缺少可靠作者来源，不能作为真人接话参考。"""
+    if not SEMANTIC_STYLE_BACKFILL_ENABLED:
+        return []
     current_time = int(time.time()) if now is None else int(now)
     cutoff = current_time - SEMANTIC_STYLE_BACKFILL_WINDOW_SEC
     ids = {int(item) for item in (bot_ids or ()) if int(item) > 0}
@@ -548,7 +570,9 @@ async def collect_semantic_style_backfill_candidates(
 
 
 async def run_semantic_style_backfill_round(*, now: int | None = None) -> int:
-    """投递由 work aux 执行的每日历史扫描任务。"""
+    """历史数据没有作者来源，停止生成语义风格回填任务。"""
+    if not SEMANTIC_STYLE_BACKFILL_ENABLED:
+        return 0
     current_time = int(time.time()) if now is None else int(now)
     bot_ids: list[int] = []
     for key, bot in get_bots().items():
@@ -573,6 +597,8 @@ async def run_semantic_style_backfill_round(*, now: int | None = None) -> int:
 
 async def handle_repeater_semantic_style_backfill_scan(payload: dict[str, Any]) -> int:
     """在 work aux 扫描历史消息，并持久化生成的语义标注任务。"""
+    if not SEMANTIC_STYLE_BACKFILL_ENABLED:
+        return 0
     current_time = int(payload.get("now") or time.time())
     raw_bot_ids = payload.get("bot_ids")
     if not isinstance(raw_bot_ids, list):
@@ -1003,8 +1029,7 @@ def _build_profile(
         bot_style_sample_count >= BOT_STYLE_PROMOTION_SAMPLE_COUNT
         and recent_bot_style_sample_count >= BOT_STYLE_PROMOTION_RECENT_SAMPLE_COUNT
     )
-    legacy_direct = example.annotation_source == "legacy_persisted_v1" and example.legacy_reuse == "direct"
-    if (legacy_direct or (bot_style_promoted and example.bot_style_positive)) and reply_text:
+    if example.source_kind == "human_pair" and reply_text:
         direct_examples = [item for item in direct_examples if item != reply_text]
         direct_examples.append(reply_text)
         pair = SemanticStyleDirectPair(
@@ -1062,6 +1087,7 @@ def _build_profile(
         bot_style_promoted=bot_style_promoted,
         visual_sample_count=(existing.visual_sample_count if existing else 0) + int(label.visual is not None),
         behavior_strategies=strategies,
+        human_only=True,
         updated_at=example.created_at,
     )
 
@@ -1156,6 +1182,8 @@ def _load_semantic_style_examples(path: Path) -> list[SemanticStyleExample]:
     for line in lines:
         try:
             raw = json.loads(line)
+            if isinstance(raw, dict):
+                raw.setdefault("source_kind", "legacy_unknown")
             label_raw = raw.get("label") if isinstance(raw, dict) else None
             if isinstance(label_raw, dict) and int(label_raw.get("version") or 1) < SEMANTIC_STYLE_LABEL_VERSION:
                 legacy_reuse = str(label_raw.get("reuse") or "").strip().lower()
@@ -1203,6 +1231,7 @@ def migrate_legacy_profiles_to_examples(
                     trigger_text=pair.trigger_text,
                     reply_text=pair.reply_text,
                     label=SemanticStyleLabel(),
+                    source_kind="legacy_unknown",
                     annotation_source="legacy_persisted_v1",
                     legacy_reuse="direct" if pair.reply_text else "style",
                     legacy_style_anchor=profile.style_anchor if index == 0 else "",
@@ -1244,6 +1273,12 @@ def _rebuild_profiles(
 ) -> dict[tuple[int, int, str], SemanticStyleProfile]:
     profiles: dict[tuple[int, int, str], SemanticStyleProfile] = {}
     for example in sorted(examples, key=lambda item: (item.created_at, item.example_id)):
+        if example.source_kind != "human_pair" or not is_human_semantic_style_pair(
+            trigger_user_id=example.trigger_user_id,
+            reply_user_id=example.reply_user_id,
+            bot_id=example.bot_id,
+        ):
+            continue
         key = _profile_key(example.bot_id, example.group_id, example.scene)
         profiles[key] = _build_profile(example, profiles.get(key), now=now)
     return profiles
@@ -1331,7 +1366,7 @@ def resolve_cached_semantic_style(
     if not semantic_style_injection_enabled(request_id, bot_id=bot_id, group_id=group_id):
         return SemanticStyleResolution()
     profile = cached_semantic_style_profile(bot_id, group_id, scene)
-    if profile is None:
+    if profile is None or not profile.human_only:
         return SemanticStyleResolution()
     rewrite_seed = profile.rewrite_seeds[-1] if profile.rewrite_seeds else ""
     if not rewrite_seed and profile.direct_examples:
@@ -1702,6 +1737,12 @@ async def handle_repeater_semantic_style(payload: dict[str, Any]) -> None:
     reply = str(payload.get("reply_text") or "").strip()
     if not trigger or not reply:
         return
+    if payload.get("source_kind") != "human_pair" or not is_human_semantic_style_pair(
+        trigger_user_id=payload.get("trigger_user_id"),
+        reply_user_id=payload.get("reply_user_id"),
+        bot_id=bot_id,
+    ):
+        return
     if not payload.get("realtime_admitted") and not claim_semantic_style_realtime_admission(
         bot_id=bot_id,
         group_id=group_id,
@@ -1721,6 +1762,9 @@ async def handle_repeater_semantic_style(payload: dict[str, Any]) -> None:
         trigger_text=_short_text(trigger, 240),
         reply_text=_short_text(reply, 240),
         label=label,
+        source_kind="human_pair",
+        trigger_user_id=int(payload["trigger_user_id"]),
+        reply_user_id=int(payload["reply_user_id"]),
         behavior_strategy=behavior_strategy,
     )
     persist_semantic_style_example(example)
@@ -1732,7 +1776,9 @@ async def handle_repeater_semantic_style_visual(payload: dict[str, Any]) -> None
 
 
 async def handle_repeater_semantic_style_backfill(payload: dict[str, Any], *, now: int | None = None) -> None:
-    """处理有限期历史标注；失败在本次任务内最多重试两次。"""
+    """历史样本没有可靠作者来源，禁止作为真人接话参考。"""
+    if not SEMANTIC_STYLE_BACKFILL_ENABLED:
+        return
     if not semantic_style_collection_enabled(
         bot_id=int(payload.get("bot_id") or 0), group_id=int(payload.get("group_id") or 0)
     ):
@@ -1785,20 +1831,25 @@ def register_semantic_style_cache_startup_hook() -> None:
         _reload_task = asyncio.create_task(_refresh_loop(), name="repeater_semantic_style_cache")
         register_startup_ready("语义风格缓存")
 
-        async def _backfill_loop() -> None:
-            await asyncio.sleep(_SEMANTIC_STYLE_BACKFILL_START_DELAY_SEC)
-            while True:
-                try:
-                    await run_semantic_style_backfill_round()
-                except Exception as exc:
-                    logger.warning("repeater semantic style backfill round failed: {}", exc)
-                await asyncio.sleep(_SEMANTIC_STYLE_BACKFILL_INTERVAL_SEC)
+        if SEMANTIC_STYLE_BACKFILL_ENABLED:
 
-        _backfill_task = asyncio.create_task(_backfill_loop(), name="repeater_semantic_style_backfill")
-        register_startup_scheduled(
-            "语义风格回填",
-            f"首轮延迟 [{_SEMANTIC_STYLE_BACKFILL_START_DELAY_SEC}s] | 间隔 [{_SEMANTIC_STYLE_BACKFILL_INTERVAL_SEC}s]",
-        )
+            async def _backfill_loop() -> None:
+                await asyncio.sleep(_SEMANTIC_STYLE_BACKFILL_START_DELAY_SEC)
+                while True:
+                    try:
+                        await run_semantic_style_backfill_round()
+                    except Exception as exc:
+                        logger.warning("repeater semantic style backfill round failed: {}", exc)
+                    await asyncio.sleep(_SEMANTIC_STYLE_BACKFILL_INTERVAL_SEC)
+
+            _backfill_task = asyncio.create_task(_backfill_loop(), name="repeater_semantic_style_backfill")
+            register_startup_scheduled(
+                "语义风格回填",
+                (
+                    f"首轮延迟 [{_SEMANTIC_STYLE_BACKFILL_START_DELAY_SEC}s] | "
+                    f"间隔 [{_SEMANTIC_STYLE_BACKFILL_INTERVAL_SEC}s]"
+                ),
+            )
 
     @driver.on_shutdown
     async def _on_shutdown() -> None:

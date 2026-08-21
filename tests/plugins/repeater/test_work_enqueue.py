@@ -36,7 +36,12 @@ async def test_enqueue_repeater_learn_captures_idempotent_work_job(monkeypatch: 
     from packages.repeater import learn_queue
     from pallas.core.platform.ingress import hotpath_metrics
 
-    payload = SimpleNamespace(to_dict=lambda: {"chat": {"group_id": 42}})
+    payload = SimpleNamespace(
+        to_dict=lambda: {
+            "chat": {"group_id": 42, "user_id": 12, "bot_id": 100, "plain_text": "接话", "time": 20},
+            "predecessor": {"user_id": 11, "plain_text": "前句"},
+        }
+    )
     chat = SimpleNamespace(chat_data=_chat_data())
     event = SimpleNamespace(group_id=42, message_id=99, self_id=100)
     monkeypatch.setattr(learn_queue, "claim_group_message_event", AsyncMock(return_value=True))
@@ -49,11 +54,10 @@ async def test_enqueue_repeater_learn_captures_idempotent_work_job(monkeypatch: 
 
     assert await learn_queue.enqueue_repeater_learn(chat, event) is True
 
-    jobs = [learn_queue.learn_queue().get_nowait() for _ in range(2)]
-    learn_job = next(job for job in jobs if job.kind == "repeater.learn")
+    learn_job = learn_queue.learn_queue().get_nowait()
     assert learn_job.kind == "repeater.learn"
     assert learn_job.idempotency_key == "repeater.learn:42:99:100"
-    assert learn_job.payload == {"chat": {"group_id": 42}}
+    assert learn_job.payload == payload.to_dict()
     assert hotpath_metrics.hotpath_metrics_snapshot()["learn_enqueued"] == 1
     assert hotpath_metrics.hotpath_metrics_snapshot()["learn_buffered"] == 1
 
@@ -63,7 +67,12 @@ async def test_enqueue_repeater_learn_buffers_job_without_waiting_for_outbox(mon
     from packages.repeater import learn_queue
 
     learn_queue.clear_repeater_learn_runtime_state()
-    payload = SimpleNamespace(to_dict=lambda: {"chat": {"group_id": 42}})
+    payload = SimpleNamespace(
+        to_dict=lambda: {
+            "chat": {"group_id": 42, "user_id": 12, "bot_id": 100, "plain_text": "接话", "time": 20},
+            "predecessor": {"user_id": 11, "plain_text": "前句"},
+        }
+    )
     chat = SimpleNamespace(chat_data=_chat_data())
     event = SimpleNamespace(group_id=42, message_id=99, self_id=100)
     store = SimpleNamespace(enqueue_many=AsyncMock())
@@ -77,7 +86,7 @@ async def test_enqueue_repeater_learn_buffers_job_without_waiting_for_outbox(mon
     assert await learn_queue.enqueue_repeater_learn(chat, event) is True
 
     store.enqueue_many.assert_not_awaited()
-    assert learn_queue.learn_queue().qsize() == 2
+    assert learn_queue.learn_queue().qsize() == 1
 
 
 @pytest.mark.asyncio
@@ -102,7 +111,7 @@ async def test_enqueue_repeater_learn_skips_capture_under_pressure_but_keeps_mes
 
     message_capture.assert_awaited_once()
     capture.assert_not_awaited()
-    jobs = [learn_queue.learn_queue().get_nowait()]
+    jobs = [learn_queue.message_queue().get_nowait()]
     assert [job.kind for job in jobs] == ["repeater.message"]
     assert hotpath_metrics.hotpath_metrics_snapshot()["learn_skipped_pressure"] == 1
     assert hotpath_metrics.hotpath_metrics_snapshot()["message_persist_buffered"] == 1
@@ -122,7 +131,7 @@ async def test_enqueue_repeater_learn_also_buffers_semantic_style_job(monkeypatc
                 "plain_text": "没救了",
                 "time": 20,
             },
-            "predecessor": {"plain_text": "又炸了"},
+            "predecessor": {"user_id": 12, "plain_text": "又炸了"},
         }
     )
     chat = SimpleNamespace(chat_data=_chat_data())
@@ -136,10 +145,14 @@ async def test_enqueue_repeater_learn_also_buffers_semantic_style_job(monkeypatc
         "pallas.product.llm.repeater_semantic_style.claim_semantic_style_realtime_admission",
         lambda **_kwargs: True,
     )
+    monkeypatch.setattr(
+        "pallas.product.llm.repeater_semantic_style.semantic_style_collection_enabled",
+        lambda **_kwargs: True,
+    )
 
     assert await learn_queue.enqueue_repeater_learn(chat, event) is True
 
-    jobs = [learn_queue.learn_queue().get_nowait() for _ in range(3)]
+    jobs = [learn_queue.learn_queue().get_nowait() for _ in range(2)]
     semantic_job = next(job for job in jobs if job.kind == "repeater.semantic_style")
     assert semantic_job.idempotency_key == "repeater.semantic_style:42:99:100"
     assert semantic_job.payload["trigger_text"] == "又炸了"
@@ -157,7 +170,7 @@ async def test_enqueue_repeater_learn_skips_semantic_style_when_realtime_budget_
     payload = SimpleNamespace(
         to_dict=lambda: {
             "chat": {"group_id": 42, "user_id": 11, "bot_id": 100, "plain_text": "没救了", "time": 20},
-            "predecessor": {"plain_text": "又炸了"},
+            "predecessor": {"user_id": 12, "plain_text": "又炸了"},
         }
     )
     chat = SimpleNamespace(chat_data=_chat_data())
@@ -174,8 +187,8 @@ async def test_enqueue_repeater_learn_skips_semantic_style_when_realtime_budget_
 
     assert await learn_queue.enqueue_repeater_learn(chat, event) is True
 
-    jobs = [learn_queue.learn_queue().get_nowait() for _ in range(2)]
-    assert sorted(job.kind for job in jobs) == ["repeater.learn", "repeater.message"]
+    jobs = [learn_queue.learn_queue().get_nowait()]
+    assert [job.kind for job in jobs] == ["repeater.learn"]
 
 
 @pytest.mark.asyncio
@@ -187,8 +200,8 @@ async def test_enqueue_repeater_learn_skips_semantic_style_when_scope_is_disable
     learn_queue.clear_repeater_learn_runtime_state()
     payload = SimpleNamespace(
         to_dict=lambda: {
-            "chat": {"group_id": 42, "bot_id": 100, "plain_text": "没救了", "time": 20},
-            "predecessor": {"plain_text": "又炸了"},
+            "chat": {"group_id": 42, "user_id": 11, "bot_id": 100, "plain_text": "没救了", "time": 20},
+            "predecessor": {"user_id": 12, "plain_text": "又炸了"},
         }
     )
     chat = SimpleNamespace(chat_data=_chat_data())
@@ -205,8 +218,32 @@ async def test_enqueue_repeater_learn_skips_semantic_style_when_scope_is_disable
 
     assert await learn_queue.enqueue_repeater_learn(chat, event) is True
 
-    jobs = [learn_queue.learn_queue().get_nowait() for _ in range(2)]
-    assert sorted(job.kind for job in jobs) == ["repeater.learn", "repeater.message"]
+    jobs = [learn_queue.learn_queue().get_nowait()]
+    assert [job.kind for job in jobs] == ["repeater.learn"]
+
+
+def test_build_semantic_style_job_records_only_human_pair(monkeypatch: pytest.MonkeyPatch) -> None:
+    from packages.repeater import learn_queue
+
+    payload = {
+        "chat": {"group_id": 42, "user_id": 12, "bot_id": 100, "plain_text": "接话", "time": 20},
+        "predecessor": {"user_id": 11, "plain_text": "前句"},
+    }
+    event = SimpleNamespace(message_id=99)
+    monkeypatch.setattr(
+        "pallas.product.llm.repeater_semantic_style.claim_semantic_style_realtime_admission",
+        lambda **_kwargs: True,
+    )
+
+    job = learn_queue.build_semantic_style_job(payload, event)
+
+    assert job is not None
+    assert job.payload["source_kind"] == "human_pair"
+    assert job.payload["trigger_user_id"] == 11
+    assert job.payload["reply_user_id"] == 12
+
+    payload["chat"]["user_id"] = 100
+    assert learn_queue.build_semantic_style_job(payload, event) is None
 
 
 @pytest.mark.asyncio
