@@ -39,14 +39,14 @@ def test_direct_declarations_cover_only_safe_exact_commands() -> None:
 
 
 @pytest.mark.asyncio
-async def test_start_falls_back_without_side_effect_when_bot_is_not_group_admin(
+async def test_start_stops_matchers_without_side_effect_when_bot_is_not_group_admin(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(direct, "bot_is_group_admin", AsyncMock(return_value=False))
 
     result = await direct.start(context("牛牛轮盘"))
 
-    assert result.fallback_to_matcher is True
+    assert result.fallback_to_matcher is False
     assert result.effects == ()
 
 

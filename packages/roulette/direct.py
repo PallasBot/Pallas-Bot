@@ -20,10 +20,12 @@ ROULETTE_RESCUE_PLUGIN = "roulette_rescue"
 
 async def start(context: DirectCommandContext) -> DirectCommandResult:
     matched, mode = parse_roulette_start_command(context.command_text)
-    if not matched or not can_roulette_start(context.group_id):
+    if not matched:
         return matcher_fallback("unavailable")
+    if not can_roulette_start(context.group_id):
+        return DirectCommandResult()
     if not await bot_is_group_admin(context.bot, context.event, fresh=True):
-        return matcher_fallback("bot_not_group_admin")
+        return DirectCommandResult()
 
     async def run() -> None:
         await service.start_roulette(
