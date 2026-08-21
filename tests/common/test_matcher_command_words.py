@@ -67,3 +67,30 @@ def test_group_plaintext_trie_includes_alias_words() -> None:
     assert is_group_plugin_command_plaintext("投票禁言")
     assert not is_group_plugin_command_plaintext("投票")
     assert is_plugin_command_plaintext("发起投票")
+
+
+def test_collect_multi_part_command_joins_with_separator() -> None:
+    from nonebot.plugin import on_command
+
+    from pallas.core.platform.ingress.matcher_command_words import _command_sep
+
+    matcher = on_command(("功能", "详情"), priority=5, block=True)
+    _register(matcher)
+
+    joined = "功能" + _command_sep() + "详情"
+    words = set(collect_command_words_from_matchers())
+    assert joined in words
+    assert "功能 详情" not in words
+    assert is_group_plugin_command_plaintext(joined)
+
+
+def test_collect_skips_single_character_commands() -> None:
+    from nonebot.plugin import on_command
+
+    matcher = on_command("赞", priority=5, block=True)
+    _register(matcher)
+
+    words = set(collect_command_words_from_matchers())
+    assert not any(len(word) < 2 for word in words)
+    assert "赞" not in words
+    assert not is_group_plugin_command_plaintext("赞")

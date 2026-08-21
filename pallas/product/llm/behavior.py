@@ -238,7 +238,12 @@ def detect_attack_pressure(
             role = str(getattr(turn, "role", "") or "")
             content = str(getattr(turn, "content", "") or "")
             created_at = int(getattr(turn, "created_at", 0) or 0)
-        if role == "user" and created_at >= cutoff and any(token in content for token in _DIRECT_ATTACK_TOKENS):
+        if (
+            role == "user"
+            and created_at > 0
+            and created_at >= cutoff
+            and any(token in content for token in _DIRECT_ATTACK_TOKENS)
+        ):
             attack_count += 1
     if attack_count >= 3:
         return "high"

@@ -468,6 +468,12 @@ async def claim_sticker_vision_delivery(bot_ids: set[int]) -> dict[str, object] 
             type_coerce(literal("sending"), postgresql.JSONB),
             literal(False),
         )
+        claim_value = func.jsonb_set(
+            claim_value,
+            cast(func.string_to_array(literal("delivery,claimed_at"), literal(",")), postgresql.ARRAY(postgresql.TEXT)),
+            type_coerce(func.to_jsonb(func.extract("epoch", func.now())), postgresql.JSONB),
+            literal(False),
+        )
         async with get_session() as session:
             claimed = (
                 await session.execute(

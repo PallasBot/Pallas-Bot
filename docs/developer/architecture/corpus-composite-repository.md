@@ -185,4 +185,4 @@ execute_repeater_message (handlers/message.py)
 - [横切能力全景](cross-cutting-concerns.md)（perm / limits / storage / reload 声明）
 - [多牛协同面](multi-bot-collaboration.md)（federate 跨部署协同，与 fed 语料源区分）
 - [LLM 输出链路](llm-output-path.md)（污染防护上游）
-- [Repeater 与 LLM 分离](../../../research/2026-08-20-llm-and-repeater-separation.md)（语料喂学习队列边界）
+- [Repeater 与 LLM 分离](../../guide/llm-and-repeater.md)（语料喂学习队列边界）

@@ -4,9 +4,16 @@ from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.reply_postprocess import (
     apply_chinese_typo,
     apply_reply_postprocess,
+    normalize_single_bubble_text,
     split_short_reply_segments,
     trim_terminal_period,
 )
+
+
+def test_normalize_single_bubble_text_keeps_structure_but_drops_blank_lines() -> None:
+    assert normalize_single_bubble_text("  首行  \n\n  次行\t\n") == "首行\n次行"
+    assert normalize_single_bubble_text("单行") == "单行"
+    assert normalize_single_bubble_text("  \n \n ") == ""
 
 
 def test_typo_disabled_returns_original() -> None:

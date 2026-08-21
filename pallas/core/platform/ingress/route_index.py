@@ -9,6 +9,7 @@ from nonebot import get_loaded_plugins
 
 from pallas.core.foundation.command_prefix import strip_leading_command_marks
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value
+from pallas.core.platform.ingress.matcher_command_words import collect_command_words_for_matcher
 from pallas.core.platform.ingress.plugin_command_plaintext import (
     _iter_trigger_parts,
     extract_command_prefixes_from_menu_data,
@@ -217,6 +218,12 @@ def build_route_index() -> RouteIndexSnapshot:
                 for prefix in entry.prefixes:
                     _add_module_mapping(prefix_map, prefix, module_key)
                 regex_entries.extend((module_key, pattern) for pattern in entry.regexes)
+
+        for matcher in getattr(plugin, "matcher", ()) or ():
+            for word in collect_command_words_for_matcher(matcher):
+                if word:
+                    _add_module_mapping(prefix_map, word, module_key)
+                    indexed.add(module_key)
 
     prefix_frozen = {key: frozenset(modules) for key, modules in prefix_map.items()}
     exact_frozen = {key: frozenset(modules) for key, modules in exact_map.items()}

@@ -515,6 +515,7 @@ async def deliver_llm_callback_success(
     if len(reply_segments) == 1 and not (direct_candidate and reply_text == direct_candidate):
         from pallas.product.llm.reply_postprocess import (
             has_cjk_space_separator,
+            normalize_single_bubble_text,
             split_short_reply_segments,
         )
         from pallas.product.llm.reply_shape import resolve_short_reply_split_decision
@@ -527,7 +528,9 @@ async def deliver_llm_callback_success(
             keep_rate=cfg.llm_reply_split_randomize_keep_rate,
         )
         if band == "short":
-            if not keep_as_single:
+            if keep_as_single:
+                reply_segments = [normalize_single_bubble_text(single_reply)]
+            else:
                 reply_segments = split_short_reply_segments(single_reply)
         elif "\n" in single_reply or has_cjk_space_separator(single_reply):
             reply_segments = split_short_reply_segments(

@@ -1113,9 +1113,7 @@ def test_prune_drops_examples_older_than_ninety_days_and_rebuilds_profiles(tmp_p
     assert build_cached_semantic_style_block(100, 42, "group_chat").endswith("新接话")
 
 
-def test_positive_bot_style_outcomes_keep_the_original_human_pair(
-    tmp_path, monkeypatch
-) -> None:
+def test_positive_bot_style_outcomes_keep_the_original_human_pair(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     clear_semantic_style_cache_for_tests()
     now = int(__import__("time").time())
@@ -1717,9 +1715,9 @@ def test_matched_examples_rank_by_similarity_and_strategy_is_fallback(tmp_path, 
         query_text="好烦，又跟对象吵架了",
     )
 
-    assert [item.source_example_id for item in resolution.matched_example_sources] == ["sim:1"]
     # 相似度召回优先于"最近两条"，且策略只在无相似示例时兜底
     assert resolution.matched_examples == [("好烦，又跟对象吵架了", "哈哈")]
+    assert [item.source_example_id for item in resolution.matched_example_sources] == ["sim:1"]
     assert resolution.behavior_strategies == []
 
     unrelated = mod.resolve_cached_semantic_style(
@@ -1729,9 +1727,9 @@ def test_matched_examples_rank_by_similarity_and_strategy_is_fallback(tmp_path, 
         request_id=request_id,
         query_text="对象又吵架了真烦",
     )
-    assert unrelated.matched_example_sources == []
     # 相似但未达示例阈值时，策略兜底生效；完全无关则不注入
     assert unrelated.matched_examples == []
+    assert unrelated.matched_example_sources == []
     assert [item.action for item in unrelated.behavior_strategies] == ["用笑声开头缓和气氛"]
 
     remote = mod.resolve_cached_semantic_style(
@@ -1853,9 +1851,7 @@ def test_semantic_style_direct_candidate_gates_on_injection_bit(tmp_path, monkey
     mod.clear_semantic_style_direct_quota_for_tests()
     mod.set_semantic_style_governance(collection_enabled=False, injection_enabled=True, bot_id=100, group_id=42)
     assert mod.semantic_style_collection_enabled(bot_id=100, group_id=42) is False
-    assert (
-        mod.should_deliver_semantic_style_direct_candidate(bot_id=100, group_id=42, candidate="没救了") is True
-    )
+    assert mod.should_deliver_semantic_style_direct_candidate(bot_id=100, group_id=42, candidate="没救了") is True
 
     mod.set_semantic_style_governance(collection_enabled=True, injection_enabled=False, bot_id=101, group_id=42)
     assert mod.semantic_style_collection_enabled(bot_id=101, group_id=42) is True

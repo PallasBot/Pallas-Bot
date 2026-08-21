@@ -838,7 +838,7 @@ def log_incompatible_federate_command_capability_peers() -> None:
         return
     _last_incompatible_capability_peers = peers
     if peers:
-        logger.debug(
+        logger.warning(
             "[联邦] 对端 {} 未支持命令能力协议 v{}；未知命令仍可能被旧端抢占，请升级并重启这些部署",
             ", ".join(peers),
             COMMAND_CAPABILITY_PROTOCOL_VERSION,
@@ -869,7 +869,7 @@ def log_incompatible_federate_ingress_peers() -> None:
         return
     _last_incompatible_ingress_peers = peers
     if peers:
-        logger.debug(
+        logger.warning(
             "[联邦] 对端 {} 未支持统一 ingress 协议 v{}，且与本机在共同群；"
             "其定向命令/消息不再跨机协调，普通消息仍正常协调，请升级并重启这些部署",
             ", ".join(_federate_peer_display_label(dep) for dep in peers),

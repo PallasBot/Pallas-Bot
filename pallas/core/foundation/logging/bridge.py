@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 import sys
+import threading
 from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
@@ -532,19 +533,7 @@ def is_matcher_lifecycle_noise(plain: str, *, command_traffic: bool = False) -> 
     return False
 
 
-def install_startup_log_noise_patcher() -> None:
-    """在 ``nonebot.init()`` 之后调用：压制启动与 Matcher 生命周期刷屏。
-
-    - 插件逐条 Succeeded → DEBUG（摘要已有 ``[启动] 就绪``）
-    - Matcher handled / complete / cancelled / ignored → DEBUG
-    """
-    from nonebot import _log_patcher
-    from nonebot.log import logger
-
-    level_name = resolve_repo_log_level()
-    if level_name in {"TRACE", "DEBUG"}:
-        return
-
+def _build_noise_patcher(logger, _log_patcher):
     debug_no = logger.level("DEBUG").no
 
     def patcher(record: dict[str, Any]) -> None:
@@ -558,7 +547,27 @@ def install_startup_log_noise_patcher() -> None:
             record["level"].name = "DEBUG"
             record["level"].no = debug_no
 
-    logger.configure(patcher=patcher)
+    return patcher
+
+
+def install_startup_log_noise_patcher() -> None:
+    """在 ``nonebot.init()`` 之后调用：压制启动与 Matcher 生命周期刷屏。
+
+    - 插件逐条 Succeeded → DEBUG（摘要已有 ``[启动] 就绪``）
+    - Matcher handled / complete / cancelled / ignored → DEBUG
+    """
+    from nonebot import _log_patcher
+    from nonebot.log import logger
+
+    _install_log_noise_patcher(logger, _log_patcher)
+
+
+def _install_log_noise_patcher(logger, _log_patcher) -> None:
+    """按当前日志级别（重）安装 noise patcher；TRACE/DEBUG 下不安装。"""
+    level_name = resolve_repo_log_level()
+    if level_name in {"TRACE", "DEBUG"}:
+        return
+    logger.configure(patcher=_build_noise_patcher(logger, _log_patcher))
 
 
 _VALID_LOG_LEVELS = frozenset({"TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"})
@@ -580,6 +589,7 @@ def resolve_repo_log_level(*, default: str = "INFO") -> str:
 _FILE_SINK_ID: int | None = None
 _FILE_SINK_ARGS: dict[str, Any] | None = None
 _FILE_SINK_LOG_PATH_DEFAULT = "nonebot_runtime.log"
+_FILE_SINK_LOCK = threading.RLock()
 
 
 def register_repo_file_sink(
@@ -597,53 +607,57 @@ def register_repo_file_sink(
     boot.py 用它替代裸 ``logger.add``；WebUI 改级别时 remove + 原位重建。
     """
     global _FILE_SINK_ID, _FILE_SINK_ARGS
-    if _FILE_SINK_ID is not None:
-        try:
-            logger.remove(_FILE_SINK_ID)
-        except Exception:
-            pass
-    _FILE_SINK_ARGS = {
-        "path": path or _FILE_SINK_LOG_PATH_DEFAULT,
-        "rotation": rotation,
-        "retention": retention,
-        "encoding": encoding,
-        "enqueue": enqueue,
-    }
-    _FILE_SINK_ID = logger.add(
-        _FILE_SINK_ARGS["path"],
-        level=resolve_repo_log_level(),
-        format=fmt,
-        rotation=_FILE_SINK_ARGS["rotation"],
-        retention=_FILE_SINK_ARGS["retention"],
-        encoding=_FILE_SINK_ARGS["encoding"],
-        enqueue=_FILE_SINK_ARGS["enqueue"],
-    )
-    return _FILE_SINK_ID
-
-
-def reapply_runtime_log_level() -> None:
-    """保存 WebUI 日志级别后，把 NoneBot 默认过滤与文件 sink 级别同步。"""
-    global _FILE_SINK_ID
-    from nonebot.log import logger
-
-    level = resolve_repo_log_level()
-    try:
-        logger.configure(extra={"nonebot_log_level": level})
-    except Exception:
-        pass
-    if _FILE_SINK_ID is not None:
-        try:
-            logger.remove(_FILE_SINK_ID)
-        except Exception:
-            pass
-        _FILE_SINK_ID = None
-    if _FILE_SINK_ARGS is not None:
-        register_repo_file_sink(
-            logger,
-            format_repo_file_log,
-            path=_FILE_SINK_ARGS["path"],
+    with _FILE_SINK_LOCK:
+        if _FILE_SINK_ID is not None:
+            try:
+                logger.remove(_FILE_SINK_ID)
+            except Exception:
+                pass
+        _FILE_SINK_ARGS = {
+            "path": path or _FILE_SINK_LOG_PATH_DEFAULT,
+            "rotation": rotation,
+            "retention": retention,
+            "encoding": encoding,
+            "enqueue": enqueue,
+        }
+        _FILE_SINK_ID = logger.add(
+            _FILE_SINK_ARGS["path"],
+            level=resolve_repo_log_level(),
+            format=fmt,
             rotation=_FILE_SINK_ARGS["rotation"],
             retention=_FILE_SINK_ARGS["retention"],
             encoding=_FILE_SINK_ARGS["encoding"],
             enqueue=_FILE_SINK_ARGS["enqueue"],
         )
+        return _FILE_SINK_ID
+
+
+def reapply_runtime_log_level() -> None:
+    """保存 WebUI 日志级别后，把 patcher、NoneBot 默认过滤与文件 sink 级别同步。"""
+    global _FILE_SINK_ID
+    from nonebot import _log_patcher
+    from nonebot.log import logger
+
+    _install_log_noise_patcher(logger, _log_patcher)
+    level = resolve_repo_log_level()
+    try:
+        logger.configure(extra={"nonebot_log_level": level})
+    except Exception:
+        pass
+    with _FILE_SINK_LOCK:
+        if _FILE_SINK_ID is not None:
+            try:
+                logger.remove(_FILE_SINK_ID)
+            except Exception:
+                pass
+            _FILE_SINK_ID = None
+        if _FILE_SINK_ARGS is not None:
+            register_repo_file_sink(
+                logger,
+                format_repo_file_log,
+                path=_FILE_SINK_ARGS["path"],
+                rotation=_FILE_SINK_ARGS["rotation"],
+                retention=_FILE_SINK_ARGS["retention"],
+                encoding=_FILE_SINK_ARGS["encoding"],
+                enqueue=_FILE_SINK_ARGS["enqueue"],
+            )
