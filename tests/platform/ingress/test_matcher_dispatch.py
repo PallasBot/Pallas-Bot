@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from inspect import getsource
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -889,6 +890,13 @@ async def test_patched_handle_event_batches_selected_matchers(
     pre_mock.assert_awaited_once()
     post_mock.assert_awaited_once()
     assert max_active <= 2
+
+
+def test_patched_handle_event_has_no_matcher_summary_log() -> None:
+    source = getsource(dispatch.patched_handle_event)
+    source += getsource(dispatch.patched_handle_event_now)
+    assert "Matcher run [" not in source
+    assert "ingress:matcher_run" not in source
 
 
 @pytest.mark.asyncio
