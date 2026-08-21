@@ -151,6 +151,7 @@ FIELD_LABELS: dict[str, str] = {
     "name": "备线显示名",
     "llm_chat_enable": "启用 LLM 对话（已弃用，请用 LLM_CHAT_ENABLED）",
     "llm_chat_enabled": "启用智能对话",
+    "log_level": "日志级别",
     "llm_governance_enabled": "限制 LLM 对话频率与字数",
     "llm_chat_max_concurrency": "LLM 对话并发上限",
     "llm_chat_queue_enabled": "高峰对话排队等待",

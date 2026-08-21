@@ -560,3 +560,75 @@ def resolve_repo_log_level(*, default: str = "INFO") -> str:
     if level in _VALID_LOG_LEVELS:
         return level
     return default
+
+
+_FILE_SINK_ID: int | None = None
+_FILE_SINK_ARGS: dict[str, Any] | None = None
+_FILE_SINK_LOG_PATH_DEFAULT = "nonebot_runtime.log"
+
+
+def register_repo_file_sink(
+    logger,
+    fmt,
+    *,
+    path=None,
+    rotation="50 MB",
+    retention="14 days",
+    encoding="utf-8",
+    enqueue=True,
+) -> int:
+    """登记主文件 sink id 与重建参数，供运行时调整日志级别。
+
+    boot.py 用它替代裸 ``logger.add``；WebUI 改级别时 remove + 原位重建。
+    """
+    global _FILE_SINK_ID, _FILE_SINK_ARGS
+    if _FILE_SINK_ID is not None:
+        try:
+            logger.remove(_FILE_SINK_ID)
+        except Exception:
+            pass
+    _FILE_SINK_ARGS = {
+        "path": path or _FILE_SINK_LOG_PATH_DEFAULT,
+        "rotation": rotation,
+        "retention": retention,
+        "encoding": encoding,
+        "enqueue": enqueue,
+    }
+    _FILE_SINK_ID = logger.add(
+        _FILE_SINK_ARGS["path"],
+        level=resolve_repo_log_level(),
+        format=fmt,
+        rotation=_FILE_SINK_ARGS["rotation"],
+        retention=_FILE_SINK_ARGS["retention"],
+        encoding=_FILE_SINK_ARGS["encoding"],
+        enqueue=_FILE_SINK_ARGS["enqueue"],
+    )
+    return _FILE_SINK_ID
+
+
+def reapply_runtime_log_level() -> None:
+    """保存 WebUI 日志级别后，把 NoneBot 默认过滤与文件 sink 级别同步。"""
+    global _FILE_SINK_ID
+    from nonebot.log import logger
+
+    level = resolve_repo_log_level()
+    try:
+        logger.configure(extra={"nonebot_log_level": level})
+    except Exception:
+        pass
+    if _FILE_SINK_ID is not None:
+        try:
+            logger.remove(_FILE_SINK_ID)
+        except Exception:
+            pass
+        _FILE_SINK_ID = None
+    if _FILE_SINK_ARGS is not None:
+        register_repo_file_sink(
+            logger,
+            format_repo_file_log,
+            path=_FILE_SINK_ARGS["path"],
+            rotation=_FILE_SINK_ARGS["rotation"],
+            retention=_FILE_SINK_ARGS["retention"],
+            encoding=_FILE_SINK_ARGS["encoding"],
+            enqueue=_FILE_SINK_ARGS["enqueue"],
+        )

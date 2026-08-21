@@ -235,6 +235,23 @@ def _command_start_section() -> WebuiEnvSection:
     )
 
 
+def _log_level_section() -> WebuiEnvSection:
+    from pallas.core.foundation.log_level_config import (
+        LogLevelConfig,
+        get_log_level_config,
+    )
+
+    return WebuiEnvSection(
+        id="log_level",
+        title="日志级别",
+        module_label="pallas.core.foundation.log_level_config",
+        model_cls=LogLevelConfig,
+        read_current=get_log_level_config,
+        field_to_env={"log_level": "LOG_LEVEL"},
+        skip_fields=frozenset(),
+    )
+
+
 def _llm_section() -> WebuiEnvSection:
     # LLM 段字段与读写逻辑归 `pallas.product.llm.webui_config` 所有。
     from pallas.product.llm.webui_config import LlmWebuiConfig, get_llm_webui_config
@@ -381,6 +398,7 @@ def _base_section_by_id(section_id: str) -> WebuiEnvSection | None:
     builders: dict[str, Any] = {
         "mail": _mail_section,
         "command_start": _command_start_section,
+        "log_level": _log_level_section,
         "llm": _llm_section,
         "arknights_kb": _arknights_kb_section,
     }
@@ -625,6 +643,15 @@ def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dic
             clear_command_start_config_cache()
         except Exception as e:
             logger.warning("配置保存后 command_start 缓存刷新失败: {}", e)
+    elif section_id == "log_level":
+        try:
+            from pallas.core.foundation.log_level_config import clear_log_level_config_cache
+            from pallas.core.foundation.logging import reapply_runtime_log_level
+
+            clear_log_level_config_cache()
+            reapply_runtime_log_level()
+        except Exception as e:
+            logger.warning("配置保存后日志级别刷新失败: {}", e)
     elif section_id == "ingress_dispatch":
         try:
             from pallas.core.platform.ingress.dispatch_lanes import clear_dispatch_lanes_cache

@@ -251,3 +251,36 @@ def test_message_scrub_patch_roundtrip(tmp_path, monkeypatch):
     data = json.loads(webui_file.read_text(encoding="utf-8"))
     assert data["env"]["PALLAS_INBOUND_FILTER_SUBSTRINGS"] == "a,b"
     clear_webui_env_sections_cache()
+
+
+def test_log_level_section_payload_shape():
+    from pallas.console.webui import webui_env_section_payload
+    from pallas.console.webui.env_sections import clear_webui_env_sections_cache
+
+    clear_webui_env_sections_cache()
+    data = webui_env_section_payload("log_level")
+    assert data["plugin"] == "log_level"
+    assert data["module"] == "pallas.core.foundation.log_level_config"
+    fields = {f["name"]: f for f in data["fields"]}
+    field = fields["log_level"]
+    assert field["env_key"] == "LOG_LEVEL"
+    assert field["kind"] == "enum"
+    assert "TRACE" in field["choices"]
+    assert "INFO" in field["choices"]
+    clear_webui_env_sections_cache()
+
+
+def test_log_level_patch_roundtrip(tmp_path, monkeypatch):
+    import json
+
+    from pallas.console.webui import apply_webui_env_section_patch
+    from pallas.console.webui.env_sections import clear_webui_env_sections_cache
+    from pallas.core.foundation.config import repo_settings as rs
+
+    clear_webui_env_sections_cache()
+    webui_file = tmp_path / "webui.json"
+    monkeypatch.setattr(rs, "repo_webui_settings_path", lambda: webui_file)
+    apply_webui_env_section_patch("log_level", {"log_level": "DEBUG"})
+    data = json.loads(webui_file.read_text(encoding="utf-8"))
+    assert data["env"]["LOG_LEVEL"] == "DEBUG"
+    clear_webui_env_sections_cache()
