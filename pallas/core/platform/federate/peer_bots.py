@@ -31,6 +31,14 @@ from pallas.core.platform.ingress.route_index import (
     extract_explicit_route_strings,
 )
 from pallas.core.platform.multi_bot.fleet import get_catalog_bot_ids
+from pallas.core.platform.multi_bot.group_admin_capability import (
+    local_group_admin_bot_ids,
+    local_group_admin_observation_complete,
+)
+from pallas.core.platform.multi_bot.group_online_cache import (
+    NS_LOCAL_CONNECTED,
+    get_cached_group_bot_ids,
+)
 from pallas.product.community_stats.store import load_or_create_deployment_id
 
 _PEER_KEY_SEGMENT = "peer_bots"
@@ -58,6 +66,7 @@ _cache_deployment_ingress_capabilities: dict[str, frozenset[str] | None] = {}
 _cache_deployment_ingress_protocols: dict[str, int | None] = {}
 # None = 对端未宣告在场群（旧版），视为可能在场；frozenset = 近期在场群
 _cache_deployment_present_groups: dict[str, frozenset[int] | None] = {}
+_cache_deployment_group_admin_bot_ids: dict[str, dict[int, frozenset[int]] | None] = {}
 _cache_deployment_rosters: dict[str, FederatePeerBotRoster] = {}
 _cache_local_roster: FederatePeerBotRoster | None = None
 _local_present_groups: dict[int, float] = {}
@@ -91,6 +100,7 @@ def clear_federate_peer_bot_cache_for_tests() -> None:
         _cache_deployment_ingress_protocols, \
         _cache_deployment_ids, \
         _cache_deployment_present_groups, \
+        _cache_deployment_group_admin_bot_ids, \
         _cache_deployment_permission_levels, \
         _cache_deployment_rosters, \
         _cache_local_roster, \
@@ -111,6 +121,7 @@ def clear_federate_peer_bot_cache_for_tests() -> None:
     _cache_deployment_ingress_capabilities = {}
     _cache_deployment_ingress_protocols = {}
     _cache_deployment_present_groups = {}
+    _cache_deployment_group_admin_bot_ids = {}
     _cache_deployment_permission_levels = {}
     _cache_deployment_rosters = {}
     _cache_local_roster = None
@@ -548,6 +559,11 @@ def publish_local_federate_peer_bot_ids_sync(
     capabilities = sorted(collect_local_federate_command_capabilities())
     permission_levels = collect_local_command_permission_levels()
     present_groups = collect_local_present_group_ids()
+    group_admin_bot_ids = {
+        str(group_id): sorted(admin_ids)
+        for group_id in present_groups
+        if (admin_ids := get_local_group_admin_bot_ids(group_id)) is not None
+    }
     payload_obj: dict[str, Any] = {
         "deployment_id": deployment_id,
         "deployment_name": local_federate_deployment_name(),
@@ -565,6 +581,8 @@ def publish_local_federate_peer_bot_ids_sync(
         "ingress_protocol": INGRESS_PROTOCOL_VERSION,
         "ingress_capabilities": sorted(collect_local_federate_ingress_capabilities()),
     }
+    if group_admin_bot_ids:
+        payload_obj["group_admin_bot_ids"] = group_admin_bot_ids
     # 插件尚未加载时能力为空：不写字段，避免被当成「零能力」抢走全部命令归属
     if capabilities:
         payload_obj["command_capabilities"] = capabilities
@@ -650,6 +668,52 @@ def _parse_present_group_ids(data: dict[str, Any]) -> frozenset[int] | None:
     return frozenset(groups)
 
 
+def _parse_group_admin_bot_ids(data: dict[str, Any]) -> dict[int, frozenset[int]] | None:
+    if "group_admin_bot_ids" not in data:
+        return None
+    raw = data.get("group_admin_bot_ids")
+    if not isinstance(raw, dict):
+        return None
+    groups: dict[int, frozenset[int]] = {}
+    for raw_group_id, raw_bot_ids in raw.items():
+        if not str(raw_group_id).isdigit() or not isinstance(raw_bot_ids, (list, tuple, set, frozenset)):
+            continue
+        groups[int(raw_group_id)] = frozenset(int(bot_id) for bot_id in raw_bot_ids if str(bot_id).isdigit())
+    return groups
+
+
+def get_federate_peer_group_admin_bot_ids(
+    deployment_id: str,
+    group_id: int,
+) -> frozenset[int] | None:
+    groups = _cache_deployment_group_admin_bot_ids.get(deployment_id.strip().lower())
+    if groups is None:
+        return None
+    return groups.get(int(group_id))
+
+
+def get_local_group_admin_bot_ids(group_id: int) -> frozenset[int] | None:
+    local_bot_ids = get_cached_group_bot_ids(group_id, namespace=NS_LOCAL_CONNECTED)
+    if local_bot_ids is None or not local_group_admin_observation_complete(group_id, local_bot_ids):
+        return None
+    return local_group_admin_bot_ids(group_id)
+
+
+def group_admin_bot_ids_by_deployment(
+    group_id: int,
+    deployment_ids: list[str] | tuple[str, ...] | frozenset[str],
+) -> dict[str, frozenset[int] | None]:
+    mine = load_or_create_deployment_id().strip().lower()
+    result: dict[str, frozenset[int] | None] = {}
+    for deployment_id in deployment_ids:
+        key = deployment_id.strip().lower()
+        if key == mine:
+            result[key] = get_local_group_admin_bot_ids(group_id)
+        else:
+            result[key] = get_federate_peer_group_admin_bot_ids(key, group_id)
+    return result
+
+
 def _parse_bot_ids(data: dict[str, Any], key: str, *, missing_is_none: bool = False) -> frozenset[int] | None:
     if key not in data:
         return None if missing_is_none else frozenset()
@@ -683,6 +747,7 @@ def refresh_federate_peer_bot_ids_sync() -> frozenset[int]:
         _cache_deployment_ids, \
         _cache_deployment_permission_levels, \
         _cache_deployment_present_groups, \
+        _cache_deployment_group_admin_bot_ids, \
         _cache_deployment_rosters, \
         _cache_ids, \
         _cache_updated_mono
@@ -697,6 +762,7 @@ def refresh_federate_peer_bot_ids_sync() -> frozenset[int]:
         _cache_deployment_ingress_protocols = {}
         _cache_deployment_permission_levels = {}
         _cache_deployment_present_groups = {}
+        _cache_deployment_group_admin_bot_ids = {}
         _cache_deployment_rosters = {}
         _cache_updated_mono = time.monotonic()
         return _cache_ids
@@ -708,6 +774,7 @@ def refresh_federate_peer_bot_ids_sync() -> frozenset[int]:
     peer_ingress_capabilities: dict[str, frozenset[str] | None] = {}
     peer_ingress_protocols: dict[str, int | None] = {}
     peer_present: dict[str, frozenset[int] | None] = {}
+    peer_group_admin: dict[str, dict[int, frozenset[int]] | None] = {}
     peer_rosters: dict[str, FederatePeerBotRoster] = {}
     pattern = f"{prefix}:{_PEER_KEY_SEGMENT}:*"
     try:
@@ -734,6 +801,7 @@ def refresh_federate_peer_bot_ids_sync() -> frozenset[int]:
                 peer_ingress_capabilities[payload_deployment_id] = _parse_ingress_capabilities(data)
                 peer_ingress_protocols[payload_deployment_id] = _parse_ingress_protocol(data)
                 peer_present[payload_deployment_id] = _parse_present_group_ids(data)
+                peer_group_admin[payload_deployment_id] = _parse_group_admin_bot_ids(data)
                 bot_ids = _parse_bot_ids(data, "bot_ids") or frozenset()
                 online_bot_ids = _parse_bot_ids(data, "online_bot_ids", missing_is_none=True)
                 public_bot_ids = _parse_bot_ids(data, "public_bot_ids") or frozenset()
@@ -757,6 +825,7 @@ def refresh_federate_peer_bot_ids_sync() -> frozenset[int]:
     _cache_deployment_ingress_capabilities = peer_ingress_capabilities
     _cache_deployment_ingress_protocols = peer_ingress_protocols
     _cache_deployment_present_groups = peer_present
+    _cache_deployment_group_admin_bot_ids = peer_group_admin
     _cache_deployment_rosters = peer_rosters
     _cache_updated_mono = time.monotonic()
     return _cache_ids
@@ -880,6 +949,19 @@ def federate_group_owner_ring_index(
     epoch = int(time.time() if now is None else now) // period
     digest = hashlib.blake2b(f"{int(group_id)}:{epoch}".encode(), digest_size=8).digest()
     return int.from_bytes(digest, "big") % ring_size
+
+
+def stable_group_owner_ring_index(group_id: int, ring_size: int) -> int:
+    if ring_size <= 0:
+        return 0
+    digest = hashlib.blake2b(str(int(group_id)).encode(), digest_size=8).digest()
+    return int.from_bytes(digest, "big") % ring_size
+
+
+@dataclass(frozen=True)
+class GroupAdminOwner:
+    deployment_id: str
+    bot_id: int
 
 
 def _capable_owner_ring(
@@ -1045,6 +1127,33 @@ def federate_group_owner_deployment(
         return deployment_id
     idx = federate_group_owner_ring_index(int(group_id), len(ring), now=now)
     return ring[idx]
+
+
+def federate_group_admin_owner(
+    group_id: int,
+    *,
+    plain: str | None = None,
+) -> GroupAdminOwner | None:
+    deployment_id = load_or_create_deployment_id().strip().lower()
+    if not deployment_id:
+        return None
+    active = sorted({deployment_id, *_cache_deployment_ids})
+    local_caps = collect_local_federate_command_capabilities()
+    capable = _capable_owner_ring(active, mine=deployment_id, plain=plain, local_caps=local_caps)
+    capable = _permission_owner_ring(capable, mine=deployment_id, plain=plain)
+    ring = _present_owner_ring(capable, group_id=int(group_id), mine=deployment_id)
+    observed = group_admin_bot_ids_by_deployment(int(group_id), ring)
+    if any(bot_ids is None for bot_ids in observed.values()):
+        return None
+    eligible_deployments = sorted(dep for dep, bot_ids in observed.items() if bot_ids)
+    if not eligible_deployments:
+        return None
+    owner_deployment = eligible_deployments[stable_group_owner_ring_index(int(group_id), len(eligible_deployments))]
+    bot_ids = sorted(observed[owner_deployment] or ())
+    return GroupAdminOwner(
+        deployment_id=owner_deployment,
+        bot_id=bot_ids[stable_group_owner_ring_index(int(group_id), len(bot_ids))],
+    )
 
 
 def should_process_federate_group_on_current_deployment(

@@ -103,12 +103,13 @@ def recent_local_group_bot_ids(group_id: int) -> list[int]:
     return sorted(observed)
 
 
-async def resolve_local_connected_bots_in_group(group_id: int) -> list[int]:
+async def resolve_local_connected_bots_in_group(group_id: int, *, force_probe: bool = False) -> list[int]:
     """本进程已连接且能查到该群成员资料的牛牛 QQ。"""
     gid = int(group_id)
-    observed = recent_local_group_bot_ids(gid)
-    if observed:
-        return observed
+    if not force_probe:
+        observed = recent_local_group_bot_ids(gid)
+        if observed:
+            return observed
     cached = get_cached_group_bot_ids(gid, namespace=NS_LOCAL_CONNECTED)
     if cached is not None:
         return cached
