@@ -114,13 +114,19 @@ def load_base_system_prompt(*, custom_path: str | None = None) -> str:
     path = resolve_base_system_prompt_path(custom_path)
     with _base_lock:
         if not path.is_file():
-            return ""
-        mtime = path.stat().st_mtime
-        if path != _base_cached_path or mtime != _base_cached_mtime:
-            _base_cached_text = path.read_text(encoding="utf-8").strip()
-            _base_cached_path = path
-            _base_cached_mtime = mtime
-        return _base_cached_text
+            baseline = ""
+        else:
+            mtime = path.stat().st_mtime
+            if path != _base_cached_path or mtime != _base_cached_mtime:
+                _base_cached_text = path.read_text(encoding="utf-8").strip()
+                _base_cached_path = path
+                _base_cached_mtime = mtime
+            baseline = _base_cached_text
+    if path == resolve_at_chat_system_prompt_path():
+        return baseline
+    from .base_prompt_override import resolve_base_prompt
+
+    return resolve_base_prompt(builtin_text=baseline)
 
 
 def load_at_chat_system_prompt() -> str:
