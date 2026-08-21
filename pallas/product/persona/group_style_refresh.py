@@ -90,6 +90,11 @@ async def refresh_group_style_profile(
     gid = int(group_id)
     now_ts = int(time.time())
 
+    from pallas.product.persona import style_governance
+
+    if not style_governance.group_style_collection_enabled(group_id=gid):
+        return False
+
     repo = make_group_config_repository()
     cfg = await repo.get(gid)
     prev_profile = getattr(cfg, "style_profile", None) if cfg is not None else None

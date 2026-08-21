@@ -150,10 +150,13 @@ async def resolve_persona(bot_id: int, group_id: int | None = None) -> ResolvedP
         )
 
     if gid is not None and group_style_enabled:
-        repo = make_group_config_repository()
-        group_config = await repo.get(gid)
-        style_profile = getattr(group_config, "style_profile", None) if group_config is not None else None
-        resolved = _apply_group_style_profile(resolved, style_profile)
+        from pallas.product.persona import style_governance
+
+        if style_governance.group_style_injection_enabled(bot_id=bid, group_id=gid):
+            repo = make_group_config_repository()
+            group_config = await repo.get(gid)
+            style_profile = getattr(group_config, "style_profile", None) if group_config is not None else None
+            resolved = _apply_group_style_profile(resolved, style_profile)
 
     payload = resolved.model_dump()
     payload["account_profile"] = resolve_account_persona_profile(

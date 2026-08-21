@@ -82,6 +82,16 @@ def group_style_status(*, bot_id: int, group_id: int) -> dict[str, bool]:
     }
 
 
+def group_style_collection_enabled(*, group_id: int) -> bool:
+    """该群当前是否允许采集群风格（缺失时默认启用）。"""
+    return _group_collection_enabled(_load_state(), group_id)
+
+
+def group_style_injection_enabled(*, bot_id: int, group_id: int) -> bool:
+    """该 Bot+群当前是否注入群风格画像（缺失时默认启用）。"""
+    return _bot_injection_enabled(_load_state(), bot_id, group_id)
+
+
 async def set_group_style_collection(*, group_id: int, enabled: bool) -> dict[str, bool]:
     """按群开关采集；返回中的 injection_enabled 为群级回退值，非逐 Bot 生效值。"""
     enabled = bool(enabled)
@@ -107,6 +117,7 @@ async def set_group_style_injection(*, bot_id: int, group_id: int, enabled: bool
         bots[str(group_id)] = {"injection_enabled": enabled}
         _save_state(state)
     logger.info("Group style injection for bot [{}] in group [{}] set to [{}]", bot_id, group_id, enabled)
+    invalidate_persona_cache(bot_id=bot_id)
     return {
         "collection_enabled": _group_collection_enabled(state, group_id),
         "injection_enabled": enabled,

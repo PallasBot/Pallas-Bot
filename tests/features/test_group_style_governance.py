@@ -77,6 +77,14 @@ async def test_set_group_style_injection_is_bot_and_group_scoped(governance_env)
 
 
 @pytest.mark.asyncio
+async def test_set_group_style_injection_invalidates_bot_persona_cache(governance_env) -> None:
+    _governance, _repo, invalidated = governance_env
+    await governance.set_group_style_injection(bot_id=1, group_id=2, enabled=False)
+    await governance.set_group_style_injection(bot_id=9, group_id=2, enabled=True)
+    assert invalidated == [1, 9]
+
+
+@pytest.mark.asyncio
 async def test_clear_group_style_with_continue_learning_re_enables_collection(governance_env) -> None:
     _governance, repo, _invalidated = governance_env
     await governance.set_group_style_collection(group_id=2, enabled=False)
