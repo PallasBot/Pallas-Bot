@@ -99,6 +99,7 @@ uv run ruff format --check pallas/ packages/
 - 与维护者/PR 描述可用 **中文**；**代码标识符、配置键名、路径、命令** 保持仓库既有习惯（多为英文键名，勿强行翻译）。
 - 修改 **配置、文档、CI/自动化** 时，可补充**简短注释**说明用途即可，不必在注释里长篇解释动机（动机放在 PR/对话里）。
 - **架构/能力变更必须同步架构文档**：新增或变更模块职责、数据流、记忆/记忆检索、工具、消息链路等结构性质变时，同步更新 `docs/developer/architecture/` 下对应文档（`agent-lifecycle.md`、`llm-output-path.md`、`message-runtime.md`、`config-storage.md` 等），并保持公开文档站（Pallas-Bot-Docs 的 `src/developer/architecture/`）一致。仅配置值/文案微调不在此列。
+- **文档站同步机制（勿手动改 Docs 仓正文）**：公开文档站由 CI 自动同步——提交主仓 `docs/**` 或 `tools/scripts/sync_docs_to_web.py` 到 `main`/`docs` 分支即触发 `sync-docs-to-web` 工作流（`.github/workflows/sync-docs-to-web.yml`），自动 commit+push 到 `PallasBot/Pallas-Bot-Docs` 的 `src/`。**无需/不应**手动在 Docs 仓 `src/` 提交正文。例外：新增文档需要出现在公开站**导航/侧栏**时，需在 Docs 仓 `src/.vitepress/config/zh.ts` 手动加条目（sync 脚本只把正文 `.md` 相对链接改写为 GitHub/站内路径，不处理导航）。
 - **面向用户的用语**（帮助、控制台、插件文案）：
 
   | 概念 | 用 | 不用 |
