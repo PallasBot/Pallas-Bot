@@ -291,7 +291,7 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                     user_id=event.user_id,
                     message=str(event.get_message()),
                 )
-                log.bind(display_name="Message").success(nb_message.escape_tag(compact_log))
+                log.bind(display_name="Message").info(nb_message.escape_tag(compact_log))
             else:
                 log.success(nb_message.escape_tag(f" Bot {bot.self_id} | {event_log}"))
         elif inbound_event_log_as_debug(event_type):

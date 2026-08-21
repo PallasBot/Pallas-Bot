@@ -306,6 +306,68 @@ async def test_patched_handle_event_discards_pre_scheduler_federate_loser(monkey
 
 
 @pytest.mark.asyncio
+async def test_patched_handle_event_logs_group_message_at_info(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.platform.message_runtime.models import HandlingOutcome
+
+    class FakeGroupMessageEvent:
+        group_id = 100
+        user_id = 200
+        message_id = 300
+        raw_message = "测试命令"
+
+        def get_log_string(self) -> str:
+            return "fake group message"
+
+        def get_message(self) -> str:
+            return self.raw_message
+
+        def get_type(self) -> str:
+            return "message"
+
+    class FakeLog:
+        def __init__(self) -> None:
+            self.levels: list[str] = []
+
+        def opt(self, **_kwargs):
+            return self
+
+        def bind(self, **_kwargs):
+            return self
+
+        def debug(self, *_args) -> None:
+            pass
+
+        def info(self, *_args) -> None:
+            self.levels.append("info")
+
+        def success(self, *_args) -> None:
+            self.levels.append("success")
+
+    bot = MagicMock(type="OneBot V11", self_id="10001")
+    event = FakeGroupMessageEvent()
+    log = FakeLog()
+    runtime = MagicMock()
+    runtime.execute_and_commit = AsyncMock(return_value=HandlingOutcome(handled=True))
+
+    monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
+    monkeypatch.setattr(dispatch.nb_message, "logger", log)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", AsyncMock(return_value=True))
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_postprocessors", AsyncMock())
+    monkeypatch.setattr(dispatch.nb_message.TrieRule, "get_value", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dispatch, "mark_activity", lambda: None)
+    monkeypatch.setattr(dispatch, "resolve_route_for_event", lambda _event: None)
+    monkeypatch.setattr(dispatch, "event_command_traffic", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(dispatch, "direct_runtime_for_group", lambda _group_id: runtime)
+    monkeypatch.setattr(dispatch, "message_runtime_context", lambda *_args, **_kwargs: MagicMock())
+    monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatch, "record_route_candidate_safe", lambda **_kwargs: None)
+
+    await dispatch.patched_handle_event_now(bot, event)
+
+    assert log.levels == ["info"]
+
+
+@pytest.mark.asyncio
 async def test_patched_handle_event_drops_chat_when_overloaded(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeGroupMessageEvent:
         group_id = 100
