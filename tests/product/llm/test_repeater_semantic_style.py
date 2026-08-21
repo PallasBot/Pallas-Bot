@@ -437,6 +437,8 @@ def test_parse_label_accepts_only_annotation_axes() -> None:
         "intensity",
         "forms",
         "visual",
+        "is_reply_pair",
+        "transferable",
     }
 
 
@@ -1281,7 +1283,7 @@ async def test_delivery_receipt_feedback_reply_promotes_exact_semantic_source(tm
 @pytest.mark.asyncio
 async def test_semantic_style_worker_labels_and_persists_relation(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
-    label = parse_semantic_style_label({"reuse": "rewrite", "style_anchor": "短句接梗。"})
+    label = parse_semantic_style_label({"is_reply_pair": True, "transferable": True})
     worker = AsyncMock(return_value=(label, None))
     monkeypatch.setattr("pallas.product.llm.repeater_semantic_style.label_semantic_style_with_llm", worker)
     from pallas.product.llm.repeater_semantic_style import handle_repeater_semantic_style
@@ -1296,11 +1298,40 @@ async def test_semantic_style_worker_labels_and_persists_relation(tmp_path, monk
         "source_kind": "human_pair",
         "trigger_user_id": 11,
         "reply_user_id": 12,
+        "pair_relation": "quoted",
         "realtime_admitted": True,
     })
 
-    worker.assert_awaited_once_with(trigger_text="又炸了", reply_text="没救了")
+    worker.assert_awaited_once_with(trigger_text="又炸了", reply_text="没救了", pair_relation="quoted")
     assert "没救了" in build_cached_semantic_style_block(99, 42, "group_chat")
+
+
+@pytest.mark.asyncio
+async def test_semantic_style_worker_drops_adjacent_pair_without_transferable_reply(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    worker = AsyncMock(return_value=(mod.SemanticStyleLabel(is_reply_pair=False, transferable=False), None))
+    persist = Mock()
+    monkeypatch.setattr(mod, "label_semantic_style_with_llm", worker)
+    monkeypatch.setattr(mod, "persist_semantic_style_example", persist)
+
+    await mod.handle_repeater_semantic_style({
+        "example_id": "42:100:99",
+        "bot_id": 99,
+        "group_id": 42,
+        "scene": "group_chat",
+        "trigger_text": "ai开智了",
+        "reply_text": "是三个不一样的牛牛",
+        "source_kind": "human_pair",
+        "trigger_user_id": 11,
+        "reply_user_id": 12,
+        "pair_relation": "adjacent",
+        "realtime_admitted": True,
+    })
+
+    worker.assert_awaited_once_with(trigger_text="ai开智了", reply_text="是三个不一样的牛牛", pair_relation="adjacent")
+    persist.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -1409,7 +1440,7 @@ async def test_realtime_image_relation_uses_cached_image_and_never_persists_byte
 ) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
-    text_label = parse_semantic_style_label({"reuse": "style"})
+    text_label = parse_semantic_style_label({"is_reply_pair": True, "transferable": True})
     visual_label = mod.parse_semantic_style_visual_label({
         "subject": "character",
         "action": "reaction",

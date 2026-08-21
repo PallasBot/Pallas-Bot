@@ -130,6 +130,8 @@ class SemanticStyleLabel(BaseModel):
     intensity: Literal["quiet", "soft", "neutral", "sharp", "strong"] = "neutral"
     forms: list[str] = Field(default_factory=list)
     visual: SemanticStyleVisualLabel | None = None
+    is_reply_pair: bool = False
+    transferable: bool = False
 
 
 class BehaviorStrategy(BaseModel):
@@ -159,6 +161,7 @@ class SemanticStyleExample(BaseModel):
     source_kind: Literal["human_pair", "legacy_unknown"] = "legacy_unknown"
     trigger_user_id: int = 0
     reply_user_id: int = 0
+    pair_relation: Literal["quoted", "adjacent"] = "adjacent"
     bot_style_positive: bool = False
     annotation_source: Literal["llm_v2", "legacy_persisted_v1"] = "llm_v2"
     legacy_reuse: Literal["direct", "rewrite", "style", ""] = ""
@@ -640,6 +643,8 @@ def parse_semantic_style_label(value: object) -> SemanticStyleLabel:
         intensity=intensity if intensity in _INTENSITY_VALUES else "neutral",
         forms=_items(raw.get("forms"), FORM_VOCABULARY),
         visual=parse_semantic_style_visual_label(raw.get("visual")) if isinstance(raw.get("visual"), dict) else None,
+        is_reply_pair=raw.get("is_reply_pair") is True,
+        transferable=raw.get("transferable") is True,
     )
 
 
@@ -1620,18 +1625,22 @@ def _parse_label_response(content: str) -> tuple[SemanticStyleLabel, BehaviorStr
 
 
 async def label_semantic_style_with_llm(
-    *, trigger_text: str, reply_text: str
+    *, trigger_text: str, reply_text: str, pair_relation: Literal["quoted", "adjacent"] = "adjacent"
 ) -> tuple[SemanticStyleLabel, BehaviorStrategy | None]:
     from pallas.product.llm.config import get_llm_config
     from pallas.product.llm.provider_client import complete_chat_message
 
     cfg = get_llm_config()
     prompt = (
-        "分析真实群聊的「前句→接话」，只输出严格 JSON：interaction_actions、semantic_relations、"
-        "intensity、forms、behavior_strategy。intensity 只能 quiet/soft/neutral/sharp/strong；"
+        "分析真实群聊的候选「前句→接话」，只输出严格 JSON：is_reply_pair、transferable、"
+        "interaction_actions、semantic_relations、intensity、forms、behavior_strategy。"
+        "is_reply_pair 仅当前句确实在回应前句时为 true；transferable 仅接话脱离当时人名、"
+        "多人局部梗或临时事实后仍可作为通用措辞参考时为 true。任一不成立都填 false。"
+        "intensity 只能 quiet/soft/neutral/sharp/strong；"
         "数组字段用受控英文词。behavior_strategy 为 null 或 "
         '{"scene":"可泛化场景","action":"实际接话动作","outcome":"可观察变化",'
         '"learning_type":"observed"}。不抄原话，不带人名/临时梗，不做价值判断。\n'
+        f"关联：{'明确引用前句' if pair_relation == 'quoted' else '仅时间相邻'}\n"
         f"前句：{_short_text(trigger_text, 96)}\n接话：{_short_text(reply_text, 96)}"
     )
     response = await complete_chat_message(
@@ -1715,11 +1724,15 @@ async def maybe_label_semantic_style_visual(payload: dict[str, Any]) -> Semantic
 
 
 async def label_semantic_style_with_retry(
-    *, trigger_text: str, reply_text: str
+    *, trigger_text: str, reply_text: str, pair_relation: Literal["quoted", "adjacent"] = "adjacent"
 ) -> tuple[SemanticStyleLabel, BehaviorStrategy | None] | None:
     for retry_index in range(SEMANTIC_STYLE_LABEL_MAX_RETRIES + 1):
         try:
-            return await label_semantic_style_with_llm(trigger_text=trigger_text, reply_text=reply_text)
+            return await label_semantic_style_with_llm(
+                trigger_text=trigger_text,
+                reply_text=reply_text,
+                pair_relation=pair_relation,
+            )
         except Exception as exc:
             if retry_index >= SEMANTIC_STYLE_LABEL_MAX_RETRIES:
                 logger.warning("repeater semantic style label dropped after retries: {}", exc)
@@ -1749,7 +1762,14 @@ async def handle_repeater_semantic_style(payload: dict[str, Any]) -> None:
         example_id=str(payload.get("example_id") or f"{group_id}:{payload.get('message_id')}:{bot_id}"),
     ):
         return
-    label, behavior_strategy = await label_semantic_style_with_llm(trigger_text=trigger, reply_text=reply)
+    pair_relation = "quoted" if payload.get("pair_relation") == "quoted" else "adjacent"
+    label, behavior_strategy = await label_semantic_style_with_llm(
+        trigger_text=trigger,
+        reply_text=reply,
+        pair_relation=pair_relation,
+    )
+    if not label.is_reply_pair or not label.transferable:
+        return
     visual = await maybe_label_semantic_style_visual(payload)
     if visual is not None:
         label = label.model_copy(update={"visual": visual})
@@ -1765,6 +1785,7 @@ async def handle_repeater_semantic_style(payload: dict[str, Any]) -> None:
         source_kind="human_pair",
         trigger_user_id=int(payload["trigger_user_id"]),
         reply_user_id=int(payload["reply_user_id"]),
+        pair_relation=pair_relation,
         behavior_strategy=behavior_strategy,
     )
     persist_semantic_style_example(example)

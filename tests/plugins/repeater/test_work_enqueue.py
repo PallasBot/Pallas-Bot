@@ -226,8 +226,15 @@ def test_build_semantic_style_job_records_only_human_pair(monkeypatch: pytest.Mo
     from packages.repeater import learn_queue
 
     payload = {
-        "chat": {"group_id": 42, "user_id": 12, "bot_id": 100, "plain_text": "接话", "time": 20},
-        "predecessor": {"user_id": 11, "plain_text": "前句"},
+        "chat": {
+            "group_id": 42,
+            "user_id": 12,
+            "bot_id": 100,
+            "plain_text": "接话",
+            "time": 20,
+            "reply_to_message_id": 98,
+        },
+        "predecessor": {"user_id": 11, "plain_text": "前句", "message_id": 98},
     }
     event = SimpleNamespace(message_id=99)
     monkeypatch.setattr(
@@ -241,6 +248,7 @@ def test_build_semantic_style_job_records_only_human_pair(monkeypatch: pytest.Mo
     assert job.payload["source_kind"] == "human_pair"
     assert job.payload["trigger_user_id"] == 11
     assert job.payload["reply_user_id"] == 12
+    assert job.payload["pair_relation"] == "quoted"
 
     payload["chat"]["user_id"] = 100
     assert learn_queue.build_semantic_style_job(payload, event) is None

@@ -301,6 +301,9 @@ def build_semantic_style_job(payload: dict[str, object], event: GroupMessageEven
         return None
     if not semantic_style_collection_enabled(bot_id=bot_id, group_id=group_id):
         return None
+    predecessor_message_id = int(predecessor.get("message_id") or 0)
+    reply_to_message_id = int(chat.get("reply_to_message_id") or 0)
+    pair_relation = "quoted" if predecessor_message_id and reply_to_message_id == predecessor_message_id else "adjacent"
     example_id = f"{group_id}:{int(event.message_id)}:{bot_id}"
     if not claim_semantic_style_realtime_admission(bot_id=bot_id, group_id=group_id, example_id=example_id):
         return None
@@ -318,6 +321,7 @@ def build_semantic_style_job(payload: dict[str, object], event: GroupMessageEven
             "source_kind": "human_pair",
             "trigger_user_id": trigger_user_id,
             "reply_user_id": reply_user_id,
+            "pair_relation": pair_relation,
             "realtime_admitted": True,
         },
         idempotency_key=f"repeater.semantic_style:{group_id}:{int(event.message_id)}:{bot_id}",
