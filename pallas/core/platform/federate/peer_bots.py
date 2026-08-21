@@ -182,6 +182,9 @@ def collect_local_federate_command_capabilities() -> frozenset[str]:
             text = str(item).strip()
             if text:
                 caps.add(text)
+    from pallas.core.platform.ingress.matcher_command_words import collect_command_words_from_matchers
+
+    caps.update(collect_command_words_from_matchers())
     result = frozenset(caps)
     _local_command_capabilities_cache = result
     return result

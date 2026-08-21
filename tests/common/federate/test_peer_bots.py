@@ -60,25 +60,27 @@ def test_peer_roster_publishes_and_reads_deployment_status(monkeypatch):
         "collect_local_federate_public_online_bot_names",
         lambda _online_ids, _public_bot_ids: {10001: "本机一号"},
     )
+    monkeypatch.setattr(
+        mod,
+        "collect_local_federate_command_capabilities",
+        lambda: frozenset({"牛牛塔罗牌", "牛牛帮助"}),
+    )
 
     assert mod.publish_local_federate_peer_bot_ids_sync(public_bot_ids=frozenset({10001})) is True
     _, payload = client.set.call_args.args[:2]
     published = json.loads(payload)
-    assert published == {
-        "deployment_id": "dep-local",
-        "deployment_name": "部署 A",
-        "bot_ids": [10001],
-        "online_bot_ids": [10001],
-        "public_bot_ids": [10001],
-        "public_online_bot_names": {"10001": "本机一号"},
-        "updated_at": published["updated_at"],
-        "present_group_ids": [],
-        "command_capability_protocol": mod.COMMAND_CAPABILITY_PROTOCOL_VERSION,
-        "ingress_protocol": mod.INGRESS_PROTOCOL_VERSION,
-        "ingress_capabilities": ["command", "hosted_activity", "llm_alias"],
-        "command_permission_levels": published["command_permission_levels"],
-    }
+    assert published["deployment_id"] == "dep-local"
+    assert published["deployment_name"] == "部署 A"
+    assert published["bot_ids"] == [10001]
+    assert published["online_bot_ids"] == [10001]
+    assert published["public_bot_ids"] == [10001]
+    assert published["public_online_bot_names"] == {"10001": "本机一号"}
+    assert published["present_group_ids"] == []
+    assert published["command_capability_protocol"] == mod.COMMAND_CAPABILITY_PROTOCOL_VERSION
+    assert published["ingress_protocol"] == mod.INGRESS_PROTOCOL_VERSION
+    assert published["ingress_capabilities"] == ["command", "hosted_activity", "llm_alias"]
     assert isinstance(published["command_permission_levels"], dict)
+    assert published["command_capabilities"] == ["牛牛塔罗牌", "牛牛帮助"]
 
     mod.refresh_federate_peer_bot_ids_sync()
     peer = mod.get_federate_peer_bot_roster("dep-b")

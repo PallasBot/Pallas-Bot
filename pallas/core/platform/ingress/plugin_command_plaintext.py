@@ -72,28 +72,51 @@ def extract_command_prefixes_from_menu_data(
     return tuple(prefixes)
 
 
+def _collect_matcher_command_words() -> list[str]:
+    """从已加载 matcher 的命令字/别名补全前缀集（如 on_command aliases、on_alconna shortcuts）。"""
+    from pallas.core.platform.ingress.matcher_command_words import collect_command_words_from_matchers
+
+    words: list[str] = []
+    for word in collect_command_words_from_matchers():
+        if word and word not in words:
+            words.append(word)
+    return words
+
+
+def _append_plugin_extra_prefixes(
+    prefixes: list[str],
+    extra: dict[str, Any],
+    *,
+    scene: Literal["all", "group"] = "all",
+) -> None:
+    explicit = extra.get("command_prefixes")
+    if isinstance(explicit, (list, tuple)):
+        for prefix in explicit:
+            item = str(prefix or "").strip()
+            if item and item not in prefixes:
+                prefixes.append(item)
+    menu_data = extra.get("menu_data")
+    for prefix in extract_command_prefixes_from_menu_data(
+        menu_data if isinstance(menu_data, list) else None,
+        scene=scene,
+    ):
+        if prefix not in prefixes:
+            prefixes.append(prefix)
+
+
 def _loaded_plugin_command_prefixes() -> tuple[str, ...]:
     global _PLUGIN_PREFIX_CACHE_VALUE
     if _PLUGIN_PREFIX_CACHE_VALUE is not None:
         return _PLUGIN_PREFIX_CACHE_VALUE
 
-    plugins = tuple(get_loaded_plugins())
     prefixes: list[str] = []
-    for plugin in plugins:
+    for plugin in get_loaded_plugins():
         meta = getattr(plugin, "metadata", None)
         extra = getattr(meta, "extra", None) if meta is not None else None
         if not isinstance(extra, dict):
             continue
-        explicit = extra.get("command_prefixes")
-        if isinstance(explicit, (list, tuple)):
-            for prefix in explicit:
-                item = str(prefix or "").strip()
-                if item and item not in prefixes:
-                    prefixes.append(item)
-        menu_data = extra.get("menu_data")
-        for prefix in extract_command_prefixes_from_menu_data(menu_data if isinstance(menu_data, list) else None):
-            if prefix not in prefixes:
-                prefixes.append(prefix)
+        _append_plugin_extra_prefixes(prefixes, extra, scene="all")
+    prefixes.extend(_collect_matcher_command_words())
     _PLUGIN_PREFIX_CACHE_VALUE = tuple(prefixes)
     return _PLUGIN_PREFIX_CACHE_VALUE
 
@@ -109,19 +132,8 @@ def _loaded_group_plugin_command_prefixes() -> tuple[str, ...]:
         extra = getattr(meta, "extra", None) if meta is not None else None
         if not isinstance(extra, dict):
             continue
-        explicit = extra.get("command_prefixes")
-        if isinstance(explicit, (list, tuple)):
-            for prefix in explicit:
-                item = str(prefix or "").strip()
-                if item and item not in prefixes:
-                    prefixes.append(item)
-        menu_data = extra.get("menu_data")
-        for prefix in extract_command_prefixes_from_menu_data(
-            menu_data if isinstance(menu_data, list) else None,
-            scene="group",
-        ):
-            if prefix not in prefixes:
-                prefixes.append(prefix)
+        _append_plugin_extra_prefixes(prefixes, extra, scene="group")
+    prefixes.extend(_collect_matcher_command_words())
     _GROUP_PLUGIN_PREFIX_CACHE_VALUE = tuple(prefixes)
     return _GROUP_PLUGIN_PREFIX_CACHE_VALUE
 
