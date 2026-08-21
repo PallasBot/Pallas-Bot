@@ -12,6 +12,7 @@ from nonebot.log import logger
 from nonebot.matcher import matchers
 
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value
+from pallas.core.foundation.logging import command_traffic_ctx
 from pallas.core.foundation.logging.throttle import log_rate_limited
 from pallas.core.platform.ingress.cold_start import in_cold_start_window, stale_message_drop_needed
 from pallas.core.platform.ingress.conversation_scheduler import (
@@ -303,6 +304,7 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
     llm_command = synthetic_llm_command_context(event)
     selected_matcher_modules: list[str] = []
     acquired_matcher_modules: list[str] = []
+    traffic_token: Any = None
 
     try:
         async with nb_message.AsyncExitStack() as stack:
@@ -323,6 +325,9 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
             apply_dispatch = isinstance(event, GroupMessageEvent)
             resolution = resolve_route_for_event(event) if apply_dispatch else None
             command_traffic = event_command_traffic(event, state, resolution=resolution) if apply_dispatch else True
+            traffic_token = command_traffic_ctx.set(
+                bool(apply_dispatch and command_traffic)
+            )
             dispatch_duration_ms = None
             if apply_dispatch:
                 direct_matcher_exclude_modules = frozenset()
@@ -495,12 +500,13 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                     )
                 if matchers_run and isinstance(event, GroupMessageEvent):
                     plain = event.get_plaintext()[:80]
+                    deduped = sorted(set(acquired_matcher_modules))
                     log_rate_limited(
                         logger,
                         "info",
                         "ingress:matcher_run",
                         "Matcher run [{}] executed in group [{}], command traffic [{}], {} matcher(s), message [{}]",
-                        ", ".join(selected_matcher_modules) or "-",
+                        ", ".join(deduped) or "-",
                         getattr(event, "group_id", "-"),
                         "on" if command_traffic else "off",
                         matchers_run,
@@ -511,6 +517,8 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                 if chat_degraded_token is not None:
                     reset_chat_degraded(chat_degraded_token)
     finally:
+        if traffic_token is not None:
+            command_traffic_ctx.reset(traffic_token)
         clear_event_dispatch_text_cache()
 
 

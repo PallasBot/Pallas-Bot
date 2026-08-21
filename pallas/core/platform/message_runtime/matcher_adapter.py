@@ -74,8 +74,7 @@ class MatcherAdapter:
             if result.acquired:
                 matchers_run += 1
                 any_matcher_executed = True
-                if llm_command is not None:
-                    acquired_matcher_modules.append(str(getattr(matcher, "plugin_name", "") or "<unknown>"))
+                acquired_matcher_modules.append(str(getattr(matcher, "plugin_name", "") or "<unknown>"))
 
         def handle_stop_propagation(_exc_group) -> None:
             nonlocal break_flag

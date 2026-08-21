@@ -2,6 +2,7 @@
 
 from .bridge import (
     apply_stdlib_logging_channel_prefix,
+    command_traffic_ctx,
     configure_quiet_library_loggers,
     format_repo_console_log,
     format_repo_file_log,
@@ -17,6 +18,7 @@ from .throttle import log_rate_limited
 
 __all__ = [
     "apply_stdlib_logging_channel_prefix",
+    "command_traffic_ctx",
     "compact_group_message_log",
     "compact_inbound_event_log",
     "configure_quiet_library_loggers",

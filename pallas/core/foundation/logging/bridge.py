@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 import sys
+from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
 from nonebot.log import LoguruHandler
@@ -509,13 +510,20 @@ _PLUGIN_LOAD_SUCCESS_RE = re.compile(r"Succeeded to load plugin", re.IGNORECASE)
 _COLOR_TAG_RE = re.compile(r"</?[a-zA-Z#][^>]*>")
 
 
-def is_matcher_lifecycle_noise(plain: str) -> bool:
-    """NoneBot Matcher 生命周期 INFO：每事件数行，生产 INFO 下应降为 DEBUG。"""
+command_traffic_ctx: ContextVar[bool] = ContextVar("pallas_command_traffic", default=False)
+
+
+def is_matcher_lifecycle_noise(plain: str, *, command_traffic: bool = False) -> bool:
+    """NoneBot Matcher 生命周期 INFO：非命令态每事件数行，生产 INFO 下应降为 DEBUG。
+
+    命令态（``command_traffic_ctx`` 由 ingress 在命令分发时置位）下放行
+    ``Event will be handled by`` 一行，便于用户确认命令已进入执行。
+    """
     text = (plain or "").strip()
     if not text:
         return False
     if text.startswith("Event will be handled by "):
-        return True
+        return not command_traffic
     if text.endswith(" running complete") or " running is cancelled" in text:
         return True
     # 「Event foo.bar is ignored」；勿匹配 Error … Event ignored!
@@ -544,7 +552,9 @@ def install_startup_log_noise_patcher() -> None:
         _log_patcher(record)
         message = str(record.get("message", ""))
         plain = _COLOR_TAG_RE.sub("", message)
-        if _PLUGIN_LOAD_SUCCESS_RE.search(plain) or is_matcher_lifecycle_noise(plain):
+        if _PLUGIN_LOAD_SUCCESS_RE.search(plain) or is_matcher_lifecycle_noise(
+            plain, command_traffic=command_traffic_ctx.get()
+        ):
             record["level"].name = "DEBUG"
             record["level"].no = debug_no
 
