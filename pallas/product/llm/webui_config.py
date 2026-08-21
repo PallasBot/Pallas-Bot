@@ -747,25 +747,6 @@ class LlmWebuiConfig(BaseModel):
             "不影响主路径快慢；分数是启发式，不是精确质量分",
         ),
     )
-    llm_reply_style_variants: dict[str, object] = Field(
-        default_factory=lambda: {
-            "version": 1,
-            "enabled": True,
-            "base_probability": 0.25,
-            "affect_styles": {
-                "warm": ["playful", "follow"],
-                "cool": ["cool", "direct"],
-                "chaotic": ["playful", "rhetorical"],
-                "assertive": ["direct", "rhetorical"],
-                "default": ["cool", "playful", "direct", "rhetorical", "follow"],
-            },
-        },
-        description=field_help(
-            "按当前情绪，临时换一种口气说话（不影响长期人设/牛格）",
-            "用表单开关即可：开=按概率抽一个口气；关=不用变体。默认约 25% 触发。可选口气在表单里点选",
-            "只影响当轮提示，不写入静态人设。没有情感数据时走 default 那组口气",
-        ),
-    )
     llm_memory_rag_enabled: bool = Field(
         default=True,
         description=field_help(
@@ -1207,7 +1188,6 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_sticker_label_backfill_daily_limit=cfg.llm_sticker_label_backfill_daily_limit,
         llm_sticker_label_realtime_daily_limit=cfg.llm_sticker_label_realtime_daily_limit,
         llm_reply_effect_eval_enabled=cfg.llm_reply_effect_eval_enabled,
-        llm_reply_style_variants=cfg.llm_reply_style_variants,
         llm_memory_rag_enabled=cfg.llm_memory_rag_enabled,
         llm_expression_inject_enabled=cfg.llm_expression_inject_enabled,
         llm_expression_learn_enabled=cfg.llm_expression_learn_enabled,

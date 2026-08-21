@@ -325,7 +325,6 @@ def _llm_section() -> WebuiEnvSection:
             "llm_sticker_vision_max_per_hour": "LLM_STICKER_VISION_MAX_PER_HOUR",
             "llm_sticker_label_realtime_daily_limit": "LLM_STICKER_LABEL_REALTIME_DAILY_LIMIT",
             "llm_reply_effect_eval_enabled": "LLM_REPLY_EFFECT_EVAL_ENABLED",
-            "llm_reply_style_variants": "LLM_REPLY_STYLE_VARIANTS",
             "llm_memory_rag_enabled": "LLM_MEMORY_RAG_ENABLED",
             "llm_expression_inject_enabled": "LLM_EXPRESSION_INJECT_ENABLED",
             "llm_expression_learn_enabled": "LLM_EXPRESSION_LEARN_ENABLED",

@@ -1,21 +1,17 @@
-"""本轮行为/措辞分层、同句重回与概率换风格。"""
+"""本轮行为/措辞分层与同句重回。"""
 
 from __future__ import annotations
 
-import random
 from types import SimpleNamespace
 
 from pallas.product.llm.models import ChatCompletionMessage
 from pallas.product.llm.turn_style_layers import (
-    ReplyStyleVariantPolicy,
-    build_probabilistic_alt_style_hint,
     build_same_utterance_redup_hint,
     build_turn_behavior_block,
     build_turn_wording_user_hints,
     find_previous_reply_for_utterance,
     merge_style_hints_before_last_user,
     normalize_utterance_key,
-    select_reply_style_variant,
 )
 from pallas.product.persona.catchphrase_bank import (
     compile_catchphrase_prompt_lines,
@@ -52,38 +48,6 @@ def test_same_utterance_redup_hint() -> None:
     assert "同句重回" in hint
     assert "漂亮牛说想咬我" in hint
     assert "换说法" in hint
-
-
-def test_probabilistic_alt_style_respects_rng() -> None:
-    always = build_probabilistic_alt_style_hint(probability=1.0, rng=random.Random(0))
-    never = build_probabilistic_alt_style_hint(probability=0.0, rng=random.Random(0))
-    assert always.startswith("【本轮临时措辞】")
-    assert never == ""
-
-
-def test_affect_variant_selection_is_bounded_and_seeded() -> None:
-    policy = ReplyStyleVariantPolicy(
-        enabled=True,
-        base_probability=2.0,
-        affect_styles={"warm": ["playful"], "default": ["direct"]},
-    )
-    selected = select_reply_style_variant(
-        policy,
-        affect_class="warm",
-        rng=random.Random(0),
-    )
-    assert selected.style_class == "playful"
-    assert selected.applied is True
-
-
-def test_affect_variant_keeps_legacy_fallback_without_affect() -> None:
-    selected = select_reply_style_variant(
-        ReplyStyleVariantPolicy(base_probability=1.0),
-        affect_class="",
-        rng=random.Random(0),
-    )
-    assert selected.applied is True
-    assert selected.style_class
 
 
 def test_behavior_and_wording_split() -> None:
