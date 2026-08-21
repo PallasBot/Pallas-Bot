@@ -68,6 +68,7 @@
 
 ## 后续阅读
 
+- [LLM 输出护栏与离线评测](llm-output-guardrails.md)
 - [Bot 内置 Agent 生命周期](agent-lifecycle.md)
 - [架构总览](overview.md)
 - [LLM 与 AI 运维](/maintainer/operate/llm-and-ai)

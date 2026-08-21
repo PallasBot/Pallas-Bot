@@ -77,5 +77,6 @@
 
 - [架构总览](overview.md)
 - [Core 与扩展](core-vs-extensions.md)
+- [多牛协同面](multi-bot-collaboration.md)
 - [Platform API](/developer/reference/platform-api)
 - [分片部署](/maintainer/deploy/sharded)

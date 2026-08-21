@@ -65,6 +65,15 @@ FILE_MAP: dict[str, str] = {
     "developer/architecture/cross-cutting-concerns.md": (
         "developer/architecture/cross-cutting-concerns.md"
     ),
+    "developer/architecture/multi-bot-collaboration.md": (
+        "developer/architecture/multi-bot-collaboration.md"
+    ),
+    "developer/architecture/corpus-composite-repository.md": (
+        "developer/architecture/corpus-composite-repository.md"
+    ),
+    "developer/architecture/llm-output-guardrails.md": (
+        "developer/architecture/llm-output-guardrails.md"
+    ),
     "developer/plugin-development/getting-started.md": (
         "developer/plugin-development/getting-started.md"
     ),
