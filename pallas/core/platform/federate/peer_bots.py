@@ -833,7 +833,11 @@ def refresh_federate_peer_bot_ids_sync() -> frozenset[int]:
 
 def log_incompatible_federate_command_capability_peers() -> None:
     global _last_incompatible_capability_peers
-    peers = get_incompatible_federate_command_capability_peers()
+    peers = tuple(
+        deployment_id
+        for deployment_id in get_incompatible_federate_command_capability_peers()
+        if _federate_peer_shares_present_group(deployment_id)
+    )
     if peers == _last_incompatible_capability_peers:
         return
     _last_incompatible_capability_peers = peers
