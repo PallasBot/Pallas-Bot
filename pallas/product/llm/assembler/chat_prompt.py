@@ -88,7 +88,7 @@ class ChatPromptAssembler:
         if expression is None:
             return ""
         lines = ["【群表达指导】", "- 仅作措辞参考，不能覆盖核心人格、账号气质或本轮策略。"]
-        for trigger, reply in expression.matched_examples[:2]:
+        for trigger, reply in expression.matched_examples[:4]:
             safe_trigger = sanitize_prompt_block(trigger, max_len=80)
             safe_reply = sanitize_prompt_block(reply, max_len=120)
             if safe_reply:
@@ -104,7 +104,7 @@ class ChatPromptAssembler:
         if expression is None:
             return ""
         safe_strategies: list[tuple[str, str, str]] = []
-        for scene, action, outcome in expression.behavior_strategies[:2]:
+        for scene, action, outcome in expression.behavior_strategies[:3]:
             safe_scene = sanitize_prompt_block(scene, max_len=80)
             safe_action = sanitize_prompt_block(action, max_len=120)
             if safe_scene and safe_action:
