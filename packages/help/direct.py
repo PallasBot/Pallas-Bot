@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from nonebot import logger
 from nonebot.adapters.onebot.v11 import MessageSegment
 from nonebot.permission import SUPERUSER
 
+from pallas.api.logging import format_plugin_event
 from pallas.core.foundation.command_prefix import matches_command_prefix
 from pallas.core.limits import is_command_cooldown_ready, refresh_command_cooldown
 from pallas.core.perm import satisfies_command_permission
@@ -69,6 +71,12 @@ class HelpDirectHandler:
             total_plugin_count=len(rows),
             total_enabled_count=sum(1 for row in rows if row.enabled),
         )
+        logger.info(
+            format_plugin_event(
+                "show_menu",
+                f"Bot [{context.bot_id}] showed menu in group [{context.group_id}]",
+            )
+        )
         return HandlingOutcome(handled=True, actions=(SendAction(MessageSegment.image(image_data)),))
 
     async def _handle_toggle(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome:
@@ -90,7 +98,7 @@ class HelpDirectHandler:
                 actions=(SendAction(error_message or f"博士，你说的'{args[0]}'是什么呀？"),),
             )
         is_superuser = await SUPERUSER(bot, event)
-        _, message = await toggle_plugin(
+        success, message = await toggle_plugin(
             plugin_name,
             context.group_id,
             context.bot_id,
@@ -98,6 +106,14 @@ class HelpDirectHandler:
             is_superuser=is_superuser,
             operator=getattr(event, "user_id", None),
         )
+        if success:
+            logger.info(
+                format_plugin_event(
+                    "enable_plugin" if action == "enable" else "disable_plugin",
+                    f"Bot [{context.bot_id}] {action}d plugin [{plugin_name}] "
+                    f"in group [{context.group_id}] by [{getattr(event, 'user_id', '-')}]",
+                )
+            )
         if message is None:
             return HandlingOutcome(handled=False, fallback_to_matcher=True)
         return HandlingOutcome(handled=True, actions=(SendAction(message),))
