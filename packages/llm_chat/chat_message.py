@@ -29,7 +29,9 @@ from pallas.product.llm.assembler import (
 from pallas.product.llm.assembler.context import ChatContextBundle, assemble_direct_chat_context
 from pallas.product.llm.behavior import (
     build_behavior_hint_text,
+    build_retaliation_hint,
     classify_behavior_scene,
+    detect_attack_pressure,
     select_behavior_patterns,
 )
 from pallas.product.llm.behavior_store import ensure_default_behavior_patterns
@@ -577,7 +579,8 @@ async def prepare_and_submit_llm_chat_turn(
             and str(tool_meta.get("tool_choice_prefer") or "").strip().lower() == "required"
         )
         affinity_value = None
-        if speak_trigger not in ("to_me", "alias", "mention", "followup"):
+        relationship_affinity = None
+        if group_id is not None and user_id is not None:
             from pallas.product.llm.memory.relationship_store import retrieve_relationship_profile
 
             try:
@@ -585,7 +588,9 @@ async def prepare_and_submit_llm_chat_turn(
             except Exception:
                 _profile = None
             if _profile is not None:
-                affinity_value = _profile.affinity
+                relationship_affinity = _profile.affinity
+                if speak_trigger not in ("to_me", "alias", "mention", "followup"):
+                    affinity_value = relationship_affinity
         necessity = evaluate_reply_necessity_gate(
             text=focus_text,
             is_to_me=is_to_me,
@@ -794,6 +799,16 @@ async def prepare_and_submit_llm_chat_turn(
         behavior_hint = ""
         if can_read_behavioral_learning(llm_cfg):
             behavior_hint = build_behavior_hint_text(scene=behavior_scene, actions=behavior_actions)
+        retaliation_hint = build_retaliation_hint(
+            pressure=detect_attack_pressure(
+                user_text=focus_text,
+                recent_turns=recent_turns,
+                is_to_me=is_to_me,
+            ),
+            affinity=relationship_affinity,
+        )
+        if retaliation_hint:
+            behavior_hint = "\n".join(item for item in (behavior_hint, retaliation_hint) if item)
         last_assistant_reply_started = time.perf_counter()
         last_reply_text = await latest_llm_assistant_reply(int(bot.self_id), group_id, user_id)
         pre_submit_context_durations_ms["last_assistant_reply"] = int(

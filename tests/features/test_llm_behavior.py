@@ -7,8 +7,10 @@ from pallas.product.llm.behavior import (
     BehaviorRun,
     BehaviorScene,
     build_behavior_hint_text,
+    build_retaliation_hint,
     classify_behavior_scene,
     default_group_chat_behavior_hint,
+    detect_attack_pressure,
     infer_behavior_feedback,
     infer_behavior_outcome,
     map_behavior_outcome_score,
@@ -26,6 +28,64 @@ from pallas.product.llm.behavior_store import (
     upsert_behavior_pattern,
 )
 from pallas.product.persona.occasion import OccasionTag, normalize_occasion_tag
+
+
+def test_attack_pressure_requires_repeated_directed_attacks() -> None:
+    assert detect_attack_pressure(
+        user_text="你这废物",
+        recent_turns=[],
+        is_to_me=True,
+    ) == "none"
+    assert detect_attack_pressure(
+        user_text="你这废物",
+        recent_turns=[
+            {"role": "user", "content": "滚回去", "created_at": 100},
+            {"role": "user", "content": "真没用", "created_at": 101},
+        ],
+        is_to_me=True,
+        now=110,
+    ) == "high"
+
+
+def test_attack_pressure_ignores_unaddressed_group_insults() -> None:
+    assert detect_attack_pressure(
+        user_text="今天这破活动",
+        recent_turns=[{"role": "user", "content": "你这废物", "created_at": 100}],
+        is_to_me=False,
+        now=110,
+    ) == "none"
+
+
+def test_attack_pressure_ignores_bot_summon_with_roll_out_phrase() -> None:
+    assert detect_attack_pressure(
+        user_text="漂亮牛牛滚出来",
+        recent_turns=[
+            {"role": "user", "content": "漂亮牛牛滚出来", "created_at": 100},
+            {"role": "user", "content": "漂亮牛牛滚出来", "created_at": 101},
+        ],
+        is_to_me=True,
+        now=110,
+    ) == "none"
+
+
+def test_attack_pressure_excludes_expired_messages() -> None:
+    assert detect_attack_pressure(
+        user_text="你这废物",
+        recent_turns=[
+            {"role": "user", "content": "滚回去", "created_at": 100},
+            {"role": "user", "content": "真没用", "created_at": 101},
+        ],
+        is_to_me=True,
+        now=200,
+    ) == "none"
+
+
+def test_retaliation_hint_uses_affinity_to_set_tone() -> None:
+    friendly = build_retaliation_hint(pressure="high", affinity=0.6)
+    hostile = build_retaliation_hint(pressure="high", affinity=-0.5)
+    assert "嘴硬调侃" in friendly
+    assert "冷硬" in hostile
+    assert build_retaliation_hint(pressure="none", affinity=0.6) == ""
 
 
 def test_normalize_occasion_aliases_and_keeps_unknown_legacy_text() -> None:

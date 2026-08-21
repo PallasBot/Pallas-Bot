@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from enum import StrEnum
 from typing import Any
 
@@ -75,6 +76,25 @@ class BehaviorRun(BaseModel):
 
 
 _PROVOCATION_TOKENS = ("效忠", "反党", "走资派", "快说", "表态", "忠诚")
+_DIRECT_ATTACK_TOKENS = (
+    "废物",
+    "垃圾",
+    "脑残",
+    "智障",
+    "弱智",
+    "蠢货",
+    "滚蛋",
+    "滚开",
+    "滚回去",
+    "滚出去",
+    "滚吧",
+    "闭嘴",
+    "去死",
+    "煞笔",
+    "傻逼",
+    "没用",
+    "有病",
+)
 _VENTING_TOKENS = ("烦死", "气死", "无语", "沃日", "绷不住", "受不了")
 _BANTER_TOKENS = ("哈哈", "乐", "蚌", "绷", "典", "梗")
 _HELP_TOKENS = ("怎么", "为啥", "为什么", "咋", "能不能", "可以吗")
@@ -190,6 +210,55 @@ def classify_behavior_scene(*, user_text: str, recent_texts: list[str], has_mult
     ):
         return BehaviorScene.GROUP_THREADING
     return BehaviorScene.SMALLTALK
+
+
+def detect_attack_pressure(
+    *,
+    user_text: str,
+    recent_turns: list[Any],
+    is_to_me: bool,
+    now: int | None = None,
+    window_sec: int = 30,
+) -> str:
+    """检测本轮是否形成连续的、明确指向 bot 的攻击压力。
+
+    只把当前直接对 bot 的消息作为入口，避免群里其他人的互骂触发 bot 反击。
+    仅累计当前用户在短窗口内的 user turn，避免助手回复或久远冲突升级本轮。
+    """
+    if not is_to_me or not any(token in str(user_text or "") for token in _DIRECT_ATTACK_TOKENS):
+        return "none"
+    cutoff = int(now if now is not None else time.time()) - max(1, int(window_sec))
+    attack_count = 1
+    for turn in recent_turns[-4:]:
+        if isinstance(turn, dict):
+            role = str(turn.get("role") or "")
+            content = str(turn.get("content") or "")
+            created_at = int(turn.get("created_at") or 0)
+        else:
+            role = str(getattr(turn, "role", "") or "")
+            content = str(getattr(turn, "content", "") or "")
+            created_at = int(getattr(turn, "created_at", 0) or 0)
+        if role == "user" and created_at >= cutoff and any(token in content for token in _DIRECT_ATTACK_TOKENS):
+            attack_count += 1
+    if attack_count >= 3:
+        return "high"
+    if attack_count >= 2:
+        return "medium"
+    return "none"
+
+
+def build_retaliation_hint(*, pressure: str, affinity: float | None) -> str:
+    if pressure not in {"medium", "high"}:
+        return ""
+    value = float(affinity) if affinity is not None else 0.0
+    if value >= 0.4:
+        tone = "关系较熟，可以嘴硬调侃两句，但别真伤人"
+    elif value <= -0.15:
+        tone = "关系偏冷，语气可以冷硬，明确挡回去并尽快收束"
+    else:
+        tone = "关系一般，直接指出对方连续攻击，简短挡回，不升级辱骂"
+    level = "连续攻击已明显升级" if pressure == "high" else "对方已连续攻击"
+    return f"【本轮临时反应】{level}；{tone}。不要无缘无故扩大战火，也不要照搬攻击词。"
 
 
 def select_behavior_patterns(
