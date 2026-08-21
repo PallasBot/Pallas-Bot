@@ -443,42 +443,50 @@ async def claim_sticker_vision_delivery(bot_ids: set[int]) -> dict[str, object] 
     )
 
     if is_postgresql_backend():
-        from sqlalchemy import String, cast, select
+        from sqlalchemy import String, cast, func, literal, select, type_coerce, update
+        from sqlalchemy.dialects import postgresql
 
         from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
 
+        target = (
+            select(BackgroundJobRow.id)
+            .where(
+                BackgroundJobRow.kind == "sticker_vision.select",
+                BackgroundJobRow.status == "done",
+                BackgroundJobRow.payload["delivery"]["state"].astext == "pending",
+                cast(BackgroundJobRow.payload["delivery"]["bot_id"].astext, String).in_([
+                    str(bot_id) for bot_id in bot_ids
+                ]),
+            )
+            .order_by(BackgroundJobRow.finished_at)
+            .limit(1)
+            .with_for_update(skip_locked=True)
+        )
+        claim_value = func.jsonb_set(
+            BackgroundJobRow.payload,
+            cast(func.string_to_array(literal("delivery,state"), literal(",")), postgresql.ARRAY(postgresql.TEXT)),
+            type_coerce(literal("sending"), postgresql.JSONB),
+            literal(False),
+        )
         async with get_session() as session:
-            rows = (
+            claimed = (
                 await session.execute(
-                    select(BackgroundJobRow)
-                    .where(
-                        BackgroundJobRow.kind == "sticker_vision.select",
-                        BackgroundJobRow.status == "done",
-                        BackgroundJobRow.payload["delivery"]["state"].astext == "pending",
-                        cast(BackgroundJobRow.payload["delivery"]["bot_id"].astext, String).in_([
-                            str(bot_id) for bot_id in bot_ids
-                        ]),
-                    )
-                    .order_by(BackgroundJobRow.finished_at)
-                    .limit(32)
-                    .with_for_update(skip_locked=True)
+                    update(BackgroundJobRow)
+                    .where(BackgroundJobRow.id.in_(target))
+                    .values(payload=claim_value)
+                    .returning(BackgroundJobRow.payload)
                 )
-            ).scalars()
+            ).scalar_one_or_none()
+            await session.commit()
             timer.mark("query")
-            for row in rows:
-                payload = dict(row.payload or {})
-                delivery = payload.get("delivery")
-                if not isinstance(delivery, dict) or delivery.get("state") != "pending":
-                    continue
-                if int(delivery.get("bot_id") or 0) not in bot_ids:
-                    continue
-                payload["delivery"] = {**delivery, "state": "sending", "claimed_at": time.time()}
-                row.payload = payload
-                await session.commit()
-                timer.finish(bot_ids=len(bot_ids))
+            payload = dict(claimed or {})
+            delivery = payload.get("delivery")
+            if isinstance(delivery, dict) and delivery.get("state") == "sending":
+                delivery["claimed_at"] = time.time()
+                timer.finish(bot_ids=len(bot_ids), rows=1)
                 return payload
-        timer.finish(bot_ids=len(bot_ids), rows=0)
-        return None
+            timer.finish(bot_ids=len(bot_ids), rows=0)
+            return None
 
     from pallas.core.foundation.db.modules import BackgroundJob
 
