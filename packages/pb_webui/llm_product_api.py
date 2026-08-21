@@ -69,11 +69,24 @@ class _SemanticStyleOverridesData(BaseModel):
 class _SemanticStyleManageBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    action: Literal["status", "overrides", "clear", "rebuild", "quality", "recover", "disable"]
+    action: Literal[
+        "status",
+        "overrides",
+        "clear",
+        "rebuild",
+        "quality",
+        "recover",
+        "disable",
+        "enable",
+        "set_governance",
+    ]
     bot_id: int | None = None
     group_id: int | None = None
     scene: str = "group_chat"
     overrides: _SemanticStyleOverridesPatch | None = None
+    collection_enabled: bool | None = None
+    injection_enabled: bool | None = None
+    continue_learning: bool | None = None
 
 
 class _SemanticStyleProfileSummaryData(BaseModel):
@@ -95,6 +108,8 @@ class _SemanticStyleProfileSummaryData(BaseModel):
 
 class _SemanticStyleStatusData(BaseModel):
     enabled: bool = True
+    collection_enabled: bool = True
+    injection_enabled: bool = True
     overrides: _SemanticStyleOverridesData | None = None
     example_count: int = 0
     profile_count: int = 0
@@ -144,7 +159,7 @@ def semantic_style_quality_response_data(
         ),
         label_version=int(data.get("label_version") or 0),
         positive_bot_style_count=int(data.get("positive_bot_style_count") or 0),
-    ).model_dump(mode="json", exclude_none=True)
+    ).model_dump(mode="json", exclude_none=True, exclude_unset=True)
 
 
 def register_llm_product_router(
@@ -225,10 +240,13 @@ def register_llm_product_router(
                     else semantic_style.update_semantic_style_overrides(override_patch)
                 )
             elif action == "clear":
+                clear_kwargs: dict[str, object] = {}
+                if body.continue_learning is not None:
+                    clear_kwargs["continue_learning"] = body.continue_learning
                 data = (
-                    semantic_style.clear_semantic_style_data(**scope)
+                    semantic_style.clear_semantic_style_data(**clear_kwargs, **scope)
                     if scope
-                    else semantic_style.clear_semantic_style_data()
+                    else semantic_style.clear_semantic_style_data(**clear_kwargs)
                 )
             elif action == "rebuild":
                 data = (
@@ -245,6 +263,27 @@ def register_llm_product_router(
                     semantic_style.recover_semantic_style_data(**scope)
                     if scope
                     else semantic_style.recover_semantic_style_data()
+                )
+            elif action == "set_governance":
+                if body.collection_enabled is None or body.injection_enabled is None:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="collection_enabled 和 injection_enabled 必须同时提供",
+                    )
+                governance_kwargs = {
+                    "collection_enabled": body.collection_enabled,
+                    "injection_enabled": body.injection_enabled,
+                }
+                data = (
+                    semantic_style.set_semantic_style_governance(**governance_kwargs, **scope)
+                    if scope
+                    else semantic_style.set_semantic_style_governance(**governance_kwargs)
+                )
+            elif action == "enable":
+                data = (
+                    semantic_style.set_semantic_style_enabled(True, **scope)
+                    if scope
+                    else semantic_style.set_semantic_style_enabled(True)
                 )
             else:
                 data = (

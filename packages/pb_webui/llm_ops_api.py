@@ -90,6 +90,77 @@ class _StickerLabelClearResult(BaseModel):
 StickerLabelMaintenanceResult = _StickerLabelRequeueResult | _StickerLabelPauseResult | _StickerLabelClearResult
 
 
+class _GroupStyleManageBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["collection", "injection", "clear"]
+    bot_id: int | None = None
+    group_id: int | None = None
+    enabled: bool | None = None
+    continue_learning: bool | None = None
+
+
+class _GroupStyleGovernanceData(BaseModel):
+    collection_enabled: bool
+    injection_enabled: bool
+
+
+class _BasePromptPreviewVersion(BaseModel):
+    id: str
+    mode: str = "append"
+    builtin_sha256: str = ""
+    updated_at: str = ""
+
+
+class _BasePromptPreviewData(BaseModel):
+    enabled: bool = False
+    mode: str = "append"
+    builtin_sha256: str = ""
+    builtin_updated: bool = False
+    updated_at: str = ""
+    text_preview: str = ""
+    versions: list[_BasePromptPreviewVersion] = Field(default_factory=list)
+
+
+class _BasePromptSaveBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["append", "replace"]
+    text: str
+
+
+class _BasePromptRestoreBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version_id: str = Field(min_length=1)
+
+
+class _BasePromptEnabledBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+
+
+def _base_prompt_preview_summary(status: dict[str, Any]) -> dict[str, Any]:
+    """把 base prompt 状态压成不含原文的预览安全摘要。"""
+    text = str(status.get("text") or "")
+    preview = text[:120] + ("…" if len(text) > 120 else "")
+    versions = [
+        {key: value for key, value in version.items() if key != "text"}
+        for version in status.get("versions") or []
+        if isinstance(version, dict)
+    ]
+    return {
+        "enabled": bool(status.get("enabled", False)),
+        "mode": str(status.get("mode") or "append"),
+        "builtin_sha256": str(status.get("builtin_sha256") or ""),
+        "builtin_updated": bool(status.get("builtin_updated", False)),
+        "updated_at": str(status.get("updated_at") or ""),
+        "text_preview": preview,
+        "versions": versions,
+    }
+
+
 def register_llm_ops_router(
     router: APIRouter,
     *,
@@ -536,6 +607,163 @@ def register_llm_ops_router(
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         return {"ok": True, "data": profile.model_dump(mode="json")}
+
+    @router.get(
+        f"{x}/common-config/llm/persona/group-style/manage",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_GroupStyleGovernanceData],
+    )
+    async def _llm_persona_group_style_manage_get(
+        bot_id: int = Query(..., ge=1, description="Bot QQ"),
+        group_id: int = Query(..., ge=1, description="群号"),
+    ) -> JSONResponse:
+        from pallas.product.persona.style_governance import group_style_status
+
+        try:
+            data = group_style_status(bot_id=bot_id, group_id=group_id)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(
+        f"{x}/common-config/llm/persona/group-style/manage",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_GroupStyleGovernanceData],
+    )
+    async def _llm_persona_group_style_manage_post(
+        body: _GroupStyleManageBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        bot_id = body.bot_id
+        group_id = body.group_id
+        if bot_id is None or group_id is None or bot_id <= 0 or group_id <= 0:
+            raise HTTPException(status_code=422, detail="bot_id 和 group_id 必须同时提供")
+        from pallas.product.persona import style_governance
+
+        try:
+            if body.action == "collection":
+                if body.enabled is None:
+                    raise HTTPException(status_code=422, detail="enabled 必填")
+                data = await style_governance.set_group_style_collection(
+                    group_id=group_id,
+                    enabled=body.enabled,
+                )
+            elif body.action == "injection":
+                if body.enabled is None:
+                    raise HTTPException(status_code=422, detail="enabled 必填")
+                data = await style_governance.set_group_style_injection(
+                    bot_id=bot_id,
+                    group_id=group_id,
+                    enabled=body.enabled,
+                )
+            else:
+                data = await style_governance.clear_group_style(
+                    group_id=group_id,
+                    continue_learning=True if body.continue_learning is None else body.continue_learning,
+                )
+        except HTTPException:
+            raise
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(
+        f"{x}/common-config/llm/persona/base-prompt",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_BasePromptPreviewData],
+    )
+    async def _llm_persona_base_prompt_get() -> JSONResponse:
+        from pallas.product.persona.base_prompt_override import base_prompt_override_status
+
+        try:
+            data = _base_prompt_preview_summary(base_prompt_override_status())
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/common-config/llm/persona/base-prompt/content", include_in_schema=True)
+    async def _llm_persona_base_prompt_content(
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.persona.base_prompt_override import base_prompt_override_status
+
+        try:
+            data = base_prompt_override_status()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/common-config/llm/persona/base-prompt/save", include_in_schema=True)
+    async def _llm_persona_base_prompt_save(
+        body: _BasePromptSaveBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.persona.base_prompt_override import save_base_prompt_override
+        from pallas.product.persona.compile_persona_prompt import resolve_base_system_prompt_path
+
+        baseline = ""
+        path = resolve_base_system_prompt_path()
+        try:
+            baseline = path.read_text(encoding="utf-8").strip() if path.is_file() else ""
+        except OSError:
+            baseline = ""
+        try:
+            data = save_base_prompt_override(mode=body.mode, text=body.text, builtin_text=baseline)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/common-config/llm/persona/base-prompt/restore", include_in_schema=True)
+    async def _llm_persona_base_prompt_restore(
+        body: _BasePromptRestoreBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.persona.base_prompt_override import restore_base_prompt_override
+
+        try:
+            data = restore_base_prompt_override(version_id=body.version_id)
+        except KeyError as e:
+            raise HTTPException(status_code=404, detail="未找到该版本") from e
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/common-config/llm/persona/base-prompt/clear", include_in_schema=True)
+    async def _llm_persona_base_prompt_clear(
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.persona.base_prompt_override import clear_base_prompt_override
+
+        try:
+            clear_base_prompt_override()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": {"cleared": True}})
+
+    @router.post(f"{x}/common-config/llm/persona/base-prompt/enabled", include_in_schema=True)
+    async def _llm_persona_base_prompt_enabled(
+        body: _BasePromptEnabledBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.persona.base_prompt_override import set_base_prompt_override_enabled
+
+        try:
+            data = set_base_prompt_override_enabled(enabled=body.enabled)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
 
     @router.get(
         f"{x}/common-config/llm/persona/sticker-labels",
