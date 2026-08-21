@@ -16,7 +16,7 @@ from threading import RLock
 from typing import TYPE_CHECKING, Any, Literal
 
 from nonebot import get_bots, get_driver, logger
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from pallas.core.foundation.db import make_local_context_repository, make_message_repository
 from pallas.core.foundation.fs_lock import atomic_write_text, interprocess_file_lock
@@ -223,8 +223,26 @@ class SemanticStyleOverride(BaseModel):
 
 
 class SemanticStyleSettings(BaseModel):
-    enabled: bool = True
+    collection_enabled: bool = True
+    injection_enabled: bool = True
     overrides: SemanticStyleOverride = Field(default_factory=SemanticStyleOverride)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy_enabled(cls, data: Any) -> Any:
+        if (
+            isinstance(data, dict)
+            and "enabled" in data
+            and "collection_enabled" not in data
+            and "injection_enabled" not in data
+        ):
+            legacy = bool(data["enabled"])
+            return {**data, "collection_enabled": legacy, "injection_enabled": legacy}
+        return data
+
+    @property
+    def enabled(self) -> bool:
+        return self.collection_enabled and self.injection_enabled
 
 
 class SemanticStyleBackfillCursor(BaseModel):
@@ -835,6 +853,8 @@ def semantic_style_status(*, bot_id: int | None = None, group_id: int | None = N
     scoped_profiles = [profile for profile in profiles.values() if _in_semantic_style_scope(profile, scope)]
     return {
         "enabled": settings.enabled,
+        "collection_enabled": settings.collection_enabled,
+        "injection_enabled": settings.injection_enabled,
         "overrides": settings.overrides.model_dump(mode="json"),
         "example_count": len(scoped_examples),
         "profile_count": len(scoped_profiles),
@@ -860,21 +880,41 @@ def update_semantic_style_overrides(
 def set_semantic_style_enabled(
     enabled: bool, *, bot_id: int | None = None, group_id: int | None = None
 ) -> dict[str, Any]:
+    value = bool(enabled)
     settings = load_semantic_style_settings(bot_id=bot_id, group_id=group_id).model_copy(
-        update={"enabled": bool(enabled)}
+        update={"collection_enabled": value, "injection_enabled": value}
     )
     _save_semantic_style_settings(settings, bot_id=bot_id, group_id=group_id)
     return semantic_style_status(bot_id=bot_id, group_id=group_id)
 
 
-def clear_semantic_style_data(*, bot_id: int | None = None, group_id: int | None = None) -> dict[str, Any]:
+def set_semantic_style_governance(
+    *, bot_id: int | None = None, group_id: int | None = None, collection_enabled: bool, injection_enabled: bool
+) -> dict[str, Any]:
+    settings = load_semantic_style_settings(bot_id=bot_id, group_id=group_id).model_copy(
+        update={
+            "collection_enabled": bool(collection_enabled),
+            "injection_enabled": bool(injection_enabled),
+        }
+    )
+    _save_semantic_style_settings(settings, bot_id=bot_id, group_id=group_id)
+    return semantic_style_status(bot_id=bot_id, group_id=group_id)
+
+
+def clear_semantic_style_data(
+    *, bot_id: int | None = None, group_id: int | None = None, continue_learning: bool = True
+) -> dict[str, Any]:
     scope = _semantic_style_scope(bot_id, group_id)
     with semantic_style_data_lock():
         examples = load_examples_with_legacy_migration_locked()
         retained = [example for example in examples if not _in_semantic_style_scope(example, scope)] if scope else []
         _write_semantic_style_examples(semantic_style_examples_path(), retained)
         _write_profiles(_rebuild_profiles(retained, now=int(time.time())))
-    save_semantic_style_backfill_cursor(SemanticStyleBackfillCursor(), bot_id=bot_id, group_id=group_id)
+        save_semantic_style_backfill_cursor(SemanticStyleBackfillCursor(), bot_id=bot_id, group_id=group_id)
+        settings = load_semantic_style_settings(bot_id=bot_id, group_id=group_id).model_copy(
+            update={"collection_enabled": bool(continue_learning)}
+        )
+        _save_semantic_style_settings(settings, bot_id=bot_id, group_id=group_id)
     return semantic_style_status(bot_id=bot_id, group_id=group_id)
 
 
@@ -1346,8 +1386,10 @@ def semantic_style_profile_summary(profile: SemanticStyleProfile | None) -> dict
 def semantic_style_injection_enabled(
     request_id: str, *, bot_id: int | None = None, group_id: int | None = None
 ) -> bool:
-    """保留稳定的 10% 对照组。"""
-    if not semantic_style_collection_enabled(bot_id=bot_id, group_id=group_id):
+    """只读注入位，保留稳定的 10% 对照组。"""
+    if bot_id is not None and group_id is not None and (int(bot_id) <= 0 or int(group_id) <= 0):
+        return False
+    if not load_semantic_style_settings(bot_id=bot_id, group_id=group_id).injection_enabled:
         return False
     digest = hashlib.blake2b(str(request_id).encode("utf-8"), digest_size=8).digest()
     return int.from_bytes(digest, "big") % 10 != 0
@@ -1356,7 +1398,7 @@ def semantic_style_injection_enabled(
 def semantic_style_collection_enabled(*, bot_id: int | None = None, group_id: int | None = None) -> bool:
     if bot_id is not None and group_id is not None and (int(bot_id) <= 0 or int(group_id) <= 0):
         return False
-    return load_semantic_style_settings(bot_id=bot_id, group_id=group_id).enabled
+    return load_semantic_style_settings(bot_id=bot_id, group_id=group_id).collection_enabled
 
 
 def resolve_cached_semantic_style(
@@ -1578,7 +1620,7 @@ def should_deliver_semantic_style_direct_candidate(
 ) -> bool:
     """按群维护最近 100 次内核任务的直投占比。"""
     settings = load_semantic_style_settings(bot_id=bot_id, group_id=group_id)
-    if not settings.enabled or not settings.overrides.direct:
+    if not settings.injection_enabled or not settings.overrides.direct:
         return False
     key = (int(bot_id or 0), int(group_id or 0))
     text = _short_text(candidate, _MAX_SEED_LEN)

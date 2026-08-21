@@ -1683,3 +1683,135 @@ def test_matched_examples_rank_by_similarity_and_strategy_is_fallback(tmp_path, 
     )
     assert remote.matched_examples == []
     assert remote.behavior_strategies == []
+
+
+def test_semantic_style_settings_split_collection_and_injection(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(mod, "semantic_style_settings_path", lambda **_: tmp_path / "settings.json")
+    mod.set_semantic_style_governance(collection_enabled=False, injection_enabled=True, bot_id=1, group_id=2)
+    assert not mod.semantic_style_collection_enabled(bot_id=1, group_id=2)
+    assert mod.semantic_style_injection_enabled("request", bot_id=1, group_id=2)
+
+
+def test_old_semantic_style_enabled_migrates_to_both_bits(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    path = tmp_path / "settings.json"
+    monkeypatch.setattr(mod, "semantic_style_settings_path", lambda **_: path)
+    path.write_text('{"enabled": false}', encoding="utf-8")
+    settings = mod.load_semantic_style_settings(bot_id=100, group_id=42)
+    assert settings.collection_enabled is False
+    assert settings.injection_enabled is False
+    assert settings.enabled is False
+
+    path.write_text('{"enabled": true}', encoding="utf-8")
+    settings = mod.load_semantic_style_settings(bot_id=100, group_id=42)
+    assert settings.collection_enabled is True
+    assert settings.injection_enabled is True
+    assert settings.enabled is True
+
+
+def test_semantic_style_governance_sets_bits_independently(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    status = mod.set_semantic_style_governance(
+        collection_enabled=True, injection_enabled=False, bot_id=100, group_id=42
+    )
+    assert status["collection_enabled"] is True
+    assert status["injection_enabled"] is False
+    assert status["enabled"] is False
+    assert mod.semantic_style_collection_enabled(bot_id=100, group_id=42) is True
+    assert mod.semantic_style_injection_enabled("request", bot_id=100, group_id=42) is False
+
+
+def test_semantic_style_injection_keeps_ten_percent_control_group(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod.set_semantic_style_governance(collection_enabled=True, injection_enabled=True, bot_id=100, group_id=42)
+    assert mod.semantic_style_injection_enabled("request", bot_id=100, group_id=42) is True
+    assert mod.semantic_style_injection_enabled("ctl-27", bot_id=100, group_id=42) is False
+
+
+def test_set_semantic_style_enabled_disable_turns_off_both_bits(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    status = mod.set_semantic_style_enabled(True, bot_id=100, group_id=42)
+    assert status["collection_enabled"] is True
+    assert status["injection_enabled"] is True
+    status = mod.set_semantic_style_enabled(False, bot_id=100, group_id=42)
+    assert status["enabled"] is False
+    assert status["collection_enabled"] is False
+    assert status["injection_enabled"] is False
+    assert not mod.semantic_style_injection_enabled("request", bot_id=100, group_id=42)
+
+
+def test_clear_semantic_style_data_sets_collection_from_continue_learning(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod.clear_semantic_style_cache_for_tests()
+    mod.set_semantic_style_governance(collection_enabled=True, injection_enabled=True, bot_id=100, group_id=42)
+    mod.persist_semantic_style_example(
+        mod.SemanticStyleExample(
+            example_id="42:1:100",
+            created_at=100,
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            trigger_text="前句",
+            reply_text="接话",
+            label=mod.parse_semantic_style_label({}),
+            source_kind="human_pair",
+            trigger_user_id=11,
+            reply_user_id=12,
+        )
+    )
+    assert mod.semantic_style_status(bot_id=100, group_id=42)["example_count"] == 1
+
+    paused = mod.clear_semantic_style_data(bot_id=100, group_id=42, continue_learning=False)
+    assert paused["example_count"] == 0
+    assert paused["collection_enabled"] is False
+    assert paused["injection_enabled"] is True
+    assert mod.semantic_style_collection_enabled(bot_id=100, group_id=42) is False
+    assert mod.semantic_style_injection_enabled("request", bot_id=100, group_id=42) is True
+
+    resumed = mod.clear_semantic_style_data(bot_id=100, group_id=42)
+    assert resumed["collection_enabled"] is True
+    assert resumed["injection_enabled"] is True
+
+
+def test_semantic_style_direct_candidate_gates_on_injection_bit(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod.clear_semantic_style_direct_quota_for_tests()
+    mod.set_semantic_style_governance(collection_enabled=False, injection_enabled=True, bot_id=100, group_id=42)
+    assert mod.semantic_style_collection_enabled(bot_id=100, group_id=42) is False
+    assert (
+        mod.should_deliver_semantic_style_direct_candidate(bot_id=100, group_id=42, candidate="没救了") is True
+    )
+
+    mod.set_semantic_style_governance(collection_enabled=True, injection_enabled=False, bot_id=101, group_id=42)
+    assert mod.semantic_style_collection_enabled(bot_id=101, group_id=42) is True
+    assert mod.should_deliver_semantic_style_direct_candidate(bot_id=101, group_id=42, candidate="没救了") is False
+
+
+def test_semantic_style_settings_dump_keeps_split_bits_without_stale_enabled(tmp_path, monkeypatch) -> None:
+    import json
+
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    path = tmp_path / "settings.json"
+    monkeypatch.setattr(mod, "semantic_style_settings_path", lambda **_: path)
+    mod.set_semantic_style_governance(collection_enabled=False, injection_enabled=True, bot_id=100, group_id=42)
+    dumped = json.loads(path.read_text(encoding="utf-8"))
+    assert set(dumped) == {"collection_enabled", "injection_enabled", "overrides"}
+    assert dumped["collection_enabled"] is False
+    assert dumped["injection_enabled"] is True
