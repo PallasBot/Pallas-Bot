@@ -96,6 +96,23 @@ SING_DECLARATION = register_prefix_command_handler(
 
 对已完成状态更新和用户提示、但后续动作可延后的场景，使用 `completion_effect(..., wait_for_completion=False)`。运行时会统一创建后台任务；不要在插件 handler 内自行 `asyncio.create_task()`。后台效果不保证与后续同群消息严格串行，不能用于依赖该顺序的状态变更、重复敏感操作或必须向用户同步报告失败的流程；这些情况应保持等待，或改为 `DirectWorkJob`。
 
+### 群管 Owner 入口
+
+需要处理 Bot 是群管才能完成的命令，可通过 `pallas.api.platform` 声明稳定的群管 owner。入口会在 matcher 和 direct runtime 前，从具备群管能力的 Bot 中选出一个；社区插件不应 import `pallas.core`：
+
+```python
+from pallas.api.platform import group_admin_owner_ingress_route
+
+extra = {
+    "ingress_route": group_admin_owner_ingress_route(passive=True),
+    "exact_plaintexts": ["牛牛冲击"],
+}
+```
+
+该策略同时适用于 direct command 与具有明确 `exact_plaintexts`、`command_prefixes` 或群命令菜单路由的 matcher。声明后移除同一命令的 `ingress_fanout`，正常情况下同群只会有一个 Bot 进入处理路径。首次观测群成员角色、peer 心跳尚未同步或协调故障时会暂时按原 fanout 路径放行，不会丢失首条命令。
+
+不要用于必须让每只 Bot 都执行的工作，例如醒酒、每 Bot 独立状态修复，或按 Bot ID 保存配置的插件开关广播。
+
 ### 外置 durable work handler
 
 扩展可以通过 Python entry point 向 work auxiliary 注册任务 handler：

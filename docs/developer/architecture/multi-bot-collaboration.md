@@ -14,6 +14,7 @@
 | worker 在线态 | `shard/presence.py`+`presence_health.py` | hub/WebUI + 联邦 online 口径 | `get_cluster_online_bot_ids()` |
 | 同部署内消息去重 | `multi_bot/dedup.py` | 同条群消息本舰只处理一次 | `try_claim_group_message_once` |
 | 同群独占/占位 | `multi_bot/dedup.py` owned gate | 同群短时单牛发言 | `try_begin_group_owned_gate` |
+| 本机群管能力观测 | `multi_bot/group_admin_capability.py` | 各连接 Bot 在某群是否为群管 | `resolve_group_admin_capability()` |
 | 跨部署联邦名册 | `federate/peer_bots.py` | 协同池其它部署的牛 | `get_federate_peer_bot_ids()` |
 | 跨部署消息抢占 | `federate/ingress.py` | 同池各端抢同一条 | `claim_federate_group_message_ingress` |
 
@@ -53,7 +54,7 @@ worker 的 WS 连接状态：
 同一个 federate 池内多个 deployment（各可持多牛）在同一群协作，**全基于 Redis TTL 心跳发布 + SCAN 前缀发现**，无清单式名单。
 
 - **配置**：`PALLAS_FEDERATE_ID`、`PALLAS_FEDERATE_INGRESS_ENABLED`（auto：有 ID 即开）、`PALLAS_FEDERATE_INGRESS_BYPASS_UNIFIED`（单进程时跳过）、`PALLAS_FEDERATE_REDIS_PREFIX`、`PALLAS_FEDERATE_OWNER_ROTATE_SEC`（默认 7200）、`PALLAS_FEDERATE_PREFER_LOCAL_OWNER`（默认关）。`PALLAS_CONTROL_PLANE_ENABLED=false` 禁用联邦。coord Redis URL：显式 `PALLAS_FEDERATE_COORD_REDIS_URL` → bootstrap 落盘 → 无则禁用；`federate_redis_prefix()`：bootstrap coord prefix → 显式 prefix → `pallas:fed:{safe_fid}`。
-- **peer 名册**：心跳发布 `publish_local_federate_peer_bot_ids_sync`（SET ex=180s，最小 60），payload 含 `bot_ids / online_bot_ids / public_bot_ids / public_online_bot_names / present_group_ids / command_capabilities / command_permission_levels / capability_protocol(v2) / ingress_protocol(v2) / ingress_capabilities`；对端 SCAN `pallas:fed:*:peer_bots:*` 解析。同步循环默认每 60s；连接钩子与启动即时同步。
+- **peer 名册**：心跳发布 `publish_local_federate_peer_bot_ids_sync`（SET ex=180s，最小 60），payload 含 `bot_ids / online_bot_ids / public_bot_ids / public_online_bot_names / present_group_ids / group_admin_bot_ids / command_capabilities / command_permission_levels / capability_protocol(v2) / ingress_protocol(v2) / ingress_capabilities`；对端 SCAN `pallas:fed:*:peer_bots:*` 解析。同步循环默认每 60s；连接钩子与启动即时同步。
 - **在场群**：`touch_federate_present_group` 每群消息 touch 写 ZSET（score=时间戳，窗口默认 300s、上限 2000）。
 - **公开面**：`get_federate_peer_bot_ids`、`get_federate_bot_rosters`（WebUI 多机协同页）、`federate_peer_bot_ids_contains(qq)`（友军互认）、`federate_peer_declared_command_plaintext(plain)`（对端宣告能力覆盖时当命令流量）。
 
@@ -67,6 +68,12 @@ worker 的 WS 连接状态：
 4. **时间桶**：`blake2b(group_id:epoch)` 取模；`rotate_sec<=0` 时纯群号取模；默认 7200s 轮换。
 
 `prefer_local_owner` 开则本机在环内时直接当 owner。**仅命令车道走归属**；chat 车道（@ 牛牛、复读）与跨部署 claim 只按条防双回。
+
+### 群管能力 Owner
+
+声明 `ingress_route.required_bot_capability="group_admin"` 的明确命令会在普通群归属前走群管能力 owner。每个部署只查询本机已连接 Bot 的自身群成员资料，不读取完整成员列表；结果以 `(group_id, bot_id)` 为键保存在容量受限的 LRU 中，不设 TTL。首次查询并发合并，群管变更 notice、自身退群和 Bot 重连/断连会失效对应观测。
+
+本机完整观测后将每个近期在场群的管理员 Bot ID 发布为 peer 心跳 `group_admin_bot_ids`。旧端、缺字段、失效 peer 或查询失败均为未知，入口会临时走原 fanout/claim 路径，保证首条命令可用。数据完整且至少有一个群管时，先复用能力、权限和在场群过滤，再用 `blake2b(group_id)` 稳定选择有群管的 deployment，随后用相同群号在该 deployment 的群管 Bot ID 中选择 owner。该算法不使用普通命令的时间桶，活动游戏不会因轮换更换主持者；非 owner 在 `[Message]`、matcher 与 direct runtime 之前被过滤。
 
 ### 联邦 ingress 抢占
 

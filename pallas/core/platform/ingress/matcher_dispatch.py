@@ -13,7 +13,6 @@ from nonebot.matcher import matchers
 
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value
 from pallas.core.foundation.logging import command_traffic_ctx
-from pallas.core.foundation.logging.throttle import log_rate_limited
 from pallas.core.platform.ingress.cold_start import in_cold_start_window, stale_message_drop_needed
 from pallas.core.platform.ingress.conversation_scheduler import (
     conversation_scheduler_enabled,
@@ -497,20 +496,6 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         llm_command["source_segment_types"],
                         selected_matcher_modules,
                         acquired_matcher_modules,
-                    )
-                if matchers_run and isinstance(event, GroupMessageEvent):
-                    plain = event.get_plaintext()[:80]
-                    deduped = sorted(set(acquired_matcher_modules))
-                    log_rate_limited(
-                        logger,
-                        "info",
-                        "ingress:matcher_run",
-                        "Matcher run [{}] executed in group [{}], command traffic [{}], {} matcher(s), message [{}]",
-                        ", ".join(deduped) or "-",
-                        getattr(event, "group_id", "-"),
-                        "on" if command_traffic else "off",
-                        matchers_run,
-                        plain or "-",
                     )
                 await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
             finally:

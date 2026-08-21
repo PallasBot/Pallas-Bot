@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
@@ -50,6 +50,7 @@ class RouteIndexSnapshot:
     always_run_modules: frozenset[str]
     passive_modules: frozenset[str]
     indexed_modules: frozenset[str]
+    required_bot_capabilities: dict[str, str] = field(default_factory=dict)
     prefix_trie: PrefixModuleTrie | None = None
 
 
@@ -163,6 +164,7 @@ def build_route_index() -> RouteIndexSnapshot:
     always_run: set[str] = set()
     passive: set[str] = set(_DEFAULT_PASSIVE_MODULES)
     indexed: set[str] = set()
+    required_capabilities: dict[str, str] = {}
 
     for plugin in get_loaded_plugins():
         module_key = plugin_module_key_from_plugin(plugin)
@@ -177,6 +179,9 @@ def build_route_index() -> RouteIndexSnapshot:
                 always_run.add(module_key)
             if ingress_route.get("passive"):
                 passive.add(module_key)
+            capability = ingress_route.get("required_bot_capability")
+            if isinstance(capability, str) and capability.strip():
+                required_capabilities[module_key] = capability.strip()
 
         menu_data = extra.get("menu_data")
         route_prefixes = extract_explicit_route_strings(extra.get("command_prefixes"))
@@ -222,6 +227,7 @@ def build_route_index() -> RouteIndexSnapshot:
         always_run_modules=frozenset(always_run),
         passive_modules=frozenset(passive),
         indexed_modules=frozenset(indexed),
+        required_bot_capabilities=required_capabilities,
         prefix_trie=PrefixModuleTrie.from_mapping(prefix_frozen),
     )
 

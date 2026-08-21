@@ -41,6 +41,7 @@ from pallas.core.platform.ingress.dream_host_gate import (
     DREAM_HOST_GATE_PLUGIN,
     dream_session_ingress_passes,
 )
+from pallas.core.platform.ingress.group_admin_owner import group_admin_owner_ingress_route
 from pallas.core.platform.ingress.policy_registry import text_matches_plugin_fanout
 from pallas.core.platform.ingress.send_queue import classify_send_queue_error
 
@@ -151,6 +152,7 @@ __all__ = [
     # 消息入口
     "DREAM_HOST_GATE_PLUGIN",
     "dream_session_ingress_passes",
+    "group_admin_owner_ingress_route",
     "text_matches_plugin_fanout",
     # 多 Bot 舰队
     "begin_group_exclusive_activity",

@@ -127,6 +127,11 @@ async def on_bot_connect(bot: Bot) -> None:
             clear_health_quarantine(qq)
 
         note_connected_bot(qq)
+        from pallas.core.platform.multi_bot.group_admin_capability import (
+            invalidate_bot_group_admin_capabilities,
+        )
+
+        invalidate_bot_group_admin_capabilities(qq)
         schedule_startup_bot_count_report()
         note_bot_session_seen(qq)
         await clear_protocol_bot_offline(qq)
@@ -162,6 +167,11 @@ async def on_bot_disconnect(bot: Bot) -> None:
         qq = int(bot.self_id)
         was_present = qq in _connected_bots
         note_disconnected_bot(qq)
+        from pallas.core.platform.multi_bot.group_admin_capability import (
+            invalidate_bot_group_admin_capabilities,
+        )
+
+        invalidate_bot_group_admin_capabilities(qq)
         if was_present:
             if _shutting_down:
                 logger.debug("[Bot {:>10}] disconnected.", bot.self_id)

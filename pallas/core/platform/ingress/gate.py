@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from contextvars import ContextVar, Token
 
-from nonebot import logger
+from nonebot import get_bots, logger
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, NoticeEvent
 from nonebot.exception import IgnoredException
 
@@ -29,6 +29,7 @@ from pallas.core.platform.ingress.claim_gate import (
 from pallas.core.platform.ingress.dream_host_gate import dream_session_ingress_passes
 from pallas.core.platform.ingress.fanout_bypass import ingress_fanout_bypasses_claim
 from pallas.core.platform.ingress.fast_path import ingress_once_claim_safe_before_host_gates
+from pallas.core.platform.ingress.group_admin_owner import group_admin_owner_ingress_decision
 from pallas.core.platform.ingress.hosted_activity_gate import (
     hosted_activity_claim_is_hosted,
     hosted_activity_ingress_passes,
@@ -110,6 +111,27 @@ def known_bot_sender(*, user_id: int, self_id: int) -> bool:
 
 async def ingress_notice_preprocess(bot, event) -> None:
     if isinstance(event, NoticeEvent):
+        from pallas.core.platform.multi_bot.group_admin_capability import (
+            invalidate_group_admin_capability,
+            record_group_admin_notice,
+        )
+
+        notice_type = getattr(event, "notice_type", "")
+        group_id = int(getattr(event, "group_id", 0) or 0)
+        if notice_type in {"group_admin", "set_group_admin"} and group_id:
+            bot_id = int(getattr(event, "user_id", 0) or 0)
+            if str(bot_id) in get_bots():
+                record_group_admin_notice(
+                    group_id=group_id,
+                    bot_id=bot_id,
+                    role="admin"
+                    if notice_type == "set_group_admin" or getattr(event, "sub_type", "") == "set"
+                    else "member",
+                )
+        elif notice_type == "group_decrease" and group_id:
+            bot_id = int(getattr(event, "user_id", 0) or 0)
+            if bot_id == int(bot.self_id):
+                invalidate_group_admin_capability(group_id=group_id, bot_id=bot_id)
         await ingress_notice_gate(bot, event)
 
 
@@ -145,6 +167,21 @@ async def ingress_group_message_gate(bot, event) -> None:
         sender_is_fleet_bot = known_bot_sender(user_id=user_id, self_id=self_id)
         pallas_ats = pallas_at_targets(event)
         local_only_federate = local_only_federate_command(plain)
+        group_admin_decision = await group_admin_owner_ingress_decision(int(event.group_id), self_id, plain)
+        if not group_admin_decision.passes:
+            outcome = "group_admin_owner_skip"
+            if metrics:
+                record_ingress_early_discard("federate")
+            raise IgnoredException("group admin owner mismatch")
+        if group_admin_decision.fallback_to_fanout:
+            ingress_fanout_early_exit(
+                self_id=self_id,
+                metrics=metrics,
+                known_bot_sender=sender_is_fleet_bot,
+                pallas_ats=pallas_ats,
+            )
+            outcome = "group_admin_owner_fallback"
+            return
         fanout_bypass = ingress_fanout_bypasses_claim(plain)
         if fanout_bypass:
             ingress_fanout_early_exit(

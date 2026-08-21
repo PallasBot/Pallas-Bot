@@ -201,6 +201,10 @@ def test_build_route_index_supports_multiple_explicit_plugin_routes(monkeypatch:
     plugins[2].metadata.extra["exact_plaintexts"] = ["牛牛在吗", "测试邮件", "牛牛报数", "牛牛出列"]
     plugins[3].metadata.extra["exact_plaintexts"] = ["牛牛轮盘", "牛牛开枪"]
     plugins[3].metadata.extra["command_prefixes"] = ["牛牛救一下", "牛牛补一枪"]
+    plugins[3].metadata.extra["ingress_route"] = {
+        "passive": True,
+        "required_bot_capability": "group_admin",
+    }
 
     monkeypatch.setattr(route_index, "get_loaded_plugins", lambda: plugins)
 
@@ -211,6 +215,7 @@ def test_build_route_index_supports_multiple_explicit_plugin_routes(monkeypatch:
     assert index.prefix_to_modules["牛牛救一下"] == frozenset({"roulette"})
     assert index.exact_to_modules["牛牛报数"] == frozenset({"bot_status"})
     assert index.exact_to_modules["牛牛轮盘"] == frozenset({"roulette"})
+    assert index.required_bot_capabilities == {"roulette": "group_admin"}
 
 
 def test_resolve_message_route_prefix_and_exact(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -7,6 +7,70 @@ from unittest.mock import AsyncMock, MagicMock
 from pallas.core.platform.federate import peer_bots as mod
 
 
+def test_publish_local_peer_payload_contains_group_admin_bot_ids(monkeypatch):
+    client = MagicMock()
+    monkeypatch.setattr(mod, "get_federate_redis_client", lambda: client)
+    monkeypatch.setattr(mod, "federate_redis_prefix", lambda _cfg=None: "pallas:fed:pool-1")
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "get_catalog_bot_ids", lambda: frozenset({111, 222}))
+    monkeypatch.setattr(mod, "collect_local_federate_online_bot_ids", lambda: frozenset({111, 222}))
+    monkeypatch.setattr(mod, "collect_local_present_group_ids", lambda: [123, 456])
+    monkeypatch.setattr(mod, "local_group_admin_bot_ids", lambda group_id: frozenset({111}) if group_id == 123 else frozenset())
+    monkeypatch.setattr(mod, "get_cached_group_bot_ids", lambda _group_id, **_kwargs: [111, 222])
+    monkeypatch.setattr(mod, "local_group_admin_observation_complete", lambda *_args: True)
+
+    assert mod.publish_local_federate_peer_bot_ids_sync() is True
+    _, payload = client.set.call_args.args[:2]
+    data = json.loads(payload)
+    assert data["group_admin_bot_ids"] == {"123": [111], "456": []}
+
+
+def test_peer_without_group_admin_field_is_unknown(monkeypatch):
+    client = MagicMock()
+    client.scan_iter.return_value = iter([b"pallas:fed:pool-1:peer_bots:dep-legacy"])
+    client.get.return_value = json.dumps({"deployment_id": "dep-legacy", "bot_ids": [20001]})
+    monkeypatch.setattr(mod, "get_federate_redis_client", lambda: client)
+    monkeypatch.setattr(mod, "federate_redis_prefix", lambda _cfg=None: "pallas:fed:pool-1")
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+
+    mod.refresh_federate_peer_bot_ids_sync()
+
+    assert mod.get_federate_peer_group_admin_bot_ids("dep-legacy", 123) is None
+
+
+def test_group_admin_owner_is_stable_for_same_group(monkeypatch):
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "collect_local_federate_command_capabilities", lambda: frozenset({"牛牛轮盘"}))
+    monkeypatch.setattr(mod, "_cache_deployment_ids", {"dep-peer"})
+    monkeypatch.setattr(mod, "_cache_deployment_capabilities", {"dep-peer": frozenset({"牛牛轮盘"})})
+    monkeypatch.setattr(mod, "_cache_deployment_present_groups", {"dep-peer": frozenset({123})})
+    monkeypatch.setattr(
+        mod,
+        "group_admin_bot_ids_by_deployment",
+        lambda *_args: {"dep-local": frozenset({100}), "dep-peer": frozenset({200})},
+    )
+
+    first = mod.federate_group_admin_owner(123, plain="牛牛轮盘")
+    second = mod.federate_group_admin_owner(123, plain="牛牛轮盘")
+
+    assert first == second
+    assert first is not None
+    assert first.deployment_id in {"dep-local", "dep-peer"}
+
+
+def test_group_admin_owner_downgrades_when_peer_observation_unknown(monkeypatch):
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "collect_local_federate_command_capabilities", lambda: frozenset())
+    monkeypatch.setattr(mod, "_cache_deployment_ids", {"dep-peer"})
+    monkeypatch.setattr(
+        mod,
+        "group_admin_bot_ids_by_deployment",
+        lambda *_args: {"dep-local": frozenset({100}), "dep-peer": None},
+    )
+
+    assert mod.federate_group_admin_owner(123, plain="牛牛轮盘") is None
+
+
 def test_publish_local_federate_peer_bot_ids_sync_writes_current_catalog(monkeypatch):
     client = MagicMock()
     monkeypatch.setattr(mod, "get_federate_redis_client", lambda: client)
