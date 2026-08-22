@@ -745,11 +745,13 @@ async def prepare_and_submit_llm_chat_turn(
                 text=focus_text,
                 is_to_me=is_to_me,
                 is_explicitly_addressed=speak_trigger in {"alias", "mention", "followup"},
+                group_id=group_id,
                 tools_permitted=bool(tool_meta.get("tools_enabled")),
                 required_tool_intent=required_tool_intent,
                 recent_bot_reply_count=min(6, recent_bot_reply_count),
                 has_multi_party_overlap=has_multi_party,
                 reply_candidates=reply_candidates,
+                reply_to_message_id=extract_reply_id_from_raw_message(str(getattr(event, "raw_message", "") or "")),
             ),
             enabled=bool(getattr(llm_cfg, "llm_current_turn_decision_enabled", False)),
         )

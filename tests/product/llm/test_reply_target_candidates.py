@@ -3,8 +3,18 @@ from __future__ import annotations
 from pallas.product.llm.reply_target_candidates import (
     clear_reply_target_candidates,
     list_reply_target_candidates,
+    note_quote_emitted,
     record_reply_target_candidate,
+    should_emit_quote,
 )
+
+
+class _FixedRng:
+    def __init__(self, value: float) -> None:
+        self._value = value
+
+    def random(self) -> float:
+        return self._value
 
 
 def test_recent_reply_target_candidates_keep_current_message_and_recent_group_context() -> None:
@@ -48,3 +58,22 @@ def test_recent_reply_target_candidates_truncate_long_text() -> None:
 
     assert len(candidates[0].text) == 160
     assert candidates[0].text == "长" * 160
+
+
+def test_quote_emit_respects_probability_and_cooldown() -> None:
+    group_id = 779001
+    assert should_emit_quote(group_id, rng=_FixedRng(0.9)) is False
+    assert should_emit_quote(group_id, rng=_FixedRng(0.1)) is True
+
+
+def test_quote_emit_respects_cooldown_within_group() -> None:
+    group_id = 779002
+    assert should_emit_quote(group_id, rng=_FixedRng(0.1)) is True
+    note_quote_emitted(group_id, now=1_000.0)
+    assert should_emit_quote(group_id, rng=_FixedRng(0.1), now=1_000.0 + 119) is False
+    assert should_emit_quote(group_id, rng=_FixedRng(0.1), now=1_000.0 + 120) is True
+
+
+def test_quote_emit_requires_valid_group() -> None:
+    assert should_emit_quote(None, rng=_FixedRng(0.1)) is False
+    assert should_emit_quote(0, rng=_FixedRng(0.1)) is False

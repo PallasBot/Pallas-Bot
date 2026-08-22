@@ -231,6 +231,88 @@ def test_model_current_turn_drops_unknown_reply_target() -> None:
     assert result.delivery_style is CurrentTurnDeliveryStyle.PLAIN
 
 
+def test_rule_current_turn_quotes_a_candidate_reply_to(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm import reply_target_candidates
+
+    monkeypatch.setattr(reply_target_candidates, "should_emit_quote", lambda *a, **k: True)
+    result = decide_current_turn(
+        CurrentTurnDecisionInput(
+            text="哈哈哈哈",
+            group_id=778901,
+            is_to_me=False,
+            reply_candidates=[
+                ReplyTargetCandidate(message_id=1001, sender_id=5, text="这个怎么弄？", is_current=False),
+            ],
+            reply_to_message_id=1001,
+        ),
+        model_enabled=False,
+    )
+
+    assert result.action is CurrentTurnAction.REPLY
+    assert result.delivery_style is CurrentTurnDeliveryStyle.QUOTE
+    assert result.reply_message_id == 1001
+    assert result.trace.source == "rule"
+    assert result.trace.reason == "rule_reply_quote"
+
+
+def test_rule_current_turn_ignores_quote_for_unknown_reply_to() -> None:
+    result = decide_current_turn(
+        CurrentTurnDecisionInput(
+            text="哈哈哈哈",
+            group_id=778902,
+            is_to_me=False,
+            reply_candidates=[
+                ReplyTargetCandidate(message_id=1001, sender_id=5, text="这个怎么弄？", is_current=False)
+            ],
+            reply_to_message_id=9999,
+        ),
+        model_enabled=False,
+    )
+
+    assert result.delivery_style is CurrentTurnDeliveryStyle.PLAIN
+    assert result.reply_message_id is None
+
+
+def test_rule_current_turn_respects_quote_cooldown_within_group(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm import reply_target_candidates
+
+    calls = 0
+
+    def first_emit(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        return calls == 1
+
+    monkeypatch.setattr(reply_target_candidates, "should_emit_quote", first_emit)
+    first = decide_current_turn(
+        CurrentTurnDecisionInput(
+            text="哈哈哈哈",
+            group_id=778903,
+            is_to_me=False,
+            reply_candidates=[ReplyTargetCandidate(message_id=1001, sender_id=5, text="这条", is_current=False)],
+            reply_to_message_id=1001,
+        ),
+        model_enabled=False,
+    )
+    second = decide_current_turn(
+        CurrentTurnDecisionInput(
+            text="哈哈哈哈",
+            group_id=778903,
+            is_to_me=False,
+            reply_candidates=[ReplyTargetCandidate(message_id=1001, sender_id=5, text="这条", is_current=False)],
+            reply_to_message_id=1001,
+        ),
+        model_enabled=False,
+    )
+
+    assert first.delivery_style is CurrentTurnDeliveryStyle.QUOTE
+    assert second.delivery_style is CurrentTurnDeliveryStyle.PLAIN
+
+
 def test_model_current_turn_downgrades_mention_without_multi_party_overlap() -> None:
     result = decide_current_turn(
         CurrentTurnDecisionInput(text="你怎么看？", is_to_me=True, has_multi_party_overlap=False),
@@ -289,36 +371,54 @@ def test_explicit_short_social_turn_uses_recent_pair_when_assistant_replied() ->
 
 
 def test_reply_target_keeps_short_social_generation_on_the_current_turn() -> None:
-    assert resolve_reply_target(
-        "我又改需求了，烦",
-        action=CurrentTurnAction.REPLY,
-        social_action=CurrentTurnSocialAction.ACK,
-    ) == "emotion"
-    assert resolve_reply_target(
-        "牛牛你还在吗",
-        action=CurrentTurnAction.REPLY,
-        social_action=CurrentTurnSocialAction.ACK,
-    ) == "fact"
-    assert resolve_reply_target(
-        "这也能改？",
-        action=CurrentTurnAction.REPLY,
-        social_action=CurrentTurnSocialAction.ACK,
-    ) == "fact"
-    assert resolve_reply_target(
-        "这个怎么改？",
-        action=CurrentTurnAction.REPLY,
-        social_action=CurrentTurnSocialAction.ANSWER,
-    ) == "answer"
-    assert resolve_reply_target(
-        "你是不是只会哞哞叫",
-        action=CurrentTurnAction.REPLY,
-        social_action=CurrentTurnSocialAction.JOKE,
-    ) == "short_tease"
-    assert resolve_reply_target(
-        "就是骂你",
-        action=CurrentTurnAction.PASS,
-        social_action=CurrentTurnSocialAction.JOKE,
-    ) == "silent"
+    assert (
+        resolve_reply_target(
+            "我又改需求了，烦",
+            action=CurrentTurnAction.REPLY,
+            social_action=CurrentTurnSocialAction.ACK,
+        )
+        == "emotion"
+    )
+    assert (
+        resolve_reply_target(
+            "牛牛你还在吗",
+            action=CurrentTurnAction.REPLY,
+            social_action=CurrentTurnSocialAction.ACK,
+        )
+        == "fact"
+    )
+    assert (
+        resolve_reply_target(
+            "这也能改？",
+            action=CurrentTurnAction.REPLY,
+            social_action=CurrentTurnSocialAction.ACK,
+        )
+        == "fact"
+    )
+    assert (
+        resolve_reply_target(
+            "这个怎么改？",
+            action=CurrentTurnAction.REPLY,
+            social_action=CurrentTurnSocialAction.ANSWER,
+        )
+        == "answer"
+    )
+    assert (
+        resolve_reply_target(
+            "你是不是只会哞哞叫",
+            action=CurrentTurnAction.REPLY,
+            social_action=CurrentTurnSocialAction.JOKE,
+        )
+        == "short_tease"
+    )
+    assert (
+        resolve_reply_target(
+            "就是骂你",
+            action=CurrentTurnAction.PASS,
+            social_action=CurrentTurnSocialAction.JOKE,
+        )
+        == "silent"
+    )
 
 
 def test_answer_reply_target_keeps_relationship_replies_in_current_context() -> None:
@@ -469,33 +569,31 @@ async def test_current_turn_decision_retries_configured_task_backup(
     monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
     monkeypatch.setattr("pallas.product.llm.providers_store._read_ai_providers_toml", lambda: None)
     clear_providers_store_cache()
-    save_providers_document(
-        {
-            "providers": [
-                {
-                    "id": "primary",
-                    "kind": "remote",
-                    "base_url": "https://primary.example.com/v1",
-                    "api_key": "sk-primary",
-                    "default_model": "main",
-                    "task_models": {"turn_decision": "decision-primary"},
-                },
-                {
-                    "id": "backup",
-                    "kind": "remote",
-                    "base_url": "https://backup.example.com/v1",
-                    "api_key": "sk-backup",
-                    "default_model": "fallback",
-                },
-            ],
-            "routing": {
-                "chain_fallback": ["primary"],
-                "tasks": {"turn_decision": "primary"},
-                "task_backups": {"turn_decision": "backup"},
-                "task_backup_models": {"turn_decision": "decision-backup"},
+    save_providers_document({
+        "providers": [
+            {
+                "id": "primary",
+                "kind": "remote",
+                "base_url": "https://primary.example.com/v1",
+                "api_key": "sk-primary",
+                "default_model": "main",
+                "task_models": {"turn_decision": "decision-primary"},
             },
-        }
-    )
+            {
+                "id": "backup",
+                "kind": "remote",
+                "base_url": "https://backup.example.com/v1",
+                "api_key": "sk-backup",
+                "default_model": "fallback",
+            },
+        ],
+        "routing": {
+            "chain_fallback": ["primary"],
+            "tasks": {"turn_decision": "primary"},
+            "task_backups": {"turn_decision": "backup"},
+            "task_backup_models": {"turn_decision": "decision-backup"},
+        },
+    })
     monkeypatch.setattr(
         "pallas.product.llm.provider_client.get_llm_config",
         lambda: LlmConfig(llm_base_url="", llm_model=""),

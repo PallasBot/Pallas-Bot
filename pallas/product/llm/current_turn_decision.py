@@ -94,11 +94,13 @@ class CurrentTurnDecisionInput(BaseModel):
     text: str = Field(max_length=4000)
     is_to_me: bool = False
     is_explicitly_addressed: bool = False
+    group_id: int | None = Field(default=None, gt=0)
     tools_permitted: bool = False
     required_tool_intent: bool = False
     recent_bot_reply_count: int = Field(default=0, ge=0, le=6)
     has_multi_party_overlap: bool = False
     reply_candidates: list[ReplyTargetCandidate] = Field(default_factory=list, max_length=6)
+    reply_to_message_id: int | None = Field(default=None, gt=0)
 
 
 class CurrentTurnModelResponse(BaseModel):
@@ -265,6 +267,20 @@ def decide_current_turn_by_rule(turn: CurrentTurnDecisionInput) -> CurrentTurnDe
             source="rule",
             reason="rule_short_vent_ack",
         )
+    if turn.reply_to_message_id is not None:
+        from pallas.product.llm.reply_target_candidates import note_quote_emitted, should_emit_quote
+
+        candidate_ids = {item.message_id for item in turn.reply_candidates}
+        if turn.reply_to_message_id in candidate_ids and should_emit_quote(turn.group_id):
+            note_quote_emitted(turn.group_id)
+            return _decision(
+                CurrentTurnAction.REPLY,
+                social_action=CurrentTurnSocialAction.ANSWER,
+                delivery_style=CurrentTurnDeliveryStyle.QUOTE,
+                reply_message_id=turn.reply_to_message_id,
+                source="rule",
+                reason="rule_reply_quote",
+            )
     if not (turn.is_to_me or turn.is_explicitly_addressed) and should_pass_low_value_social_turn(text):
         return _decision(
             CurrentTurnAction.PASS,

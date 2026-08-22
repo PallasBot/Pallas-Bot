@@ -24,6 +24,7 @@
        ├─ REPLY    → 正常对话生成 ★主路径（context 注入 + persona + 多泡）
        ├─ TOOL     → 工具调用（需权限）
        ├─ FOLLOW_UP → 追问
+       ├─ QUOTE    → 用户引用了最近候选消息（rule 路径加概率 + 冷却后判 QUOTE，见下节）
        └─ PASS     → 低投入出口（见下节）：掷概率，命中则本地极短句池取 ≤12 字补泡，未命中静默
 ```
 
@@ -109,6 +110,17 @@
 **分场景取句**：入口把触发文本（`focus_text`）传给 `dispatch_low_engagement`。触发文本带情绪词（难绷/破防/麻了/emo/烦/累/哭/气死等，`_EMOTION_TRIGGER_KEYWORDS`）时，从「梗型跳脱池」（`_EMOTION_TANGENT_POOL`，如「阴完了」「没绷住」「休息会」，真实语料提炼的干净单句冷转移）取句；否则仍走通用乖巧 soft 池。脏样本（攻击性/脏话）不进池。
 
 - 目的：给「不值得完整回复但不该静默」的消息一个低成本带角色回应，缓解 bot 在低价值消息上的持续沉默。
+
+### 引用的原生引用（QUOTE 决策）
+
+用户引用某条最近消息时（OneBot 引用段，`extract_reply_id_from_raw_message` 从 `raw_message` 解析），rule 路径可能判 `QUOTE` 而非普通回复：
+
+- 仅当引用目标在**本群最近候选**（`reply_target_candidates`，deque maxlen 6）内时，rule 才可能判 `QUOTE`——引用未知/过期消息退化为普通 `PLAIN` 回复。
+- 群级节流：每群冷却 `_QUOTE_COOLDOWN_SEC`（默认 120s）+ 命中概率 `_QUOTE_EMIT_PROBABILITY`（默认 0.25），避免连珠炮式的引用（「一次对话不会每条都 quote」）。
+- 决策在 `CurrentTurnDecisionInput.reply_to_message_id` 传入、`decide_current_turn_by_rule` 产出 `QUOTE + reply_message_id`（`source="rule"`，reason `rule_reply_quote`），零 LLM。
+- 发送侧 `delivery.py:_resolve_quote_reply_target` 只对所引用 id 在 `reply_candidate_ids` 内时才真正带引用，否则降级为纯文本。
+
+来源：审计发现 `delivery_style=QUOTE` 实际从未决出—— rule 路径原本不产 QUOTE、且 model 判定被 `llm_current_turn_decision_enabled=False` 掐死。本机制不新建配置、不增加 LLM 调用。
 
 ### 长会话压缩
 
