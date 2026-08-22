@@ -91,11 +91,11 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet && git diff --cached --quiet; then
+          git add -A
+          if git diff --cached --quiet; then
             echo "No changes to push"
             exit 0
           fi
-          git add -A
           git commit -m "docs: 同步主仓 Pallas-Bot@${SOURCE_SHA:0:7} (${SOURCE_REF})"
           git remote set-url origin "https://x-access-token:${DOCS_SYNC_TOKEN}@github.com/PallasBot/Pallas-Bot-Docs.git"
           git push origin HEAD:main
