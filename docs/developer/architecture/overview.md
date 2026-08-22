@@ -83,6 +83,7 @@ Pallas-Bot 的可执行边界是：主仓承载运行时与产品语义；WebUI�
 | 插件治理 | [plugin-governance.md](plugin-governance.md) |
 | 插件业务事件日志 | [plugin-event-logging.md](plugin-event-logging.md) |
 | Bot 内置 Agent 生命周期 | [agent-lifecycle.md](agent-lifecycle.md) |
+| LLM 上下文注入全景 | [llm-context-injection.md](llm-context-injection.md) |
 | LLM 输出路径（@ / 接话 / 表达库） | [llm-output-path.md](llm-output-path.md) |
 | 插件骨架 | [Golden Plugin](/developer/plugin-development/golden-plugin) |
 
