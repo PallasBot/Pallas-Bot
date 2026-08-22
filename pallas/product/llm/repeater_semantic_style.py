@@ -1451,9 +1451,7 @@ def resolve_cached_semantic_style(
     recent_assistant_replies: Iterable[str] = (),
     bypass_injection_gate: bool = False,
 ) -> SemanticStyleResolution:
-    if not bypass_injection_gate and not semantic_style_injection_enabled(
-        request_id, bot_id=bot_id, group_id=group_id
-    ):
+    if not bypass_injection_gate and not semantic_style_injection_enabled(request_id, bot_id=bot_id, group_id=group_id):
         return SemanticStyleResolution()
     profile = cached_semantic_style_profile(bot_id, group_id, scene)
     if profile is None or not profile.human_only:

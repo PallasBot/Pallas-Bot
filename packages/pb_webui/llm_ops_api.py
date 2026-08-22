@@ -712,9 +712,7 @@ def register_llm_ops_router(
             sections=body.sections,
         )
         response_sections = {
-            section_id: (
-                value.model_dump() if hasattr(value, "model_dump") else value
-            )
+            section_id: (value.model_dump() if hasattr(value, "model_dump") else value)
             for section_id, value in saved.items()
         }
         return JSONResponse({"ok": True, "data": response_sections})

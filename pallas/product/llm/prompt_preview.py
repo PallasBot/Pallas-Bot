@@ -85,9 +85,7 @@ async def build_prompt_preview(
         request_id = f"preview:{bot_id}:{group_id}:{user_id}"
         semantic_style_trace = {
             "bypassed_injection_gate": True,
-            "would_inject": semantic_style_injection_enabled(
-                request_id, bot_id=bot_id, group_id=group_id
-            ),
+            "would_inject": semantic_style_injection_enabled(request_id, bot_id=bot_id, group_id=group_id),
         }
         semantic_style = resolve_cached_semantic_style(
             bot_id,
