@@ -49,6 +49,10 @@ _PUBLISH_TTL_SEC = max(60, int(os.getenv("PALLAS_FEDERATE_PEER_BOT_TTL_SEC", "18
 _REFRESH_INTERVAL_SEC = max(15.0, float(os.getenv("PALLAS_FEDERATE_PEER_BOT_REFRESH_SEC", "60")))
 _PRESENT_GROUP_WINDOW_SEC = max(_PUBLISH_TTL_SEC, int(os.getenv("PALLAS_FEDERATE_PRESENT_GROUP_WINDOW_SEC", "300")))
 _PRESENT_GROUP_PUBLISH_CAP = max(64, int(os.getenv("PALLAS_FEDERATE_PRESENT_GROUP_PUBLISH_CAP", "2000")))
+# 每群写远端 Redis 的降频间隔；在场窗口远大于该值，降到秒级即可保证语义。
+_PRESENT_GROUP_REMOTE_TOUCH_INTERVAL_SEC = max(
+    5.0, float(os.getenv("PALLAS_FEDERATE_PRESENT_GROUP_REMOTE_PUSH_INTERVAL_SEC", "30"))
+)
 _NICKNAME_CACHE_TTL_SEC = max(60.0, float(os.getenv("PALLAS_FEDERATE_NICKNAME_CACHE_SEC", "600")))
 _NICKNAME_FAILURE_CACHE_TTL_SEC = max(15.0, min(_NICKNAME_CACHE_TTL_SEC, 60.0))
 _NICKNAME_CACHE_MAX_SIZE = max(1, int(os.getenv("PALLAS_FEDERATE_NICKNAME_CACHE_MAX_SIZE", "1024")))
@@ -70,6 +74,8 @@ _cache_deployment_group_admin_bot_ids: dict[str, dict[int, frozenset[int]] | Non
 _cache_deployment_rosters: dict[str, FederatePeerBotRoster] = {}
 _cache_local_roster: FederatePeerBotRoster | None = None
 _local_present_groups: dict[int, float] = {}
+# 每群最近一次写远端 Redis 的时间戳（降频用）
+_last_remote_present_touch_ts: dict[int, float] = {}
 _local_public_online_nickname_cache: dict[int, tuple[float, str]] = {}
 # 本地命令元数据收集缓存：插件加载/热载时失效
 _local_command_capabilities_cache: frozenset[str] | None = None
@@ -111,6 +117,7 @@ def clear_federate_peer_bot_cache_for_tests() -> None:
         _local_command_plaintext_to_id_cache, \
         _cache_updated_mono, \
         _local_present_groups, \
+        _last_remote_present_touch_ts, \
         _sync_task, \
         _last_incompatible_capability_peers, \
         _last_incompatible_ingress_peers
@@ -126,6 +133,7 @@ def clear_federate_peer_bot_cache_for_tests() -> None:
     _cache_deployment_rosters = {}
     _cache_local_roster = None
     _local_present_groups = {}
+    _last_remote_present_touch_ts = {}
     _local_public_online_nickname_cache = {}
     _local_command_capabilities_cache = None
     _local_command_permission_levels_cache = None
@@ -487,6 +495,16 @@ def touch_federate_present_group(group_id: int) -> None:
     for g in stale:
         _local_present_groups.pop(g, None)
 
+    # 远端写按群降频：成功后每群至多每降频间隔写一次，其余只更新本地在场表。
+    # 在场窗口（默认 300s）远大于该间隔，语义不受影响，避免热路径同步网络往返。
+    interval = float(_PRESENT_GROUP_REMOTE_TOUCH_INTERVAL_SEC)
+    if now - _last_remote_present_touch_ts.get(gid, 0.0) < interval:
+        if len(_last_remote_present_touch_ts) > 4096:
+            cutoff_allow = now - max(float(_PRESENT_GROUP_WINDOW_SEC), float(_PRESENT_GROUP_REMOTE_TOUCH_INTERVAL_SEC))
+            for g in [k for k, ts in _last_remote_present_touch_ts.items() if ts < cutoff_allow]:
+                _last_remote_present_touch_ts.pop(g, None)
+        return
+
     client = get_federate_redis_client()
     prefix = federate_redis_prefix()
     deployment_id = load_or_create_deployment_id().strip().lower()
@@ -500,7 +518,11 @@ def touch_federate_present_group(group_id: int) -> None:
         pipe.expire(key, int(_PRESENT_GROUP_WINDOW_SEC) + int(_PUBLISH_TTL_SEC))
         pipe.execute()
     except Exception:
+        # 失败也记录尝试时间：上游抖动时不至于每条消息都同步重试。
+        attempt_ts = _last_remote_present_touch_ts.get(gid, 0.0)
+        _last_remote_present_touch_ts[gid] = max(attempt_ts, now)
         return
+    _last_remote_present_touch_ts[gid] = now
 
 
 def collect_local_present_group_ids() -> list[int]:
