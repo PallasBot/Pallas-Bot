@@ -456,6 +456,26 @@ def test_list_group_feedback_entries_dedupes_recent_request_id(tmp_path, monkeyp
     assert snap["top_replies"] == ["少来。", "行吧。"]
 
 
+def test_list_group_feedback_entries_filters_by_bot(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    from pallas.product.llm.repeater_feedback import append_feedback_entry, build_feedback_entry
+
+    for bot_id in (10001, 10002):
+        append_feedback_entry(
+            build_feedback_entry(
+                entry_id=f"entry-{bot_id}",
+                request_id=f"request-{bot_id}",
+                bot_id=bot_id,
+                group_id=123,
+                user_id=456,
+                user_text="你好",
+                reply_text="嗨。",
+            )
+        )
+
+    assert [row.bot_id for row in list_group_feedback_entries(group_id=123, bot_id=10002)] == [10002]
+
+
 def test_list_group_feedback_entries_dedupes_same_request_id_with_different_entry_id(
     tmp_path,
     monkeypatch,
@@ -543,6 +563,99 @@ def test_feedback_manage_invalidate_restore_and_delete(tmp_path, monkeypatch) ->
 
     assert delete_feedback_entry(request_id="req-manage-1") is True
     assert find_feedback_entry(request_id="req-manage-1") is None
+
+
+def test_delete_feedback_entry_matches_entry_id_with_scope(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    from pallas.product.llm.repeater_feedback import (
+        append_feedback_entry,
+        build_feedback_entry,
+        delete_feedback_entry,
+        find_feedback_entry,
+    )
+
+    for bot_id, group_id in ((10001, 123), (10002, 456)):
+        append_feedback_entry(
+            build_feedback_entry(
+                entry_id="shared-entry",
+                request_id=f"request-{bot_id}",
+                bot_id=bot_id,
+                group_id=group_id,
+                user_id=789,
+                user_text="你好",
+                reply_text="嗨。",
+            )
+        )
+
+    assert delete_feedback_entry(entry_id="shared-entry", bot_id=10001, group_id=123) is True
+    assert find_feedback_entry(request_id="request-10001") is None
+    assert find_feedback_entry(request_id="request-10002") is not None
+
+    remaining = find_feedback_entry(request_id="request-10002")
+    assert remaining is not None
+    assert (remaining.bot_id, remaining.group_id) == (10002, 456)
+
+
+@pytest.mark.parametrize(
+    ("action", "assertion"),
+    [
+        ("invalidate", lambda entry: entry.eligible_for_bias is False),
+        ("restore", lambda entry: entry.eligible_for_bias is True),
+        ("correct", lambda entry: entry.corrected_reply_text == "当前 scope"),
+        ("clear_correction", lambda entry: entry.corrected_reply_text == ""),
+        ("delete", lambda entry: entry is None),
+    ],
+)
+def test_feedback_mutations_match_shared_id_with_exact_scope(tmp_path, monkeypatch, action, assertion) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    from pallas.product.llm.repeater_feedback import (
+        append_feedback_entry,
+        build_feedback_entry,
+        clear_feedback_entry_correction,
+        delete_feedback_entry,
+        find_feedback_entry,
+        set_feedback_entry_correction,
+        set_feedback_entry_eligibility,
+    )
+
+    for bot_id, group_id in ((10001, 123), (10002, 456)):
+        append_feedback_entry(
+            build_feedback_entry(
+                entry_id="shared-entry",
+                request_id="shared-request",
+                bot_id=bot_id,
+                group_id=group_id,
+                user_id=789,
+                user_text="你好",
+                reply_text="嗨。",
+                corrected_reply_text="原校正" if action == "clear_correction" else "",
+                corrected_at=1 if action == "clear_correction" else 0,
+            )
+        )
+
+    kwargs = {"entry_id": "shared-entry", "bot_id": 10001, "group_id": 123}
+    if action == "invalidate":
+        updated = set_feedback_entry_eligibility(**kwargs, eligible_for_bias=False)
+    elif action == "restore":
+        updated = set_feedback_entry_eligibility(**kwargs, eligible_for_bias=True)
+    elif action == "correct":
+        updated = set_feedback_entry_correction(**kwargs, corrected_reply_text="当前 scope")
+    elif action == "clear_correction":
+        updated = clear_feedback_entry_correction(**kwargs)
+    else:
+        updated = delete_feedback_entry(**kwargs)
+
+    assert assertion(
+        updated if action != "delete" else find_feedback_entry(request_id="shared-request", bot_id=10001, group_id=123)
+    )
+    foreign = find_feedback_entry(request_id="shared-request", bot_id=10002, group_id=456)
+    assert foreign is not None
+    if action == "delete":
+        assert foreign.corrected_reply_text == ""
+    elif action == "correct":
+        assert foreign.corrected_reply_text == ""
+    elif action == "clear_correction":
+        assert foreign.corrected_reply_text == "原校正"
 
 
 def test_feedback_entry_mutation_reloads_inside_lock_and_preserves_concurrent_append(tmp_path, monkeypatch) -> None:
@@ -721,9 +834,28 @@ def test_group_feedback_bias_snapshot_matched_replies_for_trigger(tmp_path, monk
         )
     )
 
-    snap = group_feedback_bias_snapshot(group_id=123, limit=50, user_text="真棒啊")
+    snap = group_feedback_bias_snapshot(bot_id=10001, group_id=123, limit=50, user_text="真棒啊")
 
     assert snap["matched_replies"] == ["还行吧"]
+
+
+def test_group_feedback_bias_snapshot_isolates_runtime_bot(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    for bot_id, reply in ((10001, "本机回复"), (10002, "另一 Bot 回复")):
+        append_feedback_entry(
+            build_feedback_entry(
+                bot_id=bot_id,
+                group_id=123,
+                user_id=456,
+                request_id=f"snapshot-{bot_id}",
+                user_text="你好",
+                reply_text=reply,
+            )
+        )
+
+    snapshot = group_feedback_bias_snapshot(bot_id=10001, group_id=123, limit=50)
+
+    assert snapshot["top_replies"] == ["本机回复"]
 
 
 def test_group_feedback_bias_snapshot_hotpath_skips_heavy_stats(tmp_path, monkeypatch) -> None:

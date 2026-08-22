@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from pallas.product.llm.assembler.prompt_overrides import apply_prompt_section_overrides
 from pallas.product.persona.prompt_guard import PROMPT_INJECTION_GUARD, sanitize_prompt_block
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from pallas.product.llm.assembler.context import ChatContextBundle
     from pallas.product.llm.reply_shape import ReplyShapePolicy
     from pallas.product.llm.turn_policy import TurnPolicy
@@ -32,6 +35,23 @@ class ToolPromptContext:
 class ChatPromptAssembler:
     """Assemble chat-only prompt sections in their policy order."""
 
+    section_ids = (
+        "injection_guard",
+        "persona",
+        "identity",
+        "reply_shape",
+        "turn_policy",
+        "group_timeline",
+        "memory",
+        "knowledge",
+        "relationship",
+        "person_facts",
+        "mid_term",
+        "group_expression",
+        "behavior_reference",
+        "tool_context",
+    )
+
     def assemble(
         self,
         *,
@@ -42,7 +62,33 @@ class ChatPromptAssembler:
         group_expression: ResolvedGroupExpression | None,
         reply_shape: ReplyShapePolicy,
         tool_context: ToolPromptContext | None = None,
+        section_overrides: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> str:
+        return self._join_unique(
+            self.section_texts(
+                core_persona=core_persona,
+                self_identity=self_identity,
+                turn_policy=turn_policy,
+                context=context,
+                group_expression=group_expression,
+                reply_shape=reply_shape,
+                tool_context=tool_context,
+                section_overrides=section_overrides,
+            )
+        )
+
+    def section_texts(
+        self,
+        *,
+        core_persona: str,
+        self_identity: str,
+        turn_policy: TurnPolicy,
+        context: ChatContextBundle,
+        group_expression: ResolvedGroupExpression | None,
+        reply_shape: ReplyShapePolicy,
+        tool_context: ToolPromptContext | None = None,
+        section_overrides: Mapping[str, Mapping[str, Any]] | None = None,
+    ) -> list[str]:
         sections = [
             PROMPT_INJECTION_GUARD,
             core_persona,
@@ -54,7 +100,7 @@ class ChatPromptAssembler:
             self._group_behavior_reference_block(group_expression),
             self._tool_context_block(tool_context),
         ]
-        return self._join_unique(sections)
+        return apply_prompt_section_overrides(self.section_ids, sections, section_overrides)
 
     @staticmethod
     def _join_unique(sections: list[str]) -> str:

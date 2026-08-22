@@ -21,8 +21,9 @@ def _build_client(monkeypatch) -> TestClient:
 
 
 def test_llm_repeater_feedback_api_returns_recent_entries(monkeypatch) -> None:
-    def fake_list_group_feedback_entries(*, group_id: int, limit: int = 20):
+    def fake_list_group_feedback_entries(*, group_id: int, bot_id: int, limit: int = 20):
         assert group_id == 123
+        assert bot_id == 10001
         assert limit == 20
         return [
             LlmRepeaterFeedbackEntry(
@@ -51,7 +52,7 @@ def test_llm_repeater_feedback_api_returns_recent_entries(monkeypatch) -> None:
     client = _build_client(monkeypatch)
     response = client.get(
         "/pallas/api/llm/repeater-feedback",
-        params={"group_id": 123, "limit": 20},
+        params={"group_id": 123, "bot_id": 10001, "limit": 20},
     )
 
     assert response.status_code == 200, response.text
@@ -60,6 +61,61 @@ def test_llm_repeater_feedback_api_returns_recent_entries(monkeypatch) -> None:
     assert payload["data"]["items"][0]["request_id"] == "req-1"
     assert payload["data"]["items"][0]["reply_text"] == "少来。"
     assert payload["data"]["limit"] == 20
+
+
+def test_llm_repeater_feedback_api_rejects_missing_bot_scope(monkeypatch) -> None:
+    client = _build_client(monkeypatch)
+
+    for params, missing_scope in (
+        ({"group_id": 123}, "bot_id"),
+        ({"bot_id": 10001}, "group_id"),
+    ):
+        response = client.get("/pallas/api/llm/repeater-feedback", params=params)
+
+        assert response.status_code in {400, 422}
+        assert response.json()["detail"][0]["loc"] == ["query", missing_scope]
+
+
+def test_llm_repeater_feedback_api_passes_bot_scope(monkeypatch) -> None:
+    calls: list[tuple[int, int | None, int]] = []
+
+    def fake_list_group_feedback_entries(*, group_id: int, bot_id: int | None = None, limit: int = 20):
+        calls.append((group_id, bot_id, limit))
+        return []
+
+    monkeypatch.setattr(
+        "packages.pb_webui.llm_product_api.list_group_feedback_entries",
+        fake_list_group_feedback_entries,
+    )
+    client = _build_client(monkeypatch)
+
+    response = client.get("/pallas/api/llm/repeater-feedback", params={"group_id": 123, "bot_id": 10001})
+
+    assert response.status_code == 200, response.text
+    assert calls == [(123, 10001, 20)]
+
+
+def test_llm_repeater_feedback_api_keeps_same_group_bots_isolated(monkeypatch) -> None:
+    entries = {
+        10001: [{"entry_id": "bot-1", "bot_id": 10001}],
+        10002: [{"entry_id": "bot-2", "bot_id": 10002}],
+    }
+
+    def fake_list_group_feedback_entries(*, group_id: int, bot_id: int, limit: int = 20):
+        assert group_id == 123
+        return entries[bot_id][:limit]
+
+    monkeypatch.setattr(
+        "packages.pb_webui.llm_product_api.list_group_feedback_entries",
+        fake_list_group_feedback_entries,
+    )
+    client = _build_client(monkeypatch)
+
+    first = client.get("/pallas/api/llm/repeater-feedback", params={"group_id": 123, "bot_id": 10001})
+    second = client.get("/pallas/api/llm/repeater-feedback", params={"group_id": 123, "bot_id": 10002})
+
+    assert [item["bot_id"] for item in first.json()["data"]["items"]] == [10001]
+    assert [item["bot_id"] for item in second.json()["data"]["items"]] == [10002]
 
 
 def test_llm_repeater_feedback_summary_api_returns_group_snapshot(monkeypatch) -> None:
@@ -94,7 +150,8 @@ def test_llm_repeater_feedback_summary_api_returns_group_snapshot(monkeypatch) -
 def test_llm_repeater_feedback_promotion_candidates_api(monkeypatch) -> None:
     from pallas.product.llm.kernel.feedback_models import PromotionCandidate
 
-    def fake_list_promotion_candidates(*, group_id: int, limit: int = 20, include_resolved: bool = False):
+    def fake_list_promotion_candidates(*, bot_id: int, group_id: int, limit: int = 20, include_resolved: bool = False):
+        assert bot_id == 10001
         assert group_id == 123
         assert limit == 20
         assert include_resolved is False
@@ -121,7 +178,7 @@ def test_llm_repeater_feedback_promotion_candidates_api(monkeypatch) -> None:
     client = _build_client(monkeypatch)
     response = client.get(
         "/pallas/api/llm/repeater-feedback/promotion-candidates",
-        params={"group_id": 123, "limit": 20},
+        params={"bot_id": 10001, "group_id": 123, "limit": 20},
     )
 
     assert response.status_code == 200, response.text
@@ -136,9 +193,12 @@ def test_llm_repeater_feedback_promotion_candidates_api(monkeypatch) -> None:
 def test_llm_repeater_feedback_promotion_candidates_resolve_api(monkeypatch) -> None:
     from pallas.product.llm.kernel.feedback_models import PromotionCandidate
 
-    async def fake_resolve_promotion_candidate(candidate_id: str, *, action: str, reason: str = ""):
+    async def fake_resolve_promotion_candidate(
+        candidate_id: str, *, action: str, reason: str = "", bot_id: int, group_id: int
+    ):
         assert candidate_id == "cand-1"
         assert action == "promote"
+        assert (bot_id, group_id) == (10001, 123)
         return PromotionCandidate(
             candidate_id="cand-1",
             group_id=123,
@@ -157,7 +217,7 @@ def test_llm_repeater_feedback_promotion_candidates_resolve_api(monkeypatch) -> 
     client = _build_client(monkeypatch)
     response = client.post(
         "/pallas/api/llm/repeater-feedback/promotion-candidates/resolve",
-        json={"candidate_id": "cand-1", "action": "promote"},
+        json={"candidate_id": "cand-1", "action": "promote", "bot_id": 10001, "group_id": 123},
     )
 
     assert response.status_code == 200, response.text
@@ -168,8 +228,11 @@ def test_llm_repeater_feedback_promotion_candidates_resolve_api(monkeypatch) -> 
 
 
 def test_llm_repeater_feedback_manage_api(monkeypatch) -> None:
-    def fake_set_feedback_entry_eligibility(*, entry_id: str = "", request_id: str = "", eligible_for_bias: bool):
+    def fake_set_feedback_entry_eligibility(
+        *, entry_id: str = "", request_id: str = "", bot_id: int, group_id: int, eligible_for_bias: bool
+    ):
         assert request_id == "req-1"
+        assert (bot_id, group_id) == (10001, 123)
         assert eligible_for_bias is False
         return LlmRepeaterFeedbackEntry(
             entry_id="req-1",
@@ -191,7 +254,7 @@ def test_llm_repeater_feedback_manage_api(monkeypatch) -> None:
     client = _build_client(monkeypatch)
     response = client.post(
         "/pallas/api/llm/repeater-feedback/manage",
-        json={"request_id": "req-1", "action": "invalidate"},
+        json={"request_id": "req-1", "action": "invalidate", "bot_id": 10001, "group_id": 123},
     )
 
     assert response.status_code == 200, response.text
@@ -200,9 +263,48 @@ def test_llm_repeater_feedback_manage_api(monkeypatch) -> None:
     assert payload["data"]["eligible_for_bias"] is False
 
 
+def test_llm_repeater_feedback_manage_rejects_missing_scope_for_every_action(monkeypatch) -> None:
+    client = _build_client(monkeypatch)
+    for action in ("invalidate", "restore", "delete", "correct", "clear_correction"):
+        response = client.post(
+            "/pallas/api/llm/repeater-feedback/manage",
+            json={"request_id": "req-1", "action": action},
+        )
+        assert response.status_code == 400, (action, response.text)
+        assert "bot_id 和 group_id" in response.json()["detail"]
+
+
+def test_llm_repeater_feedback_manage_delete_uses_scope(monkeypatch) -> None:
+    calls: list[tuple[str, int, int]] = []
+
+    def fake_delete_feedback_entry(*, entry_id: str = "", request_id: str = "", bot_id: int, group_id: int) -> bool:
+        calls.append((entry_id or request_id, bot_id, group_id))
+        return True
+
+    monkeypatch.setattr(
+        "packages.pb_webui.llm_product_api.delete_feedback_entry",
+        fake_delete_feedback_entry,
+    )
+    client = _build_client(monkeypatch)
+
+    response = client.post(
+        "/pallas/api/llm/repeater-feedback/manage",
+        json={"entry_id": "shared-entry", "action": "delete", "bot_id": "10001", "group_id": "123"},
+    )
+    partial = client.post(
+        "/pallas/api/llm/repeater-feedback/manage",
+        json={"entry_id": "shared-entry", "action": "delete", "bot_id": "10001"},
+    )
+
+    assert response.status_code == 200, response.text
+    assert partial.status_code == 400, partial.text
+    assert calls == [("shared-entry", 10001, 123)]
+
+
 def test_llm_repeater_feedback_manage_correct_api(monkeypatch) -> None:
-    def fake_find_feedback_entry(*, entry_id: str = "", request_id: str = ""):
+    def fake_find_feedback_entry(*, entry_id: str = "", request_id: str = "", bot_id: int, group_id: int):
         assert request_id == "req-1"
+        assert (bot_id, group_id) == (10001, 123)
         return LlmRepeaterFeedbackEntry(
             entry_id="req-1",
             created_at=1718700001,
@@ -216,6 +318,7 @@ def test_llm_repeater_feedback_manage_correct_api(monkeypatch) -> None:
 
     def fake_set_feedback_entry_correction(**kwargs):
         assert kwargs["corrected_reply_text"] == "别闹"
+        assert (kwargs["bot_id"], kwargs["group_id"]) == (10001, 123)
         return LlmRepeaterFeedbackEntry(
             entry_id="req-1",
             created_at=1718700001,
@@ -230,7 +333,7 @@ def test_llm_repeater_feedback_manage_correct_api(monkeypatch) -> None:
             eligible_for_bias=True,
         )
 
-    monkeypatch.setattr(mod, "find_feedback_entry", fake_find_feedback_entry, raising=False)
+    monkeypatch.setattr("packages.pb_webui.llm_product_api.find_feedback_entry", fake_find_feedback_entry)
     monkeypatch.setattr(
         "packages.pb_webui.llm_product_api.set_feedback_entry_correction",
         fake_set_feedback_entry_correction,
@@ -239,7 +342,13 @@ def test_llm_repeater_feedback_manage_correct_api(monkeypatch) -> None:
     client = _build_client(monkeypatch)
     response = client.post(
         "/pallas/api/llm/repeater-feedback/manage",
-        json={"request_id": "req-1", "action": "correct", "corrected_reply_text": "别闹"},
+        json={
+            "request_id": "req-1",
+            "action": "correct",
+            "corrected_reply_text": "别闹",
+            "bot_id": 10001,
+            "group_id": 123,
+        },
     )
 
     assert response.status_code == 200, response.text

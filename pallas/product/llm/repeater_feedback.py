@@ -364,15 +364,45 @@ def _load_all_feedback_entries() -> list[LlmRepeaterFeedbackEntry]:
     return list(_iter_feedback_entries(path))
 
 
-def find_feedback_entry(*, entry_id: str = "", request_id: str = "") -> LlmRepeaterFeedbackEntry | None:
+def _feedback_entry_matches(
+    item: LlmRepeaterFeedbackEntry,
+    *,
+    target_entry_id: str,
+    target_request_id: str,
+    bot_id: int | None,
+    group_id: int | None,
+) -> bool:
+    if not (
+        (target_entry_id and str(item.entry_id).strip() == target_entry_id)
+        or (target_request_id and str(item.request_id).strip() == target_request_id)
+    ):
+        return False
+    if bot_id is None and group_id is None:
+        return True
+    if bot_id is None or group_id is None:
+        return False
+    return int(item.bot_id) == int(bot_id) and int(item.group_id) == int(group_id)
+
+
+def find_feedback_entry(
+    *,
+    entry_id: str = "",
+    request_id: str = "",
+    bot_id: int | None = None,
+    group_id: int | None = None,
+) -> LlmRepeaterFeedbackEntry | None:
     target_entry_id = str(entry_id or "").strip()
     target_request_id = str(request_id or "").strip()
     if not target_entry_id and not target_request_id:
         return None
     for item in reversed(_load_all_feedback_entries()):
-        if target_entry_id and str(item.entry_id).strip() == target_entry_id:
-            return item
-        if target_request_id and str(item.request_id).strip() == target_request_id:
+        if _feedback_entry_matches(
+            item,
+            target_entry_id=target_entry_id,
+            target_request_id=target_request_id,
+            bot_id=bot_id,
+            group_id=group_id,
+        ):
             return item
     return None
 
@@ -710,6 +740,8 @@ def set_feedback_entry_correction(
     *,
     entry_id: str = "",
     request_id: str = "",
+    bot_id: int | None = None,
+    group_id: int | None = None,
     corrected_reply_text: str,
     create_fields: dict[str, Any] | None = None,
 ) -> LlmRepeaterFeedbackEntry | None:
@@ -725,8 +757,12 @@ def set_feedback_entry_correction(
 
     def update(rows: list[LlmRepeaterFeedbackEntry]) -> tuple[LlmRepeaterFeedbackEntry | None, bool]:
         for idx, item in enumerate(rows):
-            if (target_entry_id and str(item.entry_id).strip() == target_entry_id) or (
-                target_request_id and str(item.request_id).strip() == target_request_id
+            if _feedback_entry_matches(
+                item,
+                target_entry_id=target_entry_id,
+                target_request_id=target_request_id,
+                bot_id=bot_id,
+                group_id=group_id,
             ):
                 updated = item.model_copy(
                     update={"corrected_reply_text": text, "corrected_at": now, "eligible_for_bias": True}
@@ -766,7 +802,13 @@ def set_feedback_entry_correction(
     return entry
 
 
-def clear_feedback_entry_correction(*, entry_id: str = "", request_id: str = "") -> LlmRepeaterFeedbackEntry | None:
+def clear_feedback_entry_correction(
+    *,
+    entry_id: str = "",
+    request_id: str = "",
+    bot_id: int | None = None,
+    group_id: int | None = None,
+) -> LlmRepeaterFeedbackEntry | None:
     target_entry_id = str(entry_id or "").strip()
     target_request_id = str(request_id or "").strip()
     if not target_entry_id and not target_request_id:
@@ -774,8 +816,12 @@ def clear_feedback_entry_correction(*, entry_id: str = "", request_id: str = "")
 
     def clear(rows: list[LlmRepeaterFeedbackEntry]) -> tuple[LlmRepeaterFeedbackEntry | None, bool]:
         for idx, item in enumerate(rows):
-            if (target_entry_id and str(item.entry_id).strip() == target_entry_id) or (
-                target_request_id and str(item.request_id).strip() == target_request_id
+            if _feedback_entry_matches(
+                item,
+                target_entry_id=target_entry_id,
+                target_request_id=target_request_id,
+                bot_id=bot_id,
+                group_id=group_id,
             ):
                 if not str(item.corrected_reply_text or "").strip() and not item.corrected_at:
                     return item, False
@@ -791,6 +837,8 @@ def set_feedback_entry_eligibility(
     *,
     entry_id: str = "",
     request_id: str = "",
+    bot_id: int | None = None,
+    group_id: int | None = None,
     eligible_for_bias: bool,
 ) -> LlmRepeaterFeedbackEntry | None:
     target_entry_id = str(entry_id or "").strip()
@@ -800,8 +848,12 @@ def set_feedback_entry_eligibility(
 
     def update(rows: list[LlmRepeaterFeedbackEntry]) -> tuple[LlmRepeaterFeedbackEntry | None, bool]:
         for idx, item in enumerate(rows):
-            if (target_entry_id and str(item.entry_id).strip() == target_entry_id) or (
-                target_request_id and str(item.request_id).strip() == target_request_id
+            if _feedback_entry_matches(
+                item,
+                target_entry_id=target_entry_id,
+                target_request_id=target_request_id,
+                bot_id=bot_id,
+                group_id=group_id,
             ):
                 target_eligible = bool(eligible_for_bias)
                 if item.eligible_for_bias == target_eligible:
@@ -814,7 +866,13 @@ def set_feedback_entry_eligibility(
     return _mutate_feedback_entries(update)
 
 
-def delete_feedback_entry(*, entry_id: str = "", request_id: str = "") -> bool:
+def delete_feedback_entry(
+    *,
+    entry_id: str = "",
+    request_id: str = "",
+    bot_id: int | None = None,
+    group_id: int | None = None,
+) -> bool:
     target_entry_id = str(entry_id or "").strip()
     target_request_id = str(request_id or "").strip()
     if not target_entry_id and not target_request_id:
@@ -825,8 +883,13 @@ def delete_feedback_entry(*, entry_id: str = "", request_id: str = "") -> bool:
             item
             for item in rows
             if not (
-                (target_entry_id and str(item.entry_id).strip() == target_entry_id)
-                or (target_request_id and str(item.request_id).strip() == target_request_id)
+                _feedback_entry_matches(
+                    item,
+                    target_entry_id=target_entry_id,
+                    target_request_id=target_request_id,
+                    bot_id=bot_id,
+                    group_id=group_id,
+                )
             )
         ]
         removed = len(kept) != len(rows)
@@ -872,14 +935,17 @@ def list_feedback_entries_for_session(
     return deduped[-max(1, int(limit)) :]
 
 
-def list_group_feedback_entries(*, group_id: int, limit: int = 50) -> list[LlmRepeaterFeedbackEntry]:
+def list_group_feedback_entries(
+    *, group_id: int, limit: int = 50, bot_id: int | None = None
+) -> list[LlmRepeaterFeedbackEntry]:
     path = feedback_entries_path()
     if not path.exists():
         return []
     lim = max(1, int(limit))
     target_group_id = int(group_id)
+    target_bot_id = int(bot_id) if bot_id is not None else None
     path_key, group_revision, source_rows = _group_entries_index_rows(path, group_id=target_group_id)
-    key = (path_key, target_group_id, lim)
+    key = (path_key, target_group_id, target_bot_id, lim)
     now = time.monotonic()
     window_size = lim * _RECENT_WINDOW_MULTIPLIER
     with _group_entries_index_lock:
@@ -888,7 +954,10 @@ def list_group_feedback_entries(*, group_id: int, limit: int = 50) -> list[LlmRe
             expire_at, cached_revision, rows = cached
             if now < expire_at and cached_revision == group_revision:
                 return list(rows)
-    recent: deque[LlmRepeaterFeedbackEntry] = deque(source_rows, maxlen=window_size)
+    recent: deque[LlmRepeaterFeedbackEntry] = deque(
+        (item for item in source_rows if target_bot_id is None or item.bot_id == target_bot_id),
+        maxlen=window_size,
+    )
     deduped: list[LlmRepeaterFeedbackEntry] = []
     seen_ids: set[str] = set()
     for item in reversed(recent):
@@ -924,6 +993,7 @@ def is_reply_safe_for_auto_promote(reply_text: str, *, trigger_text: str = "") -
 
 def group_feedback_bias_snapshot(
     *,
+    bot_id: int | None = None,
     group_id: int,
     limit: int = 50,
     user_text: str = "",
@@ -933,6 +1003,7 @@ def group_feedback_bias_snapshot(
     from pallas.product.llm.feedback_learning import build_feedback_bias_snapshot_data
 
     return build_feedback_bias_snapshot_data(
+        bot_id=int(bot_id) if bot_id is not None else None,
         group_id=int(group_id),
         limit=int(limit),
         user_text=str(user_text or ""),

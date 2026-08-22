@@ -145,6 +145,7 @@ async def test_semantic_style_backfill_handler_skips_expired_and_retries_label_t
 ) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
+    monkeypatch.setattr(mod, "SEMANTIC_STYLE_BACKFILL_ENABLED", False)
     label = parse_semantic_style_label({"reuse": "rewrite"})
     worker = AsyncMock(side_effect=[RuntimeError("temporary"), RuntimeError("temporary"), (label, None)])
     persist = Mock()
@@ -250,8 +251,10 @@ async def test_semantic_style_label_uses_deterministic_short_options(monkeypatch
 async def test_collect_backfill_candidates_uses_online_bot_groups_and_verified_reply_samples(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
     from pallas.product.llm.repeater_semantic_style import collect_semantic_style_backfill_candidates
 
+    monkeypatch.setattr(mod, "SEMANTIC_STYLE_BACKFILL_ENABLED", False)
     now = 2_000_000_000
 
     class DummyMessageRepo:
@@ -318,6 +321,7 @@ async def test_backfill_round_enqueues_scan_without_scanning_in_unified_process(
 ) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
+    monkeypatch.setattr(mod, "SEMANTIC_STYLE_BACKFILL_ENABLED", False)
     collect = AsyncMock()
     store = SimpleNamespace(enqueue=AsyncMock())
     monkeypatch.setattr(mod, "collect_semantic_style_backfill_candidates", collect)
@@ -335,6 +339,7 @@ async def test_backfill_scan_handler_persists_jobs_before_advancing_cursor(
 ) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
+    monkeypatch.setattr(mod, "SEMANTIC_STYLE_BACKFILL_ENABLED", False)
     now = 2_000_000_000
     cursor = mod.SemanticStyleBackfillCursor()
     next_cursor = mod.SemanticStyleBackfillCursor(before_created_at=now - 10, before_message_id=99)
@@ -380,6 +385,7 @@ async def test_backfill_scan_handler_persists_jobs_before_advancing_cursor(
 async def test_backfill_scan_handler_keeps_cursor_when_enqueue_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
+    monkeypatch.setattr(mod, "SEMANTIC_STYLE_BACKFILL_ENABLED", False)
     cursor = mod.SemanticStyleBackfillCursor()
     store = SimpleNamespace(enqueue_many=AsyncMock(side_effect=RuntimeError("database unavailable")))
     saved = Mock()
@@ -1871,3 +1877,9 @@ def test_semantic_style_settings_dump_keeps_split_bits_without_stale_enabled(tmp
     assert set(dumped) == {"collection_enabled", "injection_enabled", "overrides"}
     assert dumped["collection_enabled"] is False
     assert dumped["injection_enabled"] is True
+
+
+def test_semantic_style_backfill_is_enabled_by_default():
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    assert mod.SEMANTIC_STYLE_BACKFILL_ENABLED is True

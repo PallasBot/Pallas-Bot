@@ -72,7 +72,7 @@ class LlmSessionOpsConfig(BaseModel):
     llm_session_max_content_len: int = Field(default=4000, ge=64, le=16000)
     llm_session_strip_vision_enabled: bool = True
     llm_session_summary_enabled: bool = True
-    llm_session_summary_threshold: int = Field(default=40, ge=8, le=200)
+    llm_session_summary_threshold: int = Field(default=24, ge=8, le=200)
     llm_session_summary_keep_messages: int = Field(default=16, ge=4, le=120)
     llm_session_summary_cooldown_sec: int = Field(default=600, ge=0, le=86400)
 

@@ -51,6 +51,9 @@ def test_list_webui_env_sections_is_empty():
     assert "LLM_EXPRESSION_LEARN_ENABLED" in env_keys
     assert "LLM_EXPRESSION_AUTO_PROMOTE_ENABLED" in env_keys
     assert "LLM_EXPRESSION_RETRIEVE_LIMIT" in env_keys
+    assert "LLM_BUBBLE_DELAY_BASE_SEC" in env_keys
+    assert "LLM_BUBBLE_DELAY_PER_CHAR" in env_keys
+    assert "LLM_BUBBLE_DELAY_JITTER" in env_keys
     # Provider 事实源已迁出 WebUI llm 段；运行时/密钥不在本表单
     assert "LLM_RUNTIME" not in env_keys
     assert "LLM_BASE_URL" not in env_keys

@@ -72,12 +72,18 @@ if TYPE_CHECKING:
 def bubble_delay_seconds(previous_segment: str, *, rng: random.Random | None = None) -> float:
     """Simulate a human pause between chat bubbles: short lines fire fast, long lines linger.
 
-    Base grows with segment length (short ~0.8s, long ~2.7s), then a ±35% jitter is
+    Base grows with segment length (short ~0.8s, long ~2.7s), then a ±jitter is
     applied, clamped to [0.5, 3.5] seconds so bursts never feel robotic or too slow.
+    The base/per-char/jitter values come from LLM config (see llama bubble-delay
+    settings); defaults match the long-standing hardcoded rhythm.
     """
+    cfg = get_llm_config()
+    base_per_char = float(getattr(cfg, "llm_bubble_delay_per_char", 0.04))
+    jitter_margin = float(getattr(cfg, "llm_bubble_delay_jitter", 0.35))
+    base = float(getattr(cfg, "llm_bubble_delay_base_sec", 0.8))
     length = min(len(str(previous_segment or "").strip()), 48)
-    base = 0.8 + length * 0.04
-    jitter = (rng or random).uniform(0.65, 1.35)
+    base = base + length * base_per_char
+    jitter = (rng or random).uniform(1.0 - jitter_margin, 1.0 + jitter_margin)
     return round(max(0.5, min(3.5, base * jitter)), 2)
 
 

@@ -18,6 +18,7 @@ from pallas.product.llm.ops_api import (
     delete_feedback_entry,
     delete_memory_entry,
     delete_relationship_note,
+    find_feedback_entry,
     group_feedback_bias_snapshot,
     list_active_knowledge_sources,
     list_group_feedback_entries,
@@ -39,12 +40,6 @@ from .extended_common import check_pallas_write_token
 
 if TYPE_CHECKING:
     from .config import Config
-
-
-def _llm_ext():
-    from packages.pb_webui import extended_api
-
-    return extended_api
 
 
 def _semantic_style():
@@ -350,11 +345,12 @@ def register_llm_product_router(
 
     @router.get(f"{x}/llm/repeater-feedback", include_in_schema=True)
     async def _llm_repeater_feedback_get(
+        bot_id: int = Query(..., ge=1, description="Bot QQ"),
         group_id: int = Query(..., ge=1, description="群号"),
         limit: int = Query(default=20, ge=1, le=200),
     ) -> JSONResponse:
         try:
-            rows = list_group_feedback_entries(group_id=group_id, limit=limit)
+            rows = list_group_feedback_entries(group_id=group_id, bot_id=bot_id, limit=limit)
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({
@@ -489,9 +485,24 @@ def register_llm_product_router(
                 status_code=400,
                 detail="action 必须为 invalidate / restore / delete / correct / clear_correction",
             )
+        raw_bot_id = body.get("bot_id")
+        raw_group_id = body.get("group_id")
+        if raw_bot_id is None or raw_group_id is None:
+            raise HTTPException(status_code=400, detail="feedback manage 必须提供 bot_id 和 group_id")
+        if (raw_bot_id is None) != (raw_group_id is None):
+            raise HTTPException(status_code=400, detail="bot_id 和 group_id 必须同时提供")
+        bot_id, group_id = _injection_governance_scope(
+            bot_id=str(raw_bot_id),
+            group_id=str(raw_group_id),
+        )
         try:
             if action == "delete":
-                ok = delete_feedback_entry(entry_id=entry_id, request_id=request_id)
+                ok = delete_feedback_entry(
+                    entry_id=entry_id,
+                    request_id=request_id,
+                    bot_id=bot_id,
+                    group_id=group_id,
+                )
                 if not ok:
                     raise HTTPException(status_code=404, detail="未找到该反哺记录")
                 return JSONResponse({"ok": True, "data": {"deleted": True, "entry_id": entry_id or request_id}})
@@ -500,19 +511,31 @@ def register_llm_product_router(
                 if not corrected_reply_text:
                     raise HTTPException(status_code=400, detail="corrected_reply_text 必填")
                 create_fields: dict[str, Any] | None = None
-                if _llm_ext().find_feedback_entry(entry_id=entry_id, request_id=request_id) is None:
-                    bot_id = body.get("bot_id")
-                    group_id = body.get("group_id")
-                    user_id = body.get("user_id")
-                    if bot_id is None or group_id is None or user_id is None:
+                if (
+                    find_feedback_entry(
+                        entry_id=entry_id,
+                        request_id=request_id,
+                        bot_id=bot_id,
+                        group_id=group_id,
+                    )
+                    is None
+                ):
+                    raw_user_id = body.get("user_id")
+                    if raw_user_id is None:
                         raise HTTPException(
                             status_code=400,
                             detail="未找到反哺记录时需提供 bot_id / group_id / user_id",
                         )
+                    try:
+                        user_id = int(raw_user_id)
+                    except (TypeError, ValueError) as e:
+                        raise HTTPException(status_code=400, detail="user_id 必须为正整数") from e
+                    if user_id <= 0:
+                        raise HTTPException(status_code=400, detail="user_id 必须为正整数")
                     create_fields = {
-                        "bot_id": int(bot_id),
-                        "group_id": int(group_id),
-                        "user_id": int(user_id),
+                        "bot_id": bot_id,
+                        "group_id": group_id,
+                        "user_id": user_id,
                         "user_text": str(body.get("user_text") or "").strip(),
                         "reply_text": str(body.get("reply_text") or "").strip(),
                         "llm_route": str(body.get("llm_route") or "").strip(),
@@ -522,15 +545,24 @@ def register_llm_product_router(
                 updated = set_feedback_entry_correction(
                     entry_id=entry_id,
                     request_id=request_id,
+                    bot_id=bot_id,
+                    group_id=group_id,
                     corrected_reply_text=corrected_reply_text,
                     create_fields=create_fields,
                 )
             elif action == "clear_correction":
-                updated = clear_feedback_entry_correction(entry_id=entry_id, request_id=request_id)
+                updated = clear_feedback_entry_correction(
+                    entry_id=entry_id,
+                    request_id=request_id,
+                    bot_id=bot_id,
+                    group_id=group_id,
+                )
             else:
                 updated = set_feedback_entry_eligibility(
                     entry_id=entry_id,
                     request_id=request_id,
+                    bot_id=bot_id,
+                    group_id=group_id,
                     eligible_for_bias=action == "restore",
                 )
         except HTTPException:
@@ -543,12 +575,14 @@ def register_llm_product_router(
 
     @router.get(f"{x}/llm/repeater-feedback/promotion-candidates", include_in_schema=True)
     async def _llm_repeater_feedback_promotion_candidates_get(
+        bot_id: int = Query(..., ge=1, description="Bot QQ"),
         group_id: int = Query(..., ge=1, description="群号"),
         limit: int = Query(default=20, ge=1, le=200),
         include_resolved: bool = Query(default=False, description="是否包含已晋升/已拒绝"),
     ) -> JSONResponse:
         try:
             rows = list_promotion_candidates(
+                bot_id=bot_id,
                 group_id=group_id,
                 limit=limit,
                 include_resolved=include_resolved,
@@ -572,6 +606,14 @@ def register_llm_product_router(
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         candidate_id = str(body.get("candidate_id") or "").strip()
         action = str(body.get("action") or "").strip().lower()
+        raw_bot_id = body.get("bot_id")
+        raw_group_id = body.get("group_id")
+        if raw_bot_id is None or raw_group_id is None:
+            raise HTTPException(status_code=400, detail="promotion resolve 必须提供 bot_id 和 group_id")
+        bot_id, group_id = _injection_governance_scope(
+            bot_id=str(raw_bot_id),
+            group_id=str(raw_group_id),
+        )
         if not candidate_id:
             raise HTTPException(status_code=400, detail="candidate_id required")
         if action not in {"promote", "reject"}:
@@ -581,6 +623,8 @@ def register_llm_product_router(
                 candidate_id,
                 action=action,  # type: ignore[arg-type]
                 reason=str(body.get("reason") or "").strip(),
+                bot_id=bot_id,
+                group_id=group_id,
             )
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
@@ -864,6 +908,24 @@ def register_llm_product_router(
         clamped = clamp_affinity(affinity)
         return JSONResponse({"ok": True, "data": {"affinity": clamped}})
 
+    @router.post(f"{x}/llm/conversation-kernel/relationship-notes/clear-rage", include_in_schema=True)
+    async def _llm_conversation_kernel_relationship_notes_clear_rage(
+        body: dict[str, Any],
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        try:
+            bot_id = int(body.get("bot_id") or 0)
+            user_id = int(body.get("user_id") or 0)
+            group_id = int(body.get("group_id") or 0)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="invalid numeric fields") from None
+        if bot_id <= 0 or user_id <= 0:
+            raise HTTPException(status_code=400, detail="bot_id and user_id required")
+        ok = await clear_rage_state(bot_id, group_id or None, user_id)
+        return JSONResponse({"ok": True, "data": {"cleared": bool(ok)}})
+
     @router.post(f"{x}/llm/conversation-kernel/relationship-notes/set-content", include_in_schema=True)
     async def _llm_conversation_kernel_relationship_notes_set_content(
         body: dict[str, Any],
@@ -951,21 +1013,3 @@ def register_llm_product_router(
         if data is None:
             raise HTTPException(status_code=404, detail="未找到该语料源")
         return JSONResponse({"ok": True, "data": data})
-
-    @router.post(f"{x}/llm/conversation-kernel/relationship-notes/clear-rage", include_in_schema=True)
-    async def _llm_conversation_kernel_relationship_notes_clear_rage(
-        body: dict[str, Any],
-        token: str | None = Query(default=None),
-        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
-    ) -> JSONResponse:
-        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        try:
-            bot_id = int(body.get("bot_id") or 0)
-            user_id = int(body.get("user_id") or 0)
-            group_id = int(body.get("group_id") or 0)
-        except (TypeError, ValueError):
-            raise HTTPException(status_code=400, detail="invalid numeric fields") from None
-        if bot_id <= 0 or user_id <= 0:
-            raise HTTPException(status_code=400, detail="bot_id and user_id required")
-        ok = await clear_rage_state(bot_id, group_id or None, user_id)
-        return JSONResponse({"ok": True, "data": {"cleared": bool(ok)}})

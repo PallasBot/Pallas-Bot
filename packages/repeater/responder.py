@@ -37,6 +37,7 @@ plugin_config = get_repeater_config()
 
 async def load_feedback_snapshot(
     *,
+    bot_id: int,
     group_id: int,
     user_text: str,
     behavior_scene: str,
@@ -46,6 +47,7 @@ async def load_feedback_snapshot(
     try:
         return await asyncio.to_thread(
             group_feedback_bias_snapshot,
+            bot_id=bot_id,
             group_id=group_id,
             limit=Responder.FEEDBACK_BIAS_LIMIT,
             user_text=user_text,
@@ -717,6 +719,7 @@ class Responder:
             logger.warning("Repeater behavior scene classification failed for group [{}]: [{}]", group_id, exc)
         t_feedback = time.perf_counter()
         feedback_snapshot = await load_feedback_snapshot(
+            bot_id=int(getattr(chat_data, "bot_id", 0) or 0),
             group_id=group_id,
             user_text=trigger_text,
             behavior_scene=behavior_scene,

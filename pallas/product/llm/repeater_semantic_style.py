@@ -39,7 +39,7 @@ BOT_STYLE_PROMOTION_RECENT_SAMPLE_COUNT = 8
 SEMANTIC_STYLE_BACKFILL_WINDOW_SEC = 30 * 24 * 60 * 60
 SEMANTIC_STYLE_BACKFILL_JOB_TTL_SEC = 7 * 24 * 60 * 60
 SEMANTIC_STYLE_BACKFILL_MAX_PER_DAY = 128
-SEMANTIC_STYLE_BACKFILL_ENABLED = False
+SEMANTIC_STYLE_BACKFILL_ENABLED = True
 SEMANTIC_STYLE_REALTIME_MAX_PER_DAY = 320
 SEMANTIC_STYLE_REALTIME_MAX_PER_SCOPE_PER_DAY = 20
 SEMANTIC_STYLE_REALTIME_SAMPLE_DIVISOR = 8
@@ -1449,8 +1449,11 @@ def resolve_cached_semantic_style(
     request_id: str,
     query_text: str = "",
     recent_assistant_replies: Iterable[str] = (),
+    bypass_injection_gate: bool = False,
 ) -> SemanticStyleResolution:
-    if not semantic_style_injection_enabled(request_id, bot_id=bot_id, group_id=group_id):
+    if not bypass_injection_gate and not semantic_style_injection_enabled(
+        request_id, bot_id=bot_id, group_id=group_id
+    ):
         return SemanticStyleResolution()
     profile = cached_semantic_style_profile(bot_id, group_id, scene)
     if profile is None or not profile.human_only:

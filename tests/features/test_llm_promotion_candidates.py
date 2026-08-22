@@ -238,6 +238,34 @@ def test_refresh_promotion_candidates_aggregates_corrected_reply_text(tmp_path, 
     assert rows[0].correction_backed is True
 
 
+def test_promotion_candidates_keep_same_group_bots_isolated(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    for bot_id in (10001, 10002):
+        for suffix in ("a", "b"):
+            append_feedback_entry(
+                build_feedback_entry(
+                    bot_id=bot_id,
+                    group_id=123,
+                    user_id=456,
+                    request_id=f"promotion-{bot_id}-{suffix}",
+                    user_text="你好呀",
+                    reply_text="本 Bot 回复",
+                    scene_tier="strong",
+                )
+            )
+
+    refresh_promotion_candidates_for_group(bot_id=10001, group_id=123)
+    refresh_promotion_candidates_for_group(bot_id=10002, group_id=123)
+
+    first = list_promotion_candidates(bot_id=10001, group_id=123, refresh=False)
+    second = list_promotion_candidates(bot_id=10002, group_id=123, refresh=False)
+
+    assert len(first) == 1
+    assert len(second) == 1
+    assert first[0].source_request_id.startswith("promotion-10001-")
+    assert second[0].source_request_id.startswith("promotion-10002-")
+
+
 @pytest.mark.asyncio
 async def test_auto_promote_eligible_candidates_writes_back(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))

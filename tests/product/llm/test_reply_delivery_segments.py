@@ -30,6 +30,21 @@ def test_bubble_delay_is_human_like_and_bounded() -> None:
     assert len(set(seeds)) > 1
 
 
+def test_bubble_delay_reads_llm_config(monkeypatch) -> None:
+    import random
+
+    class _FakeConfig:
+        llm_bubble_delay_base_sec = 2.0
+        llm_bubble_delay_per_char = 0.1
+        llm_bubble_delay_jitter = 0.0
+
+    monkeypatch.setattr(llm_delivery, "get_llm_config", lambda: _FakeConfig())
+
+    # total = 2.0 + 10*0.1 = 3.0；jitter=0 无抖动
+    delay = llm_delivery.bubble_delay_seconds("一二三四五六七八九十", rng=random.Random(1))
+    assert delay == 3.0
+
+
 def test_reply_postprocess_schema_no_longer_advertises_sentence_splitting() -> None:
     description = str(LlmWebuiConfig.model_fields["llm_reply_postprocess_enabled"].description or "")
 

@@ -27,6 +27,7 @@ from pallas.product.llm.assembler import (
     assemble_tool_bundle,
 )
 from pallas.product.llm.assembler.context import ChatContextBundle, assemble_direct_chat_context
+from pallas.product.llm.assembler.prompt_overrides import load_prompt_overrides
 from pallas.product.llm.behavior import (
     build_behavior_hint_text,
     build_retaliation_hint,
@@ -113,6 +114,12 @@ from .replies import (
 
 _SPEAK_ALIAS_CACHE_TTL_SEC = 60.0
 _speak_alias_cache: dict[int, tuple[float, list[str]]] = {}
+
+
+def load_chat_prompt_overrides(bot_id: int, group_id: int | None):
+    if group_id is None:
+        return None
+    return load_prompt_overrides(bot_id=bot_id, group_id=group_id)
 
 
 def clear_speak_alias_cache_for_tests() -> None:
@@ -956,6 +963,7 @@ async def prepare_and_submit_llm_chat_turn(
                 ask_before_call=bool(tool_meta.get("ask_before_call")),
                 missing_required_params=dict(tool_meta.get("missing_required_params") or {}),
             ),
+            section_overrides=load_chat_prompt_overrides(int(bot.self_id), group_id),
         )
         login_nickname_started = time.perf_counter()
         login_nick = await resolve_login_nickname(int(bot.self_id))

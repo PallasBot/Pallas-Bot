@@ -141,6 +141,30 @@ class _BasePromptEnabledBody(BaseModel):
     enabled: bool
 
 
+class _PromptPreviewBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bot_id: int = Field(ge=1)
+    group_id: int | None = Field(default=None, ge=0)
+    user_id: int = Field(ge=1)
+    query_text: str = Field(min_length=1, max_length=4000)
+
+
+class _PromptOverrideBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["replace", "append", "disable"]
+    content: str = Field(max_length=12000)
+
+
+class _PromptOverridesBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bot_id: int = Field(ge=1)
+    group_id: int = Field(ge=1)
+    sections: dict[str, _PromptOverrideBody] = Field(default_factory=dict)
+
+
 def _base_prompt_preview_summary(status: dict[str, Any]) -> dict[str, Any]:
     """把 base prompt 状态压成不含原文的预览安全摘要。"""
     text = str(status.get("text") or "")
@@ -569,7 +593,54 @@ def register_llm_ops_router(
             )
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
-        return JSONResponse({"ok": True, "data": data.model_dump()})
+        return JSONResponse({"ok": True, "data": data.model_dump(mode="json")})
+
+    @router.post(f"{x}/common-config/llm/persona/prompt-preview", include_in_schema=True)
+    async def _llm_persona_prompt_preview_post(body: _PromptPreviewBody) -> JSONResponse:
+        from pallas.product.llm.prompt_preview import build_prompt_preview
+
+        try:
+            data = await build_prompt_preview(
+                bot_id=body.bot_id,
+                group_id=body.group_id,
+                user_id=body.user_id,
+                query_text=body.query_text,
+            )
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(f"{x}/common-config/llm/persona/prompt-overrides", include_in_schema=True)
+    async def _llm_persona_prompt_overrides_get(
+        bot_id: int = Query(..., ge=1),
+        group_id: int = Query(..., ge=1),
+    ) -> JSONResponse:
+        from pallas.product.llm.assembler.prompt_overrides import load_prompt_overrides
+
+        sections = load_prompt_overrides(bot_id=bot_id, group_id=group_id)
+        return JSONResponse({"ok": True, "data": sections})
+
+    @router.put(f"{x}/common-config/llm/persona/prompt-overrides", include_in_schema=True)
+    async def _llm_persona_prompt_overrides_put(
+        body: _PromptOverridesBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.llm.assembler.prompt_overrides import save_prompt_overrides
+
+        saved = save_prompt_overrides(
+            bot_id=body.bot_id,
+            group_id=body.group_id,
+            sections=body.sections,
+        )
+        response_sections = {
+            section_id: (
+                value.model_dump() if hasattr(value, "model_dump") else value
+            )
+            for section_id, value in saved.items()
+        }
+        return JSONResponse({"ok": True, "data": response_sections})
 
     @router.get(
         f"{x}/common-config/llm/persona/group-style",

@@ -260,7 +260,9 @@ def is_reply_safe_for_shaped_writeback(reply_text: str) -> bool:
     return True
 
 
-def summarize_learning_effectiveness(*, group_id: int, window_sec: int = 7 * 86400) -> dict[str, int | float]:
+def summarize_learning_effectiveness(
+    *, group_id: int, bot_id: int | None = None, window_sec: int = 7 * 86400
+) -> dict[str, int | float]:
     from packages.repeater.opportunity_trace import read_recent_repeater_opportunity_trace
 
     now = int(time.time())
@@ -271,6 +273,8 @@ def summarize_learning_effectiveness(*, group_id: int, window_sec: int = 7 * 864
     total_replies = 0
     for row in rows:
         if int(row.get("group_id") or 0) != int(group_id):
+            continue
+        if bot_id is not None and int(row.get("bot_id") or 0) != int(bot_id):
             continue
         if str(row.get("kind") or "") != "repeater_reply_bundle":
             continue
@@ -283,7 +287,13 @@ def summarize_learning_effectiveness(*, group_id: int, window_sec: int = 7 * 864
             bias_hits += 1
     from pallas.product.llm.promotion_candidates import list_promotion_candidates
 
-    for item in list_promotion_candidates(group_id=int(group_id), limit=200, include_resolved=True, refresh=False):
+    for item in list_promotion_candidates(
+        bot_id=bot_id,
+        group_id=int(group_id),
+        limit=200,
+        include_resolved=True,
+        refresh=False,
+    ):
         if str(item.writeback_message or "") == "auto_promoted" and int(item.writeback_at or 0) >= cutoff:
             auto_promotes += 1
     hit_rate = (bias_hits / total_replies) if total_replies else 0.0
@@ -299,6 +309,7 @@ def summarize_learning_effectiveness(*, group_id: int, window_sec: int = 7 * 864
 def build_feedback_bias_snapshot_data(
     *,
     group_id: int,
+    bot_id: int | None = None,
     limit: int = 50,
     user_text: str = "",
     behavior_scene: str = "",
@@ -308,7 +319,11 @@ def build_feedback_bias_snapshot_data(
     from pallas.product.llm.kernel.memory_governance import can_promote_writeback
     from pallas.product.llm.promotion_candidates import count_pending_promotion_candidates
 
-    all_rows = list_group_feedback_entries(group_id=int(group_id), limit=max(1, int(limit)))
+    all_rows = list_group_feedback_entries(
+        bot_id=bot_id,
+        group_id=int(group_id),
+        limit=max(1, int(limit)),
+    )
     now = int(time.time())
     rows = [item for item in all_rows if item.eligible_for_bias]
     weighted = weighted_reply_counter(rows, active_scene=behavior_scene, now=now)
@@ -340,8 +355,8 @@ def build_feedback_bias_snapshot_data(
     learning_stats: dict[str, int | float] = {}
     if not hotpath:
         if can_promote_writeback():
-            promotion_candidate_count = count_pending_promotion_candidates(group_id=int(group_id))
-        learning_stats = summarize_learning_effectiveness(group_id=int(group_id))
+            promotion_candidate_count = count_pending_promotion_candidates(bot_id=bot_id, group_id=int(group_id))
+        learning_stats = summarize_learning_effectiveness(group_id=int(group_id), bot_id=bot_id)
     active_count = sum(
         1 for item in rows if feedback_entry_effective_weight(item, active_scene=behavior_scene, now=now) > 0.05
     )

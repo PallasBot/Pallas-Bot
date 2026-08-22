@@ -29,9 +29,10 @@ def promotion_candidates_path():
     return path
 
 
-def build_candidate_id(*, group_id: int, trigger_text: str, reply_text: str) -> str:
+def build_candidate_id(*, group_id: int, trigger_text: str, reply_text: str, bot_id: int | None = None) -> str:
     trigger_kw = _chat_keywords(trigger_text, group_id=int(group_id))
-    key = f"{int(group_id)}:{trigger_kw}:{str(reply_text or '').strip()}"
+    scope = f"{int(bot_id)}:" if bot_id is not None else ""
+    key = f"{scope}{int(group_id)}:{trigger_kw}:{str(reply_text or '').strip()}"
     return hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
 
 
@@ -126,10 +127,16 @@ def is_auto_promote_eligible(candidate: PromotionCandidate) -> bool:
     return support >= PROMOTION_SUPPORT_THRESHOLD and bool(candidate.correction_backed)
 
 
-def refresh_promotion_candidates_for_group(*, group_id: int, limit: int = 200) -> list[PromotionCandidate]:
+def refresh_promotion_candidates_for_group(
+    *, group_id: int, bot_id: int | None = None, limit: int = 200
+) -> list[PromotionCandidate]:
     if not promotion_allowed():
         return []
-    entries = list_group_feedback_entries(group_id=int(group_id), limit=max(1, int(limit)))
+    entries = list_group_feedback_entries(
+        bot_id=bot_id,
+        group_id=int(group_id),
+        limit=max(1, int(limit)),
+    )
     grouped = _aggregate_trigger_reply_support(entries)
     rows = _load_candidates_index()
     changed = False
@@ -146,10 +153,22 @@ def refresh_promotion_candidates_for_group(*, group_id: int, limit: int = 200) -
             else str(latest.scene_tier or "").strip()
         )
         candidate_id = build_candidate_id(
+            bot_id=bot_id,
             group_id=int(group_id),
             trigger_text=str(latest.user_text or trigger_kw),
             reply_text=reply_text,
         )
+        if bot_id is None and candidate_id not in rows:
+            candidate_id = next(
+                (
+                    existing_id
+                    for existing_id, existing_item in rows.items()
+                    if int(existing_item.group_id) == int(group_id)
+                    and str(existing_item.reply_text or "").strip() == reply_text
+                    and _chat_keywords(str(existing_item.trigger_text or ""), group_id=int(group_id)) == trigger_kw
+                ),
+                candidate_id,
+            )
         existing = rows.get(candidate_id)
         if existing is not None and (existing.promoted or str(existing.rejected_reason or "").strip()):
             continue
@@ -173,31 +192,63 @@ def refresh_promotion_candidates_for_group(*, group_id: int, limit: int = 200) -
             created.append(candidate)
     if changed:
         _write_candidates_index(rows)
-    schedule_auto_promote_for_group(int(group_id))
+    schedule_auto_promote_for_group(int(group_id), bot_id=bot_id)
     return created
 
 
 def list_promotion_candidates(
     *,
     group_id: int,
+    bot_id: int | None = None,
     limit: int = 50,
     include_resolved: bool = False,
     refresh: bool = True,
 ) -> list[PromotionCandidate]:
     if refresh and promotion_allowed():
-        refresh_promotion_candidates_for_group(group_id=int(group_id), limit=max(50, int(limit) * 4))
+        refresh_promotion_candidates_for_group(
+            bot_id=bot_id,
+            group_id=int(group_id),
+            limit=max(50, int(limit) * 4),
+        )
+
+    def matches_scope(item: PromotionCandidate) -> bool:
+        if bot_id is None:
+            return True
+        source_request_id = str(item.source_request_id or "").strip()
+        if not source_request_id:
+            return False
+        from pallas.product.llm.repeater_feedback import find_feedback_entry
+
+        return (
+            find_feedback_entry(
+                request_id=source_request_id,
+                bot_id=int(bot_id),
+                group_id=int(group_id),
+            )
+            is not None
+        )
+
     rows = [
         item
         for item in _load_candidates_index().values()
         if int(item.group_id) == int(group_id)
+        and matches_scope(item)
         and (include_resolved or (not item.promoted and not str(item.rejected_reason or "").strip()))
     ]
     rows.sort(key=lambda item: (-int(item.support_count), -int(item.last_seen_at), item.candidate_id))
     return rows[: max(1, int(limit))]
 
 
-def count_pending_promotion_candidates(*, group_id: int) -> int:
-    return len(list_promotion_candidates(group_id=int(group_id), limit=200, include_resolved=False, refresh=True))
+def count_pending_promotion_candidates(*, group_id: int, bot_id: int | None = None) -> int:
+    return len(
+        list_promotion_candidates(
+            bot_id=bot_id,
+            group_id=int(group_id),
+            limit=200,
+            include_resolved=False,
+            refresh=True,
+        )
+    )
 
 
 def resolve_promotion_candidate(
@@ -205,6 +256,8 @@ def resolve_promotion_candidate(
     *,
     action: ResolveAction,
     reason: str = "",
+    bot_id: int | None = None,
+    group_id: int | None = None,
 ) -> PromotionCandidate | None:
     key = str(candidate_id or "").strip()
     if not key:
@@ -213,6 +266,23 @@ def resolve_promotion_candidate(
     item = rows.get(key)
     if item is None:
         return None
+    if group_id is not None and int(item.group_id) != int(group_id):
+        return None
+    if bot_id is not None:
+        source_request_id = str(item.source_request_id or "").strip()
+        if not source_request_id:
+            return None
+        from pallas.product.llm.repeater_feedback import find_feedback_entry
+
+        if (
+            find_feedback_entry(
+                request_id=source_request_id,
+                bot_id=int(bot_id),
+                group_id=int(group_id or item.group_id),
+            )
+            is None
+        ):
+            return None
     if action == "promote":
         if not promotion_allowed():
             return None
@@ -317,8 +387,16 @@ async def resolve_promotion_candidate_with_writeback(
     *,
     action: ResolveAction,
     reason: str = "",
+    bot_id: int | None = None,
+    group_id: int | None = None,
 ) -> PromotionCandidate | None:
-    item = resolve_promotion_candidate(candidate_id, action=action, reason=reason)
+    item = resolve_promotion_candidate(
+        candidate_id,
+        action=action,
+        reason=reason,
+        bot_id=bot_id,
+        group_id=group_id,
+    )
     if item is None or action != "promote":
         return item
     try:
@@ -337,7 +415,7 @@ async def resolve_promotion_candidate_with_writeback(
         return item
 
 
-def schedule_auto_promote_for_group(group_id: int) -> None:
+def schedule_auto_promote_for_group(group_id: int, *, bot_id: int | None = None) -> None:
     if not promotion_allowed() or int(group_id) <= 0:
         return
     import asyncio
@@ -346,18 +424,30 @@ def schedule_auto_promote_for_group(group_id: int) -> None:
         loop = asyncio.get_running_loop()
     except RuntimeError:
         return
-    loop.create_task(auto_promote_eligible_candidates_for_group(group_id=int(group_id)))
+    loop.create_task(auto_promote_eligible_candidates_for_group(group_id=int(group_id), bot_id=bot_id))
 
 
-async def auto_promote_eligible_candidates_for_group(*, group_id: int) -> list[PromotionCandidate]:
+async def auto_promote_eligible_candidates_for_group(
+    *, group_id: int, bot_id: int | None = None
+) -> list[PromotionCandidate]:
     if not promotion_allowed():
         return []
     promoted: list[PromotionCandidate] = []
-    rows = list_promotion_candidates(group_id=int(group_id), refresh=False, include_resolved=False)
+    rows = list_promotion_candidates(
+        bot_id=bot_id,
+        group_id=int(group_id),
+        refresh=False,
+        include_resolved=False,
+    )
     for candidate in rows:
         if not is_auto_promote_eligible(candidate):
             continue
-        updated = await resolve_promotion_candidate_with_writeback(candidate.candidate_id, action="promote")
+        updated = await resolve_promotion_candidate_with_writeback(
+            candidate.candidate_id,
+            action="promote",
+            bot_id=bot_id,
+            group_id=int(group_id),
+        )
         if updated is None or updated.writeback_status != "written":
             continue
         updated.writeback_message = "auto_promoted"
@@ -373,4 +463,4 @@ def note_feedback_entry_for_promotion(entry: LlmRepeaterFeedbackEntry) -> None:
         return
     if int(entry.group_id or 0) <= 0:
         return
-    refresh_promotion_candidates_for_group(group_id=int(entry.group_id))
+    refresh_promotion_candidates_for_group(group_id=int(entry.group_id), bot_id=int(entry.bot_id))
