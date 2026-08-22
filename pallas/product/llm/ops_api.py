@@ -82,6 +82,7 @@ from pallas.product.llm.memory.ops import (
     upsert_memory_preference,
 )
 from pallas.product.llm.memory.relationship_store import (
+    clear_rage_state,
     delete_relationship_note,
     list_relationship_notes,
     set_affinity,
@@ -181,6 +182,7 @@ __all__ = [
     "clear_feedback_entry_correction",
     "clear_llm_history_session",
     "clear_memory_entries",
+    "clear_rage_state",
     "clear_providers_store_cache",
     "clear_scope_graph",
     "compact_llm_history_session",

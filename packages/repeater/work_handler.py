@@ -31,6 +31,7 @@ async def handle_repeater_message(payload: dict[str, Any]) -> None:
         sender_name=str(raw_message.get("sender_name") or ""),
         message_id=raw_message.get("message_id"),
         reply_to_message_id=raw_message.get("reply_to_message_id"),
+        suppressed_by_rage=bool(raw_message.get("suppressed_by_rage", False)),
         time=int(raw_message.get("time") or 0),
     )
     await MessageStore.persist_message(chat_data)

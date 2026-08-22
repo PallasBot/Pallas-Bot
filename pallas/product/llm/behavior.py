@@ -252,6 +252,36 @@ def detect_attack_pressure(
     return "none"
 
 
+def attack_pressure_details(
+    *,
+    user_text: str,
+    recent_turns: list[Any],
+    is_to_me: bool,
+    now: int | None = None,
+    window_sec: int = 30,
+) -> tuple[int, int]:
+    """Return distinct current attack tokens and recent directed attack turns."""
+    if not is_to_me:
+        return 0, 0
+    token_count = sum(token in str(user_text or "") for token in _DIRECT_ATTACK_TOKENS)
+    if token_count == 0:
+        return 0, 0
+    cutoff = int(now if now is not None else time.time()) - max(1, int(window_sec))
+    recent_count = 0
+    for turn in recent_turns[-4:]:
+        if isinstance(turn, dict):
+            role = str(turn.get("role") or "")
+            content = str(turn.get("content") or "")
+            created_at = int(turn.get("created_at") or 0)
+        else:
+            role = str(getattr(turn, "role", "") or "")
+            content = str(getattr(turn, "content", "") or "")
+            created_at = int(getattr(turn, "created_at", 0) or 0)
+        if role == "user" and created_at >= cutoff and any(token in content for token in _DIRECT_ATTACK_TOKENS):
+            recent_count += 1
+    return token_count, recent_count
+
+
 def build_retaliation_hint(*, pressure: str, affinity: float | None) -> str:
     if pressure not in {"medium", "high"}:
         return ""

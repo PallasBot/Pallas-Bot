@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import importlib
+import random
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -12,6 +13,7 @@ from nonebot.log import logger
 from nonebot.matcher import matchers
 
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value
+from pallas.core.foundation.db import make_message_repository
 from pallas.core.foundation.logging import command_traffic_ctx
 from pallas.core.platform.ingress.cold_start import in_cold_start_window, stale_message_drop_needed
 from pallas.core.platform.ingress.conversation_scheduler import (
@@ -160,6 +162,120 @@ def message_runtime_context(
         is_to_me=bool(getattr(event, "to_me", False) or getattr(event, "_pallas_llm_alias_hard_trigger", False)),
         command_traffic=command_traffic,
         route_modules=resolution.matched_modules if resolution is not None else frozenset(),
+    )
+
+
+async def _apply_rage_gate(bot: Bot, event: GroupMessageEvent) -> bool:
+    """Return whether this message must be suppressed while preserving its timeline row."""
+    from pallas.product.llm.memory.relationship_store import (
+        retrieve_rage_state,
+        update_rage_state,
+        upsert_relationship_profile,
+    )
+    from pallas.product.llm.rage import evaluate_attack, rage_state_is_silenced
+
+    try:
+        bot_id = int(bot.self_id)
+        group_id = int(event.group_id)
+        user_id = int(event.user_id)
+        now = int(getattr(event, "time", 0) or time.time())
+        state = await retrieve_rage_state(bot_id, group_id, user_id)
+        if state is not None and rage_state_is_silenced(state, now=now):
+            await _capture_rage_suppressed_message(bot, event)
+            return True
+        if state is None:
+            from pallas.product.llm.rage import RageState
+
+            state = RageState()
+        from pallas.product.llm.rage import decay_rage
+
+        decayed_state = decay_rage(state, now=now)
+        if decayed_state != state:
+            await update_rage_state(bot_id, group_id, user_id, decayed_state)
+            state = decayed_state
+        text = str(event.get_plaintext() or "")
+        recent_messages = await make_message_repository().find_recent_in_group(
+            group_id,
+            user_id=user_id,
+            limit=4,
+        )
+        from pallas.product.llm.behavior import attack_pressure_details
+
+        token_count, recent_count = attack_pressure_details(
+            user_text=text,
+            recent_turns=[
+                {
+                    "role": "user",
+                    "content": str(message.plain_text or ""),
+                    "created_at": int(message.time or 0),
+                }
+                for message in recent_messages
+            ],
+            is_to_me=bool(getattr(event, "to_me", False) or getattr(event, "_pallas_llm_alias_hard_trigger", False)),
+            now=now,
+        )
+        if token_count == 0:
+            return False
+        next_state = evaluate_attack(
+            state=state,
+            user_text=text,
+            recent_attack_count=recent_count,
+            is_to_me=True,
+            now=now,
+            random_value=random.random(),
+            message_id=int(getattr(event, "message_id", 0) or 0),
+        )
+        if next_state == state:
+            return False
+        await update_rage_state(bot_id, group_id, user_id, next_state)
+        await upsert_relationship_profile(
+            bot_id,
+            group_id,
+            user_id,
+            source="rage",
+            affinity_delta_add=-min(0.15, 0.03 * token_count),
+        )
+        if next_state.silenced_until > now:
+            await _capture_rage_suppressed_message(bot, event)
+            return True
+    except Exception:
+        logger.exception("Rage ingress gate failed")
+    return False
+
+
+async def _capture_rage_suppressed_message(bot: Bot, event: GroupMessageEvent) -> None:
+    from packages.repeater.learn_queue import enqueue_message_persist_job
+    from packages.repeater.message_store import MessageStore
+    from packages.repeater.model import ChatData
+
+    chat_data = ChatData(
+        group_id=int(event.group_id),
+        user_id=int(event.user_id),
+        bot_id=int(bot.self_id),
+        raw_message=str(getattr(event, "raw_message", "") or ""),
+        plain_text=str(event.get_plaintext() or ""),
+        time=int(getattr(event, "time", 0) or time.time()),
+        sender_name=str(getattr(getattr(event, "sender", None), "card", "") or ""),
+        message_id=int(getattr(event, "message_id", 0) or 0),
+        suppressed_by_rage=True,
+    )
+    await MessageStore.capture_message(chat_data)
+    enqueue_message_persist_job(
+        {
+            "group_id": chat_data.group_id,
+            "user_id": chat_data.user_id,
+            "bot_id": chat_data.bot_id,
+            "raw_message": chat_data.raw_message,
+            "plain_text": chat_data.plain_text,
+            "time": chat_data.time,
+            "is_plain_text": chat_data.is_plain_text,
+            "keywords": chat_data.keywords,
+            "sender_name": chat_data.sender_name,
+            "message_id": chat_data.message_id,
+            "reply_to_message_id": chat_data.reply_to_message_id,
+            "suppressed_by_rage": True,
+        },
+        event,
     )
 
 
@@ -322,6 +438,8 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                 nb_message.TrieRule.get_value(bot, event, state)
 
             apply_dispatch = isinstance(event, GroupMessageEvent)
+            if apply_dispatch and await _apply_rage_gate(bot, event):
+                return
             resolution = resolve_route_for_event(event) if apply_dispatch else None
             command_traffic = event_command_traffic(event, state, resolution=resolution) if apply_dispatch else True
             traffic_token = command_traffic_ctx.set(bool(apply_dispatch and command_traffic))

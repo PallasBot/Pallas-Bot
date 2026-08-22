@@ -70,6 +70,7 @@ class ChatData:
     sender_name: str = ""
     message_id: int | None = None
     reply_to_message_id: int | None = None
+    suppressed_by_rage: bool = False
 
     _keywords_size: int = 2
 

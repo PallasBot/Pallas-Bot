@@ -236,7 +236,7 @@ def enqueue_message_persist_job(message_dict: dict[str, object], event: GroupMes
     job = WorkJob.create(
         kind="repeater.message",
         payload={"message": message_dict},
-        idempotency_key=f"repeater.message:{int(event.group_id)}:{int(event.message_id)}",
+        idempotency_key=f"repeater.message:{int(event.self_id)}:{int(event.group_id)}:{int(event.message_id)}",
     )
     try:
         message_queue().put_nowait(job)

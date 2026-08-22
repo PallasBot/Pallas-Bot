@@ -16,6 +16,7 @@ from pallas.core.platform.ingress import matcher_activation as activation
 from pallas.core.platform.ingress import matcher_dispatch as dispatch
 from pallas.core.platform.ingress.route_index import RouteResolution
 from pallas.core.platform.message_runtime.models import HandlingOutcome, SendAction
+from pallas.product.llm.rage import RageState
 
 
 def test_synthetic_llm_command_context_reads_structured_marker() -> None:
@@ -171,6 +172,80 @@ def test_message_runtime_context_treats_alias_hard_trigger_as_direct_address() -
     )
 
     assert context.is_to_me is True
+
+
+@pytest.mark.asyncio
+async def test_rage_gate_suppresses_silent_message_without_reapplying_effects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm.memory import relationship_store
+
+    event = MagicMock(
+        group_id=42,
+        user_id=7,
+        message_id=11,
+        self_id="10001",
+        time=100,
+        to_me=True,
+        _pallas_llm_alias_hard_trigger=False,
+    )
+    event.get_plaintext.return_value = "你这个废物"
+    capture = AsyncMock()
+    update = AsyncMock()
+    affinity = AsyncMock()
+    monkeypatch.setattr(
+        relationship_store,
+        "retrieve_rage_state",
+        AsyncMock(return_value=RageState(rage=90, silenced_until=200)),
+    )
+    monkeypatch.setattr(relationship_store, "update_rage_state", update)
+    monkeypatch.setattr(relationship_store, "upsert_relationship_profile", affinity)
+    monkeypatch.setattr(dispatch, "_capture_rage_suppressed_message", capture)
+
+    assert await dispatch._apply_rage_gate(MagicMock(self_id="10001"), event) is True
+    capture.assert_awaited_once()
+    update.assert_not_awaited()
+    affinity.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_rage_gate_captures_message_when_attack_enters_silence(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm.memory import relationship_store
+
+    event = MagicMock(
+        group_id=42,
+        user_id=7,
+        message_id=11,
+        self_id="10001",
+        time=100,
+        to_me=True,
+        _pallas_llm_alias_hard_trigger=False,
+    )
+    event.get_plaintext.return_value = "你这个废物垃圾脑残"
+    monkeypatch.setattr(
+        relationship_store,
+        "retrieve_rage_state",
+        AsyncMock(return_value=RageState(rage=70)),
+    )
+    update = AsyncMock()
+    affinity = AsyncMock()
+    capture = AsyncMock()
+    monkeypatch.setattr(relationship_store, "update_rage_state", update)
+    monkeypatch.setattr(relationship_store, "upsert_relationship_profile", affinity)
+    monkeypatch.setattr(dispatch, "_capture_rage_suppressed_message", capture)
+    monkeypatch.setattr(
+        dispatch,
+        "make_message_repository",
+        lambda: MagicMock(
+            find_recent_in_group=AsyncMock(return_value=[]),
+        ),
+    )
+    monkeypatch.setattr("pallas.core.platform.ingress.matcher_dispatch.random.random", lambda: 1.0)
+
+    assert await dispatch._apply_rage_gate(MagicMock(self_id="10001"), event) is True
+    update.assert_awaited_once()
+    affinity.assert_awaited_once()
+    capture.assert_awaited_once()
 
 
 class _CommandMatcher:

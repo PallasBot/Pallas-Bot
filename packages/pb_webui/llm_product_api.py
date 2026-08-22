@@ -14,6 +14,7 @@ from pallas.product.llm.memory.relationship import clamp_affinity
 from pallas.product.llm.ops_api import (
     build_conversation_kernel_status,
     clear_feedback_entry_correction,
+    clear_rage_state,
     delete_feedback_entry,
     delete_memory_entry,
     delete_relationship_note,
@@ -950,3 +951,21 @@ def register_llm_product_router(
         if data is None:
             raise HTTPException(status_code=404, detail="未找到该语料源")
         return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/llm/conversation-kernel/relationship-notes/clear-rage", include_in_schema=True)
+    async def _llm_conversation_kernel_relationship_notes_clear_rage(
+        body: dict[str, Any],
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        try:
+            bot_id = int(body.get("bot_id") or 0)
+            user_id = int(body.get("user_id") or 0)
+            group_id = int(body.get("group_id") or 0)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="invalid numeric fields") from None
+        if bot_id <= 0 or user_id <= 0:
+            raise HTTPException(status_code=400, detail="bot_id and user_id required")
+        ok = await clear_rage_state(bot_id, group_id or None, user_id)
+        return JSONResponse({"ok": True, "data": {"cleared": bool(ok)}})

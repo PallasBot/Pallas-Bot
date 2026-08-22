@@ -23,6 +23,7 @@ def chat_data_to_dict(chat_data: Any) -> dict[str, int | str | None]:
         "sender_name": normalize_work_text(getattr(chat_data, "sender_name", "")),
         "message_id": getattr(chat_data, "message_id", None),
         "reply_to_message_id": getattr(chat_data, "reply_to_message_id", None),
+        "suppressed_by_rage": bool(getattr(chat_data, "suppressed_by_rage", False)),
         "time": int(chat_data.time),
     }
 

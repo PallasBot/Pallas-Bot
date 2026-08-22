@@ -52,6 +52,7 @@ class MessageStore:
             sender_name=chat_data.sender_name,
             message_id=chat_data.message_id,
             reply_to_message_id=chat_data.reply_to_message_id,
+            suppressed_by_rage=chat_data.suppressed_by_rage,
             time=chat_data.time,
         )
 
