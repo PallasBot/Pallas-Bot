@@ -372,6 +372,123 @@ async def test_handle_llm_chat_sends_low_value_direct_social_to_turn_decision(
 
 
 @pytest.mark.asyncio
+async def test_handle_llm_chat_dispatch_low_engagement_on_rule_pass_without_model_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+    capture_create_task: list[object],
+) -> None:
+    from packages.llm_chat import chat_message as mod
+    from pallas.product.llm.config import LlmConfig
+    from pallas.product.llm.current_turn_decision import (
+        CurrentTurnAction,
+        CurrentTurnDecision,
+        CurrentTurnDecisionTrace,
+        CurrentTurnSocialAction,
+    )
+    from pallas.product.llm.low_engagement import clear_low_engagement_last_used
+
+    clear_low_engagement_last_used()
+
+    event = SimpleNamespace(
+        to_me=False,
+        group_id=20002,
+        user_id=30003,
+        message_id=40004,
+        time=123456,
+        reply=None,
+        get_plaintext=lambda: "哈哈哈哈哈",
+        get_message=lambda: "哈哈哈哈哈",
+        get_session_id=lambda: "group_20002_30003",
+    )
+    bot = SimpleNamespace(self_id="10001")
+
+    captured: list[str] = []
+
+    async def fake_send(text: str) -> None:
+        captured.append(text)
+
+    monkeypatch.setattr(mod, "is_llm_chat_service_enabled", lambda: True)
+    monkeypatch.setattr(
+        mod,
+        "get_llm_chat_config",
+        lambda: SimpleNamespace(llm_chat_system_prompt_path="", llm_chat_min_priority=40),
+    )
+    llm_cfg = LlmConfig(
+        llm_chat_enabled=True,
+        llm_current_turn_decision_enabled=False,
+        llm_speak_followup_enabled=False,
+        llm_speak_perception_enabled=False,
+    )
+    monkeypatch.setattr(mod, "get_llm_config", lambda: llm_cfg)
+    monkeypatch.setattr(
+        mod,
+        "build_persona_llm_context",
+        AsyncMock(return_value=(SimpleNamespace(system="sys", metadata=SimpleNamespace(persona={})), None, None)),
+    )
+    monkeypatch.setattr(
+        mod,
+        "evaluate_llm_reply_gate_result",
+        lambda *_args, **_kwargs: SimpleNamespace(decision="proceed", reason=""),
+    )
+    monkeypatch.setattr(
+        mod,
+        "evaluate_reply_necessity_gate",
+        lambda *_args, **_kwargs: SimpleNamespace(decision="proceed", score=80, detail="test"),
+    )
+    monkeypatch.setattr(mod, "check_llm_chat_gate", AsyncMock(return_value=None))
+    monkeypatch.setattr(mod, "list_user_llm_messages", AsyncMock(return_value=[]))
+    monkeypatch.setattr(mod, "latest_llm_assistant_reply", AsyncMock(return_value=""))
+    monkeypatch.setattr(
+        mod,
+        "load_recent_bot_plain_replies",
+        AsyncMock(return_value=[]),
+    )
+
+    rule_pass = CurrentTurnDecision(
+        action=CurrentTurnAction.PASS,
+        social_action=CurrentTurnSocialAction.ACK,
+        delivery_style=mod.CurrentTurnDeliveryStyle.PLAIN,
+        reply_message_id=None,
+        trace=CurrentTurnDecisionTrace(
+            action=CurrentTurnAction.PASS,
+            social_action=CurrentTurnSocialAction.ACK,
+            delivery_style=mod.CurrentTurnDeliveryStyle.PLAIN,
+            source="rule",
+            reason="rule_low_value_social_pass",
+        ),
+    )
+    monkeypatch.setattr(mod, "decide_current_turn_with_model", AsyncMock(return_value=rule_pass))
+    submit_mock = AsyncMock()
+    monkeypatch.setattr(mod, "submit_chat_task", submit_mock)
+
+    dispatch_mock = AsyncMock(return_value=True)
+    monkeypatch.setattr("pallas.product.llm.low_engagement.dispatch_low_engagement", dispatch_mock)
+    monkeypatch.setattr(mod.llm_chat_msg, "send", fake_send)
+
+    from packages.repeater import opportunity_trace
+
+    traced: list[dict[str, object]] = []
+
+    def fake_append(payload: dict[str, object]) -> None:
+        traced.append(payload)
+
+    monkeypatch.setattr(opportunity_trace, "append_conversation_decision_trace", fake_append)
+
+    await mod.handle_llm_chat(bot, event)
+    assert len(capture_create_task) == 1
+    await capture_create_task[0]
+
+    dispatch_mock.assert_awaited_once()
+    submit_mock.assert_not_awaited()
+
+    _, kwargs = dispatch_mock.await_args
+    assert kwargs["bot_id"] == 10001
+    assert kwargs["group_id"] == 20002
+    assert kwargs["user_id"] == 30003
+    assert kwargs["recent_bot_reply_count"] == 0
+    assert kwargs["send_message"] is fake_send
+
+
+@pytest.mark.asyncio
 async def test_handle_llm_chat_submits_required_tool_intent_despite_low_social_score(
     monkeypatch: pytest.MonkeyPatch,
     capture_create_task: list[object],

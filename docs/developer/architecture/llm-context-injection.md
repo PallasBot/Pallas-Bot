@@ -80,6 +80,15 @@
 - 问候 / 昵称 / 调侃等社交动作（`social_action`），或 ≤24 字的疲惫感慨（「烦死了」「唉」等）——**跳过记忆检索**（`should_read_persistent_memory_for_turn=False`），system prompt 中记忆 / 关系 / 人物事实 / 旧话题全部为空，群环境摘录与群时间线仍保留。
 - 这类话若发生在 Bot 刚回过同一位用户之后，则只带**最近 1 对**直连对话（`should_include_recent_pair_for_turn=True`，`history_limit=2`），并同时关闭群环境摘录，避免把整段长历史塞给模型。
 
+### 低投入出口（PASS 分支）
+
+本轮决策判 `PASS`（`CurrentTurnAction.PASS`，规则来源：短社交、非 to_me 的低价值话）时，传统上是纯静默。现可走**低投入出口**（`pallas/product/llm/low_engagement.py`）：
+
+- 门控：`trace.source == "rule"` 且非 to_me（不依赖 `llm_current_turn_decision_enabled`，规则 PASS 在开关开/关时都免费产生）。
+- 掷概率（按最近 Bot 回复数：0→0.35、1–2→0.20、3–4→0.10、≥5→0.05），未命中仍静默。
+- 命中则从本地极短句池取 ≤12 字 soft 短句（群表达 active + 内置池 + emoji 兜底，`_last_used_cache` 防连续重复），`send` 一条后记录 `current_turn_low_engagement`，**不调用 LLM**。
+- 目的：给「不值得完整回复但不该静默」的消息一个低成本带角色回应，缓解 bot 在低价值消息上的持续沉默。
+
 ### 长会话压缩
 
 会话太长时先压再注入（`session_summary.py`）：当该用户消息数 ≥ `llm_session_summary_threshold`（默认 24）且距上次压缩超过冷却期（默认 600s），用低成本模型把窗口外历史压成 ≤120 字中文，写入一条 `user` 记录的【此前对话摘要】，并只保留最近 `llm_session_summary_keep_messages`（默认 16）条。**读取时摘要始终保留在窗口内**——若摘要滑出当前窗口，会弹出它、保留最近 `N-1` 条、把摘要放回最前。压缩发生在投递成功后异步执行。

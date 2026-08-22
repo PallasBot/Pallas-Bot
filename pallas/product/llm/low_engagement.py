@@ -1,0 +1,143 @@
+"""低投入表达出口：PASS 时可选投一条极短 soft 气泡。
+
+形态约束（见 specs/2026-08-22-low-engagement-exit-design.md）：
+接住上一句的极短表达（单字/短吐槽/曲解/表情），≤12 字、无问句/祈使、
+不堆叠语气词；不经 LLM 生成（本地取句）。默认乖巧，不学怼人腔。
+"""
+
+from __future__ import annotations
+
+import random
+import re
+from re import Pattern
+
+_QUESTION_OR_IMPERATIVE_TAIL_RE: Pattern[str] = re.compile(r"[？?！!。.]|[吗呢嘛吧呀]+$")
+_CQ_CODE_RE = re.compile(r"\[CQ:")
+_MAX_SAYING_CHARS = 12
+_EMOJI_FALLBACK_POOL = ["😄😄😄", "哈哈哈哈", "（（", "（", "www"]
+
+_GENTLE_POOL = [
+    "哈哈",
+    "嗯嗯",
+    "确实",
+    "不意外",
+    "这个没事",
+    "难绷",
+    "那没事了",
+    "神了",
+    "还真是",
+    "可以可以",
+    "笑死我了",
+    "好的",
+    "哦哦",
+    "嗐",
+    "乐了",
+    "不赖",
+]
+
+_last_used_cache: dict[int, str] = {}
+
+
+def _is_gentle_short_saying(saying: str) -> bool:
+    text = str(saying or "").strip()
+    if not text:
+        return False
+    if len(text) > _MAX_SAYING_CHARS:
+        return False
+    if _CQ_CODE_RE.search(text):
+        return False
+    if _QUESTION_OR_IMPERATIVE_TAIL_RE.search(text):
+        return False
+    return True
+
+
+def list_gentle_short_sayings(group_id: int, *, limit: int = 16) -> list[str]:
+    """Return this group's active, short, gentle expression-bank sayings (capped)."""
+    try:
+        from pallas.product.persona.expression_bank import list_group_expressions
+
+        rows = list_group_expressions(int(group_id), status="active", limit=64)
+    except Exception:
+        return []
+    pool = [item.saying for item in rows if _is_gentle_short_saying(item.saying)]
+    seen: set[str] = set()
+    unique: list[str] = []
+    for saying in pool:
+        if saying in seen:
+            continue
+        seen.add(saying)
+        unique.append(saying)
+    return unique[: _MAX_SAYING_CHARS + 4][: max(1, int(limit))]
+
+
+def pick_low_engagement_saying(group_id: int, rng: random.Random | None = None) -> str:
+    """Pick a low-engagement phrase, avoiding immediate repeats for the same group."""
+    rng = rng or random
+    candidates = [*list_gentle_short_sayings(group_id), *_GENTLE_POOL, *_EMOJI_FALLBACK_POOL]
+    if not candidates:
+        return "哈哈"
+    last = _last_used_cache.get(int(group_id))
+    filtered = [item for item in candidates if item != last] or candidates
+    choice = str(rng.choice(filtered))
+    _last_used_cache[int(group_id)] = choice
+    return choice
+
+
+def clear_low_engagement_last_used() -> None:
+    _last_used_cache.clear()
+
+
+def low_engagement_emit_probability(recent_bot_reply_count: int) -> float:
+    """返回给定「群被忽略度」的补泡概率；Bot 越久没说话越可能补一根气泡。"""
+    count = max(0, int(recent_bot_reply_count))
+    if count == 0:
+        return 0.35
+    if count <= 2:
+        return 0.20
+    if count <= 4:
+        return 0.10
+    return 0.05
+
+
+def should_emit_low_engagement(recent_bot_reply_count: int, rng: random.Random | None = None) -> bool:
+    rng = rng or random
+    return rng.random() < low_engagement_emit_probability(recent_bot_reply_count)
+
+
+async def dispatch_low_engagement(
+    *,
+    bot_id: int,
+    group_id: int,
+    user_id: int,
+    recent_bot_reply_count: int,
+    send_message: object,
+    rng: random.Random | None = None,
+) -> bool:
+    """PASS 分支的落地：掷一次概率，命中则取句并发送；否则真静默。
+
+    Returns whether a low-engagement bubble was delivered.
+    """
+    if not should_emit_low_engagement(recent_bot_reply_count, rng=rng):
+        return False
+    saying = pick_low_engagement_saying(int(group_id), rng=rng)
+    await send_message(saying)
+    try:
+        from pallas.core.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE
+        from pallas.product.llm.task_metrics import record_bot_llm_task
+
+        record_bot_llm_task(LLM_CHAT_TASK_TYPE, "low_engagement_emit")
+    except Exception:
+        pass
+    try:
+        from packages.repeater.opportunity_trace import append_conversation_decision_trace
+
+        append_conversation_decision_trace({
+            "group_id": int(group_id),
+            "bot_id": int(bot_id or 0),
+            "kind": "low_engagement_emit",
+            "user_id": int(user_id or 0),
+            "saying": saying,
+        })
+    except Exception:
+        pass
+    return True

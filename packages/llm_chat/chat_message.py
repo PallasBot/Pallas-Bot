@@ -764,6 +764,29 @@ async def prepare_and_submit_llm_chat_turn(
                 **current_turn_decision.trace.model_dump(mode="json"),
             })
         if current_turn_decision.action is CurrentTurnAction.PASS:
+            if not is_to_me and current_turn_decision.trace.source == "rule":
+                from pallas.product.llm.low_engagement import dispatch_low_engagement
+
+                try:
+                    emitted = await dispatch_low_engagement(
+                        bot_id=int(bot.self_id),
+                        group_id=int(group_id),
+                        user_id=int(user_id),
+                        recent_bot_reply_count=recent_bot_reply_count,
+                        send_message=llm_chat_msg.send,
+                    )
+                except Exception as exc:
+                    logger.debug("low engagement dispatch failed: {}", exc)
+                    emitted = False
+                if emitted:
+                    record_bot_llm_task(LLM_CHAT_TASK_TYPE, "current_turn_low_engagement")
+                    logger.debug(
+                        "llm chat route: current_turn_low_engagement message_id={} group={} user={}",
+                        getattr(event, "message_id", None),
+                        group_id,
+                        user_id,
+                    )
+                    return
             logger.debug(
                 "llm chat route skipped: reason=current_turn_pass message_id={} group={} user={}",
                 getattr(event, "message_id", None),
