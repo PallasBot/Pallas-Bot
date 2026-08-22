@@ -56,6 +56,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # GITHUB_TOKEN push tag 不会触发 push:tags 事件，显式 dispatch Release
+          # GITHUB_TOKEN push tag 不会触发 push:tags 事件，显式 dispatch Release 与 PyPI 发布
           gh workflow run release.yml --ref main -f version="${{ steps.detect.outputs.tag }}"
           echo "::notice::已触发 Release workflow for ${{ steps.detect.outputs.tag }}"
+          gh workflow run publish-pypi-core.yml --ref main
+          echo "::notice::已触发 publish-pypi-core workflow for ${{ steps.detect.outputs.tag }}"
