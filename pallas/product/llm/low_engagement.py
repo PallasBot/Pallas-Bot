@@ -16,6 +16,46 @@ _CQ_CODE_RE = re.compile(r"\[CQ:")
 _MAX_SAYING_CHARS = 12
 _EMOJI_FALLBACK_POOL = ["😄😄😄", "哈哈哈哈", "（（", "（", "www"]
 
+# 情绪触发词：命中则优先走「梗型跳脱」池
+_EMOTION_TRIGGER_KEYWORDS = (
+    "难绷",
+    "绷",
+    "破防",
+    "麻了",
+    "emo",
+    "玉玉",
+    "崩溃",
+    "想死",
+    "哭",
+    "太惨",
+    "无聊",
+    "好烦",
+    "烦死",
+    "累",
+    "心累",
+    "焦虑",
+    "离谱",
+    "裂开",
+    "烦",
+    "气死",
+    "要死",
+    "好气",
+)
+
+# 情绪场景的「单句冷转移/跳脱」——来自真实语料提炼（干净、不攻击、跨群可复用）
+_EMOTION_TANGENT_POOL = [
+    "阴完了",
+    "没绷住",
+    "我有点累",
+    "困了",
+    "休息会",
+    "看完释怀了",
+    "不知道为什么",
+    "我有个问题",
+    "离大谱",
+    "这也进",
+]
+
 _GENTLE_POOL = [
     "哈哈",
     "嗯嗯",
@@ -49,6 +89,21 @@ def _is_gentle_short_saying(saying: str) -> bool:
     if _QUESTION_OR_IMPERATIVE_TAIL_RE.search(text):
         return False
     return True
+
+
+def _is_emotion_turn(trigger_text: str) -> bool:
+    return any(kw in trigger_text for kw in _EMOTION_TRIGGER_KEYWORDS)
+
+
+def pick_emotion_tangent_saying(rng: random.Random | None = None) -> str:
+    """情绪场景：单句冷转移池取一句（不经 LLM）。"""
+    rng = rng or random
+    candidates = [*_EMOTION_TANGENT_POOL, *_EMOJI_FALLBACK_POOL]
+    last = _last_used_cache.get(-1)
+    filtered = [item for item in candidates if item != last] or candidates
+    choice = str(rng.choice(filtered))
+    _last_used_cache[-1] = choice
+    return choice
 
 
 def list_gentle_short_sayings(group_id: int, *, limit: int = 16) -> list[str]:
@@ -112,14 +167,21 @@ async def dispatch_low_engagement(
     recent_bot_reply_count: int,
     send_message: object,
     rng: random.Random | None = None,
+    trigger_text: str = "",
 ) -> bool:
     """PASS 分支的落地：掷一次概率，命中则取句并发送；否则真静默。
 
-    Returns whether a low-engagement bubble was delivered.
+    分场景取句：触发文本带情绪词时优先从「梗型跳脱」池取（单句冷转移，真实语料
+    支持的主流接法）；其余仍走通用 soft 句池。Returns whether a low-engagement
+    bubble was delivered.
     """
     if not should_emit_low_engagement(recent_bot_reply_count, rng=rng):
         return False
-    saying = pick_low_engagement_saying(int(group_id), rng=rng)
+    saying = (
+        pick_emotion_tangent_saying(rng=rng)
+        if _is_emotion_turn(str(trigger_text or ""))
+        else pick_low_engagement_saying(int(group_id), rng=rng)
+    )
     await send_message(saying)
     try:
         from pallas.core.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE

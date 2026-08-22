@@ -774,6 +774,7 @@ async def prepare_and_submit_llm_chat_turn(
                         user_id=int(user_id),
                         recent_bot_reply_count=recent_bot_reply_count,
                         send_message=llm_chat_msg.send,
+                        trigger_text=focus_text,
                     )
                 except Exception as exc:
                     logger.debug("low engagement dispatch failed: {}", exc)

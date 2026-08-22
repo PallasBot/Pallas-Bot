@@ -11,6 +11,24 @@
 
 两条线最终都在 `packages/llm_chat/chat_message.py` 的 `prepare_and_submit_llm_chat_turn` 里汇合后发送。
 
+## 入口路由：一句话到说话的决策流
+
+群消息进来后先过一段「该不该说」路由，两条上下文线只对走 LLM 的分支生效：
+
+```text
+群消息
+  ├─ reply_gate 硬过滤（表情/噪声/围观/过短）   skip → 真静默
+  ├─ 冷却/失能 gate（cooldown / disabled）      冷却 → 攒消息，等下次触发
+  ├─ reply_necessity 评分（@/低价值/围观）      低于阈值 → skip 静默
+  └─ decide_current_turn（规则决策，零 LLM）
+       ├─ REPLY    → 正常对话生成 ★主路径（context 注入 + persona + 多泡）
+       ├─ TOOL     → 工具调用（需权限）
+       ├─ FOLLOW_UP → 追问
+       └─ PASS     → 低投入出口（见下节）：掷概率，命中则本地极短句池取 ≤12 字补泡，未命中静默
+```
+
+只有 `REPLY` 分支才走到下文的两条上下文线。
+
 ## system prompt 段结构
 
 `ChatPromptAssembler`（`pallas/product/llm/assembler/chat_prompt.py`）按固定顺序组合各段，段内每块 `sanitize_prompt_block` 清洗后再以空行连接；空或重复的段跳过。顺序即 `section_ids`：
@@ -87,6 +105,9 @@
 - 门控：`trace.source == "rule"` 且非 to_me（不依赖 `llm_current_turn_decision_enabled`，规则 PASS 在开关开/关时都免费产生）。
 - 掷概率（按最近 Bot 回复数：0→0.35、1–2→0.20、3–4→0.10、≥5→0.05），未命中仍静默。
 - 命中则从本地极短句池取 ≤12 字 soft 短句（群表达 active + 内置池 + emoji 兜底，`_last_used_cache` 防连续重复），`send` 一条后记录 `current_turn_low_engagement`，**不调用 LLM**。
+
+**分场景取句**：入口把触发文本（`focus_text`）传给 `dispatch_low_engagement`。触发文本带情绪词（难绷/破防/麻了/emo/烦/累/哭/气死等，`_EMOTION_TRIGGER_KEYWORDS`）时，从「梗型跳脱池」（`_EMOTION_TANGENT_POOL`，如「阴完了」「没绷住」「休息会」，真实语料提炼的干净单句冷转移）取句；否则仍走通用乖巧 soft 池。脏样本（攻击性/脏话）不进池。
+
 - 目的：给「不值得完整回复但不该静默」的消息一个低成本带角色回应，缓解 bot 在低价值消息上的持续沉默。
 
 ### 长会话压缩

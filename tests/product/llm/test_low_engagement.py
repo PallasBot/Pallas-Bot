@@ -5,11 +5,13 @@ import random
 import pytest
 
 from pallas.product.llm.low_engagement import (
+    _EMOTION_TANGENT_POOL,
     _GENTLE_POOL,
     _is_gentle_short_saying,
     clear_low_engagement_last_used,
     dispatch_low_engagement,
     low_engagement_emit_probability,
+    pick_emotion_tangent_saying,
     pick_low_engagement_saying,
     should_emit_low_engagement,
 )
@@ -40,6 +42,18 @@ def test_is_gentle_short_saying_rejects_question_tail() -> None:
     assert not _is_gentle_short_saying("好吗")
     assert not _is_gentle_short_saying("怎么办呀")
     assert not _is_gentle_short_saying("？")
+
+
+def test_emotion_tangent_pool_is_clean_and_short() -> None:
+    for saying in _EMOTION_TANGENT_POOL:
+        assert _is_gentle_short_saying(saying), f"{saying} should be short & clean"
+
+
+def test_pick_emotion_tangent_saying_returns_from_pool() -> None:
+    assert pick_emotion_tangent_saying(rng=random.Random(1)) in (
+        _EMOTION_TANGENT_POOL + ["😄😄😄", "哈哈哈哈", "（（", "（", "www"]
+    )
+    clear_low_engagement_last_used()
 
 
 def test_low_engagement_emit_probability_tiers() -> None:
@@ -159,3 +173,67 @@ async def test_dispatch_low_engagement_can_stay_silent() -> None:
 
     assert emitted is False
     assert sent == []
+
+
+@pytest.mark.asyncio
+async def test_dispatch_low_engagement_emotion_turn_uses_tangent_pool(monkeypatch) -> None:
+    sent: list[str] = []
+
+    async def fake_send(text: str) -> None:
+        sent.append(text)
+
+    monkeypatch.setattr("pallas.product.llm.task_metrics.record_bot_llm_task", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "packages.repeater.opportunity_trace.append_conversation_decision_trace",
+        lambda p: None,
+    )
+
+    class AlwaysRollRng(random.Random):
+        def random(self) -> float:
+            return 0.0
+
+    clear_low_engagement_last_used()
+    emitted = await dispatch_low_engagement(
+        bot_id=1,
+        group_id=123,
+        user_id=456,
+        recent_bot_reply_count=0,
+        send_message=fake_send,
+        trigger_text="今天破防了，麻了",
+        rng=AlwaysRollRng(1),
+    )
+    assert emitted is True
+    assert len(sent) == 1
+    assert sent[0] in (_EMOTION_TANGENT_POOL + ["😄😄😄", "哈哈哈哈", "（（", "（", "www"])
+
+
+@pytest.mark.asyncio
+async def test_dispatch_low_engagement_neutral_turn_uses_gentle_pool(monkeypatch) -> None:
+    sent: list[str] = []
+
+    async def fake_send(text: str) -> None:
+        sent.append(text)
+
+    monkeypatch.setattr("pallas.product.llm.task_metrics.record_bot_llm_task", lambda *a, **k: None)
+    monkeypatch.setattr(
+        "packages.repeater.opportunity_trace.append_conversation_decision_trace",
+        lambda p: None,
+    )
+
+    class AlwaysRollRng(random.Random):
+        def random(self) -> float:
+            return 0.0
+
+    clear_low_engagement_last_used()
+    emitted = await dispatch_low_engagement(
+        bot_id=1,
+        group_id=123,
+        user_id=456,
+        recent_bot_reply_count=0,
+        send_message=fake_send,
+        trigger_text="中午吃啥",
+        rng=AlwaysRollRng(1),
+    )
+    assert emitted is True
+    assert len(sent) == 1
+    assert sent[0] in (_GENTLE_POOL + ["😄😄😄", "哈哈哈哈", "（（", "（", "www"])
