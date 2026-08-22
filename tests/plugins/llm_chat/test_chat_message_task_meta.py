@@ -856,7 +856,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     assert submit_request.llm_rewrite_metadata["semantic_style_source_example_id"] == "semantic:source:1"
     assert added["payload"]["semantic_style_source_example_id"] == "semantic:source:1"
     assert submit_request.include_session_history is True
-    assert submit_request.session_history_limit == 2
+    assert submit_request.session_history_limit is None
     assert submit_request.include_group_ambient_history is False
     assert submit_request.hybrid_retrieval_trace["sources"] == ["memory"]
 

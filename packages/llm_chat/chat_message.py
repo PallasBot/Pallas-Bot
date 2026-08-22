@@ -1018,7 +1018,7 @@ async def prepare_and_submit_llm_chat_turn(
             llm_user_text,
             cfg=llm_cfg,
             include_history=include_persistent_history or include_recent_pair,
-            history_limit=2 if include_recent_pair else None,
+            history_limit=None,
             include_group_ambient=not include_recent_pair,
             ambient_turns_out=ambient_turns,
             ambient_message_token_out=ambient_message_tokens,
@@ -1109,7 +1109,7 @@ async def prepare_and_submit_llm_chat_turn(
                 knowledge_retrieval_trace=knowledge_retrieval_trace,
                 hybrid_retrieval_trace=hybrid_retrieval_trace,
                 include_session_history=include_persistent_history or include_recent_pair,
-                session_history_limit=2 if include_recent_pair else None,
+                session_history_limit=None,
                 include_group_ambient_history=not include_recent_pair,
                 prepared_messages=prepared_messages,
                 llm_rewrite_metadata={

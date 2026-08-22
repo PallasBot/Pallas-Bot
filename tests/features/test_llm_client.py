@@ -340,13 +340,13 @@ async def test_resolve_chat_messages_passes_bounded_recent_pair(monkeypatch: pyt
             group_id=20002,
             user_id=30003,
             include_session_history=True,
-            session_history_limit=2,
+            session_history_limit=None,
             include_group_ambient_history=False,
         ),
         cfg=LlmConfig(llm_chat_enabled=True),
     )
 
-    assert build_messages.await_args.kwargs["history_limit"] == 2
+    assert build_messages.await_args.kwargs["history_limit"] is None
     assert build_messages.await_args.kwargs["include_group_ambient"] is False
 
 
