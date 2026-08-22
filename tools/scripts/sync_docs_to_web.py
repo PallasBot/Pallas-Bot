@@ -74,6 +74,9 @@ FILE_MAP: dict[str, str] = {
     "developer/architecture/llm-output-guardrails.md": (
         "developer/architecture/llm-output-guardrails.md"
     ),
+    "developer/architecture/llm-context-injection.md": (
+        "developer/architecture/llm-context-injection.md"
+    ),
     "developer/plugin-development/getting-started.md": (
         "developer/plugin-development/getting-started.md"
     ),
