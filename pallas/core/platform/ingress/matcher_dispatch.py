@@ -172,7 +172,7 @@ async def _apply_rage_gate(bot: Bot, event: GroupMessageEvent) -> bool:
         update_rage_state,
         upsert_relationship_profile,
     )
-    from pallas.product.llm.rage import evaluate_attack, rage_state_is_silenced
+    from pallas.product.llm.rage import count_attack_tokens, evaluate_attack, rage_state_is_silenced
 
     try:
         bot_id = int(bot.self_id)
@@ -194,26 +194,30 @@ async def _apply_rage_gate(bot: Bot, event: GroupMessageEvent) -> bool:
             await update_rage_state(bot_id, group_id, user_id, decayed_state)
             state = decayed_state
         text = str(event.get_plaintext() or "")
-        recent_messages = await make_message_repository().find_recent_in_group(
-            group_id,
-            user_id=user_id,
-            limit=4,
-        )
         from pallas.product.llm.behavior import attack_pressure_details
 
-        token_count, recent_count = attack_pressure_details(
-            user_text=text,
-            recent_turns=[
-                {
-                    "role": "user",
-                    "content": str(message.plain_text or ""),
-                    "created_at": int(message.time or 0),
-                }
-                for message in recent_messages
-            ],
-            is_to_me=bool(getattr(event, "to_me", False) or getattr(event, "_pallas_llm_alias_hard_trigger", False)),
-            now=now,
-        )
+        is_to_me = bool(getattr(event, "to_me", False) or getattr(event, "_pallas_llm_alias_hard_trigger", False))
+        if count_attack_tokens(text) == 0:
+            token_count, recent_count = 0, 0
+        else:
+            recent_messages = await make_message_repository().find_recent_in_group(
+                group_id,
+                user_id=user_id,
+                limit=4,
+            )
+            token_count, recent_count = attack_pressure_details(
+                user_text=text,
+                recent_turns=[
+                    {
+                        "role": "user",
+                        "content": str(message.plain_text or ""),
+                        "created_at": int(message.time or 0),
+                    }
+                    for message in recent_messages
+                ],
+                is_to_me=is_to_me,
+                now=now,
+            )
         if token_count == 0:
             return False
         next_state = evaluate_attack(
