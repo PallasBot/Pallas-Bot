@@ -205,3 +205,93 @@ def test_prompt_overrides_body_rejects_invalid_scope_and_content() -> None:
             group_id=20,
             sections={"persona": {"mode": "replace", "content": "x" * 12001}},
         )
+
+
+@pytest.mark.asyncio
+async def test_prompt_preview_try_calls_provider_directly_and_requires_write_token(monkeypatch) -> None:
+    monkeypatch.setattr(mod, "_check_pallas_write_token", lambda *a, **k: None)
+    monkeypatch.setattr(mod, "_require_pallas_token_configured", lambda *a, **k: None)
+    monkeypatch.setattr("packages.pb_webui.extended_common.check_pallas_write_token", lambda *a, **k: None)
+    monkeypatch.setattr(mod, "ensure_console_metrics_hooks", lambda: None)
+    token_calls = []
+    provider_calls = []
+    plugin_config = Config()
+
+    def check_write_token(*args, **kwargs):
+        token_calls.append((args, kwargs))
+
+    monkeypatch.setattr("packages.pb_webui.extended_common.check_pallas_write_token", check_write_token)
+
+    async def complete_chat_message(**kwargs):
+        provider_calls.append(kwargs)
+        return {"choices": [{"message": {"role": "assistant", "content": "试答结果"}}]}
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", complete_chat_message)
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: SimpleNamespace(llm_model="preview-model"))
+    app = FastAPI()
+    mod.register_extended_api(app, api_base="/pallas/api", plugin_config=plugin_config)
+    endpoint = _find_console_route_endpoint(
+        app,
+        "/pallas/api/common-config/llm/persona/prompt-preview/try",
+        "POST",
+    )
+
+    response = await endpoint(
+        body=llm_ops_api._PromptTrialBody(
+            bot_id=10,
+            group_id=20,
+            user_id=30,
+            system_prompt="系统提示",
+            query_text="用户问题",
+        ),
+        token="write-token",
+        x_pallas_token=None,
+    )
+
+    assert response.status_code == 200
+    payload = json.loads(response.body)
+    assert payload == {
+        "ok": True,
+        "data": {
+            "text": "试答结果",
+            "model": "preview-model",
+            "elapsed_ms": payload["data"]["elapsed_ms"],
+            "test_call": True,
+        },
+    }
+    assert token_calls == [((plugin_config,), {"x_pallas_token": None, "token": "write-token"})]
+    assert provider_calls[0]["messages"] == [
+        {"role": "system", "content": "系统提示"},
+        {"role": "user", "content": "用户问题"},
+    ]
+    assert provider_calls[0]["model"] == "preview-model"
+    assert provider_calls[0]["options"] == {"temperature": 0.2, "max_tokens": 512}
+    assert provider_calls[0]["tools"] is None
+    assert provider_calls[0]["task"] == "llm_prompt_preview"
+
+
+def test_prompt_trial_body_rejects_invalid_input() -> None:
+    with pytest.raises(ValueError, match="greater than or equal to 1"):
+        llm_ops_api._PromptTrialBody(
+            bot_id=1,
+            group_id=0,
+            user_id=0,
+            system_prompt="system",
+            query_text="query",
+        )
+    with pytest.raises(ValueError, match="at least 1 character"):
+        llm_ops_api._PromptTrialBody(
+            bot_id=1,
+            group_id=1,
+            user_id=0,
+            system_prompt="",
+            query_text="query",
+        )
+    with pytest.raises(ValueError, match="at least 1 character"):
+        llm_ops_api._PromptTrialBody(
+            bot_id=1,
+            group_id=1,
+            user_id=0,
+            system_prompt="system",
+            query_text="",
+        )

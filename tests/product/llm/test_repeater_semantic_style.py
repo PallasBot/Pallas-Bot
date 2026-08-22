@@ -251,10 +251,8 @@ async def test_semantic_style_label_uses_deterministic_short_options(monkeypatch
 async def test_collect_backfill_candidates_uses_online_bot_groups_and_verified_reply_samples(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from pallas.product.llm import repeater_semantic_style as mod
     from pallas.product.llm.repeater_semantic_style import collect_semantic_style_backfill_candidates
 
-    monkeypatch.setattr(mod, "SEMANTIC_STYLE_BACKFILL_ENABLED", False)
     now = 2_000_000_000
 
     class DummyMessageRepo:
@@ -279,7 +277,7 @@ async def test_collect_backfill_candidates_uses_online_bot_groups_and_verified_r
                     ),
                     SimpleNamespace(
                         group_id=42,
-                        user_id=100,
+                        user_id=11,
                         bot_id=100,
                         plain_text="没救了",
                         raw_message="没救了",
@@ -287,7 +285,7 @@ async def test_collect_backfill_candidates_uses_online_bot_groups_and_verified_r
                     ),
                     SimpleNamespace(
                         group_id=42,
-                        user_id=100,
+                        user_id=11,
                         bot_id=100,
                         plain_text="未学习回复",
                         raw_message="未学习回复",
@@ -312,7 +310,9 @@ async def test_collect_backfill_candidates_uses_online_bot_groups_and_verified_r
 
     candidates = await collect_semantic_style_backfill_candidates(now=now, bot_ids=[100])
 
-    assert candidates == []
+    assert [candidate["reply_text"] for candidate in candidates] == ["没救了"]
+    assert candidates[0]["bot_id"] == 100
+    assert candidates[0]["group_id"] == 42
 
 
 @pytest.mark.asyncio

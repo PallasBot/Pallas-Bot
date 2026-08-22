@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.3.7-49-ge02cb9aa-dirty",
+    "version": "v4.3.7-50-g07a8aca4-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -3340,6 +3340,95 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/_PromptPreviewBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/persona/prompt-preview/try": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Persona Prompt Preview Try Post",
+        "operationId": "_llm_persona_prompt_preview_try_post_pallas_api_common_config_llm_persona_prompt_preview_try_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_PromptTrialBody"
               }
             }
           }
@@ -37814,8 +37903,45 @@
           },
           "user_id": {
             "type": "integer",
+            "minimum": 0.0,
+            "title": "User Id",
+            "default": 0
+          },
+          "query_text": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Query Text",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bot_id"
+        ],
+        "title": "_PromptPreviewBody"
+      },
+      "_PromptTrialBody": {
+        "properties": {
+          "bot_id": {
+            "type": "integer",
             "minimum": 1.0,
+            "title": "Bot Id"
+          },
+          "group_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Group Id"
+          },
+          "user_id": {
+            "type": "integer",
+            "minimum": 0.0,
             "title": "User Id"
+          },
+          "system_prompt": {
+            "type": "string",
+            "minLength": 1,
+            "title": "System Prompt"
           },
           "query_text": {
             "type": "string",
@@ -37828,10 +37954,12 @@
         "type": "object",
         "required": [
           "bot_id",
+          "group_id",
           "user_id",
+          "system_prompt",
           "query_text"
         ],
-        "title": "_PromptPreviewBody"
+        "title": "_PromptTrialBody"
       },
       "_RequestActionBody": {
         "properties": {

@@ -553,7 +553,7 @@ async def collect_semantic_style_backfill_candidates(
                     created_at = int(getattr(reply_message, "time", 0) or 0)
                     if created_at < cutoff:
                         continue
-                    if int(getattr(reply_message, "user_id", 0) or 0) != bot_id:
+                    if int(getattr(reply_message, "bot_id", 0) or 0) != bot_id:
                         continue
                     reply_text = _short_text(
                         getattr(reply_message, "plain_text", "") or getattr(reply_message, "raw_message", ""), 240

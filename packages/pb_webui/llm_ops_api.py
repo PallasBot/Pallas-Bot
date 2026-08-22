@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from packages.pb_webui.console_openapi_models import _ApiOkResponse
 from pallas.product.persona.group_expression_profile import GroupExpressionProfile
@@ -146,8 +147,44 @@ class _PromptPreviewBody(BaseModel):
 
     bot_id: int = Field(ge=1)
     group_id: int | None = Field(default=None, ge=0)
-    user_id: int = Field(ge=1)
+    user_id: int = Field(default=0, ge=0)
+    query_text: str = Field(default="", max_length=4000)
+
+
+class _PromptTrialBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bot_id: int = Field(ge=1)
+    group_id: int = Field(ge=1)
+    user_id: int = Field(ge=0)
+    system_prompt: str = Field(min_length=1)
     query_text: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("system_prompt", "query_text")
+    @classmethod
+    def _require_non_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be blank")
+        return value
+
+
+def _assistant_text_from_provider_response(response: Any) -> str:
+    message: Any = response
+    if isinstance(response, dict):
+        choices = response.get("choices")
+        if isinstance(choices, list) and choices:
+            first = choices[0]
+            message = first.get("message") if isinstance(first, dict) else first
+        if isinstance(message, dict):
+            message = message.get("content", "")
+    if isinstance(message, list):
+        message = "".join(
+            str(item.get("text") or "") if isinstance(item, dict) else str(item or "") for item in message
+        )
+    text = str(message or "").strip()
+    if not text:
+        raise ValueError("empty provider assistant content")
+    return text
 
 
 class _PromptOverrideBody(BaseModel):
@@ -609,6 +646,46 @@ def register_llm_ops_router(
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/common-config/llm/persona/prompt-preview/try", include_in_schema=True)
+    async def _llm_persona_prompt_preview_try_post(
+        body: _PromptTrialBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.llm.config import get_llm_config
+        from pallas.product.llm.provider_client import LlmProviderError, complete_chat_message
+
+        cfg = get_llm_config()
+        model = str(cfg.llm_model or "").strip()
+        started = time.monotonic()
+        try:
+            response = await complete_chat_message(
+                messages=[
+                    {"role": "system", "content": body.system_prompt},
+                    {"role": "user", "content": body.query_text},
+                ],
+                model=model,
+                options={"temperature": 0.2, "max_tokens": 512},
+                tools=None,
+                cfg=cfg,
+                task="llm_prompt_preview",
+            )
+            text = _assistant_text_from_provider_response(response)
+        except LlmProviderError as e:
+            raise HTTPException(status_code=502, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({
+            "ok": True,
+            "data": {
+                "text": text,
+                "model": model,
+                "elapsed_ms": int((time.monotonic() - started) * 1000),
+                "test_call": True,
+            },
+        })
 
     @router.get(f"{x}/common-config/llm/persona/prompt-overrides", include_in_schema=True)
     async def _llm_persona_prompt_overrides_get(
