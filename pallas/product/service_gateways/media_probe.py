@@ -65,8 +65,12 @@ def normalize_maa_runtime_results(
 
 
 async def probe_image_gateways(*, draft_values: dict[str, Any] | None = None) -> list[ServiceProbeResult]:
+    from importlib.util import find_spec
+
     from nonebot import logger
 
+    if find_spec("pallas_plugin_draw") is None:
+        return []
     draw_config = import_plugin_submodule("draw", "config")
     draw_probe = import_plugin_submodule("draw", "gateway_probe")
     active_image_gen_settings = draw_config.active_image_gen_settings
@@ -217,8 +221,12 @@ async def probe_maa_endpoints(
     timeout_sec: float = 15.0,
     draft_values: dict[str, Any] | None = None,
 ) -> list[ServiceProbeResult]:
+    from importlib.util import find_spec
+
     from pallas.core.platform.shard import context as shard_ctx
 
+    if find_spec("pallas_plugin_maa") is None and find_spec("pallas_plugin_maa_hub") is None:
+        return []
     maa_endpoints = import_plugin_submodule("maa", "endpoints")
     resolve_maa_probe_http_endpoints = maa_endpoints.resolve_maa_probe_http_endpoints
 
@@ -279,6 +287,10 @@ async def probe_sing_server(
     timeout_sec: float = 15.0,
     draft_values: dict[str, Any] | None = None,
 ) -> list[ServiceProbeResult]:
+    from importlib.util import find_spec
+
+    if find_spec("pallas_plugin_sing") is None:
+        return []
     sing_config = import_plugin_submodule("sing", "config")
     get_sing_config = sing_config.get_sing_config
     sing_runtime_mode = sing_config.sing_runtime_mode
@@ -336,10 +348,24 @@ async def probe_sing_server(
 
 
 async def probe_media_services(*, timeout_sec: float = 15.0, draft_values=None) -> list[ServiceProbeResult]:
+    from nonebot import logger
+
+    async def _safe_await(coroutine, name: str) -> list[ServiceProbeResult]:
+        try:
+            return await coroutine
+        except Exception as e:  # noqa: BLE001
+            logger.debug("service_gateways {} probe failed: {}", name, e)
+            return []
+
     image_task = probe_image_gateways(draft_values=draft_values)
     maa_task = probe_maa_endpoints(timeout_sec=timeout_sec, draft_values=draft_values)
     sing_task = probe_sing_server(timeout_sec=timeout_sec, draft_values=draft_values)
-    image_results, maa_results, sing_results = await asyncio.gather(image_task, maa_task, sing_task)
+
+    image_results, maa_results, sing_results = await asyncio.gather(
+        _safe_await(image_task, "images"),
+        _safe_await(maa_task, "maa"),
+        _safe_await(sing_task, "sing"),
+    )
     return [*image_results, *maa_results, *sing_results]
 
 

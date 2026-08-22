@@ -8,6 +8,7 @@ from pallas.product.service_gateways.media_probe import (
     maa_hub_probe_note,
     probe_image_gateways,
     probe_maa_endpoints,
+    probe_media_services,
     probe_sing_server,
     sing_probe_urls,
 )
@@ -53,6 +54,52 @@ def _patch_draw_import_plugin_submodule(
 def test_sing_probe_urls() -> None:
     urls = sing_probe_urls("http://127.0.0.1:9099")
     assert urls == [("健康检查", "http://127.0.0.1:9099/health")]
+
+
+def test_probe_image_gateways_returns_empty_when_draw_not_installed(monkeypatch) -> None:
+    import importlib.util
+
+    original = importlib.util.find_spec
+
+    def fake_find_spec(name, *args, **kwargs):
+        if name == "pallas_plugin_draw":
+            return None
+        return original(name, *args, **kwargs)
+
+    monkeypatch.setattr("importlib.util.find_spec", fake_find_spec)
+    results = asyncio.run(probe_image_gateways())
+    assert results == []
+
+
+def test_probe_sing_server_returns_empty_when_sing_not_installed(monkeypatch) -> None:
+    import importlib.util
+
+    original = importlib.util.find_spec
+
+    def fake_find_spec(name, *args, **kwargs):
+        if name == "pallas_plugin_sing":
+            return None
+        return original(name, *args, **kwargs)
+
+    monkeypatch.setattr("importlib.util.find_spec", fake_find_spec)
+    results = asyncio.run(probe_sing_server())
+    assert results == []
+
+
+def test_probe_media_services_is_isolated_per_sub_probe(monkeypatch) -> None:
+    async def boom(**kwargs) -> list:
+        raise ModuleNotFoundError("pallas_plugin_draw")
+
+    async def healthy(**kwargs) -> list:
+        return [SimpleNamespace(category="唱歌", site="健康检查", ok=True, latency_ms=1, status_code=200, error=None)]
+
+    monkeypatch.setattr("pallas.product.service_gateways.media_probe.probe_image_gateways", boom)
+    monkeypatch.setattr("pallas.product.service_gateways.media_probe.probe_maa_endpoints", healthy)
+    monkeypatch.setattr("pallas.product.service_gateways.media_probe.probe_sing_server", healthy)
+
+    results = asyncio.run(probe_media_services())
+    assert len(results) == 2
+    assert all(item.category == "唱歌" for item in results)
 
 
 def test_probe_sing_disabled(monkeypatch) -> None:
