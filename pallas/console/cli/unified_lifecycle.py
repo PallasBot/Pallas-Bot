@@ -153,11 +153,22 @@ def start_bot(*, skip_port_sync: bool = False, detach: bool = False) -> int:
             if start_aux_services() != 0:
                 return 1
             write_pid_file(PID_FILE, os.getpid())
+            from pallas.core.foundation.asgi_runner import (
+                clear_process_shutdown_callback,
+                register_process_shutdown_callback,
+            )
+
+            def cleanup_foreground_runtime() -> None:
+                clear_pid_file(PID_FILE)
+                stop_aux_services()
+
+            register_process_shutdown_callback(cleanup_foreground_runtime)
             try:
                 runpy.run_path(str(PROJECT_ROOT / "bot.py"), run_name="__main__")
             except KeyboardInterrupt:
                 print("\nunified 正在停止…")
             finally:
+                clear_process_shutdown_callback()
                 clear_pid_file(PID_FILE)
                 stop_aux_services()
             return 0

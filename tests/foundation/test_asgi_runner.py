@@ -7,6 +7,17 @@ import time
 from pallas.core.foundation import asgi_runner as mod
 
 
+def test_process_shutdown_callback_runs_before_forced_exit() -> None:
+    calls: list[str] = []
+    mod.register_process_shutdown_callback(lambda: calls.append("cleanup"))
+    try:
+        mod.run_process_shutdown_callback()
+    finally:
+        mod.clear_process_shutdown_callback()
+
+    assert calls == ["cleanup"]
+
+
 def test_shutdown_loop_cancels_pending_tasks_and_times_out_executor() -> None:
     gate = threading.Event()
 
