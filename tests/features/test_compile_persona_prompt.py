@@ -45,7 +45,7 @@ def test_load_at_chat_system_prompt_uses_minimal_background_and_group_chat_style
     assert "米诺斯" in text
     assert "罗德岛" in text
     assert "背景事实" in text
-    assert "默认把自己当作熟悉的真实群友" in text
+    assert "天天泡在群里的普通群友" in text
     assert "不需要主动表演或反复提起" in text
 
 
@@ -54,46 +54,43 @@ def test_at_chat_prompt_keeps_identity_without_roleplay_persona() -> None:
 
     assert "你是女性，名为帕拉斯" in prompt
     assert "牛牛只是群友叫你的外号" in prompt
-    assert "祭司、英雄、庆典、戏剧、战车、美酒" in prompt
+    assert "只有用户明确聊到明日方舟、罗德岛或角色设定时" in prompt
+    assert "不把牛梗扩成动物人格" in prompt
 
 
 def test_at_chat_prompt_rejects_theatrical_monologues() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "不写完整小作文" in prompt
-    assert "自个儿" in prompt
-    assert "不过既然" in prompt
-    assert "别抱太大期望" in prompt
-    assert "不要把惊讶、让步、解释和承诺塞进同一条" in prompt
+    assert "一句废话如果一句话讲得完，就别拆两句" in prompt
+    assert "一个反应如果两个字带得动，就别凑一句完整的话" in prompt
+    assert "不用把每句话都说得周全" in prompt
 
 
 def test_at_chat_prompt_defines_cuteness_through_natural_reactions() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "可爱来自自然、轻快、短促的即时反应" in prompt
-    assert "不是每句都卖萌" in prompt
+    assert "带点小得意、嘴硬两句、或者软乎乎地应一句" in prompt
+    assert "说话落点常带一点轻快或亲昵" in prompt
     assert "六点？" in prompt
     assert "你对我也太狠了吧" in prompt
     assert "我努力爬起来" in prompt
-    assert "被你发现了" in prompt
-    assert "再夸我真信了" in prompt
+    assert "谢谢呀，眼光不错嘛" in prompt
 
 
 def test_at_chat_prompt_keeps_playfulness_bounded_and_contextual() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "不先替对方安排行程、承诺陪伴或下结论" in prompt
-    assert "不连续反问" in prompt
-    assert "不把牛梗扩成动物人格" in prompt
-    assert "求助或认真提问时，直接回应事情" in prompt
+    assert "先顺着玩一下再回顶，见好就收" in prompt
+    assert "别每次都拿同一句挡回去，也别真动气" in prompt
+    assert "重要或认真的事，直接说清楚就行" in prompt
 
 
 def test_at_chat_prompt_keeps_cuteness_as_default_baseline() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "轻松闲聊里的默认底色" in prompt
-    assert "亲切俏皮、小得意或软乎乎" in prompt
-    assert "别干巴巴几个字冷到底" in prompt
+    assert "谁跟你说话你都当熟人接" in prompt
+    assert "对熟人可以更放得开" in prompt
+    assert "轻快或亲昵" in prompt
 
 
 def test_at_chat_prompt_keeps_mentions_and_ambient_chat_bounded() -> None:
@@ -225,7 +222,7 @@ def test_assemble_persona_system_skips_empty_sections() -> None:
 def test_at_chat_prompt_does_not_default_to_emotional_closure() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "不抢着解释、总结、说教、安慰" in prompt
+    assert "想到什么说什么，不用把每句话都说得周全" in prompt
 
 
 def test_at_chat_prompt_reads_group_timeline_before_answering_an_at() -> None:
@@ -234,7 +231,7 @@ def test_at_chat_prompt_reads_group_timeline_before_answering_an_at() -> None:
     assert "群聊中看得见上下文时，先接具体内容" in prompt
     assert "明显在跟别人说话" in prompt
     assert "不要硬插" in prompt
-    assert "有两个或三个独立反应时才拆成短气泡" in prompt
+    assert "有第二个意思才另起一条" in prompt
 
 
 def test_base_prompt_uses_personality_as_judgment_not_character_performance() -> None:
@@ -265,8 +262,8 @@ def test_base_prompt_allows_bounded_playful_affection() -> None:
 def test_at_chat_prompt_gives_playfulness_a_scene_and_limit() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "轻松玩笑可以回顶一句，见好就收" in prompt
-    assert "不用卖萌打岔" in prompt
+    assert "顺着玩笑接一句、玩一下梗就够了" in prompt
+    assert "见好就收，不追着一个梗反复拱" in prompt
 
 
 @pytest.mark.asyncio

@@ -294,3 +294,110 @@ async def test_repeater_semantic_style_manage_checks_write_token(monkeypatch) ->
 
     assert response.status_code == 200, response.text
     assert checked == [True]
+
+
+@pytest.mark.asyncio
+async def test_repeater_semantic_style_set_governance_dispatches_both_flags(monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as semantic_style
+
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        semantic_style,
+        "set_semantic_style_governance",
+        lambda **kwargs: (
+            calls.append(kwargs)
+            or {
+                "enabled": True,
+                "collection_enabled": kwargs.get("collection_enabled"),
+                "injection_enabled": kwargs.get("injection_enabled"),
+            }
+        ),
+        raising=False,
+    )
+
+    response = await request(
+        monkeypatch,
+        "POST",
+        "/pallas/api/llm/repeater-semantic-style/manage",
+        json={
+            "action": "set_governance",
+            "bot_id": 100,
+            "group_id": 42,
+            "collection_enabled": False,
+            "injection_enabled": True,
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    assert calls == [
+        {"bot_id": 100, "group_id": 42, "collection_enabled": False, "injection_enabled": True}
+    ]
+    assert response.json()["data"]["collection_enabled"] is False
+    assert response.json()["data"]["injection_enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_repeater_semantic_style_set_governance_requires_both_flags(monkeypatch) -> None:
+    response = await request(
+        monkeypatch,
+        "POST",
+        "/pallas/api/llm/repeater-semantic-style/manage",
+        json={"action": "set_governance", "bot_id": 100, "group_id": 42, "collection_enabled": False},
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_repeater_semantic_style_clear_forwards_continue_learning(monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as semantic_style
+
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        semantic_style,
+        "clear_semantic_style_data",
+        lambda **kwargs: (
+            calls.append(kwargs)
+            or {"collection_enabled": kwargs.get("continue_learning", True), "injection_enabled": True}
+        ),
+        raising=False,
+    )
+
+    response = await request(
+        monkeypatch,
+        "POST",
+        "/pallas/api/llm/repeater-semantic-style/manage",
+        json={"action": "clear", "bot_id": 100, "group_id": 42, "continue_learning": False},
+    )
+
+    assert response.status_code == 200, response.text
+    assert calls == [{"bot_id": 100, "group_id": 42, "continue_learning": False}]
+    assert response.json()["data"]["collection_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_repeater_semantic_style_enable_action_sets_both_true(monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as semantic_style
+
+    calls: list[tuple[bool, int | None, int | None]] = []
+    monkeypatch.setattr(
+        semantic_style,
+        "set_semantic_style_enabled",
+        lambda enabled, *, bot_id=None, group_id=None: (
+            calls.append((enabled, bot_id, group_id))
+            or {"enabled": True, "collection_enabled": enabled, "injection_enabled": enabled}
+        ),
+        raising=False,
+    )
+
+    response = await request(
+        monkeypatch,
+        "POST",
+        "/pallas/api/llm/repeater-semantic-style/manage",
+        json={"action": "enable", "bot_id": 100, "group_id": 42},
+    )
+
+    assert response.status_code == 200, response.text
+    assert calls == [(True, 100, 42)]
+    assert response.json()["data"]["collection_enabled"] is True
+    assert response.json()["data"]["injection_enabled"] is True

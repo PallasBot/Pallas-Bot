@@ -15,7 +15,7 @@ uv run pallas status
 
 | 场景 | 位置 |
 | --- | --- |
-| unified（默认） | `data/pallas_unified/logs/bot.log`；NoneBot 亦可有 `data/bot/nonebot_*.log` |
+| unified（默认） | Bot 业务日志 `data/bot/nonebot_*.log`（消息实例持续写入）；`data/pallas_unified/logs/bot_*.log` 为启动器捕获 stdout，仅后台运行时产生 |
 | embed 辅进程 | `data/pallas_embed/logs/embed.log`（本机 Embedding + Redis 时） |
 | 分片（进阶） | `data/pallas_shard/logs/hub.log`、`worker-*.log`，以及同目录 bootstrap / archive |
 | 控制台实时 | 内存环 + 上述文件尾；WebUI「运行日志」页 |

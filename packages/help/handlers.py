@@ -69,6 +69,12 @@ async def handle_help_command(
             show_ignored=show_ignored,
         )
         enabled_count = sum(1 for row in all_rows if row.enabled)
+        logger.info(
+            format_plugin_event(
+                "show_menu",
+                f"Bot [{bot_id}] showed [{enabled_count}] enabled plugins in group [{group_id or '-'}]",
+            )
+        )
         await send_plugin_menu_image(
             all_rows,
             show_ignored=show_ignored,
@@ -76,12 +82,6 @@ async def handle_help_command(
             group_id=group_id,
             total_plugin_count=len(all_rows),
             total_enabled_count=enabled_count,
-        )
-        logger.info(
-            format_plugin_event(
-                "show_menu",
-                f"Bot [{bot_id}] showed [{enabled_count}] enabled plugins in group [{group_id or '-'}]",
-            )
         )
         return
 
@@ -105,16 +105,22 @@ async def handle_help_command(
                 show_ignored=show_ignored,
             )
             if issue is HelpMarkdownIssue.PLUGIN_NOT_FOUND:
+                logger.info(
+                    format_plugin_event(
+                        "show_plugin_miss",
+                        f"Bot [{bot_id}] plugin [{plugin_name}] detail not found in group [{group_id or '-'}]",
+                    )
+                )
                 await matcher.finish(f"博士，你说的'{resolved_plugin_display(plugin_name)}'是什么呀？")
                 return
             assert detail_data is not None
-            await send_plugin_detail_image(detail_data, matcher=matcher, group_id=group_id)
             logger.info(
                 format_plugin_event(
                     "show_plugin",
                     f"Bot [{bot_id}] showed plugin [{plugin_name}] details in group [{group_id or '-'}]",
                 )
             )
+            await send_plugin_detail_image(detail_data, matcher=matcher, group_id=group_id)
             return
 
         # 非插件名时，尝试把单条参数当作命令/功能名，跨插件直达功能详情页
@@ -131,7 +137,6 @@ async def handle_help_command(
                 show_ignored=show_ignored,
             )
             if issue is HelpMarkdownIssue.OK and detail_data is not None:
-                await send_function_detail_image(detail_data, matcher=matcher, group_id=group_id)
                 logger.info(
                     format_plugin_event(
                         "show_function",
@@ -139,24 +144,52 @@ async def handle_help_command(
                         f"in group [{group_id or '-'}]",
                     )
                 )
+                await send_function_detail_image(detail_data, matcher=matcher, group_id=group_id)
                 return
         elif len(targets) > 1:
             preview = "、".join(f"{t.plugin_display}·{t.func_name}" for t in targets[:6])
             suffix = " 等" if len(targets) > 6 else ""
+            logger.info(
+                format_plugin_event(
+                    "show_function_ambiguous",
+                    f"Bot [{bot_id}] query [{plugin_identifier}] matched [{len(targets)}] functions "
+                    f"in group [{group_id or '-'}]",
+                )
+            )
             await matcher.finish(
                 f"博士，'{plugin_identifier}'可能指这些功能：{preview}{suffix}，"
                 f"可以发「牛牛帮助 插件 功能」再看具体说明哦"
             )
             return
 
+        logger.info(
+            format_plugin_event(
+                "show_function_miss",
+                f"Bot [{bot_id}] query [{plugin_identifier}] matched no plugin or function "
+                f"in group [{group_id or '-'}]",
+            )
+        )
         await matcher.finish(error_message or f"博士，你说的'{plugin_identifier}'是什么呀？")
         return
 
     if error_message:
+        logger.info(
+            format_plugin_event(
+                "show_plugin_rejected",
+                f"Bot [{bot_id}] query [{plugin_identifier}] for [{plugin_name or '-'}] "
+                f"rejected in group [{group_id or '-'}]",
+            )
+        )
         await matcher.finish(error_message)
         return
 
     if not plugin_name:
+        logger.info(
+            format_plugin_event(
+                "show_plugin_miss",
+                f"Bot [{bot_id}] query [{plugin_identifier}] matched no plugin in group [{group_id or '-'}]",
+            )
+        )
         await matcher.finish(f"博士，你说的'{plugin_identifier}'是什么呀？")
         return
 
@@ -169,24 +202,49 @@ async def handle_help_command(
         )
 
         if issue is HelpMarkdownIssue.PLUGIN_NOT_FOUND:
+            logger.info(
+                format_plugin_event(
+                    "show_plugin_miss",
+                    f"Bot [{bot_id}] plugin [{plugin_name}] detail not found in group [{group_id or '-'}]",
+                )
+            )
             await matcher.finish(f"博士，你说的'{resolved_plugin_display(plugin_name)}'是什么呀？")
             return
         if issue is HelpMarkdownIssue.FUNCTION_NOT_FOUND:
+            logger.info(
+                format_plugin_event(
+                    "show_function_miss",
+                    f"Bot [{bot_id}] function [{function_identifier}] of plugin [{plugin_name}] "
+                    f"not found in group [{group_id or '-'}]",
+                )
+            )
             await matcher.finish(f"博士，我在'{resolved_plugin_display(plugin_name)}'中没有找到这个功能哦")
             return
         if issue is HelpMarkdownIssue.METADATA_MISSING:
+            logger.info(
+                format_plugin_event(
+                    "show_function_miss",
+                    f"Bot [{bot_id}] plugin [{plugin_name}] metadata missing in group [{group_id or '-'}]",
+                )
+            )
             await matcher.finish(f"博士，'{resolved_plugin_display(plugin_name)}'只有这么多信息了")
             return
         assert detail_data is not None
-        await send_function_detail_image(detail_data, matcher=matcher, group_id=group_id)
         logger.info(
             format_plugin_event(
                 "show_function",
                 f"Bot [{bot_id}] showed [{plugin_name}.{function_identifier}] details in group [{group_id or '-'}]",
             )
         )
+        await send_function_detail_image(detail_data, matcher=matcher, group_id=group_id)
         return
 
+    logger.info(
+        format_plugin_event(
+            "show_help_too_long",
+            f"Bot [{bot_id}] help query rejected with too many args in group [{group_id or '-'}]",
+        )
+    )
     await matcher.finish("博士，你说的太多了，我跟不上了...")
 
 

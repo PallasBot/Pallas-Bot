@@ -48,7 +48,7 @@ def test_build_group_feedback_chat_hint_lists_good_and_avoid(tmp_path, monkeypat
     )
     set_feedback_entry_eligibility(request_id="bad1", eligible_for_bias=False)
 
-    hint = build_group_feedback_chat_hint(group_id=123)
+    hint = build_group_feedback_chat_hint(bot_id=1, group_id=123)
 
     assert "【维护者样本参考】" in hint
     assert "较好的接话可参考" in hint
@@ -78,7 +78,7 @@ def test_build_group_feedback_chat_hint_includes_maintainer_correction(tmp_path,
         )
     )
 
-    hint = build_group_feedback_chat_hint(group_id=123, user_text="牛牛真棒啊")
+    hint = build_group_feedback_chat_hint(bot_id=1, group_id=123, user_text="牛牛真棒啊")
 
     assert "维护者期望类似这样接" in hint
     assert "谢谢，还行吧" in hint
@@ -118,7 +118,7 @@ def test_build_group_feedback_chat_hint_contrast_pair(tmp_path, monkeypatch) -> 
         )
     )
 
-    hint = build_group_feedback_chat_hint(group_id=55, user_text="今天好闲啊")
+    hint = build_group_feedback_chat_hint(bot_id=1, group_id=55, user_text="今天好闲啊")
     assert "别写「您好，很高兴为您服务」" in hint or "别写" in hint
     assert "可写「那确实闲」" in hint
 
@@ -158,7 +158,7 @@ def test_build_group_feedback_chat_hint_skips_filler_good(tmp_path, monkeypatch)
         )
     )
 
-    hint = build_group_feedback_chat_hint(group_id=77)
+    hint = build_group_feedback_chat_hint(bot_id=1, group_id=77)
     assert "那确实闲" in hint
     if "较好的接话可参考" in hint:
         good_part = hint.split("较好的接话可参考：", 1)[1].split("\n")[0]
@@ -198,7 +198,7 @@ def test_build_group_feedback_chat_hint_skips_canned_capability_good_samples(tmp
     from pallas.product.llm.feedback_chat_hint import is_weak_good_feedback_snippet
 
     assert is_weak_good_feedback_snippet("能聊聊天、接接梗、陪你唠嗑儿，反正群里有啥话题我就跟着接两句。")
-    hint = build_group_feedback_chat_hint(group_id=626, user_text="有什么用呢")
+    hint = build_group_feedback_chat_hint(bot_id=1, group_id=626, user_text="有什么用呢")
     assert "能聊聊天" not in hint
     assert "接接梗" not in hint
     assert "泡面也行" in hint
@@ -210,7 +210,27 @@ def test_build_group_feedback_chat_hint_empty_when_bias_disabled(monkeypatch) ->
     from pallas.product.llm.config import clear_llm_config_cache
 
     clear_llm_config_cache()
-    assert build_group_feedback_chat_hint(group_id=123) == ""
+    assert build_group_feedback_chat_hint(bot_id=1, group_id=123) == ""
+
+
+def test_build_group_feedback_chat_hint_isolates_runtime_bot(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    for bot_id, reply in ((10001, "本机回复"), (10002, "另一 Bot 回复")):
+        append_feedback_entry(
+            build_feedback_entry(
+                bot_id=bot_id,
+                group_id=123,
+                user_id=456,
+                request_id=f"hint-{bot_id}",
+                user_text="你好",
+                reply_text=reply,
+            )
+        )
+
+    hint = build_group_feedback_chat_hint(bot_id=10001, group_id=123)
+
+    assert "本机回复" in hint
+    assert "另一 Bot 回复" not in hint
 
 
 def test_parse_self_alias_teach() -> None:

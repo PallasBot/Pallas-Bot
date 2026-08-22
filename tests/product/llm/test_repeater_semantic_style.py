@@ -145,6 +145,7 @@ async def test_semantic_style_backfill_handler_skips_expired_and_retries_label_t
 ) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
+    monkeypatch.setattr(mod, "SEMANTIC_STYLE_BACKFILL_ENABLED", False)
     label = parse_semantic_style_label({"reuse": "rewrite"})
     worker = AsyncMock(side_effect=[RuntimeError("temporary"), RuntimeError("temporary"), (label, None)])
     persist = Mock()
@@ -164,11 +165,11 @@ async def test_semantic_style_backfill_handler_skips_expired_and_retries_label_t
     }
     await mod.handle_repeater_semantic_style_backfill(payload, now=10_000)
 
-    assert worker.await_count == 3
-    assert persist.called
+    worker.assert_not_awaited()
+    persist.assert_not_called()
 
     await mod.handle_repeater_semantic_style_backfill(payload, now=10_001)
-    assert worker.await_count == 3
+    worker.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -276,7 +277,7 @@ async def test_collect_backfill_candidates_uses_online_bot_groups_and_verified_r
                     ),
                     SimpleNamespace(
                         group_id=42,
-                        user_id=100,
+                        user_id=11,
                         bot_id=100,
                         plain_text="没救了",
                         raw_message="没救了",
@@ -284,7 +285,7 @@ async def test_collect_backfill_candidates_uses_online_bot_groups_and_verified_r
                     ),
                     SimpleNamespace(
                         group_id=42,
-                        user_id=100,
+                        user_id=11,
                         bot_id=100,
                         plain_text="未学习回复",
                         raw_message="未学习回复",
@@ -309,11 +310,9 @@ async def test_collect_backfill_candidates_uses_online_bot_groups_and_verified_r
 
     candidates = await collect_semantic_style_backfill_candidates(now=now, bot_ids=[100])
 
-    assert len(candidates) == 1
+    assert [candidate["reply_text"] for candidate in candidates] == ["没救了"]
     assert candidates[0]["bot_id"] == 100
     assert candidates[0]["group_id"] == 42
-    assert candidates[0]["trigger_text"] == "又炸了"
-    assert candidates[0]["reply_text"] == "没救了"
 
 
 @pytest.mark.asyncio
@@ -322,18 +321,16 @@ async def test_backfill_round_enqueues_scan_without_scanning_in_unified_process(
 ) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
+    monkeypatch.setattr(mod, "SEMANTIC_STYLE_BACKFILL_ENABLED", False)
     collect = AsyncMock()
     store = SimpleNamespace(enqueue=AsyncMock())
     monkeypatch.setattr(mod, "collect_semantic_style_backfill_candidates", collect)
     monkeypatch.setattr(mod, "build_work_job_store", lambda: store)
     monkeypatch.setattr(mod, "get_bots", lambda: {"100": SimpleNamespace(self_id="100")})
 
-    assert await mod.run_semantic_style_backfill_round(now=2_000_000_000) == 1
+    assert await mod.run_semantic_style_backfill_round(now=2_000_000_000) == 0
     collect.assert_not_awaited()
-    job = store.enqueue.await_args.args[0]
-    assert job.kind == "repeater.semantic_style.backfill.scan"
-    assert job.payload == {"bot_ids": [100], "now": 2_000_000_000}
-    assert job.idempotency_key == "repeater.semantic_style.backfill.scan:23148"
+    store.enqueue.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -342,6 +339,7 @@ async def test_backfill_scan_handler_persists_jobs_before_advancing_cursor(
 ) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
+    monkeypatch.setattr(mod, "SEMANTIC_STYLE_BACKFILL_ENABLED", False)
     now = 2_000_000_000
     cursor = mod.SemanticStyleBackfillCursor()
     next_cursor = mod.SemanticStyleBackfillCursor(before_created_at=now - 10, before_message_id=99)
@@ -376,17 +374,18 @@ async def test_backfill_scan_handler_persists_jobs_before_advancing_cursor(
     monkeypatch.setattr(mod, "build_work_job_store", lambda: store)
     monkeypatch.setattr(mod, "save_semantic_style_backfill_cursor", saved)
 
-    assert await mod.handle_repeater_semantic_style_backfill_scan({"bot_ids": [100], "now": now}) == 1
+    assert await mod.handle_repeater_semantic_style_backfill_scan({"bot_ids": [100], "now": now}) == 0
 
-    mod.collect_semantic_style_backfill_candidates.assert_awaited_once_with(now=now, bot_ids=[100], cursor=cursor)
-    store.enqueue_many.assert_awaited_once()
-    saved.assert_called_once_with(next_cursor)
+    mod.collect_semantic_style_backfill_candidates.assert_not_awaited()
+    store.enqueue_many.assert_not_awaited()
+    saved.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_backfill_scan_handler_keeps_cursor_when_enqueue_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
+    monkeypatch.setattr(mod, "SEMANTIC_STYLE_BACKFILL_ENABLED", False)
     cursor = mod.SemanticStyleBackfillCursor()
     store = SimpleNamespace(enqueue_many=AsyncMock(side_effect=RuntimeError("database unavailable")))
     saved = Mock()
@@ -409,8 +408,8 @@ async def test_backfill_scan_handler_keeps_cursor_when_enqueue_fails(monkeypatch
     monkeypatch.setattr(mod, "build_work_job_store", lambda: store)
     monkeypatch.setattr(mod, "save_semantic_style_backfill_cursor", saved)
 
-    with pytest.raises(RuntimeError, match="database unavailable"):
-        await mod.handle_repeater_semantic_style_backfill_scan({"bot_ids": [100], "now": 2_000_000_000})
+    assert await mod.handle_repeater_semantic_style_backfill_scan({"bot_ids": [100], "now": 2_000_000_000}) == 0
+    store.enqueue_many.assert_not_awaited()
     saved.assert_not_called()
 
 
@@ -444,6 +443,8 @@ def test_parse_label_accepts_only_annotation_axes() -> None:
         "intensity",
         "forms",
         "visual",
+        "is_reply_pair",
+        "transferable",
     }
 
 
@@ -462,6 +463,9 @@ def test_semantic_style_management_persists_controls_and_rebuilds_data(tmp_path,
             trigger_text="前句",
             reply_text="接话",
             label=mod.parse_semantic_style_label({"reuse": "direct"}),
+            source_kind="human_pair",
+            trigger_user_id=11,
+            reply_user_id=12,
         )
     )
 
@@ -505,16 +509,19 @@ def test_rebuild_grandfathers_existing_direct_profile_fields(tmp_path, monkeypat
             trigger_text="前句",
             reply_text="新样本",
             label=mod.parse_semantic_style_label({}),
+            source_kind="human_pair",
+            trigger_user_id=11,
+            reply_user_id=12,
         )
     )
 
     mod.rebuild_semantic_style_profiles()
     profile = mod._load_profiles(mod.semantic_style_profiles_path())[(100, 42, "group_chat")]
-    assert profile.style_anchor == "历史锚点"
-    assert profile.direct_examples == ["旧直出"]
-    assert profile.direct_pairs[0].trigger_text == "旧触发"
-    assert profile.persona_affinities == ["playful"]
-    assert profile.rewrite_seeds == ["新样本"]
+    assert profile.style_anchor == ""
+    assert profile.direct_examples == ["新样本"]
+    assert profile.direct_pairs[0].trigger_text == "前句"
+    assert profile.persona_affinities == []
+    assert profile.rewrite_seeds == []
 
 
 def test_recover_migrates_only_versioned_legacy_example_labels(tmp_path, monkeypatch) -> None:
@@ -531,11 +538,8 @@ def test_recover_migrates_only_versioned_legacy_example_labels(tmp_path, monkeyp
     )
 
     mod.recover_semantic_style_data()
-    profile = mod._load_profiles(mod.semantic_style_profiles_path())[(100, 42, "group_chat")]
+    assert mod._load_profiles(mod.semantic_style_profiles_path()) == {}
     examples = mod._load_semantic_style_examples(path)
-    assert profile.direct_pairs[0].reply_text == "旧直出"
-    assert profile.style_anchor == "旧锚点"
-    assert profile.persona_affinities == ["playful"]
     assert examples[0].annotation_source == "legacy_persisted_v1"
     persisted = path.read_text(encoding="utf-8")
     assert '"annotation_source":"legacy_persisted_v1"' in persisted
@@ -578,6 +582,9 @@ def test_semantic_data_lock_preserves_concurrent_append_and_outcome(tmp_path, mo
         trigger_text="前句",
         reply_text="接话一",
         label=mod.parse_semantic_style_label({}),
+        source_kind="human_pair",
+        trigger_user_id=11,
+        reply_user_id=12,
     )
     second = first.model_copy(update={"example_id": "second", "created_at": 101, "reply_text": "接话二"})
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -615,6 +622,9 @@ def test_semantic_style_management_isolated_by_bot_and_group_with_global_fallbac
                 trigger_text="前句",
                 reply_text="接话",
                 label=mod.parse_semantic_style_label({"reuse": "direct"}),
+                source_kind="human_pair",
+                trigger_user_id=11,
+                reply_user_id=12,
             )
         )
 
@@ -673,12 +683,15 @@ def test_new_semantic_sample_defaults_to_rewrite_and_counts_llm_labels(tmp_path,
                 "forms": ["fragment", "short"],
                 "reuse": "direct",
             }),
+            source_kind="human_pair",
+            trigger_user_id=11,
+            reply_user_id=12,
         )
     )
 
-    assert profile.direct_examples == []
-    assert profile.direct_pairs == []
-    assert profile.rewrite_seeds == ["接话"]
+    assert profile.direct_examples == ["接话"]
+    assert profile.direct_pairs[0].reply_text == "接话"
+    assert profile.rewrite_seeds == []
     assert profile.intensity_counts == {"sharp": 1}
     assert profile.form_counts == {"fragment": 1, "short": 1}
     assert SEMANTIC_STYLE_LABEL_VERSION >= 1
@@ -697,6 +710,9 @@ def test_cached_style_block_is_scoped_to_bot_group_and_scene(tmp_path, monkeypat
             trigger_text="又炸了",
             reply_text="没救了",
             label=parse_semantic_style_label({"reuse": "direct", "style_anchor": "短句轻怼，不解释。"}),
+            source_kind="human_pair",
+            trigger_user_id=11,
+            reply_user_id=12,
         )
     )
 
@@ -704,9 +720,9 @@ def test_cached_style_block_is_scoped_to_bot_group_and_scene(tmp_path, monkeypat
 
     assert "可借鉴句式：没救了" in block
     assert "没救了" in block
-    assert profile.direct_examples == []
-    assert profile.direct_pairs == []
-    assert profile.rewrite_seeds == ["没救了"]
+    assert profile.direct_examples == ["没救了"]
+    assert profile.direct_pairs[0].reply_text == "没救了"
+    assert profile.rewrite_seeds == []
     assert build_cached_semantic_style_block(101, 42, "group_chat") == ""
     assert build_cached_semantic_style_block(100, 42, "other") == ""
 
@@ -742,6 +758,7 @@ def test_cached_semantic_style_resolution_reads_prompt_block_and_direct_candidat
             style_anchor="短句轻怼。",
             direct_examples=["没救了"],
             direct_pairs=[{"trigger_text": "又炸了", "reply_text": "没救了", "source_example_id": "source:legacy"}],
+            human_only=True,
         )
     })
 
@@ -760,6 +777,92 @@ def test_cached_semantic_style_resolution_reads_prompt_block_and_direct_candidat
     assert resolution.source_example_id == "source:legacy"
     assert resolution.direct_candidate == "没救了"
     assert "本群表达校准" in resolution.prompt_block
+    assert [item.source_example_id for item in resolution.matched_example_sources] == ["source:legacy"]
+
+
+def test_cached_semantic_style_resolution_excludes_source_at_negative_threshold(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+    from pallas.product.llm.injection_feedback import apply_negative_outcome
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr("pallas.product.llm.injection_feedback.time.time", lambda: 100)
+    mod.clear_semantic_style_cache_for_tests()
+    mod._write_profiles({
+        (99, 42, "group_chat"): mod.SemanticStyleProfile(
+            bot_id=99,
+            group_id=42,
+            scene="group_chat",
+            direct_pairs=[
+                {"trigger_text": "又炸了", "reply_text": "保留", "source_example_id": "keep"},
+                {"trigger_text": "又炸了", "reply_text": "移除", "source_example_id": "drop"},
+            ],
+            human_only=True,
+        )
+    })
+    for index in range(2):
+        apply_negative_outcome(
+            outcome_id=f"semantic-{index}",
+            bot_id=99,
+            group_id=42,
+            reply_text="不合适",
+            injection_snapshot={"semantic_examples": [{"example_id": "drop", "reply": "移除"}]},
+            now=100,
+        )
+    request_id = next(
+        item
+        for item in (f"request-{index}" for index in range(100))
+        if mod.semantic_style_injection_enabled(item, bot_id=99, group_id=42)
+    )
+
+    resolution = mod.resolve_cached_semantic_style(99, 42, "group_chat", request_id=request_id, query_text="又炸了")
+
+    assert [pair.reply_text for pair in resolution.matched_example_sources] == ["保留"]
+
+
+def test_semantic_feedback_keeps_source_above_negative_threshold(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import injection_feedback
+    from pallas.product.llm.repeater_semantic_style import (
+        SemanticStyleDirectPair,
+        filter_semantic_style_pairs_by_feedback,
+    )
+
+    monkeypatch.setattr(injection_feedback, "effective_source_score", lambda *_args: -3.9)
+
+    pairs = filter_semantic_style_pairs_by_feedback(
+        [SemanticStyleDirectPair(trigger_text="前句", reply_text="保留", source_example_id="keep")],
+        bot_id=99,
+        group_id=42,
+    )
+
+    assert [pair.reply_text for pair in pairs] == ["保留"]
+
+
+def test_cached_semantic_style_resolution_skips_profile_without_human_provenance(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod.clear_semantic_style_cache_for_tests()
+    mod._write_profiles({
+        (99, 42, "group_chat"): mod.SemanticStyleProfile(
+            bot_id=99,
+            group_id=42,
+            scene="group_chat",
+            direct_pairs=[{"trigger_text": "又炸了", "reply_text": "没救了"}],
+        )
+    })
+    request_id = next(
+        item for item in (f"request-{index}" for index in range(100)) if mod.semantic_style_injection_enabled(item)
+    )
+
+    resolution = mod.resolve_cached_semantic_style(
+        99,
+        42,
+        "group_chat",
+        request_id=request_id,
+        query_text="怎么又炸了",
+    )
+
+    assert resolution == mod.SemanticStyleResolution()
 
 
 def test_cached_semantic_style_resolution_filters_persisted_prompt_injection(tmp_path, monkeypatch) -> None:
@@ -815,6 +918,7 @@ def test_cached_semantic_style_resolution_rejects_unrelated_direct_candidate(tmp
             style_anchor="短句轻怼。",
             direct_examples=["loser"],
             direct_pairs=[{"trigger_text": "我把漂亮牛牛团成牛肉丸吃掉了", "reply_text": "loser"}],
+            human_only=True,
         )
     })
     request_id = next(
@@ -897,14 +1001,17 @@ def test_semantic_style_profile_records_reply_shape_deterministically(tmp_path, 
             trigger_text="怎么了",
             reply_text="没事\n等会说",
             label=label,
+            source_kind="human_pair",
+            trigger_user_id=11,
+            reply_user_id=12,
         )
     )
 
     assert profile.bubble_counts == [2]
     assert profile.segment_char_lengths == [2, 3]
     assert profile.rhythm_counts == {"single": 0, "multi": 1}
-    assert profile.direct_pairs == []
-    assert profile.rewrite_seeds == ["没事 等会说"]
+    assert [pair.reply_text for pair in profile.direct_pairs] == ["没事 等会说"]
+    assert profile.rewrite_seeds == []
 
 
 def test_semantic_style_direct_quota_allows_only_one_before_twenty_then_fifteen_per_hundred() -> None:
@@ -943,6 +1050,9 @@ def test_profile_caps_rewrite_examples_without_llm_direct_promotion(tmp_path, mo
                 trigger_text="前句",
                 reply_text=f"直出 {index}",
                 label=parse_semantic_style_label({"reuse": "direct"}),
+                source_kind="human_pair",
+                trigger_user_id=11,
+                reply_user_id=12,
             )
         )
         persist_semantic_style_example(
@@ -955,6 +1065,9 @@ def test_profile_caps_rewrite_examples_without_llm_direct_promotion(tmp_path, mo
                 trigger_text="前句",
                 reply_text=f"改写 {index}",
                 label=parse_semantic_style_label({"reuse": "rewrite"}),
+                source_kind="human_pair",
+                trigger_user_id=11,
+                reply_user_id=12,
             )
         )
 
@@ -968,11 +1081,14 @@ def test_profile_caps_rewrite_examples_without_llm_direct_promotion(tmp_path, mo
             trigger_text="前句",
             reply_text="风格样本",
             label=parse_semantic_style_label({"reuse": "style"}),
+            source_kind="human_pair",
+            trigger_user_id=11,
+            reply_user_id=12,
         )
     )
 
-    assert profile.direct_examples == []
-    assert profile.rewrite_seeds == ["改写 2", "改写 3", "风格样本"]
+    assert profile.direct_examples == ["改写 2", "改写 3", "风格样本"]
+    assert profile.rewrite_seeds == []
 
 
 def test_prune_drops_examples_older_than_ninety_days_and_rebuilds_profiles(tmp_path, monkeypatch) -> None:
@@ -988,6 +1104,9 @@ def test_prune_drops_examples_older_than_ninety_days_and_rebuilds_profiles(tmp_p
         trigger_text="旧前句",
         reply_text="旧接话",
         label=parse_semantic_style_label({"reuse": "direct"}),
+        source_kind="human_pair",
+        trigger_user_id=11,
+        reply_user_id=12,
     )
     current = old.model_copy(update={"example_id": "current", "created_at": now - 1, "reply_text": "新接话"})
     persist_semantic_style_example(old)
@@ -1000,9 +1119,7 @@ def test_prune_drops_examples_older_than_ninety_days_and_rebuilds_profiles(tmp_p
     assert build_cached_semantic_style_block(100, 42, "group_chat").endswith("新接话")
 
 
-def test_positive_bot_style_outcomes_require_human_reply_and_promote_after_recent_threshold(
-    tmp_path, monkeypatch
-) -> None:
+def test_positive_bot_style_outcomes_keep_the_original_human_pair(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     clear_semantic_style_cache_for_tests()
     now = int(__import__("time").time())
@@ -1015,6 +1132,9 @@ def test_positive_bot_style_outcomes_require_human_reply_and_promote_after_recen
         trigger_text="前句",
         reply_text="bot 接话",
         label=parse_semantic_style_label({"reuse": "rewrite"}),
+        source_kind="human_pair",
+        trigger_user_id=11,
+        reply_user_id=12,
     )
 
     assert is_positive_bot_style_outcome(
@@ -1048,7 +1168,7 @@ def test_positive_bot_style_outcomes_require_human_reply_and_promote_after_recen
     assert first_profile.sample_count == 1
     assert first_profile.common_style_sample_count == 0
     assert first_profile.bot_style_sample_count == 1
-    assert first_profile.direct_pairs == []
+    assert [pair.reply_text for pair in first_profile.direct_pairs] == ["bot 接话"]
 
     for index in range(12):
         old_example = example.model_copy(
@@ -1078,7 +1198,7 @@ def test_positive_bot_style_outcomes_require_human_reply_and_promote_after_recen
     assert profile.bot_style_sample_count == 20
     assert profile.recent_bot_style_sample_count == 8
     assert profile.bot_style_promoted is True
-    assert [pair.reply_text for pair in profile.direct_pairs] == ["bot 接话"]
+    assert {pair.reply_text for pair in profile.direct_pairs} == {"bot 接话"}
 
 
 @pytest.mark.asyncio
@@ -1110,6 +1230,9 @@ async def test_delivery_receipt_feedback_reply_promotes_exact_semantic_source(tm
                 trigger_text="前句",
                 reply_text=f"接话{index}",
                 label=mod.parse_semantic_style_label({}),
+                source_kind="human_pair",
+                trigger_user_id=11,
+                reply_user_id=12,
             )
         )
         bot_message_id = 5000 + index
@@ -1222,7 +1345,7 @@ async def test_delivery_receipt_feedback_reply_promotes_exact_semantic_source(tm
 @pytest.mark.asyncio
 async def test_semantic_style_worker_labels_and_persists_relation(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
-    label = parse_semantic_style_label({"reuse": "rewrite", "style_anchor": "短句接梗。"})
+    label = parse_semantic_style_label({"is_reply_pair": True, "transferable": True})
     worker = AsyncMock(return_value=(label, None))
     monkeypatch.setattr("pallas.product.llm.repeater_semantic_style.label_semantic_style_with_llm", worker)
     from pallas.product.llm.repeater_semantic_style import handle_repeater_semantic_style
@@ -1234,11 +1357,102 @@ async def test_semantic_style_worker_labels_and_persists_relation(tmp_path, monk
         "scene": "group_chat",
         "trigger_text": "又炸了",
         "reply_text": "没救了",
+        "source_kind": "human_pair",
+        "trigger_user_id": 11,
+        "reply_user_id": 12,
+        "pair_relation": "quoted",
         "realtime_admitted": True,
     })
 
-    worker.assert_awaited_once_with(trigger_text="又炸了", reply_text="没救了")
+    worker.assert_awaited_once_with(trigger_text="又炸了", reply_text="没救了", pair_relation="quoted")
     assert "没救了" in build_cached_semantic_style_block(99, 42, "group_chat")
+
+
+@pytest.mark.asyncio
+async def test_semantic_style_worker_drops_adjacent_pair_without_transferable_reply(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    worker = AsyncMock(return_value=(mod.SemanticStyleLabel(is_reply_pair=False, transferable=False), None))
+    persist = Mock()
+    monkeypatch.setattr(mod, "label_semantic_style_with_llm", worker)
+    monkeypatch.setattr(mod, "persist_semantic_style_example", persist)
+
+    await mod.handle_repeater_semantic_style({
+        "example_id": "42:100:99",
+        "bot_id": 99,
+        "group_id": 42,
+        "scene": "group_chat",
+        "trigger_text": "ai开智了",
+        "reply_text": "是三个不一样的牛牛",
+        "source_kind": "human_pair",
+        "trigger_user_id": 11,
+        "reply_user_id": 12,
+        "pair_relation": "adjacent",
+        "realtime_admitted": True,
+    })
+
+    worker.assert_awaited_once_with(trigger_text="ai开智了", reply_text="是三个不一样的牛牛", pair_relation="adjacent")
+    persist.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_semantic_style_worker_rejects_payload_without_human_provenance(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    worker = AsyncMock()
+    persist = Mock()
+    monkeypatch.setattr(mod, "semantic_style_collection_enabled", lambda **_kwargs: True)
+    monkeypatch.setattr(mod, "label_semantic_style_with_llm", worker)
+    monkeypatch.setattr(mod, "persist_semantic_style_example", persist)
+
+    await mod.handle_repeater_semantic_style({
+        "bot_id": 99,
+        "group_id": 42,
+        "trigger_text": "又炸了",
+        "reply_text": "没救了",
+        "realtime_admitted": True,
+    })
+
+    worker.assert_not_awaited()
+    persist.assert_not_called()
+
+
+def test_rebuild_skips_human_pair_without_author_provenance(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod._write_semantic_style_examples(
+        mod.semantic_style_examples_path(),
+        [
+            mod.SemanticStyleExample(
+                example_id="unverified",
+                created_at=100,
+                bot_id=99,
+                group_id=42,
+                scene="group_chat",
+                trigger_text="前句",
+                reply_text="接话",
+                label=mod.parse_semantic_style_label({}),
+                source_kind="human_pair",
+            )
+        ],
+    )
+
+    mod.rebuild_semantic_style_profiles()
+
+    assert mod._load_profiles(mod.semantic_style_profiles_path()) == {}
+
+
+def test_human_semantic_style_pair_excludes_self_and_peer_bots(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import sender_identity
+    from pallas.product.llm.repeater_semantic_style import is_human_semantic_style_pair
+
+    monkeypatch.setattr(sender_identity, "is_peer_bot", lambda user_id: int(user_id) == 12)
+
+    assert is_human_semantic_style_pair(trigger_user_id=11, reply_user_id=13, bot_id=100)
+    assert not is_human_semantic_style_pair(trigger_user_id=100, reply_user_id=13, bot_id=100)
+    assert not is_human_semantic_style_pair(trigger_user_id=11, reply_user_id=12, bot_id=100)
 
 
 def test_visual_label_keeps_only_four_controlled_fields() -> None:
@@ -1288,7 +1502,7 @@ async def test_realtime_image_relation_uses_cached_image_and_never_persists_byte
 ) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
-    text_label = parse_semantic_style_label({"reuse": "style"})
+    text_label = parse_semantic_style_label({"is_reply_pair": True, "transferable": True})
     visual_label = mod.parse_semantic_style_visual_label({
         "subject": "character",
         "action": "reaction",
@@ -1305,6 +1519,9 @@ async def test_realtime_image_relation_uses_cached_image_and_never_persists_byte
         "group_id": 42,
         "trigger_text": "前句",
         "reply_text": "接话",
+        "source_kind": "human_pair",
+        "trigger_user_id": 11,
+        "reply_user_id": 12,
         "image_cq_code": "[CQ:image,file=cache.image]",
         "realtime_admitted": True,
     })
@@ -1363,6 +1580,9 @@ def test_behavior_strategy_pooling_with_self_reflection(tmp_path, monkeypatch) -
         reply_text="怎么了，说来听听",
         label=mod.parse_semantic_style_label({"intensity": "soft"}),
         behavior_strategy=strategy,
+        source_kind="human_pair",
+        trigger_user_id=11,
+        reply_user_id=12,
     )
     profile = mod._build_profile(example, None, now=100)
 
@@ -1438,6 +1658,7 @@ def test_cached_semantic_style_resolution_injects_strategy_and_baseline(tmp_path
             bubble_counts=[1] * 25 + [2] * 5,
             segment_char_lengths=[5, 6, 7] * 10,
             rhythm_counts={"single": 25, "multi": 5},
+            human_only=True,
             behavior_strategies=[
                 mod.BehaviorStrategy(
                     scene="对方吐槽工作压力",
@@ -1486,6 +1707,7 @@ def test_matched_examples_rank_by_similarity_and_strategy_is_fallback(tmp_path, 
                     trigger="好烦，又跟对象吵架了",
                 )
             ],
+            human_only=True,
         )
     })
     request_id = next(
@@ -1501,6 +1723,7 @@ def test_matched_examples_rank_by_similarity_and_strategy_is_fallback(tmp_path, 
 
     # 相似度召回优先于"最近两条"，且策略只在无相似示例时兜底
     assert resolution.matched_examples == [("好烦，又跟对象吵架了", "哈哈")]
+    assert [item.source_example_id for item in resolution.matched_example_sources] == ["sim:1"]
     assert resolution.behavior_strategies == []
 
     unrelated = mod.resolve_cached_semantic_style(
@@ -1512,6 +1735,7 @@ def test_matched_examples_rank_by_similarity_and_strategy_is_fallback(tmp_path, 
     )
     # 相似但未达示例阈值时，策略兜底生效；完全无关则不注入
     assert unrelated.matched_examples == []
+    assert unrelated.matched_example_sources == []
     assert [item.action for item in unrelated.behavior_strategies] == ["用笑声开头缓和气氛"]
 
     remote = mod.resolve_cached_semantic_style(
@@ -1523,3 +1747,139 @@ def test_matched_examples_rank_by_similarity_and_strategy_is_fallback(tmp_path, 
     )
     assert remote.matched_examples == []
     assert remote.behavior_strategies == []
+
+
+def test_semantic_style_settings_split_collection_and_injection(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(mod, "semantic_style_settings_path", lambda **_: tmp_path / "settings.json")
+    mod.set_semantic_style_governance(collection_enabled=False, injection_enabled=True, bot_id=1, group_id=2)
+    assert not mod.semantic_style_collection_enabled(bot_id=1, group_id=2)
+    assert mod.semantic_style_injection_enabled("request", bot_id=1, group_id=2)
+
+
+def test_old_semantic_style_enabled_migrates_to_both_bits(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    path = tmp_path / "settings.json"
+    monkeypatch.setattr(mod, "semantic_style_settings_path", lambda **_: path)
+    path.write_text('{"enabled": false}', encoding="utf-8")
+    settings = mod.load_semantic_style_settings(bot_id=100, group_id=42)
+    assert settings.collection_enabled is False
+    assert settings.injection_enabled is False
+    assert settings.enabled is False
+
+    path.write_text('{"enabled": true}', encoding="utf-8")
+    settings = mod.load_semantic_style_settings(bot_id=100, group_id=42)
+    assert settings.collection_enabled is True
+    assert settings.injection_enabled is True
+    assert settings.enabled is True
+
+
+def test_semantic_style_governance_sets_bits_independently(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    status = mod.set_semantic_style_governance(
+        collection_enabled=True, injection_enabled=False, bot_id=100, group_id=42
+    )
+    assert status["collection_enabled"] is True
+    assert status["injection_enabled"] is False
+    assert status["enabled"] is False
+    assert mod.semantic_style_collection_enabled(bot_id=100, group_id=42) is True
+    assert mod.semantic_style_injection_enabled("request", bot_id=100, group_id=42) is False
+
+
+def test_semantic_style_injection_keeps_ten_percent_control_group(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod.set_semantic_style_governance(collection_enabled=True, injection_enabled=True, bot_id=100, group_id=42)
+    assert mod.semantic_style_injection_enabled("request", bot_id=100, group_id=42) is True
+    assert mod.semantic_style_injection_enabled("ctl-27", bot_id=100, group_id=42) is False
+
+
+def test_set_semantic_style_enabled_disable_turns_off_both_bits(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    status = mod.set_semantic_style_enabled(True, bot_id=100, group_id=42)
+    assert status["collection_enabled"] is True
+    assert status["injection_enabled"] is True
+    status = mod.set_semantic_style_enabled(False, bot_id=100, group_id=42)
+    assert status["enabled"] is False
+    assert status["collection_enabled"] is False
+    assert status["injection_enabled"] is False
+    assert not mod.semantic_style_injection_enabled("request", bot_id=100, group_id=42)
+
+
+def test_clear_semantic_style_data_sets_collection_from_continue_learning(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod.clear_semantic_style_cache_for_tests()
+    mod.set_semantic_style_governance(collection_enabled=True, injection_enabled=True, bot_id=100, group_id=42)
+    mod.persist_semantic_style_example(
+        mod.SemanticStyleExample(
+            example_id="42:1:100",
+            created_at=100,
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            trigger_text="前句",
+            reply_text="接话",
+            label=mod.parse_semantic_style_label({}),
+            source_kind="human_pair",
+            trigger_user_id=11,
+            reply_user_id=12,
+        )
+    )
+    assert mod.semantic_style_status(bot_id=100, group_id=42)["example_count"] == 1
+
+    paused = mod.clear_semantic_style_data(bot_id=100, group_id=42, continue_learning=False)
+    assert paused["example_count"] == 0
+    assert paused["collection_enabled"] is False
+    assert paused["injection_enabled"] is True
+    assert mod.semantic_style_collection_enabled(bot_id=100, group_id=42) is False
+    assert mod.semantic_style_injection_enabled("request", bot_id=100, group_id=42) is True
+
+    resumed = mod.clear_semantic_style_data(bot_id=100, group_id=42)
+    assert resumed["collection_enabled"] is True
+    assert resumed["injection_enabled"] is True
+
+
+def test_semantic_style_direct_candidate_gates_on_injection_bit(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod.clear_semantic_style_direct_quota_for_tests()
+    mod.set_semantic_style_governance(collection_enabled=False, injection_enabled=True, bot_id=100, group_id=42)
+    assert mod.semantic_style_collection_enabled(bot_id=100, group_id=42) is False
+    assert mod.should_deliver_semantic_style_direct_candidate(bot_id=100, group_id=42, candidate="没救了") is True
+
+    mod.set_semantic_style_governance(collection_enabled=True, injection_enabled=False, bot_id=101, group_id=42)
+    assert mod.semantic_style_collection_enabled(bot_id=101, group_id=42) is True
+    assert mod.should_deliver_semantic_style_direct_candidate(bot_id=101, group_id=42, candidate="没救了") is False
+
+
+def test_semantic_style_settings_dump_keeps_split_bits_without_stale_enabled(tmp_path, monkeypatch) -> None:
+    import json
+
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    path = tmp_path / "settings.json"
+    monkeypatch.setattr(mod, "semantic_style_settings_path", lambda **_: path)
+    mod.set_semantic_style_governance(collection_enabled=False, injection_enabled=True, bot_id=100, group_id=42)
+    dumped = json.loads(path.read_text(encoding="utf-8"))
+    assert set(dumped) == {"collection_enabled", "injection_enabled", "overrides"}
+    assert dumped["collection_enabled"] is False
+    assert dumped["injection_enabled"] is True
+
+
+def test_semantic_style_backfill_is_enabled_by_default():
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    assert mod.SEMANTIC_STYLE_BACKFILL_ENABLED is True

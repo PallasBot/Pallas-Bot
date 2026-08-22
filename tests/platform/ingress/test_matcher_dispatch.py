@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from inspect import getsource
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -15,6 +16,7 @@ from pallas.core.platform.ingress import matcher_activation as activation
 from pallas.core.platform.ingress import matcher_dispatch as dispatch
 from pallas.core.platform.ingress.route_index import RouteResolution
 from pallas.core.platform.message_runtime.models import HandlingOutcome, SendAction
+from pallas.product.llm.rage import RageState
 
 
 def test_synthetic_llm_command_context_reads_structured_marker() -> None:
@@ -172,6 +174,80 @@ def test_message_runtime_context_treats_alias_hard_trigger_as_direct_address() -
     assert context.is_to_me is True
 
 
+@pytest.mark.asyncio
+async def test_rage_gate_suppresses_silent_message_without_reapplying_effects(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm.memory import relationship_store
+
+    event = MagicMock(
+        group_id=42,
+        user_id=7,
+        message_id=11,
+        self_id="10001",
+        time=100,
+        to_me=True,
+        _pallas_llm_alias_hard_trigger=False,
+    )
+    event.get_plaintext.return_value = "你这个废物"
+    capture = AsyncMock()
+    update = AsyncMock()
+    affinity = AsyncMock()
+    monkeypatch.setattr(
+        relationship_store,
+        "retrieve_rage_state",
+        AsyncMock(return_value=RageState(rage=90, silenced_until=200)),
+    )
+    monkeypatch.setattr(relationship_store, "update_rage_state", update)
+    monkeypatch.setattr(relationship_store, "upsert_relationship_profile", affinity)
+    monkeypatch.setattr(dispatch, "_capture_rage_suppressed_message", capture)
+
+    assert await dispatch._apply_rage_gate(MagicMock(self_id="10001"), event) is True
+    capture.assert_awaited_once()
+    update.assert_not_awaited()
+    affinity.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_rage_gate_captures_message_when_attack_enters_silence(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm.memory import relationship_store
+
+    event = MagicMock(
+        group_id=42,
+        user_id=7,
+        message_id=11,
+        self_id="10001",
+        time=100,
+        to_me=True,
+        _pallas_llm_alias_hard_trigger=False,
+    )
+    event.get_plaintext.return_value = "你这个废物垃圾脑残"
+    monkeypatch.setattr(
+        relationship_store,
+        "retrieve_rage_state",
+        AsyncMock(return_value=RageState(rage=70)),
+    )
+    update = AsyncMock()
+    affinity = AsyncMock()
+    capture = AsyncMock()
+    monkeypatch.setattr(relationship_store, "update_rage_state", update)
+    monkeypatch.setattr(relationship_store, "upsert_relationship_profile", affinity)
+    monkeypatch.setattr(dispatch, "_capture_rage_suppressed_message", capture)
+    monkeypatch.setattr(
+        dispatch,
+        "make_message_repository",
+        lambda: MagicMock(
+            find_recent_in_group=AsyncMock(return_value=[]),
+        ),
+    )
+    monkeypatch.setattr("pallas.core.platform.ingress.matcher_dispatch.random.random", lambda: 1.0)
+
+    assert await dispatch._apply_rage_gate(MagicMock(self_id="10001"), event) is True
+    update.assert_awaited_once()
+    affinity.assert_awaited_once()
+    capture.assert_awaited_once()
+
+
 class _CommandMatcher:
     rule = Rule(command("foo"))
 
@@ -303,6 +379,68 @@ async def test_patched_handle_event_discards_pre_scheduler_federate_loser(monkey
 
     pre_gate.assert_awaited_once_with(bot, event)
     submit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_patched_handle_event_logs_group_message_at_info(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.platform.message_runtime.models import HandlingOutcome
+
+    class FakeGroupMessageEvent:
+        group_id = 100
+        user_id = 200
+        message_id = 300
+        raw_message = "测试命令"
+
+        def get_log_string(self) -> str:
+            return "fake group message"
+
+        def get_message(self) -> str:
+            return self.raw_message
+
+        def get_type(self) -> str:
+            return "message"
+
+    class FakeLog:
+        def __init__(self) -> None:
+            self.levels: list[str] = []
+
+        def opt(self, **_kwargs):
+            return self
+
+        def bind(self, **_kwargs):
+            return self
+
+        def debug(self, *_args) -> None:
+            pass
+
+        def info(self, *_args) -> None:
+            self.levels.append("info")
+
+        def success(self, *_args) -> None:
+            self.levels.append("success")
+
+    bot = MagicMock(type="OneBot V11", self_id="10001")
+    event = FakeGroupMessageEvent()
+    log = FakeLog()
+    runtime = MagicMock()
+    runtime.execute_and_commit = AsyncMock(return_value=HandlingOutcome(handled=True))
+
+    monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
+    monkeypatch.setattr(dispatch.nb_message, "logger", log)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", AsyncMock(return_value=True))
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_postprocessors", AsyncMock())
+    monkeypatch.setattr(dispatch.nb_message.TrieRule, "get_value", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(dispatch, "mark_activity", lambda: None)
+    monkeypatch.setattr(dispatch, "resolve_route_for_event", lambda _event: None)
+    monkeypatch.setattr(dispatch, "event_command_traffic", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(dispatch, "direct_runtime_for_group", lambda _group_id: runtime)
+    monkeypatch.setattr(dispatch, "message_runtime_context", lambda *_args, **_kwargs: MagicMock())
+    monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatch, "record_route_candidate_safe", lambda **_kwargs: None)
+
+    await dispatch.patched_handle_event_now(bot, event)
+
+    assert log.levels == ["info"]
 
 
 @pytest.mark.asyncio
@@ -827,6 +965,13 @@ async def test_patched_handle_event_batches_selected_matchers(
     pre_mock.assert_awaited_once()
     post_mock.assert_awaited_once()
     assert max_active <= 2
+
+
+def test_patched_handle_event_has_no_matcher_summary_log() -> None:
+    source = getsource(dispatch.patched_handle_event)
+    source += getsource(dispatch.patched_handle_event_now)
+    assert "Matcher run [" not in source
+    assert "ingress:matcher_run" not in source
 
 
 @pytest.mark.asyncio

@@ -260,6 +260,8 @@ class LlmConfig(BaseModel):
     llm_reply_typo_rate: float = Field(default=0.01, ge=0.0, le=1.0)
     llm_reply_trim_terminal_period_enabled: bool = Field(default=True)
     llm_reply_trim_terminal_period_rate: float = Field(default=0.9, ge=0.0, le=1.0)
+    llm_reply_split_randomize_enabled: bool = Field(default=True)
+    llm_reply_split_randomize_keep_rate: float = Field(default=0.4, ge=0.0, le=1.0)
     llm_reply_mention_cooldown_sec: int = Field(default=900, ge=0, le=86400)
     llm_sticker_fit_enabled: bool = Field(default=False)
     llm_chat_sticker_enabled: bool = Field(default=True)
@@ -273,7 +275,6 @@ class LlmConfig(BaseModel):
     llm_sticker_label_backfill_daily_limit: int = Field(default=200, ge=0, le=2000)
     llm_sticker_label_realtime_daily_limit: int = Field(default=300, ge=0, le=2000)
     llm_reply_effect_eval_enabled: bool = Field(default=False)
-    llm_reply_style_variants: dict[str, object] = Field(default_factory=dict)
     llm_corpus_learn_guard_enabled: bool = Field(default=True)
     llm_corpus_cleanup_scheduled_enabled: bool = Field(default=True)
     llm_corpus_cleanup_interval_sec: int = Field(default=86400, ge=3600, le=604800)
@@ -344,9 +345,13 @@ class LlmConfig(BaseModel):
     llm_relationship_affinity_silence_threshold: float = Field(default=-0.3, ge=-1.0, le=0.0)
     llm_relationship_affinity_silence_max_penalty: int = Field(default=30, ge=0, le=200)
     llm_session_summary_enabled: bool = Field(default=True)
-    llm_session_summary_threshold: int = Field(default=40, ge=8, le=200)
+    llm_session_summary_threshold: int = Field(default=24, ge=8, le=200)
     llm_session_summary_keep_messages: int = Field(default=16, ge=4, le=120)
     llm_session_summary_cooldown_sec: int = Field(default=600, ge=0, le=86400)
+    # 发送节奏（deliver）：气泡间隔 = base + len*per_char，再乘 (1±jitter)，clamp [0.5, 3.5]
+    llm_bubble_delay_base_sec: float = Field(default=0.8, ge=0.0, le=5.0)
+    llm_bubble_delay_per_char: float = Field(default=0.04, ge=0.0, le=0.5)
+    llm_bubble_delay_jitter: float = Field(default=0.35, ge=0.0, le=0.9)
     mcp_servers: list[LlmMcpServerConfig] = Field(default_factory=list)
 
 
@@ -500,6 +505,8 @@ def get_llm_config() -> LlmConfig:
             llm_reply_typo_rate=_env_float("LLM_REPLY_TYPO_RATE", 0.01),
             llm_reply_trim_terminal_period_enabled=_env_bool("LLM_REPLY_TRIM_TERMINAL_PERIOD_ENABLED", True),
             llm_reply_trim_terminal_period_rate=_env_float("LLM_REPLY_TRIM_TERMINAL_PERIOD_RATE", 0.9),
+            llm_reply_split_randomize_enabled=_env_bool("LLM_REPLY_SPLIT_RANDOMIZE_ENABLED", True),
+            llm_reply_split_randomize_keep_rate=_env_float("LLM_REPLY_SPLIT_RANDOMIZE_KEEP_RATE", 0.4),
             llm_reply_mention_cooldown_sec=_env_int("LLM_REPLY_MENTION_COOLDOWN_SEC", 900),
             llm_sticker_fit_enabled=_env_bool("LLM_STICKER_FIT_ENABLED", False),
             llm_chat_sticker_enabled=_env_bool("LLM_CHAT_STICKER_ENABLED", True),
@@ -513,7 +520,6 @@ def get_llm_config() -> LlmConfig:
             llm_sticker_label_backfill_daily_limit=_env_int("LLM_STICKER_LABEL_BACKFILL_DAILY_LIMIT", 200),
             llm_sticker_label_realtime_daily_limit=_env_int("LLM_STICKER_LABEL_REALTIME_DAILY_LIMIT", 300),
             llm_reply_effect_eval_enabled=_env_bool("LLM_REPLY_EFFECT_EVAL_ENABLED", False),
-            llm_reply_style_variants=_env_json_object("LLM_REPLY_STYLE_VARIANTS"),
             llm_corpus_learn_guard_enabled=_env_bool("LLM_CORPUS_LEARN_GUARD_ENABLED", True),
             llm_corpus_cleanup_scheduled_enabled=_env_bool("LLM_CORPUS_CLEANUP_SCHEDULED", True),
             llm_corpus_cleanup_interval_sec=_env_int("LLM_CORPUS_CLEANUP_INTERVAL_SEC", 86400),
@@ -589,9 +595,12 @@ def get_llm_config() -> LlmConfig:
             llm_relationship_affinity_silence_threshold=_env_float("LLM_RELATIONSHIP_AFFINITY_SILENCE_THRESHOLD", -0.3),
             llm_relationship_affinity_silence_max_penalty=_env_int("LLM_RELATIONSHIP_AFFINITY_SILENCE_MAX_PENALTY", 30),
             llm_session_summary_enabled=_env_bool("LLM_SESSION_SUMMARY_ENABLED", True),
-            llm_session_summary_threshold=_env_int("LLM_SESSION_SUMMARY_THRESHOLD", 40),
+            llm_session_summary_threshold=_env_int("LLM_SESSION_SUMMARY_THRESHOLD", 24),
             llm_session_summary_keep_messages=_env_int("LLM_SESSION_SUMMARY_KEEP_MESSAGES", 16),
             llm_session_summary_cooldown_sec=_env_int("LLM_SESSION_SUMMARY_COOLDOWN_SEC", 600),
+            llm_bubble_delay_base_sec=_env_float("LLM_BUBBLE_DELAY_BASE_SEC", 0.8),
+            llm_bubble_delay_per_char=_env_float("LLM_BUBBLE_DELAY_PER_CHAR", 0.04),
+            llm_bubble_delay_jitter=_env_float("LLM_BUBBLE_DELAY_JITTER", 0.35),
             mcp_servers=_env_mcp_server_list("LLM_MCP_SERVERS"),
         )
         return _cached_llm_config

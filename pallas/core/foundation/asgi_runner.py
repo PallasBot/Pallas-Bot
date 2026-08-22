@@ -11,15 +11,39 @@ import asyncio
 import os
 import threading
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from nonebot import logger
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _EXECUTOR_TIMEOUT = 5.0
 _GRACEFUL_SHUTDOWN_TIMEOUT = 8.0
 
 # uvloop 的默认 executor 线程名为 ThreadPoolExecutor-N_x（非 asyncio_x）
 _EXECUTOR_THREAD_PREFIXES = ("asyncio_", "ThreadPoolExecutor-")
+_process_shutdown_callback: Callable[[], None] | None = None
+
+
+def register_process_shutdown_callback(callback: Callable[[], None]) -> None:
+    global _process_shutdown_callback
+    _process_shutdown_callback = callback
+
+
+def clear_process_shutdown_callback() -> None:
+    global _process_shutdown_callback
+    _process_shutdown_callback = None
+
+
+def run_process_shutdown_callback() -> None:
+    callback = _process_shutdown_callback
+    if callback is None:
+        return
+    try:
+        callback()
+    except Exception:
+        logger.exception("[ShutDown] 进程清理回调执行失败")
 
 
 def _uvicorn_log_config() -> dict[str, Any]:
@@ -161,4 +185,5 @@ def run_asgi_server(
             logger.complete()
             if timed_out:
                 # 跳过解释器对线程池线程的 join，避免被残留 in-flight 线程拖住停止
+                run_process_shutdown_callback()
                 os._exit(exit_code)

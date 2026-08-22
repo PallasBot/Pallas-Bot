@@ -156,6 +156,7 @@ async def test_message_persist_job_goes_to_message_queue(monkeypatch):
     job = mq.get_nowait()
     assert job.kind == "repeater.message"
     assert job.payload["message"]["plain_text"] == "hi"
+    assert job.idempotency_key == "repeater.message:9001:1001:9001"
     mq.task_done()
 
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 import logging
 import re
 import sys
+import threading
+from contextvars import ContextVar
 from typing import TYPE_CHECKING
 
 from nonebot.log import LoguruHandler
@@ -380,6 +382,11 @@ def format_business_event(action: str, result: str, /, **fields: object) -> str:
         )
     if action == "发送队列" and result == "失败":
         return f"[SendQueue] Bot [{fields.get('bot')}] failed {fields.get('api')}: {fields.get('error')}"
+    if action == "语料回填批次" and result == "已完成":
+        return (
+            f"[Corpus] backfill batch completed, pushed [{fields.get('pushed')}], "
+            f"skipped [{fields.get('skipped')}], cursor [{fields.get('cursor') or '-'}]"
+        )
     if action == "发送队列" and result == "可能已投递":
         return (
             f"[SendQueue] Bot [{fields.get('bot')}] send {fields.get('api')} timed out, "
@@ -504,19 +511,43 @@ _PLUGIN_LOAD_SUCCESS_RE = re.compile(r"Succeeded to load plugin", re.IGNORECASE)
 _COLOR_TAG_RE = re.compile(r"</?[a-zA-Z#][^>]*>")
 
 
-def is_matcher_lifecycle_noise(plain: str) -> bool:
-    """NoneBot Matcher 生命周期 INFO：每事件数行，生产 INFO 下应降为 DEBUG。"""
+command_traffic_ctx: ContextVar[bool] = ContextVar("pallas_command_traffic", default=False)
+
+
+def is_matcher_lifecycle_noise(plain: str, *, command_traffic: bool = False) -> bool:
+    """NoneBot Matcher 生命周期 INFO：非命令态每事件数行，生产 INFO 下应降为 DEBUG。
+
+    命令态（``command_traffic_ctx`` 由 ingress 在命令分发时置位）下放行
+    ``Event will be handled by`` 一行，便于用户确认命令已进入执行。
+    """
     text = (plain or "").strip()
     if not text:
         return False
     if text.startswith("Event will be handled by "):
-        return True
+        return not command_traffic
     if text.endswith(" running complete") or " running is cancelled" in text:
         return True
     # 「Event foo.bar is ignored」；勿匹配 Error … Event ignored!
     if text.startswith("Event ") and text.endswith(" is ignored"):
         return True
     return False
+
+
+def _build_noise_patcher(logger, _log_patcher):
+    debug_no = logger.level("DEBUG").no
+
+    def patcher(record: dict[str, Any]) -> None:
+        record["extra"][_SOURCE_MODULE_EXTRA_KEY] = str(record.get("name", ""))
+        _log_patcher(record)
+        message = str(record.get("message", ""))
+        plain = _COLOR_TAG_RE.sub("", message)
+        if _PLUGIN_LOAD_SUCCESS_RE.search(plain) or is_matcher_lifecycle_noise(
+            plain, command_traffic=command_traffic_ctx.get()
+        ):
+            record["level"].name = "DEBUG"
+            record["level"].no = debug_no
+
+    return patcher
 
 
 def install_startup_log_noise_patcher() -> None:
@@ -528,22 +559,15 @@ def install_startup_log_noise_patcher() -> None:
     from nonebot import _log_patcher
     from nonebot.log import logger
 
+    _install_log_noise_patcher(logger, _log_patcher)
+
+
+def _install_log_noise_patcher(logger, _log_patcher) -> None:
+    """按当前日志级别（重）安装 noise patcher；TRACE/DEBUG 下不安装。"""
     level_name = resolve_repo_log_level()
     if level_name in {"TRACE", "DEBUG"}:
         return
-
-    debug_no = logger.level("DEBUG").no
-
-    def patcher(record: dict[str, Any]) -> None:
-        record["extra"][_SOURCE_MODULE_EXTRA_KEY] = str(record.get("name", ""))
-        _log_patcher(record)
-        message = str(record.get("message", ""))
-        plain = _COLOR_TAG_RE.sub("", message)
-        if _PLUGIN_LOAD_SUCCESS_RE.search(plain) or is_matcher_lifecycle_noise(plain):
-            record["level"].name = "DEBUG"
-            record["level"].no = debug_no
-
-    logger.configure(patcher=patcher)
+    logger.configure(patcher=_build_noise_patcher(logger, _log_patcher))
 
 
 _VALID_LOG_LEVELS = frozenset({"TRACE", "DEBUG", "INFO", "SUCCESS", "WARNING", "ERROR", "CRITICAL"})
@@ -560,3 +584,80 @@ def resolve_repo_log_level(*, default: str = "INFO") -> str:
     if level in _VALID_LOG_LEVELS:
         return level
     return default
+
+
+_FILE_SINK_ID: int | None = None
+_FILE_SINK_ARGS: dict[str, Any] | None = None
+_FILE_SINK_LOG_PATH_DEFAULT = "nonebot_runtime.log"
+_FILE_SINK_LOCK = threading.RLock()
+
+
+def register_repo_file_sink(
+    logger,
+    fmt,
+    *,
+    path=None,
+    rotation="50 MB",
+    retention="14 days",
+    encoding="utf-8",
+    enqueue=True,
+) -> int:
+    """登记主文件 sink id 与重建参数，供运行时调整日志级别。
+
+    boot.py 用它替代裸 ``logger.add``；WebUI 改级别时 remove + 原位重建。
+    """
+    global _FILE_SINK_ID, _FILE_SINK_ARGS
+    with _FILE_SINK_LOCK:
+        if _FILE_SINK_ID is not None:
+            try:
+                logger.remove(_FILE_SINK_ID)
+            except Exception:
+                pass
+        _FILE_SINK_ARGS = {
+            "path": path or _FILE_SINK_LOG_PATH_DEFAULT,
+            "rotation": rotation,
+            "retention": retention,
+            "encoding": encoding,
+            "enqueue": enqueue,
+        }
+        _FILE_SINK_ID = logger.add(
+            _FILE_SINK_ARGS["path"],
+            level=resolve_repo_log_level(),
+            format=fmt,
+            rotation=_FILE_SINK_ARGS["rotation"],
+            retention=_FILE_SINK_ARGS["retention"],
+            encoding=_FILE_SINK_ARGS["encoding"],
+            enqueue=_FILE_SINK_ARGS["enqueue"],
+        )
+        return _FILE_SINK_ID
+
+
+def reapply_runtime_log_level() -> None:
+    """保存 WebUI 日志级别后，把 patcher、NoneBot 默认过滤与文件 sink 级别同步。"""
+    global _FILE_SINK_ID
+    from nonebot import _log_patcher
+    from nonebot.log import logger
+
+    _install_log_noise_patcher(logger, _log_patcher)
+    level = resolve_repo_log_level()
+    try:
+        logger.configure(extra={"nonebot_log_level": level})
+    except Exception:
+        pass
+    with _FILE_SINK_LOCK:
+        if _FILE_SINK_ID is not None:
+            try:
+                logger.remove(_FILE_SINK_ID)
+            except Exception:
+                pass
+            _FILE_SINK_ID = None
+        if _FILE_SINK_ARGS is not None:
+            register_repo_file_sink(
+                logger,
+                format_repo_file_log,
+                path=_FILE_SINK_ARGS["path"],
+                rotation=_FILE_SINK_ARGS["rotation"],
+                retention=_FILE_SINK_ARGS["retention"],
+                encoding=_FILE_SINK_ARGS["encoding"],
+                enqueue=_FILE_SINK_ARGS["enqueue"],
+            )

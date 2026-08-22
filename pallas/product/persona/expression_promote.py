@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Literal
 
 from pallas.core.foundation.fs_lock import interprocess_file_lock
@@ -14,7 +15,7 @@ from pallas.product.persona.expression_bank import (
 )
 
 AUTO_SUPPORT_THRESHOLD = 3
-ResolveAction = Literal["approve", "reject"]
+ResolveAction = Literal["approve", "reject", "restore"]
 
 
 def is_expression_auto_eligible(entry: ExpressionEntry) -> bool:
@@ -46,26 +47,34 @@ def _resolve_group_entry(
 ) -> ExpressionEntry | None:
     """Apply the resolve update as a delta event appended to the group shard."""
     pending_path = _shard_path(group_id, pending=True)
-    from pallas.product.persona.expression_bank import _iter_rows, _write_lines_append
+    from pallas.product.persona.expression_bank import _write_lines_append
 
     with interprocess_file_lock(pending_path.with_suffix(pending_path.suffix + ".lock")):
-        rows = list(_iter_rows(pending_path))
-        current = next((row for row in rows if row.entry_id == entry_id), None)
-        # Authority may live in merged shard if no pending delta references it yet.
-        if current is None:
-            from pallas.product.persona.expression_bank import _group_combined_rows
+        from pallas.product.persona.expression_bank import _group_combined_rows
 
-            current = next(
-                (row for row in _group_combined_rows(group_id) if row.entry_id == entry_id),
-                None,
-            )
+        current = next(
+            (row for row in _group_combined_rows(group_id) if row.entry_id == entry_id and row.saying),
+            None,
+        )
         if current is None:
             return None
         if action == "approve":
-            updated = current.model_copy(update={"status": "active", "rejected_reason": ""})
+            status, rejected_reason = "active", ""
+        elif action == "restore":
+            status, rejected_reason = "shadow", ""
         else:
+            status = "rejected"
             rejected_reason = str(reason or "rejected").strip() or "rejected"
-            updated = current.model_copy(update={"status": "rejected", "rejected_reason": rejected_reason})
+        updated = current.model_copy(
+            update={
+                "status": status,
+                "rejected_reason": rejected_reason,
+                "support": 0,
+                "scene_feedback": {},
+                "applied_outcome_ids": [],
+                "updated_at": int(time.time()),
+            }
+        )
         _write_lines_append(pending_path, [updated])
         return updated
 
@@ -77,7 +86,7 @@ def resolve_expression(
     reason: str = "",
 ) -> ExpressionEntry | None:
     target_id = str(entry_id or "").strip()
-    if not target_id or action not in ("approve", "reject"):
+    if not target_id or action not in ("approve", "reject", "restore"):
         return None
     gid = _group_id_from_entry_id(target_id)
     if gid <= 0:

@@ -9,6 +9,7 @@ from pallas.api.runtime import (
     register_prefix_command_handler,
 )
 from pallas.core.platform.multi_bot.dedup import try_claim_group_message_once
+from pallas.core.platform.multi_bot.group_admin_capability import resolve_group_admin_capability
 
 from . import game, service
 from .game import bot_is_group_admin, can_roulette_start, parse_roulette_start_command
@@ -20,10 +21,19 @@ ROULETTE_RESCUE_PLUGIN = "roulette_rescue"
 
 async def start(context: DirectCommandContext) -> DirectCommandResult:
     matched, mode = parse_roulette_start_command(context.command_text)
-    if not matched or not can_roulette_start(context.group_id):
+    if not matched:
         return matcher_fallback("unavailable")
-    if not await bot_is_group_admin(context.bot, context.event, fresh=True):
-        return matcher_fallback("bot_not_group_admin")
+    if not can_roulette_start(context.group_id):
+        return DirectCommandResult()
+    if not await resolve_group_admin_capability(
+        context.group_id,
+        context.bot_id,
+        bot=context.bot,
+    ):
+        return DirectCommandResult()
+    # The shared capability cache establishes eligibility; roulette still needs owner/admin detail.
+    if not await bot_is_group_admin(context.bot, context.event):
+        return DirectCommandResult()
 
     async def run() -> None:
         await service.start_roulette(

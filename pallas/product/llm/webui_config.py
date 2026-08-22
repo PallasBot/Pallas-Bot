@@ -206,12 +206,12 @@ class LlmWebuiConfig(BaseModel):
         ),
     )
     llm_session_summary_threshold: int = Field(
-        default=40,
+        default=24,
         ge=8,
         le=200,
         description=field_help(
             "会话里攒到多少条消息才开始做摘要",
-            "默认 40。聊天很长、常忘前文可调低（如 24）；想少花摘要费用可调高",
+            "默认 24。聊天很长、常忘前文可调低；想少花摘要费用可调高",
             "须开启「会话过长时生成摘要」；过低会频繁摘要、多花钱",
         ),
     )
@@ -647,6 +647,46 @@ class LlmWebuiConfig(BaseModel):
             "设为 0 可保留句号；设为 1 则符合条件时总是省略",
         ),
     )
+    llm_reply_split_randomize_enabled: bool = Field(
+        default=True,
+        description=field_help(
+            "短回复要不要偶尔整条一句发出（不打散成多气泡）",
+            "开=约按下方概率随机保留整条；关=一律按现有规则拆分",
+            "用于缓解「X？ Y」式两气泡模板感；默认开",
+        ),
+    )
+    llm_reply_split_randomize_keep_rate: float = Field(
+        default=0.4,
+        description=field_help(
+            "保留整条不发多气泡的概率（0～1）",
+            "默认 0.4；开启随机化时生效",
+            "设 0=总是拆分；设 1=短回复基本不拆",
+        ),
+    )
+    llm_bubble_delay_base_sec: float = Field(
+        default=0.8,
+        description=field_help(
+            "气泡间隔基础值（秒）",
+            "默认 0.8；与长度无关的固定停顿",
+            "间隔 = 基础值 + 字数×每字增量，再乘抖动，上限 3.5 秒",
+        ),
+    )
+    llm_bubble_delay_per_char: float = Field(
+        default=0.04,
+        description=field_help(
+            "气泡间隔每字增量（秒/字符）",
+            "默认 0.04；消息越长间隔越长",
+            "建议 0.02～0.08；过大长消息会显得很慢",
+        ),
+    )
+    llm_bubble_delay_jitter: float = Field(
+        default=0.35,
+        description=field_help(
+            "气泡间隔抖动（±比例）",
+            "默认 0.35；模拟真人打字随机停顿",
+            "设 0=完全固定；建议不超过 0.9",
+        ),
+    )
     llm_reply_mention_cooldown_sec: int = Field(
         default=900,
         description=field_help(
@@ -745,25 +785,6 @@ class LlmWebuiConfig(BaseModel):
             "要不要在后台给回复打个效果分，方便以后分析",
             "开=异步记分到数据目录；关=不记（默认）。一般运维可保持关",
             "不影响主路径快慢；分数是启发式，不是精确质量分",
-        ),
-    )
-    llm_reply_style_variants: dict[str, object] = Field(
-        default_factory=lambda: {
-            "version": 1,
-            "enabled": True,
-            "base_probability": 0.25,
-            "affect_styles": {
-                "warm": ["playful", "follow"],
-                "cool": ["cool", "direct"],
-                "chaotic": ["playful", "rhetorical"],
-                "assertive": ["direct", "rhetorical"],
-                "default": ["cool", "playful", "direct", "rhetorical", "follow"],
-            },
-        },
-        description=field_help(
-            "按当前情绪，临时换一种口气说话（不影响长期人设/牛格）",
-            "用表单开关即可：开=按概率抽一个口气；关=不用变体。默认约 25% 触发。可选口气在表单里点选",
-            "只影响当轮提示，不写入静态人设。没有情感数据时走 default 那组口气",
         ),
     )
     llm_memory_rag_enabled: bool = Field(
@@ -1192,6 +1213,11 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_reply_postprocess_enabled=cfg.llm_reply_postprocess_enabled,
         llm_reply_trim_terminal_period_enabled=cfg.llm_reply_trim_terminal_period_enabled,
         llm_reply_trim_terminal_period_rate=cfg.llm_reply_trim_terminal_period_rate,
+        llm_reply_split_randomize_enabled=cfg.llm_reply_split_randomize_enabled,
+        llm_reply_split_randomize_keep_rate=cfg.llm_reply_split_randomize_keep_rate,
+        llm_bubble_delay_base_sec=cfg.llm_bubble_delay_base_sec,
+        llm_bubble_delay_per_char=cfg.llm_bubble_delay_per_char,
+        llm_bubble_delay_jitter=cfg.llm_bubble_delay_jitter,
         llm_reply_mention_cooldown_sec=cfg.llm_reply_mention_cooldown_sec,
         llm_reply_typo_enabled=cfg.llm_reply_typo_enabled,
         llm_reply_typo_rate=cfg.llm_reply_typo_rate,
@@ -1207,7 +1233,6 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_sticker_label_backfill_daily_limit=cfg.llm_sticker_label_backfill_daily_limit,
         llm_sticker_label_realtime_daily_limit=cfg.llm_sticker_label_realtime_daily_limit,
         llm_reply_effect_eval_enabled=cfg.llm_reply_effect_eval_enabled,
-        llm_reply_style_variants=cfg.llm_reply_style_variants,
         llm_memory_rag_enabled=cfg.llm_memory_rag_enabled,
         llm_expression_inject_enabled=cfg.llm_expression_inject_enabled,
         llm_expression_learn_enabled=cfg.llm_expression_learn_enabled,

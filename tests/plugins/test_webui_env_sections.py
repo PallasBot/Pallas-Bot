@@ -51,6 +51,9 @@ def test_list_webui_env_sections_is_empty():
     assert "LLM_EXPRESSION_LEARN_ENABLED" in env_keys
     assert "LLM_EXPRESSION_AUTO_PROMOTE_ENABLED" in env_keys
     assert "LLM_EXPRESSION_RETRIEVE_LIMIT" in env_keys
+    assert "LLM_BUBBLE_DELAY_BASE_SEC" in env_keys
+    assert "LLM_BUBBLE_DELAY_PER_CHAR" in env_keys
+    assert "LLM_BUBBLE_DELAY_JITTER" in env_keys
     # Provider 事实源已迁出 WebUI llm 段；运行时/密钥不在本表单
     assert "LLM_RUNTIME" not in env_keys
     assert "LLM_BASE_URL" not in env_keys
@@ -186,12 +189,6 @@ def test_field_to_env_uppercase_keys_matches_plugin_api():
     assert m["pallas_webui_enabled"] == "PALLAS_WEBUI_ENABLED"
 
 
-def test_llm_style_variant_field_maps_to_runtime_env():
-    from pallas.console.webui.env_sections import _llm_section
-
-    assert _llm_section().field_to_env["llm_reply_style_variants"] == "LLM_REPLY_STYLE_VARIANTS"
-
-
 def test_llm_sticker_vision_fields_map_to_runtime_env():
     from pallas.console.webui.env_sections import _llm_section
 
@@ -256,4 +253,37 @@ def test_message_scrub_patch_roundtrip(tmp_path, monkeypatch):
     apply_webui_env_section_patch("message_scrub", {"inbound_filter_substrings": "a,b"})
     data = json.loads(webui_file.read_text(encoding="utf-8"))
     assert data["env"]["PALLAS_INBOUND_FILTER_SUBSTRINGS"] == "a,b"
+    clear_webui_env_sections_cache()
+
+
+def test_log_level_section_payload_shape():
+    from pallas.console.webui import webui_env_section_payload
+    from pallas.console.webui.env_sections import clear_webui_env_sections_cache
+
+    clear_webui_env_sections_cache()
+    data = webui_env_section_payload("log_level")
+    assert data["plugin"] == "log_level"
+    assert data["module"] == "pallas.core.foundation.log_level_config"
+    fields = {f["name"]: f for f in data["fields"]}
+    field = fields["log_level"]
+    assert field["env_key"] == "LOG_LEVEL"
+    assert field["kind"] == "enum"
+    assert "TRACE" in field["choices"]
+    assert "INFO" in field["choices"]
+    clear_webui_env_sections_cache()
+
+
+def test_log_level_patch_roundtrip(tmp_path, monkeypatch):
+    import json
+
+    from pallas.console.webui import apply_webui_env_section_patch
+    from pallas.console.webui.env_sections import clear_webui_env_sections_cache
+    from pallas.core.foundation.config import repo_settings as rs
+
+    clear_webui_env_sections_cache()
+    webui_file = tmp_path / "webui.json"
+    monkeypatch.setattr(rs, "repo_webui_settings_path", lambda: webui_file)
+    apply_webui_env_section_patch("log_level", {"log_level": "DEBUG"})
+    data = json.loads(webui_file.read_text(encoding="utf-8"))
+    assert data["env"]["LOG_LEVEL"] == "DEBUG"
     clear_webui_env_sections_cache()

@@ -23,6 +23,7 @@ from pallas.product.llm.memory.relationship import (
     normalize_relationship_note,
     prefer_relationship_source,
 )
+from pallas.product.llm.rage import RageState
 from pallas.product.llm.session_backend import llm_product_storage_ready
 from pallas.product.llm.session_store import normalize_group_scope
 from pallas.product.persona.prompt_guard import sanitize_prompt_literal
@@ -38,6 +39,7 @@ class RelationshipProfile:
     affinity: float = 0.0
     source: str = "auto"
     weight: float = 1.0
+    rage: RageState = RageState()
 
     @property
     def has_facts(self) -> bool:
@@ -55,6 +57,10 @@ class RelationshipProfile:
 def is_relationship_store_available() -> bool:
     cfg = get_llm_config()
     return cfg.llm_relationship_notes_enabled and llm_product_storage_ready()
+
+
+def is_rage_store_available() -> bool:
+    return llm_product_storage_ready()
 
 
 def _use_mongodb_backend() -> bool:
@@ -185,6 +191,96 @@ async def upsert_relationship_profile(
     return True
 
 
+async def update_rage_state(
+    bot_id: int,
+    group_id: int | None,
+    user_id: int,
+    state: RageState,
+) -> bool:
+    """Persist rage fields without changing relationship facts or affinity."""
+    if not is_rage_store_available() or not user_id:
+        return False
+    if _use_mongodb_backend():
+        from pallas.product.llm.memory.relationship_store_mongo import update_rage_state_mongo
+
+        return await update_rage_state_mongo(bot_id, group_id, user_id, state)
+    if not _use_postgresql_backend():
+        return False
+    scope_gid = normalize_group_scope(group_id)
+    now = int(time.time())
+    async with get_session() as session:
+        row = (
+            await session.execute(
+                select(LlmRelationshipNoteRow).where(
+                    LlmRelationshipNoteRow.bot_id == int(bot_id),
+                    LlmRelationshipNoteRow.group_id == scope_gid,
+                    LlmRelationshipNoteRow.user_id == int(user_id),
+                )
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            session.add(
+                LlmRelationshipNoteRow(
+                    bot_id=int(bot_id),
+                    group_id=scope_gid,
+                    user_id=int(user_id),
+                    content="",
+                    source="rage",
+                    created_at=now,
+                    updated_at=now,
+                    rage=max(0, min(100, int(state.rage))),
+                    rage_last_attack_at=int(state.last_attack_at),
+                    rage_last_attack_message_id=int(state.last_attack_message_id),
+                    rage_silenced_until=int(state.silenced_until),
+                    rage_silence_reason=str(state.silence_reason or ""),
+                )
+            )
+        else:
+            row.rage = max(0, min(100, int(state.rage)))
+            row.rage_last_attack_at = int(state.last_attack_at)
+            row.rage_last_attack_message_id = int(state.last_attack_message_id)
+            row.rage_silenced_until = int(state.silenced_until)
+            row.rage_silence_reason = str(state.silence_reason or "")
+            row.updated_at = now
+        await session.commit()
+    return True
+
+
+async def clear_rage_state(bot_id: int, group_id: int | None, user_id: int) -> bool:
+    return await update_rage_state(bot_id, group_id, user_id, RageState())
+
+
+async def retrieve_rage_state(bot_id: int, group_id: int | None, user_id: int) -> RageState | None:
+    if not is_rage_store_available() or not user_id:
+        return None
+    if _use_mongodb_backend():
+        from pallas.product.llm.memory.relationship_store_mongo import retrieve_rage_state_mongo
+
+        return await retrieve_rage_state_mongo(bot_id, group_id, user_id)
+    if not _use_postgresql_backend():
+        return None
+    scope_gid = normalize_group_scope(group_id)
+    async with get_session(read_only=True) as session:
+        row = (
+            await session.execute(
+                select(LlmRelationshipNoteRow).where(
+                    LlmRelationshipNoteRow.bot_id == int(bot_id),
+                    LlmRelationshipNoteRow.group_id == scope_gid,
+                    LlmRelationshipNoteRow.user_id == int(user_id),
+                )
+            )
+        ).scalar_one_or_none()
+    if row is None:
+        return None
+    return RageState(
+        rage=max(0, min(100, int(getattr(row, "rage", 0) or 0))),
+        last_attack_at=int(getattr(row, "rage_last_attack_at", 0) or 0),
+        last_attack_message_id=int(getattr(row, "rage_last_attack_message_id", 0) or 0),
+        silenced_until=int(getattr(row, "rage_silenced_until", 0) or 0),
+        silence_reason=str(getattr(row, "rage_silence_reason", "") or ""),
+    )
+
+
 async def save_relationship_note(
     bot_id: int,
     group_id: int | None,
@@ -295,7 +391,14 @@ async def retrieve_relationship_profile(
         daily_step=float(getattr(c, "llm_relationship_affinity_daily_decay_step", 0.02) or 0.02),
         now=now,
     )
-    if not content and warmth == 0.0 and assertiveness == 0.0 and affinity == 0.0:
+    if (
+        not content
+        and warmth == 0.0
+        and assertiveness == 0.0
+        and affinity == 0.0
+        and int(getattr(row, "rage", 0) or 0) == 0
+        and int(getattr(row, "rage_silenced_until", 0) or 0) <= now
+    ):
         return None
     return RelationshipProfile(
         content=content,
@@ -304,6 +407,13 @@ async def retrieve_relationship_profile(
         affinity=affinity,
         source=str(row.source or "").strip() or "auto",
         weight=weight,
+        rage=RageState(
+            rage=max(0, min(100, int(getattr(row, "rage", 0) or 0))),
+            last_attack_at=int(getattr(row, "rage_last_attack_at", 0) or 0),
+            last_attack_message_id=int(getattr(row, "rage_last_attack_message_id", 0) or 0),
+            silenced_until=int(getattr(row, "rage_silenced_until", 0) or 0),
+            silence_reason=str(getattr(row, "rage_silence_reason", "") or ""),
+        ),
     )
 
 

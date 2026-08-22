@@ -82,6 +82,7 @@ from pallas.product.llm.memory.ops import (
     upsert_memory_preference,
 )
 from pallas.product.llm.memory.relationship_store import (
+    clear_rage_state,
     delete_relationship_note,
     list_relationship_notes,
     set_affinity,
@@ -138,6 +139,7 @@ from pallas.product.llm.providers_store import (
 from pallas.product.llm.repeater_feedback import (
     clear_feedback_entry_correction,
     delete_feedback_entry,
+    find_feedback_entry,
     group_feedback_bias_snapshot,
     list_group_feedback_entries,
     set_feedback_entry_correction,
@@ -181,6 +183,7 @@ __all__ = [
     "clear_feedback_entry_correction",
     "clear_llm_history_session",
     "clear_memory_entries",
+    "clear_rage_state",
     "clear_providers_store_cache",
     "clear_scope_graph",
     "compact_llm_history_session",
@@ -210,6 +213,7 @@ __all__ = [
     "fetch_tts_translator",
     "fetch_tts_voices",
     "find_provider",
+    "find_feedback_entry",
     "get_hiergraph_status",
     "get_llm_history_session_detail",
     "get_llm_memory_ops_config",

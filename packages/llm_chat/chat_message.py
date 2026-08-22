@@ -27,13 +27,17 @@ from pallas.product.llm.assembler import (
     assemble_tool_bundle,
 )
 from pallas.product.llm.assembler.context import ChatContextBundle, assemble_direct_chat_context
+from pallas.product.llm.assembler.prompt_overrides import load_prompt_overrides
 from pallas.product.llm.behavior import (
     build_behavior_hint_text,
+    build_retaliation_hint,
     classify_behavior_scene,
+    detect_attack_pressure,
     select_behavior_patterns,
 )
 from pallas.product.llm.behavior_store import ensure_default_behavior_patterns
 from pallas.product.llm.bot_reply_context import lookup_bot_reply_context
+from pallas.product.llm.budget import trim_messages_to_char_budget
 from pallas.product.llm.chat_queue import (
     begin_chat_turn,
     finish_chat_turn,
@@ -70,6 +74,7 @@ from pallas.product.llm.memory import (
 from pallas.product.llm.memory.auto_episode import maybe_auto_save_episode
 from pallas.product.llm.memory.auto_ip_knowledge import schedule_auto_save_ip_knowledge
 from pallas.product.llm.message_guard import normalize_llm_chat_user_text
+from pallas.product.llm.models import ChatCompletionMessage
 from pallas.product.llm.persona_context import build_persona_llm_context
 from pallas.product.llm.reply_gate import evaluate_llm_reply_gate_result, reply_gate_skip_metric
 from pallas.product.llm.reply_necessity import evaluate_reply_necessity_gate
@@ -79,7 +84,7 @@ from pallas.product.llm.reply_target_candidates import (
     record_reply_target_candidate,
 )
 from pallas.product.llm.reply_variation import should_wait_for_more
-from pallas.product.llm.session_store import list_user_llm_messages
+from pallas.product.llm.session_store import build_llm_chat_messages, list_user_llm_messages
 from pallas.product.llm.session_summary import schedule_session_summary
 from pallas.product.llm.speak_perception import evaluate_speak_perception, speak_perception_metrics
 from pallas.product.llm.task_metrics import record_bot_llm_task
@@ -87,6 +92,7 @@ from pallas.product.llm.turn_policy import resolve_turn_policy
 from pallas.product.persona.peer_bots_prompt import save_peer_alias_from_teach
 from pallas.product.persona.prompt_guard import sanitize_prompt_literal
 from pallas.product.persona.self_identity import (
+    extract_raw_learned_self_aliases,
     extract_self_aliases,
     maybe_persist_self_alias_from_utterance,
     resolve_cached_login_nickname,
@@ -110,8 +116,88 @@ _SPEAK_ALIAS_CACHE_TTL_SEC = 60.0
 _speak_alias_cache: dict[int, tuple[float, list[str]]] = {}
 
 
+def load_chat_prompt_overrides(bot_id: int, group_id: int | None):
+    if group_id is None:
+        return None
+    return load_prompt_overrides(bot_id=bot_id, group_id=group_id)
+
+
 def clear_speak_alias_cache_for_tests() -> None:
     _speak_alias_cache.clear()
+
+
+def build_injection_snapshot(
+    *,
+    ambient_turns: list[dict[str, object]],
+    expression_entries: list[object],
+    semantic_style: object | None = None,
+    semantic_examples: list[tuple[str, str]] | None = None,
+    semantic_example_sources: list[object] | None = None,
+    hybrid_retrieval_trace: dict[str, object],
+    knowledge_retrieval_trace: dict[str, object],
+    learned_self_aliases: list[str],
+    group_style_profile: dict[str, object] | None,
+) -> dict[str, object]:
+    from pallas.product.llm.repeater_semantic_style import (
+        SemanticStyleDirectPair,
+        semantic_style_source_example_id,
+    )
+
+    snapshot_semantic_examples: list[dict[str, str]] = []
+    sources = list(
+        semantic_example_sources
+        if semantic_example_sources is not None
+        else getattr(semantic_style, "matched_example_sources", []) or []
+    )
+    examples = list(
+        semantic_examples if semantic_examples is not None else getattr(semantic_style, "matched_examples", []) or []
+    )
+    for pair, source in zip(examples, sources, strict=False):
+        if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+            continue
+        trigger = str(pair[0])
+        reply = str(pair[1])
+        source_id = semantic_style_source_example_id(
+            SemanticStyleDirectPair(
+                trigger_text=trigger,
+                reply_text=reply,
+                source_example_id=str(getattr(source, "source_example_id", "") or ""),
+            )
+        )
+        snapshot_semantic_examples.append({"example_id": source_id, "trigger": trigger, "reply": reply})
+    memory = hybrid_retrieval_trace.get("memory") if isinstance(hybrid_retrieval_trace, dict) else {}
+    memory_entries = memory.get("entries", []) if isinstance(memory, dict) else []
+    chunks = knowledge_retrieval_trace.get("chunks", []) if isinstance(knowledge_retrieval_trace, dict) else []
+    return {
+        "ambient_turns": [dict(item) for item in ambient_turns if isinstance(item, dict)],
+        "expression_entries": [
+            {
+                "entry_id": str(getattr(item, "entry_id", "") or ""),
+                "saying": str(getattr(item, "saying", "") or "")[:120],
+                "occasion": str(getattr(item, "occasion", "") or "")[:120],
+            }
+            for item in expression_entries
+            if str(getattr(item, "entry_id", "") or "").strip()
+        ],
+        "semantic_examples": snapshot_semantic_examples,
+        "memory_entries": [dict(item) for item in memory_entries if isinstance(item, dict)],
+        "knowledge_chunks": [dict(item) for item in chunks if isinstance(item, dict)],
+        "self_aliases": [{"alias": alias, "origin": "persona_self_alias"} for alias in learned_self_aliases],
+        "style_profile": dict(group_style_profile or {}),
+    }
+
+
+def trim_prepared_messages_for_snapshot(
+    messages: list[ChatCompletionMessage],
+    *,
+    ambient_turns: list[dict[str, object]],
+    ambient_message_token: str,
+    system_prompt: str,
+    budget_chars: int,
+) -> tuple[list[ChatCompletionMessage], list[dict[str, object]]]:
+    trimmed = trim_messages_to_char_budget(messages, system_prompt=system_prompt, budget_chars=budget_chars)
+    has_ambient = bool(ambient_message_token) and any(item.source_token == ambient_message_token for item in trimmed)
+    return trimmed, list(ambient_turns) if has_ambient else []
 
 
 async def load_recent_bot_plain_replies(bot_id: int, group_id: int, *, limit: int = 6) -> list[str]:
@@ -577,7 +663,8 @@ async def prepare_and_submit_llm_chat_turn(
             and str(tool_meta.get("tool_choice_prefer") or "").strip().lower() == "required"
         )
         affinity_value = None
-        if speak_trigger not in ("to_me", "alias", "mention", "followup"):
+        relationship_affinity = None
+        if group_id is not None and user_id is not None:
             from pallas.product.llm.memory.relationship_store import retrieve_relationship_profile
 
             try:
@@ -585,7 +672,9 @@ async def prepare_and_submit_llm_chat_turn(
             except Exception:
                 _profile = None
             if _profile is not None:
-                affinity_value = _profile.affinity
+                relationship_affinity = _profile.affinity
+                if speak_trigger not in ("to_me", "alias", "mention", "followup"):
+                    affinity_value = relationship_affinity
         necessity = evaluate_reply_necessity_gate(
             text=focus_text,
             is_to_me=is_to_me,
@@ -716,12 +805,14 @@ async def prepare_and_submit_llm_chat_turn(
         )
         direct_context_started = time.perf_counter()
         group_timeline = ""
-        if group_id is not None and (is_to_me or speak_trigger in {"alias", "mention", "followup"}):
+        if group_id is not None and (is_to_me or speak_trigger in {"alias", "mention", "followup", "ambient"}):
             try:
+                ambient = speak_trigger == "ambient"
                 group_timeline = await build_recent_group_timeline(
                     int(group_id),
                     current_message_id=message_id or None,
                     self_bot_id=int(bot.self_id),
+                    limit=4 if ambient else 8,
                 )
             except Exception:
                 logger.debug("group timeline context skipped for group [{}]", group_id)
@@ -792,6 +883,16 @@ async def prepare_and_submit_llm_chat_turn(
         behavior_hint = ""
         if can_read_behavioral_learning(llm_cfg):
             behavior_hint = build_behavior_hint_text(scene=behavior_scene, actions=behavior_actions)
+        retaliation_hint = build_retaliation_hint(
+            pressure=detect_attack_pressure(
+                user_text=focus_text,
+                recent_turns=recent_turns,
+                is_to_me=is_to_me,
+            ),
+            affinity=relationship_affinity,
+        )
+        if retaliation_hint:
+            behavior_hint = "\n".join(item for item in (behavior_hint, retaliation_hint) if item)
         last_assistant_reply_started = time.perf_counter()
         last_reply_text = await latest_llm_assistant_reply(int(bot.self_id), group_id, user_id)
         pre_submit_context_durations_ms["last_assistant_reply"] = int(
@@ -816,13 +917,18 @@ async def prepare_and_submit_llm_chat_turn(
             except Exception:
                 group_expression_profile = None
         reply_shape = resolve_reply_shape(turn_policy, group_expression_profile)
-        semantic_examples = list(getattr(semantic_style, "matched_examples", []) or [])[:2]
+        semantic_example_sources = list(getattr(semantic_style, "matched_example_sources", []) or [])
+        semantic_examples: list[tuple[str, str]] = []
+        injected_semantic_sources: list[object] = []
+        for index, example in enumerate(list(getattr(semantic_style, "matched_examples", []) or [])[:2]):
+            if not isinstance(example, (list, tuple)) or len(example) != 2:
+                continue
+            semantic_examples.append((str(example[0] or ""), str(example[1] or "")))
+            injected_semantic_sources.append(
+                semantic_example_sources[index] if index < len(semantic_example_sources) else None
+            )
         group_expression = ResolvedGroupExpression(
-            matched_examples=[
-                (str(item[0] or ""), str(item[1] or ""))
-                for item in semantic_examples
-                if isinstance(item, (list, tuple)) and len(item) == 2
-            ],
+            matched_examples=semantic_examples,
             baseline_note=str(getattr(semantic_style, "baseline_note", "") or ""),
             behavior_strategies=[
                 (str(item.scene or ""), str(item.action or ""), str(item.outcome or ""))
@@ -857,6 +963,7 @@ async def prepare_and_submit_llm_chat_turn(
                 ask_before_call=bool(tool_meta.get("ask_before_call")),
                 missing_required_params=dict(tool_meta.get("missing_required_params") or {}),
             ),
+            section_overrides=load_chat_prompt_overrides(int(bot.self_id), group_id),
         )
         login_nickname_started = time.perf_counter()
         login_nick = await resolve_login_nickname(int(bot.self_id))
@@ -874,6 +981,38 @@ async def prepare_and_submit_llm_chat_turn(
                 mention_names=self_aliases,
             )
             or focus_text.strip()
+        )
+        learned_self_aliases = extract_raw_learned_self_aliases(persona_dict)
+        ambient_turns: list[dict[str, object]] = []
+        ambient_message_tokens: list[str] = []
+        prepared_messages = await build_llm_chat_messages(
+            int(bot.self_id),
+            group_id,
+            user_id,
+            llm_user_text,
+            cfg=llm_cfg,
+            include_history=include_persistent_history or include_recent_pair,
+            history_limit=2 if include_recent_pair else None,
+            include_group_ambient=not include_recent_pair,
+            ambient_turns_out=ambient_turns,
+            ambient_message_token_out=ambient_message_tokens,
+        )
+        prepared_messages, ambient_turns = trim_prepared_messages_for_snapshot(
+            prepared_messages,
+            ambient_turns=ambient_turns,
+            ambient_message_token=ambient_message_tokens[0] if ambient_message_tokens else "",
+            system_prompt=system_prompt,
+            budget_chars=int(getattr(llm_cfg, "llm_chat_char_budget", 0) or 0),
+        )
+        injection_snapshot = build_injection_snapshot(
+            ambient_turns=ambient_turns,
+            expression_entries=[],
+            semantic_examples=semantic_examples,
+            semantic_example_sources=injected_semantic_sources,
+            hybrid_retrieval_trace=hybrid_retrieval_trace,
+            knowledge_retrieval_trace=knowledge_retrieval_trace,
+            learned_self_aliases=learned_self_aliases,
+            group_style_profile=getattr(semantic_style, "style_profile", None),
         )
         from pallas.product.llm.tools.command_invoke import serialize_event_source_segments
 
@@ -920,6 +1059,7 @@ async def prepare_and_submit_llm_chat_turn(
                 "self_aliases": self_aliases[:8],
                 "speak_trigger": speak_trigger or "to_me",
                 "command_source_segments": command_source_segments,
+                "injection_snapshot": injection_snapshot,
             },
         )
         pre_submit_stage_durations_ms["task_registration"] = int(
@@ -945,6 +1085,7 @@ async def prepare_and_submit_llm_chat_turn(
                 include_session_history=include_persistent_history or include_recent_pair,
                 session_history_limit=2 if include_recent_pair else None,
                 include_group_ambient_history=not include_recent_pair,
+                prepared_messages=prepared_messages,
                 llm_rewrite_metadata={
                     "task": "llm_chat",
                     "current_turn_action": current_turn_decision.action,

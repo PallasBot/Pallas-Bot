@@ -169,6 +169,58 @@ async def test_refresh_group_style_profile_observes_non_bot_messages(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_refresh_skips_group_when_collection_is_paused(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.persona.group_style_refresh import refresh_group_style_profile
+
+    reads: list[int] = []
+    written: list[tuple[int, str, object]] = []
+    observed: list[object] = []
+
+    class DummyGroupRepo:
+        async def get(self, key_id: int, ignore_cache=False):  # noqa: ARG002
+            reads.append(key_id)
+            return None
+
+        async def upsert_field(self, key_id: int, field: str, value):
+            written.append((key_id, field, value))
+
+    class DummyMessageRepo:
+        async def find_recent_in_group(self, *_args, **_kwargs):
+            return []
+
+    class DummyContextRepo:
+        async def list_answers_for_group_since(self, *_args, **_kwargs):
+            return []
+
+    monkeypatch.setattr(
+        "pallas.product.persona.style_governance.group_style_collection_enabled",
+        lambda *, group_id: False,
+    )
+    monkeypatch.setattr(
+        "pallas.product.persona.group_style_refresh.make_group_config_repository", lambda: DummyGroupRepo()
+    )
+    monkeypatch.setattr(
+        "pallas.product.persona.group_style_refresh.make_message_repository", lambda: DummyMessageRepo()
+    )
+    monkeypatch.setattr(
+        "pallas.product.persona.group_style_refresh.make_local_context_repository", lambda: DummyContextRepo()
+    )
+    monkeypatch.setattr(
+        "pallas.product.persona.group_style_refresh.invalidate_persona_cache",
+        lambda bot_id=None: None,
+    )
+    monkeypatch.setattr(
+        "pallas.product.persona.expression_learn.learn_expressions_from_group_messages",
+        lambda group_id, texts, *, bot_id=0, max_notes=5: observed.append((group_id, texts, bot_id)),
+    )
+
+    assert await refresh_group_style_profile(777) is False
+    assert reads == []
+    assert written == []
+    assert observed == []
+
+
+@pytest.mark.asyncio
 async def test_refresh_dirty_group_style_batch_isolates_failures(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.product.persona.group_style_refresh import (
         clear_group_style_dirty_state,

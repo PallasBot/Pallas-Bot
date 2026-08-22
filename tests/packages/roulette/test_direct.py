@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import ANY, AsyncMock
 
 import pytest
 
 from packages.roulette import direct, game
+from packages.roulette import __plugin_meta__
 from pallas.api.runtime import DirectCommandContext
 
 
@@ -38,15 +39,33 @@ def test_direct_declarations_cover_only_safe_exact_commands() -> None:
     assert direct.JUDGMENT_DECLARATION.command_id == "roulette.punish"
 
 
+def test_roulette_declares_group_admin_owner_without_fanout() -> None:
+    route = __plugin_meta__.extra["ingress_route"]
+    assert route["required_bot_capability"] == "group_admin"
+    assert "ingress_fanout" not in __plugin_meta__.extra
+
+
 @pytest.mark.asyncio
-async def test_start_falls_back_without_side_effect_when_bot_is_not_group_admin(
+async def test_start_uses_cached_group_admin_capability(monkeypatch: pytest.MonkeyPatch) -> None:
+    capability = AsyncMock(return_value=False)
+    monkeypatch.setattr(direct, "resolve_group_admin_capability", capability)
+
+    result = await direct.start(context("牛牛轮盘"))
+
+    capability.assert_awaited_once_with(100, 1, bot=ANY)
+    assert result.fallback_to_matcher is False
+    assert result.effects == ()
+
+
+@pytest.mark.asyncio
+async def test_start_stops_matchers_without_side_effect_when_bot_is_not_group_admin(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(direct, "bot_is_group_admin", AsyncMock(return_value=False))
 
     result = await direct.start(context("牛牛轮盘"))
 
-    assert result.fallback_to_matcher is True
+    assert result.fallback_to_matcher is False
     assert result.effects == ()
 
 

@@ -378,6 +378,18 @@ def test_is_matcher_lifecycle_noise() -> None:
     assert not is_matcher_lifecycle_noise("ingress_dispatch: stats group_messages=1")
 
 
+def test_command_traffic_bypasses_handled_noise() -> None:
+    handled = (
+        "Event will be handled by Matcher(type='message', module=packages.repeater.handlers.message, lineno=45)"
+    )
+    assert not is_matcher_lifecycle_noise(handled, command_traffic=True)
+    assert is_matcher_lifecycle_noise(handled, command_traffic=False)
+    assert is_matcher_lifecycle_noise(
+        "Matcher(type='message', module=packages.llm_chat.chat_message, lineno=114) running complete",
+        command_traffic=True,
+    )
+
+
 def test_websocket_connection_handshake_noise_is_quiet_but_lifecycle_stays_visible() -> None:
     assert is_websocket_connection_noise('172.17.0.8:32864 - "WebSocket /onebot/v11/ws" [accepted]')
     assert is_websocket_connection_noise("connection open")

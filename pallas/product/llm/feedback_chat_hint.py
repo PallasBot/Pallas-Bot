@@ -123,10 +123,10 @@ def _build_matched_contrast_pairs(rows: list, *, query: str, limit: int = 2) -> 
     return pairs
 
 
-def build_group_feedback_chat_hint(*, group_id: int, user_text: str = "", limit: int = 40) -> str:
-    if not can_read_behavioral_learning() or int(group_id) <= 0:
+def build_group_feedback_chat_hint(*, bot_id: int, group_id: int, user_text: str = "", limit: int = 40) -> str:
+    if not can_read_behavioral_learning() or int(bot_id) <= 0 or int(group_id) <= 0:
         return ""
-    rows = list_group_feedback_entries(group_id=int(group_id), limit=max(1, int(limit)))
+    rows = list_group_feedback_entries(bot_id=int(bot_id), group_id=int(group_id), limit=max(1, int(limit)))
     if not rows:
         return ""
 
@@ -208,11 +208,12 @@ def build_group_feedback_chat_hint(*, group_id: int, user_text: str = "", limit:
     return f"\n【维护者样本参考】\n- {body}"
 
 
-async def load_repeater_feedback_system_suffix(*, group_id: int, user_text: str = "") -> str:
+async def load_repeater_feedback_system_suffix(*, bot_id: int, group_id: int, user_text: str = "") -> str:
     import asyncio
 
     hint = await asyncio.to_thread(
         build_group_feedback_chat_hint,
+        bot_id=int(bot_id),
         group_id=int(group_id),
         user_text=str(user_text or ""),
     )

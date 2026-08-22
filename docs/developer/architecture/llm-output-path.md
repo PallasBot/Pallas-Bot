@@ -8,7 +8,8 @@
 
 ```text
 群消息
- ├─ @ / to_me → packages/llm_chat/chat_message.py
+ ├─ 统一 ingress 怒气门控 → 记录时间线；静默时停止后续副作用
+ │  └─ @ / to_me → packages/llm_chat/chat_message.py
  │     persona +【表达参考】→ client.submit_chat_task
  │
  └─ 非 @ 接话 → packages/repeater/handlers/message.py
@@ -59,6 +60,9 @@
 | 配置键 | `pallas/product/llm/config.py`；WebUI 段见 `env_sections.py`（侧栏 **AI 配置**） |
 
 ## 约束
+
+- 怒气门控发生在 direct runtime 与 matcher 之前。静默不是丢弃入站消息：消息仍持久化并带 `suppressed_by_rage=true`，但不会被视为 Bot 已回复，也不会进入 LLM、工具或 Repeater 处理。
+- 攻击增量由攻击词数量、短窗口连续攻击次数和当前怒气共同决定；75 分进入静默，低于 75 才恢复。静默期间不重复累积怒气、不重复扣好感、不延长截止时间。
 
 - 日常接话只使用 Repeater 语料，不调用 LLM 生成、选句、润色或拼接。
 - `@`、follow-up 与工具回合独立走 `llm_chat`。

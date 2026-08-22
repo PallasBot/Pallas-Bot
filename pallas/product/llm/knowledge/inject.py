@@ -56,35 +56,38 @@ async def enrich_system_with_knowledge_sources(
         user_id=user_id,
         cfg=c,
     )
+    max_chunk_len = c.llm_knowledge_content_max_len
+    rendered_hits = [item for item in hits if sanitize_prompt_block(item.content, max_len=max_chunk_len)]
     trace = {
-        "hit_count": len(hits),
-        "sources": sorted({item.source_id for item in hits}),
+        "hit_count": len(rendered_hits),
+        "sources": sorted({item.source_id for item in rendered_hits}),
         "chunks": [
             {
                 "source_id": item.source_id,
+                "chunk_id": item.chunk_id,
                 "title": item.title,
                 "score": item.score,
             }
-            for item in hits
+            for item in rendered_hits
         ],
     }
     try:
         from pallas.product.llm.rag_metrics import record_rag_query_result
 
-        if hits:
+        if rendered_hits:
             record_rag_query_result(
                 hit=True,
-                documents=[(item.title or item.source_id, item.source_id) for item in hits],
+                documents=[(item.title or item.source_id, item.source_id) for item in rendered_hits],
             )
         else:
             record_rag_query_result(hit=False)
     except Exception:
         pass
-    if not hits:
+    if not rendered_hits:
         return KnowledgeInjectionResult(system_prompt=system_prompt, trace=trace)
 
     lines: list[str] = []
-    for item in hits:
+    for item in rendered_hits:
         safe = sanitize_prompt_block(item.content, max_len=c.llm_knowledge_content_max_len)
         if not safe:
             continue

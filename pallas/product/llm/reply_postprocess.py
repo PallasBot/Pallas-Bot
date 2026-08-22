@@ -130,6 +130,12 @@ def _split_long_comma_segments(segment: str) -> list[str]:
     return segments
 
 
+def normalize_single_bubble_text(text: str) -> str:
+    """单气泡规范化：保留换行结构，仅丢弃空行与首尾空白，不做任何拆分。"""
+    lines = [line.strip() for line in str(text or "").splitlines() if line.strip()]
+    return "\n".join(lines)
+
+
 def split_short_reply_segments(
     text: str,
     *,

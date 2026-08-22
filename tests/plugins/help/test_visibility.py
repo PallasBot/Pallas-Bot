@@ -34,6 +34,25 @@ def test_console_stats_excluded_matches_help_hidden_infra():
     assert "ingress_gate" in excluded
 
 
+def test_get_help_menu_plugins_hidden_matches_pip_module_name(monkeypatch):
+    from packages.help import plugin_manager as pm
+
+    tts = SimpleNamespace(name="pallas_plugin_tts", metadata=SimpleNamespace(name="牛牛说", extra={}))
+    sing = SimpleNamespace(name="pallas_plugin_sing", metadata=SimpleNamespace(name="牛牛唱歌", extra={}))
+
+    monkeypatch.setattr(pm, "get_loaded_plugins", lambda: [tts, sing])
+    monkeypatch.setattr(pm, "is_plugin_help_available", lambda _name: True)
+    monkeypatch.setattr(
+        "packages.help.visibility.load_help_hidden_plugins",
+        lambda: ["tts"],
+    )
+
+    menu = pm.get_help_menu_plugins(show_ignored=True)
+    names = {p.name for p in menu}
+    assert "pallas_plugin_tts" not in names
+    assert "pallas_plugin_sing" in names
+
+
 def test_get_help_menu_plugins_always_excludes_hidden(monkeypatch):
     from packages.help import plugin_manager as pm
 

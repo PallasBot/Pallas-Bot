@@ -113,6 +113,7 @@ class Message(Document):
     sender_name: str = Field(default="")
     message_id: int | None = Field(default=None)
     reply_to_message_id: int | None = Field(default=None)
+    suppressed_by_rage: bool = False
     time: int = Field(default_factory=lambda: int(time.time()))
 
     class Settings:
@@ -409,6 +410,11 @@ class LlmRelationshipNote(Document):
     warmth_delta: float = Field(default=0.0)
     assertiveness_delta: float = Field(default=0.0)
     affinity: float = Field(default=0.0)
+    rage: int = Field(default=0)
+    rage_last_attack_at: int = Field(default=0)
+    rage_last_attack_message_id: int = Field(default=0)
+    rage_silenced_until: int = Field(default=0)
+    rage_silence_reason: str = Field(default="")
     created_at: int = Field(default_factory=lambda: int(time.time()))
     updated_at: int = Field(default_factory=lambda: int(time.time()))
 

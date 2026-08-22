@@ -28,5 +28,9 @@ def trim_messages_to_char_budget(
         overhead = estimate_prompt_chars(system_prompt, [])
         room = max(64, budget_chars - overhead)
         if len(content) > room:
-            kept[0] = ChatCompletionMessage(role=kept[0].role, content=content[:room])
+            kept[0] = ChatCompletionMessage(
+                role=kept[0].role,
+                content=content[:room],
+                source_token=kept[0].source_token,
+            )
     return kept

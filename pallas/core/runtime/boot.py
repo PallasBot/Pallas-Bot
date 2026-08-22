@@ -17,6 +17,7 @@ from pallas.core.foundation.logging import (
     format_repo_file_log,
     install_repo_console_log_format,
     install_startup_log_noise_patcher,
+    register_repo_file_sink,
     resolve_repo_log_level,
 )
 from pallas.core.foundation.paths import plugin_data_dir
@@ -42,16 +43,12 @@ def boot() -> nonebot.Driver:
     install_startup_log_noise_patcher()
     logger.info("[初始化] 运行环境载入中...")
     bot_log_dir = plugin_data_dir("bot", create=True)
-    logger.add(
-        bot_log_dir / "nonebot_{time:YYYY-MM-DD_HH-mm-ss_SSSSSS}.log",
-        level=file_log_level,
-        format=format_repo_file_log,
-        rotation="50 MB",
-        retention="14 days",
-        encoding="utf-8",
-        enqueue=True,
+    register_repo_file_sink(
+        logger,
+        format_repo_file_log,
+        path=bot_log_dir / "nonebot_{time:YYYY-MM-DD_HH-mm-ss_SSSSSS}.log",
     )
-    logger.info("[初始化] 运行环境已就绪：日志目录 {}，级别 {}", bot_log_dir, file_log_level)
+    logger.info("[初始化] 运行环境已就绪：日志目录 [{}]、级别 [{}]", bot_log_dir, file_log_level)
     start_message_scrub_if_enabled()
     install_llm_startup_probe()
     install_nonebot_log_sink()

@@ -51,7 +51,8 @@ uv run ruff format --check pallas/ packages/
 
 | 用途 | 路径 |
 | --- | --- |
-| Bot 主日志（统一运行时） | `data/pallas_unified/logs/bot.log`；历史 NoneBot 用 `data/bot/nonebot_*.log` |
+| Bot 业务日志 | `data/bot/nonebot_*.log`（NoneBot loguru，Bot 消息实例持续写入） |
+| unified 启动器日志 | `data/pallas_unified/logs/bot_*.log`（后台启动捕获 stdout；主日志以 nonebot 业务日志为准） |
 | 业务工作 aux 日志 | `data/pallas_work/logs/work.log`（下载/后台任务） |
 | embed 辅进程日志 | `data/pallas_embed/logs/embed.log`（本机 Embedding + Redis 时） |
 | 分片日志 / 状态 | `data/pallas_shard/logs/{hub,worker-*}.log`、`registry.json`、`stats/` |

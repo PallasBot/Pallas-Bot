@@ -91,7 +91,7 @@ def get_help_menu_plugins(
     """与一级帮助总览相同的插件集合。"""
     plugins = [p for p in get_loaded_plugins() if p.name]
     hidden = set(resolve_help_hidden_plugins())
-    plugins = [p for p in plugins if p.name not in hidden]
+    plugins = [p for p in plugins if not is_plugin_name_in_set(p.name, hidden)]
 
     if show_ignored:
         filtered = [p for p in plugins if is_plugin_help_available(p.name)]

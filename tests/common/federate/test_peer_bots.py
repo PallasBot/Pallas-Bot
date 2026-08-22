@@ -7,6 +7,70 @@ from unittest.mock import AsyncMock, MagicMock
 from pallas.core.platform.federate import peer_bots as mod
 
 
+def test_publish_local_peer_payload_contains_group_admin_bot_ids(monkeypatch):
+    client = MagicMock()
+    monkeypatch.setattr(mod, "get_federate_redis_client", lambda: client)
+    monkeypatch.setattr(mod, "federate_redis_prefix", lambda _cfg=None: "pallas:fed:pool-1")
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "get_catalog_bot_ids", lambda: frozenset({111, 222}))
+    monkeypatch.setattr(mod, "collect_local_federate_online_bot_ids", lambda: frozenset({111, 222}))
+    monkeypatch.setattr(mod, "collect_local_present_group_ids", lambda: [123, 456])
+    monkeypatch.setattr(mod, "local_group_admin_bot_ids", lambda group_id: frozenset({111}) if group_id == 123 else frozenset())
+    monkeypatch.setattr(mod, "get_cached_group_bot_ids", lambda _group_id, **_kwargs: [111, 222])
+    monkeypatch.setattr(mod, "local_group_admin_observation_complete", lambda *_args: True)
+
+    assert mod.publish_local_federate_peer_bot_ids_sync() is True
+    _, payload = client.set.call_args.args[:2]
+    data = json.loads(payload)
+    assert data["group_admin_bot_ids"] == {"123": [111], "456": []}
+
+
+def test_peer_without_group_admin_field_is_unknown(monkeypatch):
+    client = MagicMock()
+    client.scan_iter.return_value = iter([b"pallas:fed:pool-1:peer_bots:dep-legacy"])
+    client.get.return_value = json.dumps({"deployment_id": "dep-legacy", "bot_ids": [20001]})
+    monkeypatch.setattr(mod, "get_federate_redis_client", lambda: client)
+    monkeypatch.setattr(mod, "federate_redis_prefix", lambda _cfg=None: "pallas:fed:pool-1")
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+
+    mod.refresh_federate_peer_bot_ids_sync()
+
+    assert mod.get_federate_peer_group_admin_bot_ids("dep-legacy", 123) is None
+
+
+def test_group_admin_owner_is_stable_for_same_group(monkeypatch):
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "collect_local_federate_command_capabilities", lambda: frozenset({"牛牛轮盘"}))
+    monkeypatch.setattr(mod, "_cache_deployment_ids", {"dep-peer"})
+    monkeypatch.setattr(mod, "_cache_deployment_capabilities", {"dep-peer": frozenset({"牛牛轮盘"})})
+    monkeypatch.setattr(mod, "_cache_deployment_present_groups", {"dep-peer": frozenset({123})})
+    monkeypatch.setattr(
+        mod,
+        "group_admin_bot_ids_by_deployment",
+        lambda *_args: {"dep-local": frozenset({100}), "dep-peer": frozenset({200})},
+    )
+
+    first = mod.federate_group_admin_owner(123, plain="牛牛轮盘")
+    second = mod.federate_group_admin_owner(123, plain="牛牛轮盘")
+
+    assert first == second
+    assert first is not None
+    assert first.deployment_id in {"dep-local", "dep-peer"}
+
+
+def test_group_admin_owner_downgrades_when_peer_observation_unknown(monkeypatch):
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "collect_local_federate_command_capabilities", lambda: frozenset())
+    monkeypatch.setattr(mod, "_cache_deployment_ids", {"dep-peer"})
+    monkeypatch.setattr(
+        mod,
+        "group_admin_bot_ids_by_deployment",
+        lambda *_args: {"dep-local": frozenset({100}), "dep-peer": None},
+    )
+
+    assert mod.federate_group_admin_owner(123, plain="牛牛轮盘") is None
+
+
 def test_publish_local_federate_peer_bot_ids_sync_writes_current_catalog(monkeypatch):
     client = MagicMock()
     monkeypatch.setattr(mod, "get_federate_redis_client", lambda: client)
@@ -60,25 +124,27 @@ def test_peer_roster_publishes_and_reads_deployment_status(monkeypatch):
         "collect_local_federate_public_online_bot_names",
         lambda _online_ids, _public_bot_ids: {10001: "本机一号"},
     )
+    monkeypatch.setattr(
+        mod,
+        "collect_local_federate_command_capabilities",
+        lambda: frozenset({"牛牛塔罗牌", "牛牛帮助"}),
+    )
 
     assert mod.publish_local_federate_peer_bot_ids_sync(public_bot_ids=frozenset({10001})) is True
     _, payload = client.set.call_args.args[:2]
     published = json.loads(payload)
-    assert published == {
-        "deployment_id": "dep-local",
-        "deployment_name": "部署 A",
-        "bot_ids": [10001],
-        "online_bot_ids": [10001],
-        "public_bot_ids": [10001],
-        "public_online_bot_names": {"10001": "本机一号"},
-        "updated_at": published["updated_at"],
-        "present_group_ids": [],
-        "command_capability_protocol": mod.COMMAND_CAPABILITY_PROTOCOL_VERSION,
-        "ingress_protocol": mod.INGRESS_PROTOCOL_VERSION,
-        "ingress_capabilities": ["command", "hosted_activity", "llm_alias"],
-        "command_permission_levels": published["command_permission_levels"],
-    }
+    assert published["deployment_id"] == "dep-local"
+    assert published["deployment_name"] == "部署 A"
+    assert published["bot_ids"] == [10001]
+    assert published["online_bot_ids"] == [10001]
+    assert published["public_bot_ids"] == [10001]
+    assert published["public_online_bot_names"] == {"10001": "本机一号"}
+    assert published["present_group_ids"] == []
+    assert published["command_capability_protocol"] == mod.COMMAND_CAPABILITY_PROTOCOL_VERSION
+    assert published["ingress_protocol"] == mod.INGRESS_PROTOCOL_VERSION
+    assert published["ingress_capabilities"] == ["command", "hosted_activity", "llm_alias"]
     assert isinstance(published["command_permission_levels"], dict)
+    assert published["command_capabilities"] == ["牛牛塔罗牌", "牛牛帮助"]
 
     mod.refresh_federate_peer_bot_ids_sync()
     peer = mod.get_federate_peer_bot_roster("dep-b")
@@ -657,6 +723,37 @@ def test_log_incompatible_federate_ingress_peers_silent_without_shared_group(mon
 
     mod.log_incompatible_federate_ingress_peers()
     assert warnings == []
+
+
+def test_log_incompatible_federate_command_capability_peers_silent_without_shared_group(monkeypatch):
+    """命令能力旧协议对端未与本机共同在场时不告警。"""
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "collect_local_present_group_ids", lambda: [733291779])
+    warnings: list[tuple[str, tuple]] = []
+    monkeypatch.setattr(mod.logger, "warning", lambda msg, *args: warnings.append((msg, args)))
+
+    mod._cache_deployment_ids = frozenset({"dep-alone"})
+    mod._cache_deployment_capability_protocols = {"dep-alone": 1}
+    mod._cache_deployment_present_groups = {"dep-alone": frozenset({626266902})}
+
+    mod.log_incompatible_federate_command_capability_peers()
+    assert warnings == []
+
+
+def test_log_incompatible_federate_command_capability_peers_warns_for_shared_group(monkeypatch):
+    """命令能力旧协议对端与本机有共同在场群时输出升级告警。"""
+    mod.clear_federate_peer_bot_cache_for_tests()
+    monkeypatch.setattr(mod, "collect_local_present_group_ids", lambda: [733291779])
+    warnings: list[tuple[str, tuple]] = []
+    monkeypatch.setattr(mod.logger, "warning", lambda msg, *args: warnings.append((msg, args)))
+
+    mod._cache_deployment_ids = frozenset({"dep-shared"})
+    mod._cache_deployment_capability_protocols = {"dep-shared": 1}
+    mod._cache_deployment_present_groups = {"dep-shared": frozenset({733291779})}
+
+    mod.log_incompatible_federate_command_capability_peers()
+    assert len(warnings) == 1
+    assert warnings[0][1] == ("dep-shared", 2)
 
 
 def test_collect_local_federate_command_capabilities_includes_explicit_command_prefixes(

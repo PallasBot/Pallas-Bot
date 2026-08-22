@@ -47,6 +47,39 @@ def test_resolve_expression_approves_or_rejects_persisted_entry(monkeypatch, tmp
     assert rejected.status == "rejected"
     assert rejected.rejected_reason == "不符合群聊习惯"
 
+    restored = resolve_expression(saved.entry_id, action="restore")
+    assert restored is not None
+    assert restored.status == "shadow"
+    assert restored.rejected_reason == ""
+
+
+def test_resolve_merged_expression_preserves_feedback_without_changing_score_or_support(monkeypatch, tmp_path) -> None:
+    from pallas.product.persona import expression_bank as store
+    from pallas.product.persona.expression_promote import resolve_expression
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    saved = store.append_or_merge_expression(make_entry(store, support=2))
+    store.merge_group_expressions(10001)
+    store.record_expression_outcome([saved.entry_id], scene="吐槽", score_delta=-3, outcome_id="negative-1")
+
+    rejected = resolve_expression(saved.entry_id, action="reject", reason="llm_negative_feedback")
+    folded = {entry.entry_id: entry for entry in store.list_group_expressions(10001)}[saved.entry_id]
+
+    assert rejected is not None
+    assert folded.status == "rejected"
+    assert folded.rejected_reason == "llm_negative_feedback"
+    assert folded.support == 2
+    assert store.expression_scene_feedback_score(saved.entry_id, scene="吐槽") == -3
+
+    restored = resolve_expression(saved.entry_id, action="restore")
+    folded = {entry.entry_id: entry for entry in store.list_group_expressions(10001)}[saved.entry_id]
+
+    assert restored is not None
+    assert folded.status == "shadow"
+    assert folded.rejected_reason == ""
+    assert folded.support == 2
+    assert store.expression_scene_feedback_score(saved.entry_id, scene="吐槽") == -3
+
 
 def test_maybe_auto_promote_activates_eligible_group_entries(monkeypatch, tmp_path) -> None:
     from pallas.product.persona import expression_bank as store

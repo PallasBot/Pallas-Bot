@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import operator
 from typing import Any
 
 from nonebot import logger
 from pydantic import BaseModel, ConfigDict, Field
 
+from pallas.core.foundation.logging import log_rate_limited
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.kernel.memory_governance import can_read_persistent_memory
 from pallas.product.llm.knowledge.vector_backend import vector_retrieve_mode
@@ -124,6 +126,56 @@ def memory_source_section(source: str) -> str:
     return "【相关群内记忆】"
 
 
+def memory_trace_entry(item: dict[str, Any]) -> dict[str, object]:
+    source = str(item.get("source") or "").strip() or "memory"
+    content = str(item.get("content") or "").strip()
+    text_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+    entry_id = item.get("id")
+    stable_id = f"memory:{int(entry_id)}" if str(entry_id or "").isdigit() else f"memory:{source}:{text_hash}"
+    return {
+        "entry_id": stable_id,
+        "source": source,
+        "score": int(item.get("score") or 0),
+        "text_hash": text_hash,
+        "text_preview": content[:120],
+    }
+
+
+def rank_memory_hits_by_feedback(
+    hits: list[dict[str, Any]], *, bot_id: int, group_id: int | None
+) -> list[dict[str, Any]]:
+    if group_id is None or int(group_id) <= 0:
+        return list(hits)
+    try:
+        from pallas.product.llm.injection_feedback import effective_source_score
+
+        ranked: list[tuple[float, int, dict[str, Any]]] = []
+        has_negative_score = False
+        for index, item in enumerate(hits):
+            source_id = str(memory_trace_entry(item)["entry_id"])
+            score = effective_source_score(int(bot_id), int(group_id), "memory", source_id)
+            if score <= -3.0:
+                continue
+            has_negative_score = has_negative_score or score < 0.0
+            base_score = float(item.get("score") or 0.0)
+            ranked.append((base_score + min(score, 0.0), index, item))
+        if not has_negative_score:
+            return [item for _score, _index, item in ranked]
+        ranked.sort(key=lambda item: (-item[0], item[1]))
+        return [item for _score, _index, item in ranked]
+    except Exception as exc:
+        log_rate_limited(
+            logger,
+            "warning",
+            "llm.injection_governance.memory_rank_failed",
+            "memory injection governance ranking failed for bot [{}] and group [{}]: [{}]",
+            bot_id,
+            group_id,
+            exc,
+        )
+        return list(hits)
+
+
 def format_memory_blocks(hits: list[dict[str, Any]], *, max_len: int) -> str:
     """按来源分块渲染已召回记忆；总条数由上游 top_k 控制。"""
     grouped: dict[str, list[str]] = {}
@@ -238,25 +290,20 @@ async def enrich_system_with_memory_context(
             hits.append(hit)
             if len(hits) >= top_k:
                 break
-    lines = [
-        sanitize_prompt_block(str(item.get("content") or ""), max_len=c.llm_memory_content_max_len) for item in hits
-    ]
-    lines = [line for line in lines if line]
+    hits = rank_memory_hits_by_feedback(hits, bot_id=bot_id, group_id=group_id)
+    selected_hits: list[dict[str, Any]] = []
+    selected_content: set[str] = set()
+    for item in hits:
+        content = sanitize_prompt_block(str(item.get("content") or ""), max_len=c.llm_memory_content_max_len)
+        if not content or content in selected_content:
+            continue
+        selected_content.add(content)
+        selected_hits.append(item)
     trace = {
-        "hit_count": len(lines),
+        "hit_count": len(selected_hits),
         "retrieve_mode": vector_retrieve_mode(c),
-        "sources": sorted({
-            str(item.get("source") or "").strip() or "memory" for item in hits if str(item.get("content") or "").strip()
-        }),
-        "entries": [
-            {
-                "source": str(item.get("source") or "").strip() or "memory",
-                "score": int(item.get("score") or 0),
-                "content": str(item.get("content") or "").strip()[:120],
-            }
-            for item in hits
-            if str(item.get("content") or "").strip()
-        ],
+        "sources": sorted({str(item.get("source") or "").strip() or "memory" for item in selected_hits}),
+        "entries": [memory_trace_entry(item) for item in selected_hits],
         "skipped_current_turn_echoes": skipped_current_turn_echoes,
         "memory_plan": plan.model_dump(mode="json"),
     }
@@ -266,7 +313,7 @@ async def enrich_system_with_memory_context(
     try:
         from pallas.product.llm.memory_rag_metrics import record_memory_rag_query_result
 
-        if lines:
+        if selected_hits:
             record_memory_rag_query_result(
                 hit=True,
                 documents=[
@@ -276,17 +323,16 @@ async def enrich_system_with_memory_context(
                         or "memory",
                         str(item.get("source") or "").strip() or "memory",
                     )
-                    for item in hits
-                    if str(item.get("content") or "").strip()
+                    for item in selected_hits
                 ],
             )
         else:
             record_memory_rag_query_result(hit=False)
     except Exception:
         pass
-    if not lines:
+    if not selected_hits:
         return MemoryInjectionResult(system_prompt=system_prompt, trace=trace)
-    block = format_memory_blocks(hits, max_len=c.llm_memory_content_max_len)
+    block = format_memory_blocks(selected_hits, max_len=c.llm_memory_content_max_len)
     if not block:
         return MemoryInjectionResult(system_prompt=system_prompt, trace=trace)
     base = (system_prompt or "").rstrip()

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.3.6-10-g71d49aa6",
+    "version": "v4.3.7-52-g9d473fbd-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -3277,6 +3277,370 @@
         }
       }
     },
+    "/pallas/api/common-config/llm/persona/prompt-preview": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Persona Prompt Preview Post",
+        "operationId": "_llm_persona_prompt_preview_post_pallas_api_common_config_llm_persona_prompt_preview_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_PromptPreviewBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/persona/prompt-preview/try": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Persona Prompt Preview Try Post",
+        "operationId": "_llm_persona_prompt_preview_try_post_pallas_api_common_config_llm_persona_prompt_preview_try_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_PromptTrialBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/persona/prompt-overrides": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Persona Prompt Overrides Get",
+        "operationId": "_llm_persona_prompt_overrides_get_pallas_api_common_config_llm_persona_prompt_overrides_get",
+        "parameters": [
+          {
+            "name": "bot_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Bot Id"
+            }
+          },
+          {
+            "name": "group_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Persona Prompt Overrides Put",
+        "operationId": "_llm_persona_prompt_overrides_put_pallas_api_common_config_llm_persona_prompt_overrides_put",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_PromptOverridesBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/pallas/api/common-config/llm/persona/group-style": {
       "get": {
         "tags": [
@@ -3383,6 +3747,706 @@
                 "schema": {
                   "$ref": "#/components/schemas/_ApiOkResponse_GroupExpressionProfile_"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/persona/group-style/manage": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Persona Group Style Manage Get",
+        "operationId": "_llm_persona_group_style_manage_get_pallas_api_common_config_llm_persona_group_style_manage_get",
+        "parameters": [
+          {
+            "name": "bot_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Bot QQ",
+              "title": "Bot Id"
+            },
+            "description": "Bot QQ"
+          },
+          {
+            "name": "group_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "群号",
+              "title": "Group Id"
+            },
+            "description": "群号"
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse__GroupStyleGovernanceData_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Persona Group Style Manage Post",
+        "operationId": "_llm_persona_group_style_manage_post_pallas_api_common_config_llm_persona_group_style_manage_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_GroupStyleManageBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse__GroupStyleGovernanceData_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/persona/base-prompt": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Persona Base Prompt Get",
+        "operationId": "_llm_persona_base_prompt_get_pallas_api_common_config_llm_persona_base_prompt_get",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse__BasePromptPreviewData_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/persona/base-prompt/content": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Persona Base Prompt Content",
+        "operationId": "_llm_persona_base_prompt_content_pallas_api_common_config_llm_persona_base_prompt_content_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/persona/base-prompt/save": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Persona Base Prompt Save",
+        "operationId": "_llm_persona_base_prompt_save_pallas_api_common_config_llm_persona_base_prompt_save_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_BasePromptSaveBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/persona/base-prompt/restore": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Persona Base Prompt Restore",
+        "operationId": "_llm_persona_base_prompt_restore_pallas_api_common_config_llm_persona_base_prompt_restore_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_BasePromptRestoreBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/persona/base-prompt/clear": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Persona Base Prompt Clear",
+        "operationId": "_llm_persona_base_prompt_clear_pallas_api_common_config_llm_persona_base_prompt_clear_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/persona/base-prompt/enabled": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Persona Base Prompt Enabled",
+        "operationId": "_llm_persona_base_prompt_enabled_pallas_api_common_config_llm_persona_base_prompt_enabled_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_BasePromptEnabledBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -19646,6 +20710,18 @@
         "operationId": "_llm_repeater_feedback_get_pallas_api_llm_repeater_feedback_get",
         "parameters": [
           {
+            "name": "bot_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Bot QQ",
+              "title": "Bot Id"
+            },
+            "description": "Bot QQ"
+          },
+          {
             "name": "group_id",
             "in": "query",
             "required": true,
@@ -19843,6 +20919,210 @@
         }
       }
     },
+    "/pallas/api/llm/repeater-feedback/governance": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Repeater Feedback Governance Get",
+        "operationId": "_llm_repeater_feedback_governance_get_pallas_api_llm_repeater_feedback_governance_get",
+        "parameters": [
+          {
+            "name": "bot_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Bot QQ",
+              "title": "Bot Id"
+            },
+            "description": "Bot QQ"
+          },
+          {
+            "name": "group_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "群号",
+              "title": "Group Id"
+            },
+            "description": "群号"
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/llm/repeater-feedback/governance/manage": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Repeater Feedback Governance Manage",
+        "operationId": "_llm_repeater_feedback_governance_manage_pallas_api_llm_repeater_feedback_governance_manage_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InjectionGovernanceManageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/pallas/api/llm/repeater-feedback/manage": {
       "post": {
         "tags": [
@@ -19942,6 +21222,18 @@
         "summary": " Llm Repeater Feedback Promotion Candidates Get",
         "operationId": "_llm_repeater_feedback_promotion_candidates_get_pallas_api_llm_repeater_feedback_promotion_candidates_get",
         "parameters": [
+          {
+            "name": "bot_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Bot QQ",
+              "title": "Bot Id"
+            },
+            "description": "Bot QQ"
+          },
           {
             "name": "group_id",
             "in": "query",
@@ -20328,9 +21620,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "additionalProperties": true,
-                "title": "Body"
+                "$ref": "#/components/schemas/_ExpressionBankResolveRequest"
               }
             }
           }
@@ -21582,6 +22872,97 @@
         ],
         "summary": " Llm Conversation Kernel Relationship Notes Set Affinity",
         "operationId": "_llm_conversation_kernel_relationship_notes_set_affinity_pallas_api_llm_conversation_kernel_relationship_notes_set_affinity_post",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "Body"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/llm/conversation-kernel/relationship-notes/clear-rage": {
+      "post": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Conversation Kernel Relationship Notes Clear Rage",
+        "operationId": "_llm_conversation_kernel_relationship_notes_clear_rage_pallas_api_llm_conversation_kernel_relationship_notes_clear_rage_post",
         "parameters": [
           {
             "name": "token",
@@ -31314,6 +32695,68 @@
         ],
         "title": "IngressDispatchHistoryPoint"
       },
+      "InjectionGovernanceManageRequest": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "undo_outcome",
+              "restore_expression",
+              "restore_semantic"
+            ],
+            "title": "Action"
+          },
+          "bot_id": {
+            "type": "string",
+            "title": "Bot Id"
+          },
+          "group_id": {
+            "type": "string",
+            "title": "Group Id"
+          },
+          "outcome_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome Id"
+          },
+          "entry_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entry Id"
+          },
+          "source_example_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Example Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action",
+          "bot_id",
+          "group_id"
+        ],
+        "title": "InjectionGovernanceManageRequest"
+      },
       "LifecycleCatalogModel": {
         "properties": {
           "backend": {
@@ -33211,6 +34654,28 @@
         ],
         "title": "_ApiOkResponse[_AiExtensionTestData]"
       },
+      "_ApiOkResponse__BasePromptPreviewData_": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/_BasePromptPreviewData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "_ApiOkResponse[_BasePromptPreviewData]"
+      },
       "_ApiOkResponse__ConsoleLoginChangeData_": {
         "properties": {
           "ok": {
@@ -33254,6 +34719,28 @@
           "data"
         ],
         "title": "_ApiOkResponse[_ConsoleSetupStatusData]"
+      },
+      "_ApiOkResponse__GroupStyleGovernanceData_": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/_GroupStyleGovernanceData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "_ApiOkResponse[_GroupStyleGovernanceData]"
       },
       "_ApiOkResponse__LlmEmbeddingStatusData_": {
         "properties": {
@@ -33452,6 +34939,129 @@
           "data"
         ],
         "title": "_ApiOkResponse[_StickerLabelOverviewData]"
+      },
+      "_BasePromptEnabledBody": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "_BasePromptEnabledBody"
+      },
+      "_BasePromptPreviewData": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": false
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode",
+            "default": "append"
+          },
+          "builtin_sha256": {
+            "type": "string",
+            "title": "Builtin Sha256",
+            "default": ""
+          },
+          "builtin_updated": {
+            "type": "boolean",
+            "title": "Builtin Updated",
+            "default": false
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At",
+            "default": ""
+          },
+          "text_preview": {
+            "type": "string",
+            "title": "Text Preview",
+            "default": ""
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/_BasePromptPreviewVersion"
+            },
+            "type": "array",
+            "title": "Versions"
+          }
+        },
+        "type": "object",
+        "title": "_BasePromptPreviewData"
+      },
+      "_BasePromptPreviewVersion": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode",
+            "default": "append"
+          },
+          "builtin_sha256": {
+            "type": "string",
+            "title": "Builtin Sha256",
+            "default": ""
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "title": "_BasePromptPreviewVersion"
+      },
+      "_BasePromptRestoreBody": {
+        "properties": {
+          "version_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Version Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "version_id"
+        ],
+        "title": "_BasePromptRestoreBody"
+      },
+      "_BasePromptSaveBody": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "append",
+              "replace"
+            ],
+            "title": "Mode"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mode",
+          "text"
+        ],
+        "title": "_BasePromptSaveBody"
       },
       "_BotConfigPatch": {
         "properties": {
@@ -34039,6 +35649,35 @@
         ],
         "title": "_DbTableRowUpsertBody"
       },
+      "_ExpressionBankResolveRequest": {
+        "properties": {
+          "entry_id": {
+            "type": "string",
+            "title": "Entry Id"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "reject",
+              "restore"
+            ],
+            "title": "Action"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "entry_id",
+          "action"
+        ],
+        "title": "_ExpressionBankResolveRequest"
+      },
       "_FilesCreateBody": {
         "properties": {
           "parent": {
@@ -34393,6 +36032,88 @@
           "group_id"
         ],
         "title": "_GroupFleetWhitelistEntryBody"
+      },
+      "_GroupStyleGovernanceData": {
+        "properties": {
+          "collection_enabled": {
+            "type": "boolean",
+            "title": "Collection Enabled"
+          },
+          "injection_enabled": {
+            "type": "boolean",
+            "title": "Injection Enabled"
+          }
+        },
+        "type": "object",
+        "required": [
+          "collection_enabled",
+          "injection_enabled"
+        ],
+        "title": "_GroupStyleGovernanceData"
+      },
+      "_GroupStyleManageBody": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "collection",
+              "injection",
+              "clear",
+              "rebuild"
+            ],
+            "title": "Action"
+          },
+          "bot_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bot Id"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Enabled"
+          },
+          "continue_learning": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Continue Learning"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "_GroupStyleManageBody"
       },
       "_HelpMenuVisibilityBody": {
         "properties": {
@@ -36108,6 +37829,138 @@
         "type": "object",
         "title": "_PluginGovernanceBody"
       },
+      "_PromptOverrideBody": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "replace",
+              "append",
+              "disable"
+            ],
+            "title": "Mode"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 12000,
+            "title": "Content"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "mode",
+          "content"
+        ],
+        "title": "_PromptOverrideBody"
+      },
+      "_PromptOverridesBody": {
+        "properties": {
+          "bot_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Bot Id"
+          },
+          "group_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Group Id"
+          },
+          "sections": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/_PromptOverrideBody"
+            },
+            "type": "object",
+            "title": "Sections"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bot_id",
+          "group_id"
+        ],
+        "title": "_PromptOverridesBody"
+      },
+      "_PromptPreviewBody": {
+        "properties": {
+          "bot_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Bot Id"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id"
+          },
+          "user_id": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "User Id",
+            "default": 0
+          },
+          "query_text": {
+            "type": "string",
+            "maxLength": 4000,
+            "title": "Query Text",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bot_id"
+        ],
+        "title": "_PromptPreviewBody"
+      },
+      "_PromptTrialBody": {
+        "properties": {
+          "bot_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Bot Id"
+          },
+          "group_id": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Group Id"
+          },
+          "user_id": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "User Id"
+          },
+          "system_prompt": {
+            "type": "string",
+            "minLength": 1,
+            "title": "System Prompt"
+          },
+          "query_text": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Query Text"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "bot_id",
+          "group_id",
+          "user_id",
+          "system_prompt",
+          "query_text"
+        ],
+        "title": "_PromptTrialBody"
+      },
       "_RequestActionBody": {
         "properties": {
           "self_id": {
@@ -36274,7 +38127,9 @@
               "rebuild",
               "quality",
               "recover",
-              "disable"
+              "disable",
+              "enable",
+              "set_governance"
             ],
             "title": "Action"
           },
@@ -36314,6 +38169,39 @@
                 "type": "null"
               }
             ]
+          },
+          "collection_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Collection Enabled"
+          },
+          "injection_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Injection Enabled"
+          },
+          "continue_learning": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Continue Learning"
           }
         },
         "additionalProperties": false,
@@ -36513,6 +38401,16 @@
           "enabled": {
             "type": "boolean",
             "title": "Enabled",
+            "default": true
+          },
+          "collection_enabled": {
+            "type": "boolean",
+            "title": "Collection Enabled",
+            "default": true
+          },
+          "injection_enabled": {
+            "type": "boolean",
+            "title": "Injection Enabled",
             "default": true
           },
           "overrides": {

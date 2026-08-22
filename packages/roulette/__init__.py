@@ -9,6 +9,7 @@ from pallas.api.metadata import (
     join_usage,
     usage_line,
 )
+from pallas.api.platform import group_admin_owner_ingress_route
 from pallas.product.llm.knowledge.declare import knowledge_source_row
 from pallas.product.llm.tools.declare import llm_command_tool_row
 
@@ -33,7 +34,7 @@ __plugin_meta__ = PluginMetadata(
         "version": PLUGIN_EXTRA_VERSION,
         "menu_template": PLUGIN_MENU_TEMPLATE,
         "reload_policy": "metadata",
-        "ingress_route": {"passive": True},
+        "ingress_route": group_admin_owner_ingress_route(passive=True),
         "exact_plaintexts": [
             "牛牛轮盘",
             "牛牛轮盘踢人",
@@ -43,18 +44,6 @@ __plugin_meta__ = PluginMetadata(
             "牛牛开枪",
         ],
         "command_prefixes": ["牛牛救一下", "牛牛补一枪"],
-        "ingress_fanout": {
-            "scope": "always",
-            "plaintexts": [
-                "牛牛轮盘",
-                "牛牛轮盘踢人",
-                "牛牛轮盘禁言",
-                "牛牛踢人轮盘",
-                "牛牛禁言轮盘",
-                "牛牛开枪",
-            ],
-            "prefixes": ["牛牛救一下", "牛牛补一枪"],
-        },
         "command_permissions": command_perm_list(
             command_perm_row("roulette.start", "牛牛轮盘"),
             command_perm_row("roulette.shot", "牛牛开枪"),

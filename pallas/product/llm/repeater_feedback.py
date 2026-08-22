@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -9,16 +10,22 @@ import time
 from collections import deque
 from pathlib import Path
 from threading import RLock
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from nonebot import logger
 from pydantic import BaseModel, ConfigDict, Field
 
+from pallas.core.foundation.logging import log_rate_limited
 from pallas.core.foundation.paths import plugin_data_dir
 from pallas.core.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE
+from pallas.product.llm.injection_feedback import InjectionSnapshot, NegativeOutcomeApplyResult
 from pallas.product.llm.kernel.memory_governance import (
     can_collect_feedback,
     can_promote_writeback,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 _BLOCKED_SOURCE_TAGS = {"memory", "relationship", "tool", "knowledge"}
 _MAX_REPLY_LEN = 32
@@ -60,6 +67,7 @@ class LlmRepeaterFeedbackEntry(BaseModel):
     bot_message_id: int = 0
     semantic_source_example_id: str = ""
     semantic_scene: str = ""
+    injection_snapshot: InjectionSnapshot = Field(default_factory=InjectionSnapshot)
 
 
 _GROUP_ENTRIES_CACHE_TTL_SEC = 5.0
@@ -95,16 +103,19 @@ def clear_group_feedback_entries_cache() -> None:
         _bot_message_index = {}
 
 
-def feedback_base_dir() -> Path:
+def feedback_base_dir(*, create: bool = True) -> Path:
     env_dir = str(os.environ.get("PALLAS_DATA_DIR") or "").strip()
     if env_dir:
         root = Path(env_dir)
-        root.mkdir(parents=True, exist_ok=True)
+        if create:
+            root.mkdir(parents=True, exist_ok=True)
         path = root / "llm_repeater_feedback"
-        path.mkdir(parents=True, exist_ok=True)
+        if create:
+            path.mkdir(parents=True, exist_ok=True)
         return path
-    path = plugin_data_dir("pb_webui", create=True) / "llm_repeater_feedback"
-    path.mkdir(parents=True, exist_ok=True)
+    path = plugin_data_dir("pb_webui", create=create) / "llm_repeater_feedback"
+    if create:
+        path.mkdir(parents=True, exist_ok=True)
     return path
 
 
@@ -258,6 +269,7 @@ def build_feedback_entry(**kwargs: Any) -> LlmRepeaterFeedbackEntry:
         bot_message_id=int(kwargs.get("bot_message_id") or 0),
         semantic_source_example_id=str(kwargs.get("semantic_source_example_id") or "").strip(),
         semantic_scene=str(kwargs.get("semantic_scene") or "").strip(),
+        injection_snapshot=InjectionSnapshot.model_validate(kwargs.get("injection_snapshot") or {}),
     )
 
 
@@ -326,6 +338,25 @@ def _write_feedback_entries(rows: list[LlmRepeaterFeedbackEntry]) -> None:
     clear_group_feedback_entries_cache()
 
 
+def _mutate_feedback_entries[T](
+    mutation: Callable[[list[LlmRepeaterFeedbackEntry]], tuple[T, bool]],
+) -> T:
+    from pallas.core.foundation.fs_lock import atomic_write_text, interprocess_file_lock
+
+    path = feedback_base_dir(create=False) / "entries.jsonl"
+    if not path.exists():
+        return mutation([])[0]
+    with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):
+        rows = list(_iter_feedback_entries(path))
+        result, changed = mutation(rows)
+        if changed:
+            body = "".join(json.dumps(item.model_dump(mode="json"), ensure_ascii=False) + "\n" for item in rows)
+            atomic_write_text(path, body)
+    if changed:
+        clear_group_feedback_entries_cache()
+    return result
+
+
 def _load_all_feedback_entries() -> list[LlmRepeaterFeedbackEntry]:
     path = feedback_entries_path()
     if not path.exists():
@@ -333,15 +364,45 @@ def _load_all_feedback_entries() -> list[LlmRepeaterFeedbackEntry]:
     return list(_iter_feedback_entries(path))
 
 
-def find_feedback_entry(*, entry_id: str = "", request_id: str = "") -> LlmRepeaterFeedbackEntry | None:
+def _feedback_entry_matches(
+    item: LlmRepeaterFeedbackEntry,
+    *,
+    target_entry_id: str,
+    target_request_id: str,
+    bot_id: int | None,
+    group_id: int | None,
+) -> bool:
+    if not (
+        (target_entry_id and str(item.entry_id).strip() == target_entry_id)
+        or (target_request_id and str(item.request_id).strip() == target_request_id)
+    ):
+        return False
+    if bot_id is None and group_id is None:
+        return True
+    if bot_id is None or group_id is None:
+        return False
+    return int(item.bot_id) == int(bot_id) and int(item.group_id) == int(group_id)
+
+
+def find_feedback_entry(
+    *,
+    entry_id: str = "",
+    request_id: str = "",
+    bot_id: int | None = None,
+    group_id: int | None = None,
+) -> LlmRepeaterFeedbackEntry | None:
     target_entry_id = str(entry_id or "").strip()
     target_request_id = str(request_id or "").strip()
     if not target_entry_id and not target_request_id:
         return None
     for item in reversed(_load_all_feedback_entries()):
-        if target_entry_id and str(item.entry_id).strip() == target_entry_id:
-            return item
-        if target_request_id and str(item.request_id).strip() == target_request_id:
+        if _feedback_entry_matches(
+            item,
+            target_entry_id=target_entry_id,
+            target_request_id=target_request_id,
+            bot_id=bot_id,
+            group_id=group_id,
+        ):
             return item
     return None
 
@@ -350,18 +411,284 @@ def find_feedback_entry_by_bot_message_id(
     *, bot_id: int, group_id: int, bot_message_id: int
 ) -> LlmRepeaterFeedbackEntry | None:
     global _bot_message_index_path, _bot_message_index_revision, _bot_message_index
-    path = feedback_entries_path()
+    path = feedback_base_dir(create=False) / "entries.jsonl"
     path_key = _feedback_entries_path_key(path)
     revision = _feedback_entries_revision(path)
     with _group_entries_index_lock:
         if _bot_message_index_path != path_key or _bot_message_index_revision != revision:
-            rows = deque(_iter_feedback_entries(path), maxlen=4096) if path.exists() else ()
+            try:
+                rows = deque(_iter_feedback_entries(path), maxlen=4096) if path.exists() else ()
+            except OSError:
+                log_rate_limited(
+                    logger,
+                    "warning",
+                    "llm.repeater_feedback.message_lookup_read_failed",
+                    "LLM feedback message lookup read failed for bot [{}] in group [{}]",
+                    bot_id,
+                    group_id,
+                )
+                return None
             _bot_message_index = {
                 (item.bot_id, item.group_id, item.bot_message_id): item for item in rows if item.bot_message_id > 0
             }
             _bot_message_index_path = path_key
             _bot_message_index_revision = revision
-        return _bot_message_index.get((int(bot_id), int(group_id), int(bot_message_id)))
+        cached = _bot_message_index.get((int(bot_id), int(group_id), int(bot_message_id)))
+    if cached is not None:
+        return cached
+    return _find_feedback_entry_by_bot_message_id_fallback(
+        path,
+        bot_id=int(bot_id),
+        group_id=int(group_id),
+        bot_message_id=int(bot_message_id),
+    )
+
+
+def _find_feedback_entry_by_bot_message_id_fallback(
+    path: Path,
+    *,
+    bot_id: int,
+    group_id: int,
+    bot_message_id: int,
+) -> LlmRepeaterFeedbackEntry | None:
+    if not path.exists():
+        return None
+    try:
+        with path.open(encoding="utf-8", errors="replace") as handle:
+            for raw_line in handle:
+                try:
+                    payload = json.loads(raw_line)
+                except (TypeError, ValueError):
+                    continue
+                if not isinstance(payload, dict):
+                    continue
+                try:
+                    if (
+                        int(payload.get("bot_id") or 0) != bot_id
+                        or int(payload.get("group_id") or 0) != group_id
+                        or int(payload.get("bot_message_id") or 0) != bot_message_id
+                    ):
+                        continue
+                    return LlmRepeaterFeedbackEntry.model_validate(payload)
+                except (TypeError, ValueError):
+                    continue
+    except OSError:
+        log_rate_limited(
+            logger,
+            "warning",
+            "llm.repeater_feedback.message_lookup_read_failed",
+            "LLM feedback message lookup read failed for bot [{}] in group [{}]",
+            bot_id,
+            group_id,
+        )
+    return None
+
+
+async def apply_llm_negative_feedback_for_bot_message(
+    *,
+    bot_id: str,
+    group_id: str,
+    bot_message_id: str,
+    actor_id: str,
+    reason: str,
+) -> NegativeOutcomeApplyResult | None:
+    """Apply the single group-scoped negative outcome for a delivered LLM reply."""
+    try:
+        entry = await asyncio.to_thread(
+            find_feedback_entry_by_bot_message_id,
+            bot_id=int(bot_id),
+            group_id=int(group_id),
+            bot_message_id=int(bot_message_id),
+        )
+        if entry is None:
+            return None
+        from pallas.product.llm.injection_feedback import apply_negative_outcome
+
+        result = await asyncio.to_thread(
+            apply_negative_outcome,
+            outcome_id=f"{entry.entry_id}:not-allowed",
+            bot_id=entry.bot_id,
+            group_id=entry.group_id,
+            reply_text=entry.reply_text,
+            injection_snapshot=entry.injection_snapshot,
+            actor_id=str(actor_id),
+            reason=str(reason),
+        )
+    except Exception:
+        log_rate_limited(
+            logger,
+            "warning",
+            "llm.repeater_feedback.negative_apply_failed",
+            "LLM negative feedback apply failed for bot [{}] in group [{}]",
+            bot_id,
+            group_id,
+        )
+        return None
+    await apply_negative_feedback_source_decisions(entry, result)
+    return result
+
+
+async def apply_negative_feedback_source_decisions(
+    entry: LlmRepeaterFeedbackEntry,
+    result: NegativeOutcomeApplyResult,
+) -> None:
+    """Apply source-owned mutations after a newly persisted governance outcome."""
+    from pallas.product.llm.injection_feedback import (
+        begin_negative_outcome_effect,
+        claim_negative_outcome_effect,
+        mark_negative_outcome_effect_completed,
+        release_negative_outcome_effect_claim,
+    )
+
+    expression_ids = group_scoped_expression_ids(entry, result)
+    if expression_ids:
+        claimed = await asyncio.to_thread(
+            claim_negative_outcome_effect,
+            outcome_id=result.outcome_id,
+            bot_id=result.bot_id,
+            group_id=result.group_id,
+            kind="expression",
+        )
+        if claimed:
+            begun = await asyncio.to_thread(
+                begin_negative_outcome_effect,
+                outcome_id=result.outcome_id,
+                bot_id=result.bot_id,
+                group_id=result.group_id,
+                kind="expression",
+                lease_id=claimed,
+            )
+            if begun:
+                try:
+                    await asyncio.to_thread(apply_expression_negative_feedback, entry, result, expression_ids)
+                except Exception:
+                    await asyncio.to_thread(
+                        release_negative_outcome_effect_claim,
+                        outcome_id=result.outcome_id,
+                        bot_id=result.bot_id,
+                        group_id=result.group_id,
+                        kind="expression",
+                        lease_id=claimed,
+                    )
+                    log_rate_limited(
+                        logger,
+                        "warning",
+                        "llm.repeater_feedback.expression_apply_failed",
+                        "LLM negative feedback expression update failed for bot [{}] in group [{}]",
+                        entry.bot_id,
+                        entry.group_id,
+                    )
+                else:
+                    await asyncio.to_thread(
+                        mark_negative_outcome_effect_completed,
+                        outcome_id=result.outcome_id,
+                        bot_id=result.bot_id,
+                        group_id=result.group_id,
+                        kind="expression",
+                        lease_id=claimed,
+                    )
+
+    aliases = [
+        decision.source_id
+        for decision in result.decisions
+        if decision.kind == "self_alias" and decision.remove_alias and decision.source_id
+    ]
+    if aliases:
+        claimed = await asyncio.to_thread(
+            claim_negative_outcome_effect,
+            outcome_id=result.outcome_id,
+            bot_id=result.bot_id,
+            group_id=result.group_id,
+            kind="self_alias",
+        )
+        if claimed:
+            begun = await asyncio.to_thread(
+                begin_negative_outcome_effect,
+                outcome_id=result.outcome_id,
+                bot_id=result.bot_id,
+                group_id=result.group_id,
+                kind="self_alias",
+                lease_id=claimed,
+            )
+            if begun:
+                try:
+                    from pallas.product.persona.self_identity import remove_learned_self_aliases
+
+                    await remove_learned_self_aliases(entry.bot_id, aliases)
+                except Exception:
+                    await asyncio.to_thread(
+                        release_negative_outcome_effect_claim,
+                        outcome_id=result.outcome_id,
+                        bot_id=result.bot_id,
+                        group_id=result.group_id,
+                        kind="self_alias",
+                        lease_id=claimed,
+                    )
+                    log_rate_limited(
+                        logger,
+                        "warning",
+                        "llm.repeater_feedback.alias_apply_failed",
+                        "LLM negative feedback alias update failed for bot [{}] in group [{}]",
+                        entry.bot_id,
+                        entry.group_id,
+                    )
+                else:
+                    await asyncio.to_thread(
+                        mark_negative_outcome_effect_completed,
+                        outcome_id=result.outcome_id,
+                        bot_id=result.bot_id,
+                        group_id=result.group_id,
+                        kind="self_alias",
+                        lease_id=claimed,
+                    )
+
+
+def group_scoped_expression_ids(
+    entry: LlmRepeaterFeedbackEntry,
+    result: NegativeOutcomeApplyResult,
+) -> list[str]:
+    from pallas.product.persona.expression_bank import _group_id_from_entry_id
+
+    expression_ids: list[str] = []
+    for decision in result.decisions:
+        if decision.kind != "expression" or decision.score >= 0 or not decision.source_id:
+            continue
+        source_group_id = _group_id_from_entry_id(decision.source_id)
+        if source_group_id == int(entry.group_id):
+            expression_ids.append(decision.source_id)
+            continue
+        log_rate_limited(
+            logger,
+            "warning",
+            "llm.repeater_feedback.expression_scope_mismatch",
+            "Ignored LLM negative feedback expression [{}] outside group [{}]",
+            decision.source_id,
+            entry.group_id,
+        )
+    return expression_ids
+
+
+def apply_expression_negative_feedback(
+    entry: LlmRepeaterFeedbackEntry,
+    result: NegativeOutcomeApplyResult,
+    expression_ids: list[str],
+) -> None:
+    from pallas.product.persona.expression_bank import (
+        expression_scene_feedback_score,
+        record_expression_outcome,
+    )
+    from pallas.product.persona.expression_promote import resolve_expression
+
+    scene = entry.behavior_scene or ""
+    record_expression_outcome(
+        expression_ids,
+        scene=scene,
+        score_delta=-3,
+        outcome_id=result.outcome_id,
+    )
+    for entry_id in expression_ids:
+        if expression_scene_feedback_score(entry_id, scene=scene) <= -3:
+            resolve_expression(entry_id, action="reject", reason="llm_negative_feedback")
 
 
 def record_quoted_semantic_style_feedback(
@@ -413,6 +740,8 @@ def set_feedback_entry_correction(
     *,
     entry_id: str = "",
     request_id: str = "",
+    bot_id: int | None = None,
+    group_id: int | None = None,
     corrected_reply_text: str,
     create_fields: dict[str, Any] | None = None,
 ) -> LlmRepeaterFeedbackEntry | None:
@@ -425,24 +754,29 @@ def set_feedback_entry_correction(
     target_entry_id = str(entry_id or "").strip()
     target_request_id = str(request_id or "").strip()
     now = int(time.time())
-    rows = _load_all_feedback_entries()
-    for idx, item in enumerate(rows):
-        matched = False
-        if target_entry_id and str(item.entry_id).strip() == target_entry_id:
-            matched = True
-        elif target_request_id and str(item.request_id).strip() == target_request_id:
-            matched = True
-        if not matched:
-            continue
-        item.corrected_reply_text = text
-        item.corrected_at = now
-        item.eligible_for_bias = True
-        rows[idx] = item
-        _write_feedback_entries(rows)
+
+    def update(rows: list[LlmRepeaterFeedbackEntry]) -> tuple[LlmRepeaterFeedbackEntry | None, bool]:
+        for idx, item in enumerate(rows):
+            if _feedback_entry_matches(
+                item,
+                target_entry_id=target_entry_id,
+                target_request_id=target_request_id,
+                bot_id=bot_id,
+                group_id=group_id,
+            ):
+                updated = item.model_copy(
+                    update={"corrected_reply_text": text, "corrected_at": now, "eligible_for_bias": True}
+                )
+                rows[idx] = updated
+                return updated, True
+        return None, False
+
+    updated = _mutate_feedback_entries(update)
+    if updated is not None:
         from pallas.product.llm.promotion_candidates import note_feedback_entry_for_promotion
 
-        note_feedback_entry_for_promotion(item)
-        return item
+        note_feedback_entry_for_promotion(updated)
+        return updated
 
     payload = dict(create_fields or {})
     if not payload:
@@ -468,84 +802,102 @@ def set_feedback_entry_correction(
     return entry
 
 
-def clear_feedback_entry_correction(*, entry_id: str = "", request_id: str = "") -> LlmRepeaterFeedbackEntry | None:
+def clear_feedback_entry_correction(
+    *,
+    entry_id: str = "",
+    request_id: str = "",
+    bot_id: int | None = None,
+    group_id: int | None = None,
+) -> LlmRepeaterFeedbackEntry | None:
     target_entry_id = str(entry_id or "").strip()
     target_request_id = str(request_id or "").strip()
     if not target_entry_id and not target_request_id:
         return None
-    rows = _load_all_feedback_entries()
-    updated: LlmRepeaterFeedbackEntry | None = None
-    for idx, item in enumerate(rows):
-        matched = False
-        if target_entry_id and str(item.entry_id).strip() == target_entry_id:
-            matched = True
-        elif target_request_id and str(item.request_id).strip() == target_request_id:
-            matched = True
-        if not matched:
-            continue
-        item.corrected_reply_text = ""
-        item.corrected_at = 0
-        rows[idx] = item
-        updated = item
-        break
-    if updated is None:
-        return None
-    _write_feedback_entries(rows)
-    return updated
+
+    def clear(rows: list[LlmRepeaterFeedbackEntry]) -> tuple[LlmRepeaterFeedbackEntry | None, bool]:
+        for idx, item in enumerate(rows):
+            if _feedback_entry_matches(
+                item,
+                target_entry_id=target_entry_id,
+                target_request_id=target_request_id,
+                bot_id=bot_id,
+                group_id=group_id,
+            ):
+                if not str(item.corrected_reply_text or "").strip() and not item.corrected_at:
+                    return item, False
+                updated = item.model_copy(update={"corrected_reply_text": "", "corrected_at": 0})
+                rows[idx] = updated
+                return updated, True
+        return None, False
+
+    return _mutate_feedback_entries(clear)
 
 
 def set_feedback_entry_eligibility(
     *,
     entry_id: str = "",
     request_id: str = "",
+    bot_id: int | None = None,
+    group_id: int | None = None,
     eligible_for_bias: bool,
 ) -> LlmRepeaterFeedbackEntry | None:
     target_entry_id = str(entry_id or "").strip()
     target_request_id = str(request_id or "").strip()
     if not target_entry_id and not target_request_id:
         return None
-    rows = _load_all_feedback_entries()
-    updated: LlmRepeaterFeedbackEntry | None = None
-    for idx, item in enumerate(rows):
-        matched = False
-        if target_entry_id and str(item.entry_id).strip() == target_entry_id:
-            matched = True
-        elif target_request_id and str(item.request_id).strip() == target_request_id:
-            matched = True
-        if not matched:
-            continue
-        item.eligible_for_bias = bool(eligible_for_bias)
-        rows[idx] = item
-        updated = item
-        break
-    if updated is None:
-        return None
-    _write_feedback_entries(rows)
-    return updated
+
+    def update(rows: list[LlmRepeaterFeedbackEntry]) -> tuple[LlmRepeaterFeedbackEntry | None, bool]:
+        for idx, item in enumerate(rows):
+            if _feedback_entry_matches(
+                item,
+                target_entry_id=target_entry_id,
+                target_request_id=target_request_id,
+                bot_id=bot_id,
+                group_id=group_id,
+            ):
+                target_eligible = bool(eligible_for_bias)
+                if item.eligible_for_bias == target_eligible:
+                    return item, False
+                updated = item.model_copy(update={"eligible_for_bias": target_eligible})
+                rows[idx] = updated
+                return updated, True
+        return None, False
+
+    return _mutate_feedback_entries(update)
 
 
-def delete_feedback_entry(*, entry_id: str = "", request_id: str = "") -> bool:
+def delete_feedback_entry(
+    *,
+    entry_id: str = "",
+    request_id: str = "",
+    bot_id: int | None = None,
+    group_id: int | None = None,
+) -> bool:
     target_entry_id = str(entry_id or "").strip()
     target_request_id = str(request_id or "").strip()
     if not target_entry_id and not target_request_id:
         return False
-    rows = _load_all_feedback_entries()
-    kept: list[LlmRepeaterFeedbackEntry] = []
-    removed = False
-    for item in rows:
-        matched = False
-        if target_entry_id and str(item.entry_id).strip() == target_entry_id:
-            matched = True
-        elif target_request_id and str(item.request_id).strip() == target_request_id:
-            matched = True
-        if matched:
-            removed = True
-            continue
-        kept.append(item)
-    if not removed:
-        return False
-    _write_feedback_entries(kept)
-    return True
+
+    def delete(rows: list[LlmRepeaterFeedbackEntry]) -> tuple[bool, bool]:
+        kept = [
+            item
+            for item in rows
+            if not (
+                _feedback_entry_matches(
+                    item,
+                    target_entry_id=target_entry_id,
+                    target_request_id=target_request_id,
+                    bot_id=bot_id,
+                    group_id=group_id,
+                )
+            )
+        ]
+        removed = len(kept) != len(rows)
+        if removed:
+            rows[:] = kept
+        return removed, removed
+
+    return _mutate_feedback_entries(delete)
 
 
 def list_feedback_entries_for_session(
@@ -583,14 +935,17 @@ def list_feedback_entries_for_session(
     return deduped[-max(1, int(limit)) :]
 
 
-def list_group_feedback_entries(*, group_id: int, limit: int = 50) -> list[LlmRepeaterFeedbackEntry]:
+def list_group_feedback_entries(
+    *, group_id: int, limit: int = 50, bot_id: int | None = None
+) -> list[LlmRepeaterFeedbackEntry]:
     path = feedback_entries_path()
     if not path.exists():
         return []
     lim = max(1, int(limit))
     target_group_id = int(group_id)
+    target_bot_id = int(bot_id) if bot_id is not None else None
     path_key, group_revision, source_rows = _group_entries_index_rows(path, group_id=target_group_id)
-    key = (path_key, target_group_id, lim)
+    key = (path_key, target_group_id, target_bot_id, lim)
     now = time.monotonic()
     window_size = lim * _RECENT_WINDOW_MULTIPLIER
     with _group_entries_index_lock:
@@ -599,7 +954,10 @@ def list_group_feedback_entries(*, group_id: int, limit: int = 50) -> list[LlmRe
             expire_at, cached_revision, rows = cached
             if now < expire_at and cached_revision == group_revision:
                 return list(rows)
-    recent: deque[LlmRepeaterFeedbackEntry] = deque(source_rows, maxlen=window_size)
+    recent: deque[LlmRepeaterFeedbackEntry] = deque(
+        (item for item in source_rows if target_bot_id is None or item.bot_id == target_bot_id),
+        maxlen=window_size,
+    )
     deduped: list[LlmRepeaterFeedbackEntry] = []
     seen_ids: set[str] = set()
     for item in reversed(recent):
@@ -635,6 +993,7 @@ def is_reply_safe_for_auto_promote(reply_text: str, *, trigger_text: str = "") -
 
 def group_feedback_bias_snapshot(
     *,
+    bot_id: int | None = None,
     group_id: int,
     limit: int = 50,
     user_text: str = "",
@@ -644,6 +1003,7 @@ def group_feedback_bias_snapshot(
     from pallas.product.llm.feedback_learning import build_feedback_bias_snapshot_data
 
     return build_feedback_bias_snapshot_data(
+        bot_id=int(bot_id) if bot_id is not None else None,
         group_id=int(group_id),
         limit=int(limit),
         user_text=str(user_text or ""),

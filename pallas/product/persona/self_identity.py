@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pallas.core.foundation.db import make_bot_config_repository
 from pallas.product.persona.prompt_guard import sanitize_prompt_literal, wrap_stats_block
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 DEFAULT_GENERIC_ALIASES: tuple[str, ...] = ("牛牛",)
 # 兼容旧引用；默认全员通称不再广播「帕拉斯」「Pallas」。
@@ -359,6 +362,44 @@ async def merge_self_aliases(bot_id: int, aliases: list[str]) -> bool:
         return True
     persona["self_aliases"] = stored
     await repo.upsert_field(int(bot_id), "persona", persona)
+    return True
+
+
+async def remove_learned_self_aliases(bot_id: str, aliases: Iterable[str]) -> bool:
+    targets = {str(alias) for alias in aliases if str(alias)}
+    if not targets:
+        return False
+    repo = make_bot_config_repository()
+    doc = await repo.get(int(bot_id))
+    if doc is None or not isinstance(getattr(doc, "persona", None), dict):
+        return False
+    persona = dict(doc.persona)
+    raw = persona.get("self_aliases")
+    if not isinstance(raw, list):
+        return False
+    protected = {item.casefold() for item in extract_generic_self_aliases()}
+    protected.update(
+        item.casefold()
+        for item in extract_exclusive_self_aliases(
+            None,
+            login_nickname=resolve_cached_login_nickname(int(bot_id)),
+            managed_display_name=resolve_managed_display_name(int(bot_id)),
+        )
+    )
+    retained = [item for item in raw if str(item) not in targets or str(item).casefold() in protected]
+    if len(retained) == len(raw):
+        return False
+    persona["self_aliases"] = retained
+    await repo.upsert_field(int(bot_id), "persona", persona)
+    try:
+        from pallas.core.platform.ingress.alias_route import remember_learned_self_aliases
+
+        remember_learned_self_aliases(
+            int(bot_id),
+            [item for item in retained if str(item).casefold() not in _DEFAULT_GENERIC_ALIAS_CASEFOLDS],
+        )
+    except Exception:
+        pass
     return True
 
 

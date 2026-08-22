@@ -29,12 +29,37 @@ async def test_load_feedback_snapshot_swallows_thread_failure(monkeypatch) -> No
     monkeypatch.setattr(responder.asyncio, "to_thread", AsyncMock(side_effect=RuntimeError("broken snapshot")))
 
     snapshot = await responder.load_feedback_snapshot(
+        bot_id=2,
         group_id=1,
         user_text="message",
         behavior_scene="smalltalk",
     )
 
     assert snapshot is None
+
+
+@pytest.mark.asyncio
+async def test_load_feedback_snapshot_passes_runtime_bot_scope(monkeypatch) -> None:
+    from packages.repeater import responder
+
+    monkeypatch.setattr(responder, "can_apply_feedback_bias", lambda: True)
+    snapshot_call = {}
+
+    async def fake_to_thread(function, **kwargs):
+        snapshot_call.update(kwargs)
+        return {"count": 1}
+
+    monkeypatch.setattr(responder.asyncio, "to_thread", fake_to_thread)
+
+    result = await responder.load_feedback_snapshot(
+        bot_id=10002,
+        group_id=123,
+        user_text="你好",
+        behavior_scene="smalltalk",
+    )
+
+    assert result == {"count": 1}
+    assert snapshot_call["bot_id"] == 10002
 
 
 def _pick_weighted_max(seq, weights):
@@ -504,6 +529,7 @@ async def test_context_find_threshold_filtering():
             )
             assert result == (["high_msg"], "ans_high")
             mock_feedback_snapshot.assert_awaited_once_with(
+                bot_id=bot_id,
                 group_id=group_id,
                 user_text="ctx_input",
                 behavior_scene="smalltalk",

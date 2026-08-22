@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import random
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -41,9 +42,30 @@ def resolve_group_rhythm(group_expression: GroupExpressionProfile | None) -> str
     return best_name
 
 
+def resolve_short_reply_split_decision(
+    *,
+    band: str,
+    randomize_enabled: bool,
+    keep_rate: float,
+    rng: random.Random | None = None,
+) -> bool:
+    """短回复 band 下是否保留单段不拆（shape 阶段决策，delivery 只执行拆分）。"""
+    if band != "short":
+        return False
+    if not randomize_enabled:
+        return False
+    rate = max(0.0, min(1.0, float(keep_rate)))
+    if rate <= 0:
+        return False
+    dice = rng if rng is not None else random
+    return dice.random() < rate
+
+
 def resolve_reply_shape(
     turn_policy: TurnPolicy,
     group_expression: GroupExpressionProfile | None,
+    *,
+    rng: random.Random | None = None,
 ) -> ReplyShapePolicy:
     if turn_policy.needs_tool:
         return ReplyShapePolicy(
@@ -66,8 +88,9 @@ def resolve_reply_shape(
             max_output_tokens=chat_reply_token_budget("serious"),
         )
 
+    dice = rng if rng is not None else random
     shape = group_expression.reply_shape if group_expression is not None else None
-    preferred_bubbles = max(1, min(3, int(shape.bubble_count_p50 or 2))) if shape else 2
+    preferred_bubbles = dice.choice([1, 2, 3]) if shape is None else max(1, min(3, int(shape.bubble_count_p50 or 2)))
     observed_max = int(shape.bubble_count_p90 or 3) if shape else 3
     max_bubbles = max(preferred_bubbles, min(5, max(1, observed_max)))
     return ReplyShapePolicy(

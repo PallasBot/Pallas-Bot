@@ -72,12 +72,18 @@ if TYPE_CHECKING:
 def bubble_delay_seconds(previous_segment: str, *, rng: random.Random | None = None) -> float:
     """Simulate a human pause between chat bubbles: short lines fire fast, long lines linger.
 
-    Base grows with segment length (short ~0.8s, long ~2.7s), then a ±35% jitter is
+    Base grows with segment length (short ~0.8s, long ~2.7s), then a ±jitter is
     applied, clamped to [0.5, 3.5] seconds so bursts never feel robotic or too slow.
+    The base/per-char/jitter values come from LLM config (see llama bubble-delay
+    settings); defaults match the long-standing hardcoded rhythm.
     """
+    cfg = get_llm_config()
+    base_per_char = float(getattr(cfg, "llm_bubble_delay_per_char", 0.04))
+    jitter_margin = float(getattr(cfg, "llm_bubble_delay_jitter", 0.35))
+    base = float(getattr(cfg, "llm_bubble_delay_base_sec", 0.8))
     length = min(len(str(previous_segment or "").strip()), 48)
-    base = 0.8 + length * 0.04
-    jitter = (rng or random).uniform(0.65, 1.35)
+    base = base + length * base_per_char
+    jitter = (rng or random).uniform(1.0 - jitter_margin, 1.0 + jitter_margin)
     return round(max(0.5, min(3.5, base * jitter)), 2)
 
 
@@ -372,6 +378,7 @@ def maybe_append_llm_repeater_feedback(
     from pallas.product.llm.repeater_feedback import (
         append_feedback_entry,
         build_feedback_entry,
+        feedback_reply_max_len,
         normalize_feedback_llm_route,
         should_collect_llm_repeater_feedback,
     )
@@ -386,14 +393,25 @@ def maybe_append_llm_repeater_feedback(
     semantic_source_example_id = str(task.get("semantic_style_source_example_id") or "").strip()
     if not semantic_source_bound or not direct_candidate or str(reply_text or "").strip() != direct_candidate:
         semantic_source_example_id = ""
-    if not should_collect_llm_repeater_feedback(
-        task_type=str(task.get("task_type") or "").strip(),
+    task_type = str(task.get("task_type") or "").strip()
+    collect_for_learning = should_collect_llm_repeater_feedback(
+        task_type=task_type,
         group_id=group_id,
         user_text=user_text,
         reply_text=reply_text,
         source_tags=source_tags,
-    ):
+    )
+    retain_for_message_lookup = bool(
+        task_type == LLM_CHAT_TASK_TYPE
+        and group_id > 0
+        and int(bot_message_id or 0) > 0
+        and str(reply_text or "").strip()
+    )
+    if not collect_for_learning and not retain_for_message_lookup:
         return
+    reply_preview = str(reply_text or "").strip()[: feedback_reply_max_len(task_type=task_type)].rstrip()
+    if not collect_for_learning:
+        semantic_source_example_id = ""
     try:
         append_feedback_entry(
             build_feedback_entry(
@@ -403,17 +421,19 @@ def maybe_append_llm_repeater_feedback(
                 group_id=group_id,
                 user_id=int(task.get("user_id") or 0),
                 user_text=user_text,
-                reply_text=reply_text,
+                reply_text=reply_preview,
                 behavior_scene=str(task.get("behavior_scene") or "").strip(),
                 scene_tier=str(task.get("scene_tier") or "").strip(),
                 behavior_actions=list(task.get("behavior_actions") or []),
                 llm_route=normalize_feedback_llm_route(task.get("llm_route")),
                 source_tags=source_tags,
-                eligible_for_bias=True,
-                eligible_for_writeback=str(task.get("scene_tier") or "").strip().lower() == "strong",
+                eligible_for_bias=collect_for_learning,
+                eligible_for_writeback=collect_for_learning
+                and str(task.get("scene_tier") or "").strip().lower() == "strong",
                 bot_message_id=int(bot_message_id or 0),
                 semantic_source_example_id=semantic_source_example_id,
                 semantic_scene="group_chat",
+                injection_snapshot=task.get("injection_snapshot"),
             )
         )
     except Exception as e:
@@ -501,12 +521,23 @@ async def deliver_llm_callback_success(
     if len(reply_segments) == 1 and not (direct_candidate and reply_text == direct_candidate):
         from pallas.product.llm.reply_postprocess import (
             has_cjk_space_separator,
+            normalize_single_bubble_text,
             split_short_reply_segments,
         )
+        from pallas.product.llm.reply_shape import resolve_short_reply_split_decision
 
         single_reply = reply_segments[0]
+        cfg = get_llm_config()
+        keep_as_single = resolve_short_reply_split_decision(
+            band=band,
+            randomize_enabled=cfg.llm_reply_split_randomize_enabled,
+            keep_rate=cfg.llm_reply_split_randomize_keep_rate,
+        )
         if band == "short":
-            reply_segments = split_short_reply_segments(single_reply)
+            if keep_as_single:
+                reply_segments = [normalize_single_bubble_text(single_reply)]
+            else:
+                reply_segments = split_short_reply_segments(single_reply)
         elif "\n" in single_reply or has_cjk_space_separator(single_reply):
             reply_segments = split_short_reply_segments(
                 single_reply,

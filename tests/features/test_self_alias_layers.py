@@ -11,6 +11,7 @@ from pallas.product.persona.self_identity import (
     extract_generic_self_aliases,
     extract_self_aliases,
     merge_self_aliases,
+    remove_learned_self_aliases,
     shorten_niu_niu_compound_alias,
 )
 
@@ -112,3 +113,82 @@ async def test_merge_self_aliases_does_not_persist_derived_short_aliases(
     assert ok is True
     assert written == [(42, "persona", {"self_aliases": ["豆包牛牛", "阿帕"]})]
     assert remembered == [(42, ["豆包牛牛", "阿帕"])]
+
+
+@pytest.mark.asyncio
+async def test_remove_learned_self_aliases_only_removes_persisted_aliases(monkeypatch: pytest.MonkeyPatch) -> None:
+    written: list[dict] = []
+    remembered: list[list[str]] = []
+
+    class DummyRepo:
+        async def get(self, _bot_id: int):
+            return SimpleNamespace(persona={"self_aliases": ["学习称呼", "牛牛"]})
+
+        async def upsert_field(self, _bot_id: int, _field: str, value: dict) -> None:
+            written.append(value)
+
+    monkeypatch.setattr("pallas.product.persona.self_identity.make_bot_config_repository", lambda: DummyRepo())
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.alias_route.remember_learned_self_aliases",
+        lambda _bot_id, aliases: remembered.append(aliases),
+    )
+
+    assert await remove_learned_self_aliases(42, ["学习称呼", "牛牛", "QQ 原昵称"]) is True
+    assert written == [{"self_aliases": ["牛牛"]}]
+    assert remembered == [[]]
+    aliases = extract_self_aliases(written[0], login_nickname="QQ 原昵称", managed_display_name="漂亮牛牛")
+    assert "漂亮牛牛" in aliases
+    assert "QQ 原昵称" in aliases
+    assert "牛牛" in aliases
+
+
+@pytest.mark.asyncio
+async def test_remove_learned_self_aliases_never_modifies_legacy_alias_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    written: list[dict] = []
+    remembered: list[list[str]] = []
+
+    class DummyRepo:
+        async def get(self, _bot_id: int):
+            return SimpleNamespace(persona={"alias_names": ["旧称呼"]})
+
+        async def upsert_field(self, _bot_id: int, _field: str, value: dict) -> None:
+            written.append(value)
+
+    monkeypatch.setattr("pallas.product.persona.self_identity.make_bot_config_repository", lambda: DummyRepo())
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.alias_route.remember_learned_self_aliases",
+        lambda _bot_id, aliases: remembered.append(aliases),
+    )
+
+    assert await remove_learned_self_aliases(42, ["旧称呼"]) is False
+    assert written == []
+    assert remembered == []
+
+
+@pytest.mark.asyncio
+async def test_remove_learned_self_aliases_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
+    persona = {"self_aliases": ["学习称呼"]}
+    written: list[dict] = []
+    remembered: list[list[str]] = []
+
+    class DummyRepo:
+        async def get(self, _bot_id: int):
+            return SimpleNamespace(persona=persona)
+
+        async def upsert_field(self, _bot_id: int, _field: str, value: dict) -> None:
+            persona.clear()
+            persona.update(value)
+            written.append(value)
+
+    monkeypatch.setattr("pallas.product.persona.self_identity.make_bot_config_repository", lambda: DummyRepo())
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.alias_route.remember_learned_self_aliases",
+        lambda _bot_id, aliases: remembered.append(aliases),
+    )
+
+    assert await remove_learned_self_aliases(42, ["学习称呼"]) is True
+    assert await remove_learned_self_aliases(42, ["学习称呼"]) is False
+    assert written == [{"self_aliases": []}]
+    assert remembered == [[]]

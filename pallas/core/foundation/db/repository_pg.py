@@ -168,6 +168,7 @@ class MessageRow(Base):
     sender_name: Mapped[str] = mapped_column(Text, nullable=False, default="")
     message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     reply_to_message_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    suppressed_by_rage: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     time: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
 
@@ -385,6 +386,11 @@ class LlmRelationshipNoteRow(Base):
     warmth_delta: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     assertiveness_delta: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     affinity: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    rage: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    rage_last_attack_at: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    rage_last_attack_message_id: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    rage_silenced_until: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    rage_silence_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
     updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
@@ -691,6 +697,24 @@ def _ensure_pg_llm_relationship_delta_columns(connection) -> None:
         connection.execute(
             text("ALTER TABLE llm_relationship_note ADD COLUMN affinity DOUBLE PRECISION NOT NULL DEFAULT 0")
         )
+    if "rage" not in names:
+        connection.execute(text("ALTER TABLE llm_relationship_note ADD COLUMN rage INTEGER NOT NULL DEFAULT 0"))
+    if "rage_last_attack_at" not in names:
+        connection.execute(
+            text("ALTER TABLE llm_relationship_note ADD COLUMN rage_last_attack_at BIGINT NOT NULL DEFAULT 0")
+        )
+    if "rage_last_attack_message_id" not in names:
+        connection.execute(
+            text("ALTER TABLE llm_relationship_note ADD COLUMN rage_last_attack_message_id BIGINT NOT NULL DEFAULT 0")
+        )
+    if "rage_silenced_until" not in names:
+        connection.execute(
+            text("ALTER TABLE llm_relationship_note ADD COLUMN rage_silenced_until BIGINT NOT NULL DEFAULT 0")
+        )
+    if "rage_silence_reason" not in names:
+        connection.execute(
+            text("ALTER TABLE llm_relationship_note ADD COLUMN rage_silence_reason TEXT NOT NULL DEFAULT ''")
+        )
 
 
 def _ensure_pg_llm_memory_embedding_columns(connection) -> None:
@@ -764,6 +788,8 @@ def _ensure_pg_message_timeline_metadata(connection) -> None:
         connection.execute(text("ALTER TABLE message ADD COLUMN message_id BIGINT"))
     if "reply_to_message_id" not in names:
         connection.execute(text("ALTER TABLE message ADD COLUMN reply_to_message_id BIGINT"))
+    if "suppressed_by_rage" not in names:
+        connection.execute(text("ALTER TABLE message ADD COLUMN suppressed_by_rage BOOLEAN NOT NULL DEFAULT FALSE"))
 
 
 def _ensure_pg_context_answer_reply_index(connection) -> None:
@@ -1896,6 +1922,7 @@ class PgMessageRepository:
                         "sender_name": _s(m.sender_name) or "",
                         "message_id": m.message_id,
                         "reply_to_message_id": m.reply_to_message_id,
+                        "suppressed_by_rage": bool(getattr(m, "suppressed_by_rage", False)),
                         "time": m.time,
                     }
                     for m in batch

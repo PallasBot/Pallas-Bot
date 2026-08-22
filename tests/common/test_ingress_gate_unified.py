@@ -3,9 +3,10 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message, NoticeEvent
 from nonebot.exception import IgnoredException
 
+from pallas.core.platform.ingress.group_admin_owner import GroupAdminOwnerIngressDecision
 from pallas.core.platform.shard.registry import config as shard_cfg
 
 
@@ -77,6 +78,95 @@ async def test_unified_ingress_fanout_allows_all_bots(monkeypatch: pytest.Monkey
 
     await ingress_group_message_gate(FakeBot(111), event)
     await ingress_group_message_gate(FakeBot(222), event)
+
+
+@pytest.mark.asyncio
+async def test_group_admin_owner_blocks_before_fanout_bypass(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.gate.group_admin_owner_ingress_decision",
+        AsyncMock(return_value=GroupAdminOwnerIngressDecision(passes=False)),
+    )
+    fanout = MagicMock(return_value=True)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_fanout_bypasses_claim", fanout)
+    from pallas.core.platform.ingress.gate import ingress_group_message_gate
+
+    event = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=12345,
+        message_id=1,
+        message=Message("牛牛轮盘"),
+        raw_message="牛牛轮盘",
+    )
+
+    with pytest.raises(IgnoredException, match="group admin owner mismatch"):
+        await ingress_group_message_gate(type("Bot", (), {"self_id": "111"})(), event)
+    fanout.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_group_admin_owner_falls_back_to_fanout_when_observation_is_unknown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.gate.group_admin_owner_ingress_decision",
+        AsyncMock(return_value=GroupAdminOwnerIngressDecision(passes=True, fallback_to_fanout=True)),
+    )
+    fanout = MagicMock(return_value=False)
+    monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_fanout_bypasses_claim", fanout)
+    from pallas.core.platform.ingress.gate import ingress_group_message_gate
+
+    event = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=12345,
+        message_id=1,
+        message=Message("牛牛轮盘"),
+        raw_message="牛牛轮盘",
+    )
+
+    await ingress_group_message_gate(type("Bot", (), {"self_id": "111"})(), event)
+    fanout.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_group_admin_notice_ignores_non_local_bot(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.platform.ingress import gate
+
+    record_notice = MagicMock()
+    monkeypatch.setattr(gate, "get_bots", lambda: {"111": object()})
+    monkeypatch.setattr(
+        "pallas.core.platform.multi_bot.group_admin_capability.record_group_admin_notice",
+        record_notice,
+    )
+    monkeypatch.setattr(gate, "ingress_notice_gate", AsyncMock())
+    event = NoticeEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="notice",
+        notice_type="group_admin",
+        sub_type="set",
+        group_id=12345,
+        user_id=999,
+    )
+
+    await gate.ingress_notice_preprocess(type("Bot", (), {"self_id": "111"})(), event)
+
+    record_notice.assert_not_called()
 
 
 @pytest.mark.asyncio

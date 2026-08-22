@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
@@ -9,6 +9,7 @@ from nonebot import get_loaded_plugins
 
 from pallas.core.foundation.command_prefix import strip_leading_command_marks
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value
+from pallas.core.platform.ingress.matcher_command_words import collect_command_words_for_matcher
 from pallas.core.platform.ingress.plugin_command_plaintext import (
     _iter_trigger_parts,
     extract_command_prefixes_from_menu_data,
@@ -50,6 +51,7 @@ class RouteIndexSnapshot:
     always_run_modules: frozenset[str]
     passive_modules: frozenset[str]
     indexed_modules: frozenset[str]
+    required_bot_capabilities: dict[str, str] = field(default_factory=dict)
     prefix_trie: PrefixModuleTrie | None = None
 
 
@@ -163,6 +165,7 @@ def build_route_index() -> RouteIndexSnapshot:
     always_run: set[str] = set()
     passive: set[str] = set(_DEFAULT_PASSIVE_MODULES)
     indexed: set[str] = set()
+    required_capabilities: dict[str, str] = {}
 
     for plugin in get_loaded_plugins():
         module_key = plugin_module_key_from_plugin(plugin)
@@ -177,6 +180,9 @@ def build_route_index() -> RouteIndexSnapshot:
                 always_run.add(module_key)
             if ingress_route.get("passive"):
                 passive.add(module_key)
+            capability = ingress_route.get("required_bot_capability")
+            if isinstance(capability, str) and capability.strip():
+                required_capabilities[module_key] = capability.strip()
 
         menu_data = extra.get("menu_data")
         route_prefixes = extract_explicit_route_strings(extra.get("command_prefixes"))
@@ -213,6 +219,12 @@ def build_route_index() -> RouteIndexSnapshot:
                     _add_module_mapping(prefix_map, prefix, module_key)
                 regex_entries.extend((module_key, pattern) for pattern in entry.regexes)
 
+        for matcher in getattr(plugin, "matcher", ()) or ():
+            for word in collect_command_words_for_matcher(matcher):
+                if word:
+                    _add_module_mapping(prefix_map, word, module_key)
+                    indexed.add(module_key)
+
     prefix_frozen = {key: frozenset(modules) for key, modules in prefix_map.items()}
     exact_frozen = {key: frozenset(modules) for key, modules in exact_map.items()}
     return RouteIndexSnapshot(
@@ -222,6 +234,7 @@ def build_route_index() -> RouteIndexSnapshot:
         always_run_modules=frozenset(always_run),
         passive_modules=frozenset(passive),
         indexed_modules=frozenset(indexed),
+        required_bot_capabilities=required_capabilities,
         prefix_trie=PrefixModuleTrie.from_mapping(prefix_frozen),
     )
 

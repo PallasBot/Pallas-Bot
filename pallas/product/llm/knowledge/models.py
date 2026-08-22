@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from enum import StrEnum
 from typing import Any
 
@@ -30,6 +31,10 @@ class KnowledgeChunkDecl(BaseModel):
     content: str = Field(min_length=1)
     keywords: str = Field(default="")
 
+    def stable_chunk_id(self, source_id: str) -> str:
+        payload = f"{source_id}\n{self.title}\n{self.content}".encode()
+        return f"{source_id}:{hashlib.sha256(payload).hexdigest()}"
+
 
 class KnowledgeSourceDecl(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -50,6 +55,7 @@ class RetrievedKnowledgeChunk(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     source_id: str
+    chunk_id: str = ""
     title: str
     content: str
     score: int = 0

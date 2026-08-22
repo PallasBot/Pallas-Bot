@@ -41,6 +41,7 @@ from pallas.core.platform.ingress.dream_host_gate import (
     DREAM_HOST_GATE_PLUGIN,
     dream_session_ingress_passes,
 )
+from pallas.core.platform.ingress.group_admin_owner import group_admin_owner_ingress_route
 from pallas.core.platform.ingress.policy_registry import text_matches_plugin_fanout
 from pallas.core.platform.ingress.send_queue import classify_send_queue_error
 
@@ -71,6 +72,9 @@ from pallas.core.platform.multi_bot.fleet import (
     get_catalog_bot_ids,
     get_fleet_bot_ids,
     invalidate_fleet_bot_cache,
+)
+from pallas.core.platform.multi_bot.group_admin_capability import (
+    resolve_group_admin_capability,
 )
 from pallas.core.platform.multi_bot.group_fleet_probe import (
     list_local_fleet_bots_in_group,
@@ -151,6 +155,7 @@ __all__ = [
     # 消息入口
     "DREAM_HOST_GATE_PLUGIN",
     "dream_session_ingress_passes",
+    "group_admin_owner_ingress_route",
     "text_matches_plugin_fanout",
     # 多 Bot 舰队
     "begin_group_exclusive_activity",
@@ -165,6 +170,7 @@ __all__ = [
     "get_catalog_bot_ids",
     "get_fleet_bot_ids",
     "get_session_seen_bot_ids",
+    "resolve_group_admin_capability",
     # 多机协同名册
     "FederatePeerBotRoster",
     "get_federate_bot_rosters",

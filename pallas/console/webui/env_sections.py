@@ -235,6 +235,23 @@ def _command_start_section() -> WebuiEnvSection:
     )
 
 
+def _log_level_section() -> WebuiEnvSection:
+    from pallas.core.foundation.log_level_config import (
+        LogLevelConfig,
+        get_log_level_config,
+    )
+
+    return WebuiEnvSection(
+        id="log_level",
+        title="日志级别",
+        module_label="pallas.core.foundation.log_level_config",
+        model_cls=LogLevelConfig,
+        read_current=get_log_level_config,
+        field_to_env={"log_level": "LOG_LEVEL"},
+        skip_fields=frozenset(),
+    )
+
+
 def _llm_section() -> WebuiEnvSection:
     # LLM 段字段与读写逻辑归 `pallas.product.llm.webui_config` 所有。
     from pallas.product.llm.webui_config import LlmWebuiConfig, get_llm_webui_config
@@ -316,6 +333,11 @@ def _llm_section() -> WebuiEnvSection:
             "llm_reply_postprocess_enabled": "LLM_REPLY_POSTPROCESS_ENABLED",
             "llm_reply_typo_enabled": "LLM_REPLY_TYPO_ENABLED",
             "llm_reply_typo_rate": "LLM_REPLY_TYPO_RATE",
+            "llm_reply_split_randomize_enabled": "LLM_REPLY_SPLIT_RANDOMIZE_ENABLED",
+            "llm_reply_split_randomize_keep_rate": "LLM_REPLY_SPLIT_RANDOMIZE_KEEP_RATE",
+            "llm_bubble_delay_base_sec": "LLM_BUBBLE_DELAY_BASE_SEC",
+            "llm_bubble_delay_per_char": "LLM_BUBBLE_DELAY_PER_CHAR",
+            "llm_bubble_delay_jitter": "LLM_BUBBLE_DELAY_JITTER",
             "llm_sticker_fit_enabled": "LLM_STICKER_FIT_ENABLED",
             "llm_chat_sticker_enabled": "LLM_CHAT_STICKER_ENABLED",
             "llm_chat_sticker_cooldown_sec": "LLM_CHAT_STICKER_COOLDOWN_SEC",
@@ -325,7 +347,6 @@ def _llm_section() -> WebuiEnvSection:
             "llm_sticker_vision_max_per_hour": "LLM_STICKER_VISION_MAX_PER_HOUR",
             "llm_sticker_label_realtime_daily_limit": "LLM_STICKER_LABEL_REALTIME_DAILY_LIMIT",
             "llm_reply_effect_eval_enabled": "LLM_REPLY_EFFECT_EVAL_ENABLED",
-            "llm_reply_style_variants": "LLM_REPLY_STYLE_VARIANTS",
             "llm_memory_rag_enabled": "LLM_MEMORY_RAG_ENABLED",
             "llm_expression_inject_enabled": "LLM_EXPRESSION_INJECT_ENABLED",
             "llm_expression_learn_enabled": "LLM_EXPRESSION_LEARN_ENABLED",
@@ -380,6 +401,7 @@ def _base_section_by_id(section_id: str) -> WebuiEnvSection | None:
     builders: dict[str, Any] = {
         "mail": _mail_section,
         "command_start": _command_start_section,
+        "log_level": _log_level_section,
         "llm": _llm_section,
         "arknights_kb": _arknights_kb_section,
     }
@@ -624,6 +646,15 @@ def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dic
             clear_command_start_config_cache()
         except Exception as e:
             logger.warning("配置保存后 command_start 缓存刷新失败: {}", e)
+    elif section_id == "log_level":
+        try:
+            from pallas.core.foundation.log_level_config import clear_log_level_config_cache
+            from pallas.core.foundation.logging import reapply_runtime_log_level
+
+            clear_log_level_config_cache()
+            reapply_runtime_log_level()
+        except Exception as e:
+            logger.warning("配置保存后日志级别刷新失败: {}", e)
     elif section_id == "ingress_dispatch":
         try:
             from pallas.core.platform.ingress.dispatch_lanes import clear_dispatch_lanes_cache

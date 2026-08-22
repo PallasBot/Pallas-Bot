@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from pallas.product.llm.injection_feedback import list_injection_governance_status, undo_negative_outcome_status
 from pallas.product.llm.memory.relationship import clamp_affinity
 from pallas.product.llm.ops_api import (
     build_conversation_kernel_status,
     clear_feedback_entry_correction,
+    clear_rage_state,
     delete_feedback_entry,
     delete_memory_entry,
     delete_relationship_note,
+    find_feedback_entry,
     group_feedback_bias_snapshot,
     list_active_knowledge_sources,
     list_group_feedback_entries,
@@ -28,7 +32,7 @@ from pallas.product.llm.ops_api import (
     set_feedback_entry_eligibility,
     set_relationship_note_content,
 )
-from pallas.product.persona.expression_bank import ExpressionStatus, list_group_expressions
+from pallas.product.persona.expression_bank import ExpressionStatus, get_group_expression, list_group_expressions
 from pallas.product.persona.expression_promote import resolve_expression
 
 from .console_openapi_models import _ApiOkResponse
@@ -36,12 +40,6 @@ from .extended_common import check_pallas_write_token
 
 if TYPE_CHECKING:
     from .config import Config
-
-
-def _llm_ext():
-    from packages.pb_webui import extended_api
-
-    return extended_api
 
 
 def _semantic_style():
@@ -59,6 +57,36 @@ class _SemanticStyleOverridesPatch(BaseModel):
     image: bool | None = None
 
 
+class InjectionGovernanceManageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["undo_outcome", "restore_expression", "restore_semantic"]
+    bot_id: str
+    group_id: str
+    outcome_id: str | None = None
+    entry_id: str | None = None
+    source_example_id: str | None = None
+
+
+class _ExpressionBankResolveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    entry_id: str
+    action: Literal["approve", "reject", "restore"]
+    reason: str = ""
+
+
+def _injection_governance_scope(*, bot_id: str, group_id: str) -> tuple[int, int]:
+    try:
+        parsed_bot_id = int(str(bot_id).strip())
+        parsed_group_id = int(str(group_id).strip())
+    except (TypeError, ValueError) as e:
+        raise HTTPException(status_code=400, detail="bot_id 和 group_id 必须为正整数") from e
+    if parsed_bot_id <= 0 or parsed_group_id <= 0:
+        raise HTTPException(status_code=400, detail="bot_id 和 group_id 必须为正整数")
+    return parsed_bot_id, parsed_group_id
+
+
 class _SemanticStyleOverridesData(BaseModel):
     aggressive: bool
     nonsense: bool
@@ -69,11 +97,24 @@ class _SemanticStyleOverridesData(BaseModel):
 class _SemanticStyleManageBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    action: Literal["status", "overrides", "clear", "rebuild", "quality", "recover", "disable"]
+    action: Literal[
+        "status",
+        "overrides",
+        "clear",
+        "rebuild",
+        "quality",
+        "recover",
+        "disable",
+        "enable",
+        "set_governance",
+    ]
     bot_id: int | None = None
     group_id: int | None = None
     scene: str = "group_chat"
     overrides: _SemanticStyleOverridesPatch | None = None
+    collection_enabled: bool | None = None
+    injection_enabled: bool | None = None
+    continue_learning: bool | None = None
 
 
 class _SemanticStyleProfileSummaryData(BaseModel):
@@ -95,6 +136,8 @@ class _SemanticStyleProfileSummaryData(BaseModel):
 
 class _SemanticStyleStatusData(BaseModel):
     enabled: bool = True
+    collection_enabled: bool = True
+    injection_enabled: bool = True
     overrides: _SemanticStyleOverridesData | None = None
     example_count: int = 0
     profile_count: int = 0
@@ -144,7 +187,7 @@ def semantic_style_quality_response_data(
         ),
         label_version=int(data.get("label_version") or 0),
         positive_bot_style_count=int(data.get("positive_bot_style_count") or 0),
-    ).model_dump(mode="json", exclude_none=True)
+    ).model_dump(mode="json", exclude_none=True, exclude_unset=True)
 
 
 def register_llm_product_router(
@@ -225,10 +268,13 @@ def register_llm_product_router(
                     else semantic_style.update_semantic_style_overrides(override_patch)
                 )
             elif action == "clear":
+                clear_kwargs: dict[str, object] = {}
+                if body.continue_learning is not None:
+                    clear_kwargs["continue_learning"] = body.continue_learning
                 data = (
-                    semantic_style.clear_semantic_style_data(**scope)
+                    semantic_style.clear_semantic_style_data(**clear_kwargs, **scope)
                     if scope
-                    else semantic_style.clear_semantic_style_data()
+                    else semantic_style.clear_semantic_style_data(**clear_kwargs)
                 )
             elif action == "rebuild":
                 data = (
@@ -245,6 +291,27 @@ def register_llm_product_router(
                     semantic_style.recover_semantic_style_data(**scope)
                     if scope
                     else semantic_style.recover_semantic_style_data()
+                )
+            elif action == "set_governance":
+                if body.collection_enabled is None or body.injection_enabled is None:
+                    raise HTTPException(
+                        status_code=422,
+                        detail="collection_enabled 和 injection_enabled 必须同时提供",
+                    )
+                governance_kwargs = {
+                    "collection_enabled": body.collection_enabled,
+                    "injection_enabled": body.injection_enabled,
+                }
+                data = (
+                    semantic_style.set_semantic_style_governance(**governance_kwargs, **scope)
+                    if scope
+                    else semantic_style.set_semantic_style_governance(**governance_kwargs)
+                )
+            elif action == "enable":
+                data = (
+                    semantic_style.set_semantic_style_enabled(True, **scope)
+                    if scope
+                    else semantic_style.set_semantic_style_enabled(True)
                 )
             else:
                 data = (
@@ -278,11 +345,12 @@ def register_llm_product_router(
 
     @router.get(f"{x}/llm/repeater-feedback", include_in_schema=True)
     async def _llm_repeater_feedback_get(
+        bot_id: int = Query(..., ge=1, description="Bot QQ"),
         group_id: int = Query(..., ge=1, description="群号"),
         limit: int = Query(default=20, ge=1, le=200),
     ) -> JSONResponse:
         try:
-            rows = list_group_feedback_entries(group_id=group_id, limit=limit)
+            rows = list_group_feedback_entries(group_id=group_id, bot_id=bot_id, limit=limit)
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({
@@ -304,6 +372,101 @@ def register_llm_product_router(
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
+    @router.get(f"{x}/llm/repeater-feedback/governance", include_in_schema=True)
+    async def _llm_repeater_feedback_governance_get(
+        bot_id: str | None = Query(default=None, description="Bot QQ"),
+        group_id: str | None = Query(default=None, description="群号"),
+    ) -> JSONResponse:
+        parsed_bot_id, parsed_group_id = _injection_governance_scope(
+            bot_id=bot_id or "",
+            group_id=group_id or "",
+        )
+        try:
+            status, data = await asyncio.to_thread(
+                list_injection_governance_status,
+                bot_id=parsed_bot_id,
+                group_id=parsed_group_id,
+            )
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        if status == "storage_error":
+            raise HTTPException(status_code=500, detail="治理账本读取失败")
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/llm/repeater-feedback/governance/manage", include_in_schema=True)
+    async def _llm_repeater_feedback_governance_manage(
+        body: InjectionGovernanceManageRequest,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        bot_id, group_id = _injection_governance_scope(bot_id=body.bot_id, group_id=body.group_id)
+        action = body.action
+        if action == "restore_expression":
+            entry_id = str(body.entry_id or "").strip()
+            if not entry_id:
+                raise HTTPException(status_code=400, detail="entry_id 必填")
+            try:
+                entry = await asyncio.to_thread(
+                    get_group_expression,
+                    group_id=group_id,
+                    entry_id=entry_id,
+                )
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(status_code=500, detail=str(e)) from e
+            if entry is None:
+                raise HTTPException(status_code=404, detail="未找到该群表达记录")
+            try:
+                updated = await asyncio.to_thread(resolve_expression, entry_id, action="restore")
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(status_code=500, detail=str(e)) from e
+            if updated is None:
+                raise HTTPException(status_code=404, detail="未找到该群表达记录")
+            return JSONResponse({"ok": True, "data": {"entry_id": entry_id, "status": updated.status}})
+
+        outcome_id = str(body.outcome_id or "").strip()
+        if not outcome_id:
+            raise HTTPException(status_code=400, detail="outcome_id 必填")
+        source_example_id = str(body.source_example_id or "").strip()
+        if action == "restore_semantic" and source_example_id:
+            try:
+                status, governance = await asyncio.to_thread(
+                    list_injection_governance_status,
+                    bot_id=bot_id,
+                    group_id=group_id,
+                )
+            except Exception as e:  # noqa: BLE001
+                raise HTTPException(status_code=500, detail=str(e)) from e
+            if status == "storage_error":
+                raise HTTPException(status_code=500, detail="治理账本读取失败")
+            outcome = next(
+                (row for row in governance.get("outcomes", []) if str(row.get("outcome_id") or "") == outcome_id),
+                None,
+            )
+            if outcome is None or not any(
+                str(decision.get("source_id") or "") == source_example_id
+                for decision in outcome.get("decisions", [])
+                if isinstance(decision, dict)
+            ):
+                raise HTTPException(status_code=404, detail="未找到该语义样本对应的治理结果")
+        try:
+            undo_status = await asyncio.to_thread(
+                undo_negative_outcome_status,
+                outcome_id=outcome_id,
+                bot_id=bot_id,
+                group_id=group_id,
+            )
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        if undo_status == "storage_error":
+            raise HTTPException(status_code=500, detail="治理账本写入失败")
+        if undo_status != "undone":
+            raise HTTPException(status_code=404, detail="未找到该群治理结果")
+        data: dict[str, bool | str] = {"undone": True, "outcome_id": outcome_id}
+        if action == "restore_semantic":
+            data["semantic_restored"] = True
+        return JSONResponse({"ok": True, "data": data})
+
     @router.post(f"{x}/llm/repeater-feedback/manage", include_in_schema=True)
     async def _llm_repeater_feedback_manage(
         body: dict[str, Any],
@@ -322,9 +485,24 @@ def register_llm_product_router(
                 status_code=400,
                 detail="action 必须为 invalidate / restore / delete / correct / clear_correction",
             )
+        raw_bot_id = body.get("bot_id")
+        raw_group_id = body.get("group_id")
+        if raw_bot_id is None or raw_group_id is None:
+            raise HTTPException(status_code=400, detail="feedback manage 必须提供 bot_id 和 group_id")
+        if (raw_bot_id is None) != (raw_group_id is None):
+            raise HTTPException(status_code=400, detail="bot_id 和 group_id 必须同时提供")
+        bot_id, group_id = _injection_governance_scope(
+            bot_id=str(raw_bot_id),
+            group_id=str(raw_group_id),
+        )
         try:
             if action == "delete":
-                ok = delete_feedback_entry(entry_id=entry_id, request_id=request_id)
+                ok = delete_feedback_entry(
+                    entry_id=entry_id,
+                    request_id=request_id,
+                    bot_id=bot_id,
+                    group_id=group_id,
+                )
                 if not ok:
                     raise HTTPException(status_code=404, detail="未找到该反哺记录")
                 return JSONResponse({"ok": True, "data": {"deleted": True, "entry_id": entry_id or request_id}})
@@ -333,19 +511,31 @@ def register_llm_product_router(
                 if not corrected_reply_text:
                     raise HTTPException(status_code=400, detail="corrected_reply_text 必填")
                 create_fields: dict[str, Any] | None = None
-                if _llm_ext().find_feedback_entry(entry_id=entry_id, request_id=request_id) is None:
-                    bot_id = body.get("bot_id")
-                    group_id = body.get("group_id")
-                    user_id = body.get("user_id")
-                    if bot_id is None or group_id is None or user_id is None:
+                if (
+                    find_feedback_entry(
+                        entry_id=entry_id,
+                        request_id=request_id,
+                        bot_id=bot_id,
+                        group_id=group_id,
+                    )
+                    is None
+                ):
+                    raw_user_id = body.get("user_id")
+                    if raw_user_id is None:
                         raise HTTPException(
                             status_code=400,
                             detail="未找到反哺记录时需提供 bot_id / group_id / user_id",
                         )
+                    try:
+                        user_id = int(raw_user_id)
+                    except (TypeError, ValueError) as e:
+                        raise HTTPException(status_code=400, detail="user_id 必须为正整数") from e
+                    if user_id <= 0:
+                        raise HTTPException(status_code=400, detail="user_id 必须为正整数")
                     create_fields = {
-                        "bot_id": int(bot_id),
-                        "group_id": int(group_id),
-                        "user_id": int(user_id),
+                        "bot_id": bot_id,
+                        "group_id": group_id,
+                        "user_id": user_id,
                         "user_text": str(body.get("user_text") or "").strip(),
                         "reply_text": str(body.get("reply_text") or "").strip(),
                         "llm_route": str(body.get("llm_route") or "").strip(),
@@ -355,15 +545,24 @@ def register_llm_product_router(
                 updated = set_feedback_entry_correction(
                     entry_id=entry_id,
                     request_id=request_id,
+                    bot_id=bot_id,
+                    group_id=group_id,
                     corrected_reply_text=corrected_reply_text,
                     create_fields=create_fields,
                 )
             elif action == "clear_correction":
-                updated = clear_feedback_entry_correction(entry_id=entry_id, request_id=request_id)
+                updated = clear_feedback_entry_correction(
+                    entry_id=entry_id,
+                    request_id=request_id,
+                    bot_id=bot_id,
+                    group_id=group_id,
+                )
             else:
                 updated = set_feedback_entry_eligibility(
                     entry_id=entry_id,
                     request_id=request_id,
+                    bot_id=bot_id,
+                    group_id=group_id,
                     eligible_for_bias=action == "restore",
                 )
         except HTTPException:
@@ -376,12 +575,14 @@ def register_llm_product_router(
 
     @router.get(f"{x}/llm/repeater-feedback/promotion-candidates", include_in_schema=True)
     async def _llm_repeater_feedback_promotion_candidates_get(
+        bot_id: int = Query(..., ge=1, description="Bot QQ"),
         group_id: int = Query(..., ge=1, description="群号"),
         limit: int = Query(default=20, ge=1, le=200),
         include_resolved: bool = Query(default=False, description="是否包含已晋升/已拒绝"),
     ) -> JSONResponse:
         try:
             rows = list_promotion_candidates(
+                bot_id=bot_id,
                 group_id=group_id,
                 limit=limit,
                 include_resolved=include_resolved,
@@ -405,6 +606,14 @@ def register_llm_product_router(
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         candidate_id = str(body.get("candidate_id") or "").strip()
         action = str(body.get("action") or "").strip().lower()
+        raw_bot_id = body.get("bot_id")
+        raw_group_id = body.get("group_id")
+        if raw_bot_id is None or raw_group_id is None:
+            raise HTTPException(status_code=400, detail="promotion resolve 必须提供 bot_id 和 group_id")
+        bot_id, group_id = _injection_governance_scope(
+            bot_id=str(raw_bot_id),
+            group_id=str(raw_group_id),
+        )
         if not candidate_id:
             raise HTTPException(status_code=400, detail="candidate_id required")
         if action not in {"promote", "reject"}:
@@ -414,6 +623,8 @@ def register_llm_product_router(
                 candidate_id,
                 action=action,  # type: ignore[arg-type]
                 reason=str(body.get("reason") or "").strip(),
+                bot_id=bot_id,
+                group_id=group_id,
             )
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
@@ -441,22 +652,20 @@ def register_llm_product_router(
 
     @router.post(f"{x}/llm/expression-bank/resolve", include_in_schema=True)
     async def _llm_expression_bank_resolve(
-        body: dict[str, Any],
+        body: _ExpressionBankResolveRequest,
         token: str | None = Query(default=None),
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        entry_id = str(body.get("entry_id") or "").strip()
-        action = str(body.get("action") or "").strip().lower()
+        entry_id = body.entry_id.strip()
+        action = body.action
         if not entry_id:
             raise HTTPException(status_code=400, detail="entry_id required")
-        if action not in {"approve", "reject"}:
-            raise HTTPException(status_code=400, detail="action must be approve or reject")
         try:
             updated = resolve_expression(
                 entry_id,
-                action=action,  # type: ignore[arg-type]
-                reason=str(body.get("reason") or "").strip(),
+                action=action,
+                reason=body.reason.strip(),
             )
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
@@ -698,6 +907,24 @@ def register_llm_product_router(
             raise HTTPException(status_code=404, detail="设置好感度失败")
         clamped = clamp_affinity(affinity)
         return JSONResponse({"ok": True, "data": {"affinity": clamped}})
+
+    @router.post(f"{x}/llm/conversation-kernel/relationship-notes/clear-rage", include_in_schema=True)
+    async def _llm_conversation_kernel_relationship_notes_clear_rage(
+        body: dict[str, Any],
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        try:
+            bot_id = int(body.get("bot_id") or 0)
+            user_id = int(body.get("user_id") or 0)
+            group_id = int(body.get("group_id") or 0)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="invalid numeric fields") from None
+        if bot_id <= 0 or user_id <= 0:
+            raise HTTPException(status_code=400, detail="bot_id and user_id required")
+        ok = await clear_rage_state(bot_id, group_id or None, user_id)
+        return JSONResponse({"ok": True, "data": {"cleared": bool(ok)}})
 
     @router.post(f"{x}/llm/conversation-kernel/relationship-notes/set-content", include_in_schema=True)
     async def _llm_conversation_kernel_relationship_notes_set_content(

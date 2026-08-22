@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from packages.pb_webui.console_openapi_models import _ApiOkResponse
 from pallas.product.persona.group_expression_profile import GroupExpressionProfile
@@ -88,6 +89,137 @@ class _StickerLabelClearResult(BaseModel):
 
 
 StickerLabelMaintenanceResult = _StickerLabelRequeueResult | _StickerLabelPauseResult | _StickerLabelClearResult
+
+
+class _GroupStyleManageBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    action: Literal["collection", "injection", "clear", "rebuild"]
+    bot_id: int | None = None
+    group_id: int | None = None
+    enabled: bool | None = None
+    continue_learning: bool | None = None
+
+
+class _GroupStyleGovernanceData(BaseModel):
+    collection_enabled: bool
+    injection_enabled: bool
+
+
+class _BasePromptPreviewVersion(BaseModel):
+    id: str
+    mode: str = "append"
+    builtin_sha256: str = ""
+    updated_at: str = ""
+
+
+class _BasePromptPreviewData(BaseModel):
+    enabled: bool = False
+    mode: str = "append"
+    builtin_sha256: str = ""
+    builtin_updated: bool = False
+    updated_at: str = ""
+    text_preview: str = ""
+    versions: list[_BasePromptPreviewVersion] = Field(default_factory=list)
+
+
+class _BasePromptSaveBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["append", "replace"]
+    text: str
+
+
+class _BasePromptRestoreBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    version_id: str = Field(min_length=1)
+
+
+class _BasePromptEnabledBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool
+
+
+class _PromptPreviewBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bot_id: int = Field(ge=1)
+    group_id: int | None = Field(default=None, ge=0)
+    user_id: int = Field(default=0, ge=0)
+    query_text: str = Field(default="", max_length=4000)
+
+
+class _PromptTrialBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bot_id: int = Field(ge=1)
+    group_id: int = Field(ge=1)
+    user_id: int = Field(ge=0)
+    system_prompt: str = Field(min_length=1)
+    query_text: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("system_prompt", "query_text")
+    @classmethod
+    def _require_non_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("must not be blank")
+        return value
+
+
+def _assistant_text_from_provider_response(response: Any) -> str:
+    message: Any = response
+    if isinstance(response, dict):
+        choices = response.get("choices")
+        if isinstance(choices, list) and choices:
+            first = choices[0]
+            message = first.get("message") if isinstance(first, dict) else first
+        if isinstance(message, dict):
+            message = message.get("content", "")
+    if isinstance(message, list):
+        message = "".join(
+            str(item.get("text") or "") if isinstance(item, dict) else str(item or "") for item in message
+        )
+    text = str(message or "").strip()
+    if not text:
+        raise ValueError("empty provider assistant content")
+    return text
+
+
+class _PromptOverrideBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["replace", "append", "disable"]
+    content: str = Field(max_length=12000)
+
+
+class _PromptOverridesBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    bot_id: int = Field(ge=1)
+    group_id: int = Field(ge=1)
+    sections: dict[str, _PromptOverrideBody] = Field(default_factory=dict)
+
+
+def _base_prompt_preview_summary(status: dict[str, Any]) -> dict[str, Any]:
+    """把 base prompt 状态压成不含原文的预览安全摘要。"""
+    text = str(status.get("text") or "")
+    preview = text[:120] + ("…" if len(text) > 120 else "")
+    versions = [
+        {key: value for key, value in version.items() if key != "text"}
+        for version in status.get("versions") or []
+        if isinstance(version, dict)
+    ]
+    return {
+        "enabled": bool(status.get("enabled", False)),
+        "mode": str(status.get("mode") or "append"),
+        "builtin_sha256": str(status.get("builtin_sha256") or ""),
+        "builtin_updated": bool(status.get("builtin_updated", False)),
+        "updated_at": str(status.get("updated_at") or ""),
+        "text_preview": preview,
+        "versions": versions,
+    }
 
 
 def register_llm_ops_router(
@@ -498,7 +630,92 @@ def register_llm_ops_router(
             )
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
-        return JSONResponse({"ok": True, "data": data.model_dump()})
+        return JSONResponse({"ok": True, "data": data.model_dump(mode="json")})
+
+    @router.post(f"{x}/common-config/llm/persona/prompt-preview", include_in_schema=True)
+    async def _llm_persona_prompt_preview_post(body: _PromptPreviewBody) -> JSONResponse:
+        from pallas.product.llm.prompt_preview import build_prompt_preview
+
+        try:
+            data = await build_prompt_preview(
+                bot_id=body.bot_id,
+                group_id=body.group_id,
+                user_id=body.user_id,
+                query_text=body.query_text,
+            )
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/common-config/llm/persona/prompt-preview/try", include_in_schema=True)
+    async def _llm_persona_prompt_preview_try_post(
+        body: _PromptTrialBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.llm.config import get_llm_config
+        from pallas.product.llm.provider_client import LlmProviderError, complete_chat_message
+
+        cfg = get_llm_config()
+        model = str(cfg.llm_model or "").strip()
+        started = time.monotonic()
+        try:
+            response = await complete_chat_message(
+                messages=[
+                    {"role": "system", "content": body.system_prompt},
+                    {"role": "user", "content": body.query_text},
+                ],
+                model=model,
+                options={"temperature": 0.2, "max_tokens": 512},
+                tools=None,
+                cfg=cfg,
+                task="llm_prompt_preview",
+            )
+            text = _assistant_text_from_provider_response(response)
+        except LlmProviderError as e:
+            raise HTTPException(status_code=502, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({
+            "ok": True,
+            "data": {
+                "text": text,
+                "model": model,
+                "elapsed_ms": int((time.monotonic() - started) * 1000),
+                "test_call": True,
+            },
+        })
+
+    @router.get(f"{x}/common-config/llm/persona/prompt-overrides", include_in_schema=True)
+    async def _llm_persona_prompt_overrides_get(
+        bot_id: int = Query(..., ge=1),
+        group_id: int = Query(..., ge=1),
+    ) -> JSONResponse:
+        from pallas.product.llm.assembler.prompt_overrides import load_prompt_overrides
+
+        sections = load_prompt_overrides(bot_id=bot_id, group_id=group_id)
+        return JSONResponse({"ok": True, "data": sections})
+
+    @router.put(f"{x}/common-config/llm/persona/prompt-overrides", include_in_schema=True)
+    async def _llm_persona_prompt_overrides_put(
+        body: _PromptOverridesBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.llm.assembler.prompt_overrides import save_prompt_overrides
+
+        saved = save_prompt_overrides(
+            bot_id=body.bot_id,
+            group_id=body.group_id,
+            sections=body.sections,
+        )
+        response_sections = {
+            section_id: (value.model_dump() if hasattr(value, "model_dump") else value)
+            for section_id, value in saved.items()
+        }
+        return JSONResponse({"ok": True, "data": response_sections})
 
     @router.get(
         f"{x}/common-config/llm/persona/group-style",
@@ -536,6 +753,169 @@ def register_llm_ops_router(
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         return {"ok": True, "data": profile.model_dump(mode="json")}
+
+    @router.get(
+        f"{x}/common-config/llm/persona/group-style/manage",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_GroupStyleGovernanceData],
+    )
+    async def _llm_persona_group_style_manage_get(
+        bot_id: int = Query(..., ge=1, description="Bot QQ"),
+        group_id: int = Query(..., ge=1, description="群号"),
+    ) -> JSONResponse:
+        from pallas.product.persona.style_governance import group_style_status
+
+        try:
+            data = group_style_status(bot_id=bot_id, group_id=group_id)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(
+        f"{x}/common-config/llm/persona/group-style/manage",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_GroupStyleGovernanceData],
+    )
+    async def _llm_persona_group_style_manage_post(
+        body: _GroupStyleManageBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        bot_id = body.bot_id
+        group_id = body.group_id
+        if bot_id is None or group_id is None or bot_id <= 0 or group_id <= 0:
+            raise HTTPException(status_code=422, detail="bot_id 和 group_id 必须同时提供")
+        from pallas.product.persona import style_governance
+
+        try:
+            if body.action == "collection":
+                if body.enabled is None:
+                    raise HTTPException(status_code=422, detail="enabled 必填")
+                data = await style_governance.set_group_style_collection(
+                    group_id=group_id,
+                    enabled=body.enabled,
+                )
+            elif body.action == "injection":
+                if body.enabled is None:
+                    raise HTTPException(status_code=422, detail="enabled 必填")
+                data = await style_governance.set_group_style_injection(
+                    bot_id=bot_id,
+                    group_id=group_id,
+                    enabled=body.enabled,
+                )
+            else:
+                if body.action == "clear":
+                    data = await style_governance.clear_group_style(
+                        group_id=group_id,
+                        continue_learning=True if body.continue_learning is None else body.continue_learning,
+                    )
+                else:
+                    from pallas.product.persona.group_style_refresh import refresh_group_style_profile
+
+                    await refresh_group_style_profile(group_id)
+                    data = style_governance.group_style_status(bot_id=bot_id, group_id=group_id)
+        except HTTPException:
+            raise
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.get(
+        f"{x}/common-config/llm/persona/base-prompt",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_BasePromptPreviewData],
+    )
+    async def _llm_persona_base_prompt_get() -> JSONResponse:
+        from pallas.product.persona.base_prompt_override import base_prompt_override_status
+
+        try:
+            data = _base_prompt_preview_summary(base_prompt_override_status())
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/common-config/llm/persona/base-prompt/content", include_in_schema=True)
+    async def _llm_persona_base_prompt_content(
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.persona.base_prompt_override import base_prompt_override_status
+
+        try:
+            data = base_prompt_override_status()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/common-config/llm/persona/base-prompt/save", include_in_schema=True)
+    async def _llm_persona_base_prompt_save(
+        body: _BasePromptSaveBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.persona.base_prompt_override import save_base_prompt_override
+        from pallas.product.persona.compile_persona_prompt import resolve_base_system_prompt_path
+
+        baseline = ""
+        path = resolve_base_system_prompt_path()
+        try:
+            baseline = path.read_text(encoding="utf-8").strip() if path.is_file() else ""
+        except OSError:
+            baseline = ""
+        try:
+            data = save_base_prompt_override(mode=body.mode, text=body.text, builtin_text=baseline)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/common-config/llm/persona/base-prompt/restore", include_in_schema=True)
+    async def _llm_persona_base_prompt_restore(
+        body: _BasePromptRestoreBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.persona.base_prompt_override import restore_base_prompt_override
+
+        try:
+            data = restore_base_prompt_override(version_id=body.version_id)
+        except KeyError as e:
+            raise HTTPException(status_code=404, detail="未找到该版本") from e
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.post(f"{x}/common-config/llm/persona/base-prompt/clear", include_in_schema=True)
+    async def _llm_persona_base_prompt_clear(
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.persona.base_prompt_override import clear_base_prompt_override
+
+        try:
+            clear_base_prompt_override()
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": {"cleared": True}})
+
+    @router.post(f"{x}/common-config/llm/persona/base-prompt/enabled", include_in_schema=True)
+    async def _llm_persona_base_prompt_enabled(
+        body: _BasePromptEnabledBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.persona.base_prompt_override import set_base_prompt_override_enabled
+
+        try:
+            data = set_base_prompt_override_enabled(enabled=body.enabled)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
 
     @router.get(
         f"{x}/common-config/llm/persona/sticker-labels",

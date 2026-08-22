@@ -221,6 +221,82 @@ async def test_resolve_persona_skips_group_style_when_disabled(monkeypatch: pyte
 
 
 @pytest.mark.asyncio
+async def test_resolve_persona_skips_profile_when_scoped_injection_is_paused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.persona.loader import invalidate_persona_cache, resolve_persona
+    from pallas.product.persona.model import ResolvedPersona
+
+    class DummyGroupRepo:
+        async def get(self, key, ignore_cache=False):  # noqa: ARG002
+            return type("GroupCfg", (), {"style_profile": {"derived": {"chaos_bias": 0.9}}})()
+
+    class DummyBotRepo:
+        async def get(self, key, ignore_cache=False):  # noqa: ARG002
+            return type("BotCfg", (), {"group_style_enabled": True})()
+
+    monkeypatch.setattr(
+        "pallas.product.persona.loader.derive_persona_from_bot_id",
+        lambda _bid, archetype_enabled=True: ResolvedPersona(
+            reply_bias=1.0,
+            speak_bias=1.0,
+            length_pref="short",
+            warmth=0.0,
+            assertiveness=0.0,
+        ),
+    )
+    monkeypatch.setattr("pallas.product.persona.loader.make_group_config_repository", lambda: DummyGroupRepo())
+    monkeypatch.setattr("pallas.product.persona.loader.make_bot_config_repository", lambda: DummyBotRepo())
+    monkeypatch.setattr(
+        "pallas.product.persona.style_governance.group_style_injection_enabled",
+        lambda *, bot_id, group_id: False,
+    )
+
+    invalidate_persona_cache()
+    resolved = await resolve_persona(10001, 777)
+
+    assert resolved.chaos_bias == ResolvedPersona.model_fields["chaos_bias"].default
+
+
+@pytest.mark.asyncio
+async def test_resolve_persona_applies_profile_when_scoped_injection_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.persona.loader import invalidate_persona_cache, resolve_persona
+    from pallas.product.persona.model import ResolvedPersona
+
+    class DummyGroupRepo:
+        async def get(self, key, ignore_cache=False):  # noqa: ARG002
+            return type("GroupCfg", (), {"style_profile": {"derived": {"chaos_bias": 0.9}}})()
+
+    class DummyBotRepo:
+        async def get(self, key, ignore_cache=False):  # noqa: ARG002
+            return type("BotCfg", (), {"group_style_enabled": True})()
+
+    monkeypatch.setattr(
+        "pallas.product.persona.loader.derive_persona_from_bot_id",
+        lambda _bid, archetype_enabled=True: ResolvedPersona(
+            reply_bias=1.0,
+            speak_bias=1.0,
+            length_pref="short",
+            warmth=0.0,
+            assertiveness=0.0,
+        ),
+    )
+    monkeypatch.setattr("pallas.product.persona.loader.make_group_config_repository", lambda: DummyGroupRepo())
+    monkeypatch.setattr("pallas.product.persona.loader.make_bot_config_repository", lambda: DummyBotRepo())
+    monkeypatch.setattr(
+        "pallas.product.persona.style_governance.group_style_injection_enabled",
+        lambda *, bot_id, group_id: True,
+    )
+
+    invalidate_persona_cache()
+    resolved = await resolve_persona(10001, 777)
+
+    assert resolved.chaos_bias == pytest.approx(0.9)
+
+
+@pytest.mark.asyncio
 async def test_resolve_persona_reuses_bot_base_across_groups(monkeypatch: pytest.MonkeyPatch) -> None:
     from unittest.mock import AsyncMock
 

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import time
 from typing import Any
 
+from nonebot import logger
+
+from pallas.core.foundation.logging import log_rate_limited
 from pallas.product.llm.behavior import infer_behavior_feedback
 from pallas.product.llm.behavior_store import (
     behavior_run_public_dict,
@@ -294,6 +298,50 @@ def format_group_ambient_block(turns: list[LlmChatTurn], *, max_len: int) -> str
     return sanitize_prompt_block(f"【群环境摘录】\n{body}", max_len=max_len)
 
 
+def format_group_ambient_block_with_snapshot(
+    turns: list[LlmChatTurn],
+    *,
+    bot_id: int,
+    group_id: int | None,
+    max_len: int,
+) -> tuple[str, list[dict[str, object]]]:
+    if not turns:
+        return "", []
+    header = "【群环境摘录】"
+    block = sanitize_prompt_block(header, max_len=max_len)
+    if block != header:
+        return block, []
+    snapshot: list[dict[str, object]] = []
+    scope = normalize_group_scope(group_id)
+    for turn in turns:
+        raw = str(turn.content or "").strip()
+        label = "帕拉斯" if turn.role == "assistant" else "群友"
+        line = sanitize_prompt_literal(f"{label}：{raw}", max_len=512)
+        if not line:
+            continue
+        text_hash = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        available = max_len - len(block) - 1
+        if available <= 0:
+            break
+        rendered_line = line[:available].rstrip()
+        if not rendered_line:
+            break
+        rendered_text = rendered_line.removeprefix(f"{label}：")
+        if rendered_text:
+            snapshot.append({
+                "turn_id": (
+                    f"ambient:{int(bot_id)}:{scope}:{turn.role}:{int(turn.user_id)}:{int(turn.created_at)}:{text_hash}"
+                ),
+                "user_id": int(turn.user_id),
+                "text_hash": text_hash,
+                "text_preview": rendered_text[:120],
+            })
+        block = f"{block}\n{rendered_line}"
+        if rendered_line != line:
+            break
+    return block, snapshot
+
+
 async def build_llm_chat_messages(
     bot_id: int,
     group_id: int | None,
@@ -304,6 +352,8 @@ async def build_llm_chat_messages(
     include_history: bool = True,
     history_limit: int | None = None,
     include_group_ambient: bool = True,
+    ambient_turns_out: list[dict[str, object]] | None = None,
+    ambient_message_token_out: list[str] | None = None,
 ) -> list[ChatCompletionMessage]:
     c = cfg or get_llm_config()
     messages: list[ChatCompletionMessage] = []
@@ -323,11 +373,36 @@ async def build_llm_chat_messages(
     ):
         ambient = await list_group_ambient_messages(bot_id, group_id, cfg=c)
         ambient = [turn for turn in ambient if turn.user_id != int(user_id)]
-        ambient_block = format_group_ambient_block(ambient, max_len=c.user_message_max_len)
+        try:
+            from pallas.product.llm.injection_feedback import filter_ambient_turns
+
+            ambient = filter_ambient_turns(int(bot_id), normalize_group_scope(group_id), ambient)
+        except Exception as exc:
+            log_rate_limited(
+                logger,
+                "warning",
+                "llm.injection_governance.ambient_filter_failed",
+                "ambient injection governance filter failed for bot [{}] and group [{}]: [{}]",
+                bot_id,
+                normalize_group_scope(group_id),
+                exc,
+            )
+        ambient_block, ambient_snapshot = format_group_ambient_block_with_snapshot(
+            ambient,
+            bot_id=bot_id,
+            group_id=group_id,
+            max_len=c.user_message_max_len,
+        )
         if ambient_block:
             wrapped = format_user_turn(ambient_block, max_len=c.user_message_max_len)
             if wrapped:
-                messages.append(ChatCompletionMessage(role="user", content=wrapped))
+                token_text = "\n".join(str(item["turn_id"]) for item in ambient_snapshot)
+                ambient_token = f"ambient:{hashlib.sha256(token_text.encode()).hexdigest()}"
+                messages.append(ChatCompletionMessage(role="user", content=wrapped, source_token=ambient_token))
+                if ambient_turns_out is not None:
+                    ambient_turns_out.extend(ambient_snapshot)
+                if ambient_message_token_out is not None:
+                    ambient_message_token_out.append(ambient_token)
 
     if include_history:
         history = await list_user_llm_messages(bot_id, group_id, user_id, limit=history_limit, cfg=c)
