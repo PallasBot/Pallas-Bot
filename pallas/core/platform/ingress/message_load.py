@@ -6,6 +6,10 @@ import time
 _OVERLOAD_UNTIL = 0.0
 _LAST_ACTIVITY = time.monotonic()
 _LANE_WAIT_OVERLOAD_MS = 250
+# 阈值属低频变化配置，秒级缓存避免每 matcher 匹配反复读盘（repo_env_raw_value→4 stat）
+_LANE_WAIT_OVERLOAD_CACHE_TTL_SEC = 5.0
+_lane_wait_overload_cache: int | None = None
+_lane_wait_overload_cached_at: float = 0.0
 # 本条事件在过载时选择「降质接话」而非整段丢弃闲聊
 _CHAT_DEGRADED = contextvars.ContextVar("ingress_chat_degraded", default=False)
 
@@ -57,15 +61,27 @@ def should_shed_chat_sidework() -> bool:
 
 
 def lane_wait_overload_threshold_ms() -> int:
+    global _lane_wait_overload_cache, _lane_wait_overload_cached_at
+    now = time.monotonic()
+    if (
+        _lane_wait_overload_cache is not None
+        and now - _lane_wait_overload_cached_at < _LANE_WAIT_OVERLOAD_CACHE_TTL_SEC
+    ):
+        return _lane_wait_overload_cache
+
     from pallas.core.foundation.config.repo_settings import repo_env_raw_value
 
     raw = repo_env_raw_value("PALLAS_LANE_WAIT_OVERLOAD_MS")
     if raw is None:
-        return _LANE_WAIT_OVERLOAD_MS
-    try:
-        return max(50, int(str(raw).strip()))
-    except ValueError:
-        return _LANE_WAIT_OVERLOAD_MS
+        value: int = _LANE_WAIT_OVERLOAD_MS
+    else:
+        try:
+            value = max(50, int(str(raw).strip()))
+        except ValueError:
+            value = _LANE_WAIT_OVERLOAD_MS
+    _lane_wait_overload_cache = value
+    _lane_wait_overload_cached_at = now
+    return value
 
 
 def record_lane_wait(wait_ms: float, *, busy: bool = False) -> None:
@@ -84,6 +100,8 @@ def record_send_queue_pressure(depth: int, max_depth: int) -> None:
 
 
 def reset_message_load_for_tests() -> None:
-    global _OVERLOAD_UNTIL, _LAST_ACTIVITY
+    global _OVERLOAD_UNTIL, _LAST_ACTIVITY, _lane_wait_overload_cache, _lane_wait_overload_cached_at
     _OVERLOAD_UNTIL = 0.0
     _LAST_ACTIVITY = time.monotonic()
+    _lane_wait_overload_cache = None
+    _lane_wait_overload_cached_at = 0.0
