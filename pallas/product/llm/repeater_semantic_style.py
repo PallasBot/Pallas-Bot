@@ -1140,14 +1140,14 @@ def _build_profile(
     )
 
 
-def persist_semantic_style_example(example: SemanticStyleExample) -> SemanticStyleProfile:
+def persist_semantic_style_example(example: SemanticStyleExample) -> SemanticStyleProfile | None:
     with semantic_style_data_lock():
         examples = load_examples_with_legacy_migration_locked()
         examples.append(example)
         _write_semantic_style_examples(semantic_style_examples_path(), examples)
         profiles = _rebuild_profiles(examples, now=int(time.time()))
         _write_profiles(profiles)
-        return profiles[_profile_key(example.bot_id, example.group_id, example.scene)]
+        return profiles.get(_profile_key(example.bot_id, example.group_id, example.scene))
 
 
 def is_positive_bot_style_outcome(
@@ -1316,11 +1316,47 @@ def _write_semantic_style_examples(path: Path, examples: list[SemanticStyleExamp
     tmp.replace(path)
 
 
+def _apply_legacy_rhythm_statistics(
+    profiles: dict[tuple[int, int, str], SemanticStyleProfile], example: SemanticStyleExample
+) -> None:
+    """让 legacy_unknown 样本也能沉淀群节奏统计，但不写对白字段（无可靠作者来源）。
+
+    legacy 样本没有可靠的 trigger/reply 作者 id，不能作为真人接话对白注入；
+    但其 reply_text 仍能反映本群真实回复的长度/气泡/节奏分布，纯统计入 profile
+    喂给 build_rhythm_baseline_note，不污染 direct_pairs/rewrite_seeds/matched_examples。
+    """
+    reply_text = _short_text(example.reply_text, _MAX_SEED_LEN)
+    if not reply_text:
+        return
+    key = _profile_key(example.bot_id, example.group_id, example.scene)
+    existing = profiles.get(key)
+    bubble_count, segment_char_lengths, rhythm = deterministic_reply_shape(example.reply_text)
+    if not bubble_count:
+        return
+    if existing is None:
+        existing = SemanticStyleProfile(
+            bot_id=example.bot_id,
+            group_id=example.group_id,
+            scene=example.scene,
+            human_only=True,
+            updated_at=example.created_at,
+        )
+        profiles[key] = existing
+    existing.bubble_counts = [*existing.bubble_counts, bubble_count][-100:]
+    existing.segment_char_lengths = [*existing.segment_char_lengths, *segment_char_lengths][-300:]
+    existing.rhythm_counts[rhythm] = int(existing.rhythm_counts.get(rhythm) or 0) + 1
+    existing.sample_count += 1
+    existing.common_style_sample_count += 1
+
+
 def _rebuild_profiles(
     examples: list[SemanticStyleExample], *, now: int
 ) -> dict[tuple[int, int, str], SemanticStyleProfile]:
     profiles: dict[tuple[int, int, str], SemanticStyleProfile] = {}
     for example in sorted(examples, key=lambda item: (item.created_at, item.example_id)):
+        if example.source_kind == "legacy_unknown":
+            _apply_legacy_rhythm_statistics(profiles, example)
+            continue
         if example.source_kind != "human_pair" or not is_human_semantic_style_pair(
             trigger_user_id=example.trigger_user_id,
             reply_user_id=example.reply_user_id,

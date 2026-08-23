@@ -538,7 +538,16 @@ def test_recover_migrates_only_versioned_legacy_example_labels(tmp_path, monkeyp
     )
 
     mod.recover_semantic_style_data()
-    assert mod._load_profiles(mod.semantic_style_profiles_path()) == {}
+    profiles = mod._load_profiles(mod.semantic_style_profiles_path())
+    assert isinstance(profiles, dict)
+    assert len(profiles) == 1
+    profile = profiles[(100, 42, "group_chat")]
+    assert profile.sample_count == 1
+    assert profile.common_style_sample_count == 1
+    assert profile.direct_examples == []
+    assert profile.direct_pairs == []
+    assert profile.rewrite_seeds == []
+    assert profile.style_anchor == ""
     examples = mod._load_semantic_style_examples(path)
     assert examples[0].annotation_source == "legacy_persisted_v1"
     persisted = path.read_text(encoding="utf-8")
@@ -1883,3 +1892,104 @@ def test_semantic_style_backfill_is_enabled_by_default():
     from pallas.product.llm import repeater_semantic_style as mod
 
     assert mod.SEMANTIC_STYLE_BACKFILL_ENABLED is True
+
+
+def test_legacy_unknown_accumulates_rhythm_statistics(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod.persist_semantic_style_example(
+        mod.SemanticStyleExample(
+            example_id="42:2:100",
+            created_at=100,
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            trigger_text="前句A",
+            reply_text="单条一句",
+            label=mod.parse_semantic_style_label({}),
+            source_kind="legacy_unknown",
+        )
+    )
+    mod.persist_semantic_style_example(
+        mod.SemanticStyleExample(
+            example_id="42:3:100",
+            created_at=101,
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            trigger_text="前句B",
+            reply_text="第一句\n第二句",
+            label=mod.parse_semantic_style_label({}),
+            source_kind="legacy_unknown",
+        )
+    )
+    profile = mod._load_profiles(mod.semantic_style_profiles_path())[(100, 42, "group_chat")]
+    assert profile.sample_count == 2
+    assert profile.common_style_sample_count == 2
+    assert profile.bubble_counts == [1, 2]
+    assert profile.rhythm_counts == {"single": 1, "multi": 1}
+    assert profile.segment_char_lengths == [4, 3, 3]
+    assert profile.direct_examples == []
+    assert profile.direct_pairs == []
+    assert profile.rewrite_seeds == []
+    assert profile.bot_style_sample_count == 0
+
+
+def test_legacy_unknown_skips_empty_reply_text(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod.persist_semantic_style_example(
+        mod.SemanticStyleExample(
+            example_id="42:4:100",
+            created_at=100,
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            trigger_text="前句",
+            reply_text="",
+            label=mod.parse_semantic_style_label({}),
+            source_kind="legacy_unknown",
+        )
+    )
+    assert mod._load_profiles(mod.semantic_style_profiles_path()) == {}
+
+
+def test_rebuild_profiles_merges_legacy_statistics_with_human_pair(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod.persist_semantic_style_example(
+        mod.SemanticStyleExample(
+            example_id="42:5:100",
+            created_at=100,
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            trigger_text="前句",
+            reply_text="旧样本两句\n第二句",
+            label=mod.parse_semantic_style_label({}),
+            source_kind="legacy_unknown",
+        )
+    )
+    mod.persist_semantic_style_example(
+        mod.SemanticStyleExample(
+            example_id="42:6:100",
+            created_at=101,
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            trigger_text="新触发",
+            reply_text="新样本",
+            label=mod.parse_semantic_style_label({}),
+            source_kind="human_pair",
+            trigger_user_id=11,
+            reply_user_id=12,
+        )
+    )
+    profile = mod._load_profiles(mod.semantic_style_profiles_path())[(100, 42, "group_chat")]
+    assert profile.sample_count == 2
+    assert profile.bubble_counts == [2, 1]
+    assert profile.direct_examples == ["新样本"]
+    assert profile.rewrite_seeds == []
