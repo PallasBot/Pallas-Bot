@@ -249,7 +249,7 @@ async def test_build_llm_chat_messages_excludes_ambient_turn_clipped_from_block(
 
 
 @pytest.mark.asyncio
-async def test_build_llm_chat_messages_uses_bounded_recent_pair_without_ambient(pg_engine, monkeypatch) -> None:
+async def test_build_llm_chat_messages_uses_full_session_window_without_ambient(pg_engine, monkeypatch) -> None:
     clear_llm_config_cache()
     cfg = LlmConfig(
         llm_session_enabled=True,
@@ -274,7 +274,6 @@ async def test_build_llm_chat_messages_uses_bounded_recent_pair_without_ambient(
         "继续讲",
         cfg=cfg,
         include_history=True,
-        history_limit=2,
         include_group_ambient=False,
     )
 
@@ -287,7 +286,7 @@ async def test_build_llm_chat_messages_uses_bounded_recent_pair_without_ambient(
 
 
 @pytest.mark.asyncio
-async def test_build_llm_chat_messages_forwards_bounded_history_without_ambient(
+async def test_build_llm_chat_messages_forwards_full_window_history_without_ambient(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     cfg = LlmConfig(llm_session_enabled=True, llm_session_user_window=8, llm_session_group_window=4)
@@ -308,12 +307,11 @@ async def test_build_llm_chat_messages_forwards_bounded_history_without_ambient(
         "继续讲",
         cfg=cfg,
         include_history=True,
-        history_limit=2,
         include_group_ambient=False,
     )
 
     assert [item.role for item in messages] == ["user", "assistant", "user"]
-    assert history_mock.await_args.kwargs["limit"] == 2
+    assert history_mock.await_args.kwargs["limit"] is None
     ambient_mock.assert_not_awaited()
 
 
