@@ -117,7 +117,7 @@ WebUI 在同一页「功能开关」里：启用智能对话 / 启用遗留酒�
 | 话题相关就带上（相关即带） | 话题与工具领域沾边时交给模型 |
 | 说到触发词才带上（触发才带） | 平时不带；说到触发说法或经 `tools.find` 后才出现 |
 
-后者更省上下文。开发向见 [Bot 内置 Agent 生命周期](/developer/architecture/agent-lifecycle)；HTTP 契约见 [Agent Platform API](/common/webui/api/09-agent-platform)；排障见 [LLM 与 AI](/maintainer/operate/llm-and-ai)。
+后者更省上下文。模型到底看到了什么、回复会被哪些检查拦下，见 [牛牛的上下文与回复护栏](llm-context-and-guardrails.md)。开发向见 [Bot 内置 Agent 生命周期](/developer/architecture/agent-lifecycle)；HTTP 契约见 [Agent Platform API](/common/webui/api/09-agent-platform)；排障见 [LLM 与 AI](/maintainer/operate/llm-and-ai)。
 
 ---
 

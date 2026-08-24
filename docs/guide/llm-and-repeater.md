@@ -65,4 +65,5 @@ AI **成功发出**之后，还可能：
 - [复读 / 接话](/plugins/repeater)
 - [牛格与群味](/plugins/persona)
 - [AI 扩展](ai.md) · [LLM 对话、媒体与 AI Runtime](ai-runtime-choice.md)
+- 想了解模型看到了什么、回复被怎么拦：[牛牛的上下文与回复护栏](llm-context-and-guardrails.md)
 - 开发者：[LLM 输出路径](/developer/architecture/llm-output-path)

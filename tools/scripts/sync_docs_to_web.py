@@ -161,6 +161,7 @@ FILE_MAP: dict[str, str] = {
     "guide/community-plugin-store.md": "guide/community-plugin-store.md",
     "guide/community-plugin-author.md": "guide/community-plugin-author.md",
     "guide/llm-and-repeater.md": "guide/llm-and-repeater.md",
+    "guide/llm-context-and-guardrails.md": "guide/llm-context-and-guardrails.md",
     "guide/llm-migrate-from-ollama.md": "guide/llm-migrate-from-ollama.md",
     "guide/usage-admin.md": "guide/usage-admin.md",
     "guide/ai-runtime-choice.md": "guide/ai-runtime-choice.md",
