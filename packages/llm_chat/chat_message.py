@@ -698,6 +698,36 @@ async def prepare_and_submit_llm_chat_turn(
                 "speak_trigger": speak_trigger or "to_me",
             })
         if necessity.decision == "skip" and not required_tool_intent and not is_to_me:
+            from pallas.product.llm.low_engagement import (
+                can_bubble_low_engagement_on_necessity_skip,
+                dispatch_low_engagement,
+            )
+
+            if group_id is not None and can_bubble_low_engagement_on_necessity_skip(
+                text=focus_text,
+                bot_id=int(bot.self_id),
+                recent_bot_reply_count=recent_bot_reply_count,
+            ):
+                try:
+                    emitted = await dispatch_low_engagement(
+                        bot_id=int(bot.self_id),
+                        group_id=int(group_id),
+                        user_id=int(user_id),
+                        recent_bot_reply_count=recent_bot_reply_count,
+                        send_message=llm_chat_msg.send,
+                        trigger_text=focus_text,
+                    )
+                except Exception as exc:
+                    logger.debug("low engagement dispatch failed: {}", exc)
+                    emitted = False
+                if emitted:
+                    record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_necessity_low_engagement")
+                    logger.debug(
+                        "llm chat route: reply_necessity_low_engagement message_id={} group={} user={}",
+                        getattr(event, "message_id", None),
+                        group_id,
+                        user_id,
+                    )
             record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_necessity_skip")
             logger.debug(
                 "llm chat route skipped: reason=reply_necessity message_id={} group={} user={} score={} detail={}",
