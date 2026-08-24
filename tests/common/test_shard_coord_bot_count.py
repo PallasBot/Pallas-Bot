@@ -67,7 +67,7 @@ def test_cross_shard_order_finalize(fake_coord_redis, monkeypatch):
     assert len(order) == 3
 
 
-def test_finalize_keeps_order_when_late_registration_arrives(fake_coord_redis):
+def test_finalize_absorbs_late_registration_into_order_tail(fake_coord_redis):
     path = mod._session_path(10086, 999003)
     mod._ensure_session(
         path,
@@ -91,7 +91,29 @@ def test_finalize_keeps_order_when_late_registration_arrives(fake_coord_redis):
     mod._try_finalize_order(path, 100)
     order = mod._read_session(path).get("order")
     assert isinstance(order, list)
-    assert order == [100]
+    assert order == [100, 300]
+
+
+def test_finalize_keeps_order_when_no_new_registration(fake_coord_redis):
+    path = mod._session_path(10086, 999006)
+    mod._ensure_session(
+        path,
+        group_id=10086,
+        user_id=1,
+        message_time=1,
+        seed="2026-05-22:10086",
+    )
+    mod._register_shard_bots(path, 3, [100, 200])
+    data = mod._read_session(path)
+    assert data is not None
+    data["collect_until"] = time.time() - 0.01
+    data["order"] = [100, 200]
+    data["finalized_by"] = 100
+    mod._write_session_atomic(path, data)
+    mod._try_finalize_order(path, 100)
+    order = mod._read_session(path).get("order")
+    assert isinstance(order, list)
+    assert order == [100, 200]
 
 
 def test_completion_claims_once_after_report_window(fake_coord_redis):
@@ -244,7 +266,7 @@ async def test_turn_is_ready_after_previous_bot_reported(fake_coord_redis):
     )
 
 
-def test_late_shard_extends_collect_window(fake_coord_redis):
+def test_late_shard_does_not_extend_collect_window(fake_coord_redis):
     path = mod._session_path(10086, 999002)
     mod._ensure_session(
         path,
@@ -257,4 +279,79 @@ def test_late_shard_extends_collect_window(fake_coord_redis):
     time.sleep(0.05)
     mod._register_shard_bots(path, 1, [200])
     second_until = float(mod._read_session(path)["collect_until"])
-    assert second_until >= first_until
+    assert second_until == first_until
+
+
+async def test_wait_for_order_finalizes_for_non_min_coordinator(fake_coord_redis):
+    """unified 模式协调任务持有者未必是已登记最小牛，仍须能完成 finalize。"""
+    path = mod._session_path(10086, 999007)
+    mod._ensure_session(
+        path,
+        group_id=10086,
+        user_id=1,
+        message_time=1,
+        seed="2026-05-22:10086",
+    )
+    mod._register_shard_bots(path, 0, [300, 100, 200])
+    data = mod._read_session(path)
+    assert data is not None
+    data["collect_until"] = time.time() - 0.01
+    mod._write_session_atomic(path, data)
+
+    order = await mod._wait_for_order(path, deadline=time.time() + 5.0, self_bot_id=200)
+    assert order is not None
+    assert set(order) == {100, 200, 300}
+
+
+async def test_coordinator_cancels_when_cooldown_active(fake_coord_redis, monkeypatch):
+    class FakeGroupConfig:
+        def __init__(self, group_id: int, cooldown: int) -> None:
+            self.group_id = group_id
+            self.cooldown = cooldown
+
+        async def is_cooldown(self, action_type: str) -> bool:
+            return False
+
+        async def refresh_cooldown(self, action_type: str) -> None:
+            return None
+
+    monkeypatch.setattr(
+        "pallas.core.platform.shard.registry.config.get_shard_registry_settings",
+        lambda: type("S", (), {"shard_id": 0})(),
+    )
+    monkeypatch.setattr("pallas.core.foundation.config.GroupConfig", FakeGroupConfig)
+
+    from pallas.core.platform.multi_bot.dedup import cross_bot_group_message_key
+
+    group_id, user_id, message_time = 10086, 1, 1
+    claim_key = cross_bot_group_message_key(
+        group_id,
+        user_id,
+        mod.bot_count_coord_plaintext("牛牛报数"),
+        message_time,
+        use_plaintext=True,
+        include_message_time=True,
+    )
+    path = mod._session_path(group_id, claim_key)
+    mod._ensure_session(
+        path,
+        group_id=group_id,
+        user_id=user_id,
+        message_time=message_time,
+        seed="2026-05-22:10086",
+    )
+    mod._register_shard_bots(path, 0, [100])
+    data = mod._read_session(path)
+    assert data is not None
+    data["collect_until"] = time.time() - 0.01
+    mod._write_session_atomic(path, data)
+
+    result = await mod.run_shard_coordinated_bot_count(
+        group_id=group_id,
+        user_id=user_id,
+        plaintext="牛牛报数",
+        message_time=message_time,
+        self_bot_id=100,
+    )
+    assert result is None
+    assert mod._read_session(path)["cancelled"] is True

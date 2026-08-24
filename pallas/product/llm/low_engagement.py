@@ -203,3 +203,37 @@ async def dispatch_low_engagement(
     except Exception:
         pass
     return True
+
+
+def can_bubble_low_engagement_on_necessity_skip(
+    *,
+    text: str,
+    bot_id: int | None = None,
+    recent_bot_reply_count: int = 0,
+) -> bool:
+    """necessity gate 判 skip 时，判定是否值得走低投入冒泡而非直接静默。
+
+    复用 reply_necessity 的硬静默原语：noise/spam/incomplete/bystander 任一命中即
+    真静默（spec 边界「该静默的仍然静默」）；其余低价值社交短消息（low_social /
+    short_reaction 扣分项）可冒泡。
+    """
+    from pallas.product.llm.reply_necessity import (
+        is_bystander_plain_text,
+        is_incomplete_utterance,
+        is_low_value_social_turn,
+        is_noise_fragment,
+        looks_like_spam_or_promo,
+    )
+
+    plain = str(text or "").strip()
+    if not plain:
+        return False
+    if is_noise_fragment(plain):
+        return False
+    if looks_like_spam_or_promo(plain):
+        return False
+    if is_incomplete_utterance(plain):
+        return False
+    if is_bystander_plain_text(plain, bot_id=bot_id):
+        return False
+    return is_low_value_social_turn(plain)

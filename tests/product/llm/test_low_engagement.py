@@ -8,6 +8,7 @@ from pallas.product.llm.low_engagement import (
     _EMOTION_TANGENT_POOL,
     _GENTLE_POOL,
     _is_gentle_short_saying,
+    can_bubble_low_engagement_on_necessity_skip,
     clear_low_engagement_last_used,
     dispatch_low_engagement,
     low_engagement_emit_probability,
@@ -237,3 +238,34 @@ async def test_dispatch_low_engagement_neutral_turn_uses_gentle_pool(monkeypatch
     assert emitted is True
     assert len(sent) == 1
     assert sent[0] in (_GENTLE_POOL + ["😄😄😄", "哈哈哈哈", "（（", "（", "www"])
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "哈哈",
+        "难绷",
+        "那没事了",
+        "这也行",
+    ],
+)
+def test_can_bubble_on_necessity_skip_true_for_low_value_social(text: str) -> None:
+    assert can_bubble_low_engagement_on_necessity_skip(text=text, bot_id=123)
+
+
+@pytest.mark.parametrize(
+    ("text", "bot_id"),
+    [
+        ("", 123),
+        ("😄😄😄", 123),  # 纯 emoji → noise
+        ("6", 123),  # 单字符噪声
+        ("？", 123),  # 问号噪声
+        ("https://example.com 点击即玩 免费领", 123),  # spam
+        ("想要加我微信哦", 123),  # promo term
+        ("然后", 123),  # 不完整话语
+        ("你是", 123),  # 不完整话语
+        ("[CQ:at,qq=999] 一起玩啊", 1),  # @ 他人未 @ bot → bystander
+    ],
+)
+def test_can_bubble_on_necessity_skip_false_for_hard_silent(text: str, bot_id: int | None) -> None:
+    assert not can_bubble_low_engagement_on_necessity_skip(text=text, bot_id=bot_id)

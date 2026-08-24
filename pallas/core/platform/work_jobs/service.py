@@ -38,19 +38,33 @@ def work_aux_batch_sizes(concurrency: int) -> list[int]:
 
 _IDLE_BACKOFF_BASE_SEC = 0.2
 _IDLE_BACKOFF_MAX_SEC = 2.0
+_IDLE_BACKOFF_EXPONENT_CAP = 8
+
+
+def idle_backoff_seconds(idle_rounds: int) -> float:
+    exponent = min(idle_rounds, _IDLE_BACKOFF_EXPONENT_CAP)
+    return min(_IDLE_BACKOFF_MAX_SEC, _IDLE_BACKOFF_BASE_SEC * (1.5**exponent))
 
 
 async def run_work_consumer(worker: WorkJobWorker, *, idle_backoff: bool = True) -> None:
     idle_rounds = 0
     while True:
-        if await worker.run_once():
+        try:
+            polled = await worker.run_once()
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.warning("work aux consumer loop crashed, will retry: {}", exc)
+            polled = False
+            idle_rounds = 0
+        if polled:
             idle_rounds = 0
             continue
         idle_rounds += 1
         if not idle_backoff:
             await asyncio.sleep(_IDLE_BACKOFF_BASE_SEC)
             continue
-        await asyncio.sleep(min(_IDLE_BACKOFF_MAX_SEC, _IDLE_BACKOFF_BASE_SEC * (1.5**idle_rounds)))
+        await asyncio.sleep(idle_backoff_seconds(idle_rounds))
 
 
 async def run_work_status_publisher(store, *, consumers: int, metrics) -> None:
