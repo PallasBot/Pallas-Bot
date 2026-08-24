@@ -86,16 +86,18 @@ def _ensure_session(
     def init(data: dict[str, Any]) -> None:
         if data.get("group_id"):
             return
+        base_until = float(data.get("collect_until") or 0)
         data.update({
             "group_id": group_id,
             "user_id": user_id,
             "message_time": message_time,
             "seed": seed,
-            "collect_until": now + _COLLECT_SEC,
             "shards": {},
             "order": None,
             "cancelled": False,
         })
+        if not base_until:
+            data["collect_until"] = now + _COLLECT_SEC
 
     out = _mutate_session(session_key, init)
     return out or {}
@@ -109,9 +111,10 @@ def _register_shard_bots(session_key: str, shard_id: int, bot_ids: list[int]) ->
         merged = {int(x) for x in shards.get(key, []) if str(x).isdigit()}
         merged.update(int(x) for x in bot_ids)
         shards[key] = sorted(merged)
-        now = time.time()
-        cur = float(data.get("collect_until") or 0)
-        data["collect_until"] = max(cur, now + _COLLECT_SEC)
+        # 收集窗口锚定在首个触发时刻：后续补登记只并入 shards，
+        # 不再推后 collect_until，避免窗口被拉长导致 finalize 迟迟不被触发。
+        if not data.get("collect_until"):
+            data["collect_until"] = time.time() + _COLLECT_SEC
 
     _mutate_session(session_key, reg)
 
@@ -154,6 +157,11 @@ def _try_finalize_order(session_key: str, self_bot_id: int) -> dict[str, Any] | 
             return
         existing = data.get("order")
         if isinstance(existing, list) and existing:
+            known = {int(x) for x in existing}
+            fresh = [int(x) for x in registered if int(x) not in known]
+            if fresh:
+                existing.extend(sorted(fresh))
+                data["report_until"] = time.time() + (len(existing) - 1) * STAGGER_SEC + 0.8
             return
         order = list(registered)
         seed = str(data.get("seed") or "")
@@ -353,11 +361,14 @@ async def _wait_for_order(session_key: str, *, deadline: float, self_bot_id: int
         if data.get("cancelled"):
             return None
         registered = _all_registered_bots(data)
-        if registered and time.time() >= float(data.get("collect_until") or 0) and min(registered) == self_bot_id:
-            order = data.get("order")
-            if not isinstance(order, list) or not order:
-                await asyncio.to_thread(_try_finalize_order, session_key, self_bot_id)
-                data = await asyncio.to_thread(_read_session, session_key) or data
+        order = data.get("order")
+        known = len(order) if isinstance(order, list) and order else 0
+        ready_to_finalize = (
+            bool(registered) and time.time() >= float(data.get("collect_until") or 0) and known < len(registered)
+        )
+        if ready_to_finalize:
+            await asyncio.to_thread(_try_finalize_order, session_key, self_bot_id)
+            data = await asyncio.to_thread(_read_session, session_key) or data
         order = data.get("order")
         if isinstance(order, list) and order:
             try:
