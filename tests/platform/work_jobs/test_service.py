@@ -84,3 +84,42 @@ async def test_work_consumer_idle_backoff_slows_idle_polling(monkeypatch: pytest
 
     assert fast > slow
     assert slow >= 1
+
+
+@pytest.mark.asyncio
+async def test_idle_backoff_caps_exponent_to_avoid_overflow() -> None:
+    from pallas.core.platform.work_jobs import service
+
+    assert service.idle_backoff_seconds(10**6) == service._IDLE_BACKOFF_MAX_SEC
+    assert service.idle_backoff_seconds(0) == service._IDLE_BACKOFF_BASE_SEC
+    assert service.idle_backoff_seconds(1) == pytest.approx(0.3)
+
+
+@pytest.mark.asyncio
+async def test_work_consumer_survives_run_once_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    from pallas.core.platform.work_jobs import service
+
+    class Worker:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def run_once(self) -> bool:
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("boom")
+            return False
+
+    worker = Worker()
+    monkeypatch.setattr(service, "_IDLE_BACKOFF_BASE_SEC", 0.01)
+    monkeypatch.setattr(service, "_IDLE_BACKOFF_MAX_SEC", 0.02)
+
+    task = asyncio.create_task(service.run_work_consumer(worker))
+    try:
+        await asyncio.sleep(0.08)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+    assert worker.calls >= 2
