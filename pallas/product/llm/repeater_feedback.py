@@ -1024,18 +1024,14 @@ def list_feedback_entries_for_session(
     if not path.exists():
         return []
     window_size = max(1, int(limit)) * _RECENT_WINDOW_MULTIPLIER
-    recent: deque[LlmRepeaterFeedbackEntry] = deque(maxlen=window_size)
     target_group_id = int(group_id)
     target_bot_id = int(bot_id)
     target_user_id = int(user_id)
-    for item in _iter_feedback_entries(path):
-        if int(item.group_id) != target_group_id:
-            continue
-        if int(item.bot_id) != target_bot_id:
-            continue
-        if int(item.user_id) != target_user_id:
-            continue
-        recent.append(item)
+    _, _, source_rows = _group_entries_index_rows(path, group_id=target_group_id)
+    recent: deque[LlmRepeaterFeedbackEntry] = deque(
+        (item for item in source_rows if int(item.bot_id) == target_bot_id and int(item.user_id) == target_user_id),
+        maxlen=window_size,
+    )
     deduped: list[LlmRepeaterFeedbackEntry] = []
     seen_ids: set[str] = set()
     for item in reversed(recent):
