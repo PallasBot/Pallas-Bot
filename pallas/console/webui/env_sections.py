@@ -318,7 +318,6 @@ def _llm_section() -> WebuiEnvSection:
             "llm_chat_queue_wait_sec": "LLM_CHAT_QUEUE_WAIT_SEC",
             "llm_repeater_feedback_enabled": "LLM_REPEATER_FEEDBACK_ENABLED",
             "llm_repeater_bias_enabled": "LLM_REPEATER_BIAS_ENABLED",
-            "llm_repeater_writeback_enabled": "LLM_REPEATER_WRITEBACK_ENABLED",
             "conversation_feature_level": "CONVERSATION_FEATURE_LEVEL",
             "llm_reply_gate_enabled": "LLM_REPLY_GATE_ENABLED",
             "llm_current_turn_decision_enabled": "LLM_CURRENT_TURN_DECISION_ENABLED",

@@ -8,7 +8,6 @@ from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.kernel.memory_governance import (
     can_apply_feedback_bias,
     can_collect_feedback,
-    can_promote_writeback,
     can_read_behavioral_learning,
     can_read_generic_knowledge,
     can_read_persistent_memory,
@@ -30,10 +29,8 @@ def build_conversation_kernel_status(cfg: LlmConfig | None = None) -> dict[str, 
         "conversation_feature_level_raw": str(c.conversation_feature_level or "").strip(),
         "llm_repeater_feedback_enabled": bool(c.llm_repeater_feedback_enabled),
         "llm_repeater_bias_enabled": bool(c.llm_repeater_bias_enabled),
-        "llm_repeater_writeback_enabled": bool(c.llm_repeater_writeback_enabled),
         "feedback_collect_active": can_collect_feedback(c),
         "feedback_bias_active": can_apply_feedback_bias(c),
-        "writeback_active": can_promote_writeback(c),
         "runtime_state_summary_active": runtime_summary_active,
         "generic_knowledge_active": can_read_generic_knowledge(c),
         "memory_policy": {

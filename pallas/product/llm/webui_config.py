@@ -488,14 +488,6 @@ class LlmWebuiConfig(BaseModel):
             "样本太少时不会强行生效；依赖上方「收集反哺」",
         ),
     )
-    llm_repeater_writeback_enabled: bool = Field(
-        default=True,
-        description=field_help(
-            "合格的软反馈要不要写进接话学习语料，让以后更能复用",
-            "开=符合条件才回写（进阶，可保持开）；关=只影响当场打分，不进语料库",
-            "写回前建议先在会话页处理好坏样本；乱写回会让语料变怪",
-        ),
-    )
     conversation_feature_level: ConversationFeatureLevel = Field(
         default="",
         description=field_help(
@@ -1195,7 +1187,6 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_chat_max_concurrency=cfg.llm_chat_max_concurrency,
         llm_repeater_feedback_enabled=cfg.llm_repeater_feedback_enabled,
         llm_repeater_bias_enabled=cfg.llm_repeater_bias_enabled,
-        llm_repeater_writeback_enabled=cfg.llm_repeater_writeback_enabled,
         conversation_feature_level=cfg.conversation_feature_level or "",  # type: ignore[arg-type]
         llm_reply_gate_enabled=cfg.llm_reply_gate_enabled,
         llm_current_turn_decision_enabled=cfg.llm_current_turn_decision_enabled,

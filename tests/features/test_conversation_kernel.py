@@ -166,11 +166,9 @@ def test_memory_read_policy_disables_behavioral_learning_by_default() -> None:
         LlmConfig(
             llm_chat_enabled=True,
             llm_repeater_bias_enabled=False,
-            llm_repeater_writeback_enabled=False,
         )
     )
     assert policy.allow_behavioral_learning is False
-    assert policy.allow_writeback is False
 
 
 def test_persona_affect_contract_ignores_legacy_account_length() -> None:

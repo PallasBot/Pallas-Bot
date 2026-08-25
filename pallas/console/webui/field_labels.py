@@ -159,7 +159,6 @@ FIELD_LABELS: dict[str, str] = {
     "llm_chat_queue_wait_sec": "排队等待超时（秒）",
     "llm_repeater_feedback_enabled": "收集 LLM 对话反哺",
     "llm_repeater_bias_enabled": "反哺参与接话打分",
-    "llm_repeater_writeback_enabled": "反哺写回接话语料",
     "conversation_feature_level": "对话能力档位",
     "llm_reply_gate_enabled": "过滤无意义 @",
     "llm_shut_up_silence_enabled": "闭嘴静默",

@@ -22,7 +22,6 @@ from pallas.core.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE
 from pallas.product.llm.injection_feedback import InjectionSnapshot, NegativeOutcomeApplyResult
 from pallas.product.llm.kernel.memory_governance import (
     can_collect_feedback,
-    can_promote_writeback,
 )
 
 if TYPE_CHECKING:
@@ -62,7 +61,6 @@ class LlmRepeaterFeedbackEntry(BaseModel):
     llm_route: str = ""
     source_tags: list[str] = Field(default_factory=list)
     eligible_for_bias: bool = True
-    eligible_for_writeback: bool = False
     corrected_reply_text: str = ""
     corrected_at: int = 0
     bot_message_id: int = 0
@@ -287,7 +285,6 @@ def build_feedback_entry(**kwargs: Any) -> LlmRepeaterFeedbackEntry:
         llm_route=str(kwargs.get("llm_route") or "").strip(),
         source_tags=[str(item).strip() for item in list(kwargs.get("source_tags") or []) if str(item).strip()],
         eligible_for_bias=bool(kwargs.get("eligible_for_bias", True)),
-        eligible_for_writeback=bool(kwargs.get("eligible_for_writeback", False)),
         corrected_reply_text=str(kwargs.get("corrected_reply_text") or "").strip(),
         corrected_at=int(kwargs.get("corrected_at") or 0),
         bot_message_id=int(kwargs.get("bot_message_id") or 0),
@@ -321,10 +318,8 @@ def append_feedback_entry(entry: LlmRepeaterFeedbackEntry) -> None:
         after_revision=_feedback_entries_revision(path),
     )
     from pallas.product.llm.feedback_embedding_cache import prefetch_trigger_embedding
-    from pallas.product.llm.promotion_candidates import note_feedback_entry_for_promotion
 
     prefetch_trigger_embedding(str(entry.user_text or ""))
-    note_feedback_entry_for_promotion(entry)
 
 
 def _iter_feedback_entries(path: Path):
@@ -393,11 +388,8 @@ def is_retained_feedback_entry(
     item: LlmRepeaterFeedbackEntry,
     *,
     cutoff_created_at: int,
-    protected_request_ids: set[str],
 ) -> bool:
     if int(item.created_at) >= cutoff_created_at:
-        return True
-    if str(item.request_id or "").strip() in protected_request_ids:
         return True
     if str(item.corrected_reply_text or "").strip():
         return True
@@ -411,10 +403,9 @@ def is_retained_feedback_entry(
 def compact_feedback_entries(*, retention_days: int = 7) -> dict[str, int]:
     """压缩 entries.jsonl：超期且不被保护的条目移入按月归档文件。
 
-    保护规则：被 promotion candidates 引用、有校正、被标记 ineligible、strong 场景。
+    保护规则：有校正、被标记 ineligible、strong 场景。
     """
     from pallas.core.foundation.fs_lock import interprocess_file_lock
-    from pallas.product.llm.promotion_candidates import protected_feedback_request_ids
 
     path = feedback_base_dir(create=False) / "entries.jsonl"
     if not path.exists():
@@ -423,7 +414,6 @@ def compact_feedback_entries(*, retention_days: int = 7) -> dict[str, int]:
     retention_days = max(1, int(retention_days))
     now = int(time.time())
     cutoff = now - retention_days * 86400
-    protected = protected_feedback_request_ids()
     archive_path = feedback_archive_path()
 
     def mutation(rows: list[LlmRepeaterFeedbackEntry]) -> tuple[dict[str, int], bool]:
@@ -433,7 +423,6 @@ def compact_feedback_entries(*, retention_days: int = 7) -> dict[str, int]:
             if is_retained_feedback_entry(
                 item,
                 cutoff_created_at=cutoff,
-                protected_request_ids=protected,
             ):
                 retained.append(item)
             else:
@@ -886,9 +875,6 @@ def set_feedback_entry_correction(
 
     updated = _mutate_feedback_entries(update)
     if updated is not None:
-        from pallas.product.llm.promotion_candidates import note_feedback_entry_for_promotion
-
-        note_feedback_entry_for_promotion(updated)
         return updated
 
     payload = dict(create_fields or {})
@@ -1123,7 +1109,3 @@ def group_feedback_bias_snapshot(
 
 def should_append_feedback_for_task(task_type: str) -> bool:
     return can_collect_feedback() and is_feedback_task_type(task_type)
-
-
-def promotion_allowed() -> bool:
-    return can_promote_writeback()

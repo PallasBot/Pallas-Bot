@@ -28,7 +28,6 @@ class MemoryReadPolicy(BaseModel):
     allow_corpus_foundation: bool = True
     allow_behavioral_learning: bool = False
     allow_generic_knowledge: bool = True
-    allow_writeback: bool = False
 
 
 def resolve_conversation_feature_level(cfg: LlmConfig | None = None) -> ConversationFeatureLevel:
@@ -42,7 +41,7 @@ def resolve_conversation_feature_level(cfg: LlmConfig | None = None) -> Conversa
         return ConversationFeatureLevel.FULL_CONVERSATION_KERNEL
     if not c.llm_chat_enabled:
         return ConversationFeatureLevel.LEGACY_REPEATER
-    if c.llm_repeater_feedback_enabled or c.llm_repeater_bias_enabled or c.llm_repeater_writeback_enabled:
+    if c.llm_repeater_feedback_enabled or c.llm_repeater_bias_enabled:
         return ConversationFeatureLevel.FULL_CONVERSATION_KERNEL
     return ConversationFeatureLevel.LEGACY_REPEATER
 
@@ -51,9 +50,6 @@ def resolve_memory_read_policy(cfg: LlmConfig | None = None) -> MemoryReadPolicy
     c = cfg or get_llm_config()
     feature_level = resolve_conversation_feature_level(c)
     allow_behavioral = bool(c.llm_repeater_bias_enabled) and feature_level != ConversationFeatureLevel.LEGACY_REPEATER
-    allow_writeback = bool(c.llm_repeater_writeback_enabled)
-    if feature_level == ConversationFeatureLevel.LEGACY_REPEATER:
-        allow_writeback = False
     return MemoryReadPolicy(
         allow_runtime_state=bool(c.llm_chat_enabled and c.llm_session_enabled),
         allow_persistent_memory=bool(
@@ -62,7 +58,6 @@ def resolve_memory_read_policy(cfg: LlmConfig | None = None) -> MemoryReadPolicy
         allow_corpus_foundation=True,
         allow_behavioral_learning=allow_behavioral,
         allow_generic_knowledge=bool(c.llm_chat_enabled and c.llm_knowledge_sources_enabled),
-        allow_writeback=allow_writeback,
     )
 
 
@@ -109,12 +104,6 @@ def can_apply_feedback_bias(cfg: LlmConfig | None = None) -> bool:
     c = cfg or get_llm_config()
     policy = resolve_memory_read_policy(c)
     return bool(c.llm_chat_enabled and c.llm_repeater_bias_enabled and policy.allow_behavioral_learning)
-
-
-def can_promote_writeback(cfg: LlmConfig | None = None) -> bool:
-    c = cfg or get_llm_config()
-    policy = resolve_memory_read_policy(c)
-    return bool(c.llm_chat_enabled and c.llm_repeater_writeback_enabled and policy.allow_writeback)
 
 
 def empty_bias_snapshot() -> FeedbackBiasSnapshot:

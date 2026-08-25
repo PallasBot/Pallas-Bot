@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from unittest.mock import AsyncMock
-
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
@@ -40,7 +38,6 @@ def test_llm_repeater_feedback_api_returns_recent_entries(monkeypatch) -> None:
                 llm_route="plain_llm_chat",
                 source_tags=[],
                 eligible_for_bias=True,
-                eligible_for_writeback=False,
             )
         ]
 
@@ -145,86 +142,6 @@ def test_llm_repeater_feedback_summary_api_returns_group_snapshot(monkeypatch) -
     assert payload["data"]["count"] == 3
     assert payload["data"]["top_replies"] == ["少来。", "行啊。"]
     assert payload["data"]["scenes"] == ["banter", "group_threading"]
-
-
-def test_llm_repeater_feedback_promotion_candidates_api(monkeypatch) -> None:
-    from pallas.product.llm.kernel.feedback_models import PromotionCandidate
-
-    def fake_list_promotion_candidates(*, bot_id: int, group_id: int, limit: int = 20, include_resolved: bool = False):
-        assert bot_id == 10001
-        assert group_id == 123
-        assert limit == 20
-        assert include_resolved is False
-        return [
-            PromotionCandidate(
-                candidate_id="cand-1",
-                group_id=123,
-                trigger_text="你又来这套",
-                reply_text="少来。",
-                support_count=2,
-                last_seen_at=1718700001,
-                behavior_scene="banter",
-                scene_tier="strong",
-                writeback_status="pending",
-                source_request_id="req-2",
-            )
-        ]
-
-    monkeypatch.setattr(
-        "packages.pb_webui.llm_product_api.list_promotion_candidates",
-        fake_list_promotion_candidates,
-    )
-
-    client = _build_client(monkeypatch)
-    response = client.get(
-        "/pallas/api/llm/repeater-feedback/promotion-candidates",
-        params={"bot_id": 10001, "group_id": 123, "limit": 20},
-    )
-
-    assert response.status_code == 200, response.text
-    payload = response.json()
-    assert payload["ok"] is True
-    assert payload["data"]["items"][0]["candidate_id"] == "cand-1"
-    assert payload["data"]["items"][0]["reply_text"] == "少来。"
-    assert payload["data"]["items"][0]["scene_tier"] == "strong"
-    assert payload["data"]["items"][0]["writeback_status"] == "pending"
-
-
-def test_llm_repeater_feedback_promotion_candidates_resolve_api(monkeypatch) -> None:
-    from pallas.product.llm.kernel.feedback_models import PromotionCandidate
-
-    async def fake_resolve_promotion_candidate(
-        candidate_id: str, *, action: str, reason: str = "", bot_id: int, group_id: int
-    ):
-        assert candidate_id == "cand-1"
-        assert action == "promote"
-        assert (bot_id, group_id) == (10001, 123)
-        return PromotionCandidate(
-            candidate_id="cand-1",
-            group_id=123,
-            trigger_text="你又来这套",
-            reply_text="少来。",
-            support_count=2,
-            promoted=True,
-            writeback_status="written",
-        )
-
-    monkeypatch.setattr(
-        "packages.pb_webui.llm_product_api.resolve_promotion_candidate_with_writeback",
-        AsyncMock(side_effect=fake_resolve_promotion_candidate),
-    )
-
-    client = _build_client(monkeypatch)
-    response = client.post(
-        "/pallas/api/llm/repeater-feedback/promotion-candidates/resolve",
-        json={"candidate_id": "cand-1", "action": "promote", "bot_id": 10001, "group_id": 123},
-    )
-
-    assert response.status_code == 200, response.text
-    payload = response.json()
-    assert payload["ok"] is True
-    assert payload["data"]["promoted"] is True
-    assert payload["data"]["writeback_status"] == "written"
 
 
 def test_llm_repeater_feedback_manage_api(monkeypatch) -> None:

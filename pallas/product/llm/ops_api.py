@@ -111,10 +111,6 @@ from pallas.product.llm.ops_config import (
     memory_ops_patch_dict,
     session_ops_patch_dict,
 )
-from pallas.product.llm.promotion_candidates import (
-    list_promotion_candidates,
-    resolve_promotion_candidate_with_writeback,
-)
 from pallas.product.llm.providers_store import (
     bot_providers_configured,
     clear_providers_store_cache,
@@ -235,7 +231,6 @@ __all__ = [
     "list_memory_entity_summaries_async",
     "list_memory_preferences",
     "list_mid_term_summaries",
-    "list_promotion_candidates",
     "list_recent_conversation_traces",
     "list_relationship_notes",
     "list_scopes",
@@ -271,7 +266,6 @@ __all__ = [
     "reload_runtime_model",
     "resolve_endpoint_candidates_for_task",
     "resolve_endpoint_for_task",
-    "resolve_promotion_candidate_with_writeback",
     "resolve_provider_api_key",
     "resolve_provider_api_keys",
     "resolve_provider_base_url",

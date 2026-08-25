@@ -242,7 +242,6 @@ class LlmConfig(BaseModel):
     llm_chat_disabled_group_ids: list[int] = Field(default_factory=list)
     llm_repeater_feedback_enabled: bool = Field(default=True)
     llm_repeater_bias_enabled: bool = Field(default=True)
-    llm_repeater_writeback_enabled: bool = Field(default=True)
     conversation_feature_level: str = Field(default="")
     llm_reply_gate_enabled: bool = Field(default=True)
     llm_current_turn_decision_enabled: bool = Field(default=False)
@@ -484,7 +483,6 @@ def get_llm_config() -> LlmConfig:
             llm_chat_disabled_group_ids=_env_group_id_list("LLM_CHAT_DISABLED_GROUP_IDS"),
             llm_repeater_feedback_enabled=_env_bool("LLM_REPEATER_FEEDBACK_ENABLED", True),
             llm_repeater_bias_enabled=_env_bool("LLM_REPEATER_BIAS_ENABLED", True),
-            llm_repeater_writeback_enabled=_env_bool("LLM_REPEATER_WRITEBACK_ENABLED", True),
             conversation_feature_level=resolve_conversation_feature_level_raw(),
             llm_reply_gate_enabled=_env_bool("LLM_REPLY_GATE_ENABLED", True),
             llm_current_turn_decision_enabled=_env_bool("LLM_CURRENT_TURN_DECISION_ENABLED", False),

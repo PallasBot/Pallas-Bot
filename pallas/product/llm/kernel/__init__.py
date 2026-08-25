@@ -7,13 +7,12 @@ from pallas.product.llm.kernel.decision import (
     decide_repeater_action,
     plan_direct_chat_stages,
 )
-from pallas.product.llm.kernel.feedback_models import FeedbackBiasSnapshot, PromotionCandidate
+from pallas.product.llm.kernel.feedback_models import FeedbackBiasSnapshot
 from pallas.product.llm.kernel.memory_governance import (
     MemoryAssetKind,
     MemoryReadPolicy,
     can_apply_feedback_bias,
     can_collect_feedback,
-    can_promote_writeback,
     can_read_behavioral_learning,
     can_read_persistent_memory,
     can_read_runtime_state,
@@ -54,12 +53,10 @@ __all__ = [
     "GenerationStage",
     "MemoryAssetKind",
     "MemoryReadPolicy",
-    "PromotionCandidate",
     "behavior_scene_to_conversation_scene",
     "build_conversation_kernel_status",
     "can_apply_feedback_bias",
     "can_collect_feedback",
-    "can_promote_writeback",
     "can_read_behavioral_learning",
     "can_read_persistent_memory",
     "can_read_runtime_state",

@@ -23,10 +23,8 @@ from pallas.product.llm.ops_api import (
     list_active_knowledge_sources,
     list_group_feedback_entries,
     list_memory_entries,
-    list_promotion_candidates,
     list_recent_conversation_traces,
     list_relationship_notes,
-    resolve_promotion_candidate_with_writeback,
     set_affinity,
     set_feedback_entry_correction,
     set_feedback_entry_eligibility,
@@ -571,65 +569,6 @@ def register_llm_product_router(
             raise HTTPException(status_code=500, detail=str(e)) from e
         if updated is None:
             raise HTTPException(status_code=404, detail="未找到该反哺记录")
-        return JSONResponse({"ok": True, "data": updated.model_dump(mode="json")})
-
-    @router.get(f"{x}/llm/repeater-feedback/promotion-candidates", include_in_schema=True)
-    async def _llm_repeater_feedback_promotion_candidates_get(
-        bot_id: int = Query(..., ge=1, description="Bot QQ"),
-        group_id: int = Query(..., ge=1, description="群号"),
-        limit: int = Query(default=20, ge=1, le=200),
-        include_resolved: bool = Query(default=False, description="是否包含已晋升/已拒绝"),
-    ) -> JSONResponse:
-        try:
-            rows = list_promotion_candidates(
-                bot_id=bot_id,
-                group_id=group_id,
-                limit=limit,
-                include_resolved=include_resolved,
-            )
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(status_code=500, detail=str(e)) from e
-        return JSONResponse({
-            "ok": True,
-            "data": {
-                "items": [row.model_dump(mode="json") for row in rows],
-                "limit": limit,
-            },
-        })
-
-    @router.post(f"{x}/llm/repeater-feedback/promotion-candidates/resolve", include_in_schema=True)
-    async def _llm_repeater_feedback_promotion_candidates_resolve(
-        body: dict[str, Any],
-        token: str | None = Query(default=None),
-        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
-    ) -> JSONResponse:
-        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        candidate_id = str(body.get("candidate_id") or "").strip()
-        action = str(body.get("action") or "").strip().lower()
-        raw_bot_id = body.get("bot_id")
-        raw_group_id = body.get("group_id")
-        if raw_bot_id is None or raw_group_id is None:
-            raise HTTPException(status_code=400, detail="promotion resolve 必须提供 bot_id 和 group_id")
-        bot_id, group_id = _injection_governance_scope(
-            bot_id=str(raw_bot_id),
-            group_id=str(raw_group_id),
-        )
-        if not candidate_id:
-            raise HTTPException(status_code=400, detail="candidate_id required")
-        if action not in {"promote", "reject"}:
-            raise HTTPException(status_code=400, detail="action must be promote or reject")
-        try:
-            updated = await resolve_promotion_candidate_with_writeback(
-                candidate_id,
-                action=action,  # type: ignore[arg-type]
-                reason=str(body.get("reason") or "").strip(),
-                bot_id=bot_id,
-                group_id=group_id,
-            )
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(status_code=500, detail=str(e)) from e
-        if updated is None:
-            raise HTTPException(status_code=404, detail="未找到候选或 writeback 未开启")
         return JSONResponse({"ok": True, "data": updated.model_dump(mode="json")})
 
     @router.get(f"{x}/llm/expression-bank", include_in_schema=True)

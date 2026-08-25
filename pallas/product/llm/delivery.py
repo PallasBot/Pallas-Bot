@@ -428,8 +428,6 @@ def maybe_append_llm_repeater_feedback(
                 llm_route=normalize_feedback_llm_route(task.get("llm_route")),
                 source_tags=source_tags,
                 eligible_for_bias=collect_for_learning,
-                eligible_for_writeback=collect_for_learning
-                and str(task.get("scene_tier") or "").strip().lower() == "strong",
                 bot_message_id=int(bot_message_id or 0),
                 semantic_source_example_id=semantic_source_example_id,
                 semantic_scene="group_chat",
@@ -724,22 +722,6 @@ async def deliver_llm_callback_success(
                 name=f"llm_sticker_followup:{task_id}",
             )
             followup_task.add_done_callback(_consume_sticker_label_enqueue_result)
-    if learned_reply_text and text_delivered and group_id:
-        scene_tier = str(task.get("scene_tier") or "").strip()
-        channel = "at_chat" if task_type == LLM_CHAT_TASK_TYPE else "strong" if scene_tier == "strong" else "group"
-        try:
-            from pallas.product.persona.expression_learn import note_expression_from_utterance
-
-            note_expression_from_utterance(
-                int(group_id),
-                learned_reply_text,
-                source="llm_success",
-                channel=channel,
-                scene_tier=scene_tier,
-                bot_id=int(bot_id or 0),
-            )
-        except Exception as exc:
-            logger.debug("AI callback expression learn skipped for task [{}], error [{}]", task_id, exc)
     if learned_reply_text and text_delivered:
         if bool(get_llm_config().llm_reply_effect_eval_enabled):
             from pallas.product.llm.reply_effect import evaluate_and_record_reply_effect

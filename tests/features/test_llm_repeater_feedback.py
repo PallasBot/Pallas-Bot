@@ -22,7 +22,7 @@ from pallas.product.llm.repeater_feedback import (
 )
 
 
-def test_llm_repeater_feedback_defaults_enabled_bias_writeback(monkeypatch) -> None:
+def test_llm_repeater_feedback_defaults_enabled_bias(monkeypatch) -> None:
     monkeypatch.setattr(
         "pallas.product.llm.feedback_embedding_cache.schedule_feedback_trigger_backfill",
         lambda: None,
@@ -30,12 +30,10 @@ def test_llm_repeater_feedback_defaults_enabled_bias_writeback(monkeypatch) -> N
     clear_llm_config_cache()
     monkeypatch.delenv("LLM_REPEATER_FEEDBACK_ENABLED", raising=False)
     monkeypatch.delenv("LLM_REPEATER_BIAS_ENABLED", raising=False)
-    monkeypatch.delenv("LLM_REPEATER_WRITEBACK_ENABLED", raising=False)
 
     defaults = LlmConfig()
     assert defaults.llm_repeater_feedback_enabled is True
     assert defaults.llm_repeater_bias_enabled is True
-    assert defaults.llm_repeater_writeback_enabled is True
 
 
 def test_should_collect_llm_repeater_feedback_accepts_short_group_reply() -> None:
@@ -81,7 +79,7 @@ def test_normalize_feedback_llm_route_strips_explicit_route() -> None:
     assert normalize_feedback_llm_route("  plain_llm_chat  ") == "plain_llm_chat"
 
 
-def test_build_feedback_entry_defaults_writeback_false() -> None:
+def test_build_feedback_entry_defaults_bias_enabled() -> None:
     entry = build_feedback_entry(
         bot_id=10001,
         group_id=123,
@@ -94,50 +92,6 @@ def test_build_feedback_entry_defaults_writeback_false() -> None:
     assert isinstance(entry, LlmRepeaterFeedbackEntry)
     assert entry.entry_id == "req-1"
     assert entry.eligible_for_bias is True
-    assert entry.eligible_for_writeback is False
-
-
-def test_maybe_append_feedback_marks_writeback_eligible_only_for_strong_scene(monkeypatch) -> None:
-    from pallas.product.llm import delivery as llm_delivery
-    from pallas.product.llm.delivery import maybe_append_llm_repeater_feedback
-
-    appended = []
-    monkeypatch.setattr(
-        llm_delivery,
-        "get_llm_config",
-        lambda: SimpleNamespace(llm_repeater_feedback_enabled=True),
-    )
-    monkeypatch.setattr(
-        "pallas.product.llm.repeater_feedback.append_feedback_entry",
-        appended.append,
-    )
-    task = {
-        "task_type": "llm_chat",
-        "bot_id": 10001,
-        "group_id": 123,
-        "user_id": 456,
-        "user_text": "你又来这套",
-    }
-
-    maybe_append_llm_repeater_feedback(
-        "req-strong",
-        {
-            **task,
-            "scene_tier": "strong",
-            "semantic_style_source_example_id": "source:1",
-            "semantic_style_direct_candidate": "少来。",
-        },
-        "少来。",
-        bot_message_id=7788,
-        semantic_source_bound=True,
-    )
-    maybe_append_llm_repeater_feedback("req-weak", {**task, "scene_tier": "weak"}, "少来。")
-
-    assert [entry.eligible_for_writeback for entry in appended] == [True, False]
-    assert appended[0].bot_message_id == 7788
-    assert appended[0].semantic_source_example_id == "source:1"
-    assert appended[0].semantic_scene == "group_chat"
-    assert appended[1].semantic_source_example_id == ""
 
 
 @pytest.mark.asyncio
@@ -172,7 +126,6 @@ async def test_long_delivered_reply_keeps_lookup_only_negative_feedback(monkeypa
     assert found is not None
     assert found.bot_message_id == 40001
     assert found.eligible_for_bias is False
-    assert found.eligible_for_writeback is False
     assert found.reply_text == reply[:120]
     assert group_feedback_bias_snapshot(group_id=20001)["count"] == 0
 
@@ -889,10 +842,6 @@ def test_group_feedback_bias_snapshot_hotpath_skips_heavy_stats(tmp_path, monkey
         "pallas.product.llm.feedback_learning.summarize_learning_effectiveness",
         boom,
     )
-    monkeypatch.setattr(
-        "pallas.product.llm.promotion_candidates.count_pending_promotion_candidates",
-        boom,
-    )
 
     snap = group_feedback_bias_snapshot(
         group_id=123,
@@ -905,7 +854,6 @@ def test_group_feedback_bias_snapshot_hotpath_skips_heavy_stats(tmp_path, monkey
     assert snap["semantic_matched_replies"] == ["还行吧"]
     assert seen.get("policy") == "memory_only"
     assert snap["learning_stats"] == {}
-    assert snap["promotion_candidate_count"] == 0
 
 
 def test_list_group_feedback_entries_uses_short_ttl_cache(tmp_path, monkeypatch) -> None:
@@ -946,10 +894,6 @@ def test_list_group_feedback_entries_updates_loaded_group_without_rescanning_fil
     monkeypatch.setattr(
         "pallas.product.llm.feedback_embedding_cache.prefetch_trigger_embedding",
         lambda _text: None,
-    )
-    monkeypatch.setattr(
-        "pallas.product.llm.promotion_candidates.note_feedback_entry_for_promotion",
-        lambda _entry: None,
     )
     append_feedback_entry(
         build_feedback_entry(
@@ -1517,8 +1461,7 @@ def test_feedback_retention_archives_unprotected_old_entries(tmp_path, monkeypat
     assert [item.request_id for item in remaining] == ["old-strong"]
 
 
-def test_feedback_retention_protects_corrected_ineligible_strong_and_candidate_refs(tmp_path, monkeypatch) -> None:
-    from pallas.product.llm import promotion_candidates as pc
+def test_feedback_retention_protects_corrected_ineligible_and_strong(tmp_path, monkeypatch) -> None:
     from pallas.product.llm import repeater_feedback as mod
 
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
@@ -1567,8 +1510,8 @@ def test_feedback_retention_protects_corrected_ineligible_strong_and_candidate_r
     )
     mod.append_feedback_entry(
         mod.build_feedback_entry(
-            entry_id="old-candidate-ref",
-            request_id="candidate-source-req",
+            entry_id="old-plain",
+            request_id="old-plain",
             bot_id=10001,
             group_id=123,
             user_id=460,
@@ -1577,37 +1520,15 @@ def test_feedback_retention_protects_corrected_ineligible_strong_and_candidate_r
             created_at=old,
         )
     )
-    mod.append_feedback_entry(
-        mod.build_feedback_entry(
-            entry_id="old-archived",
-            request_id="old-archived",
-            bot_id=10001,
-            group_id=123,
-            user_id=461,
-            user_text="你好",
-            reply_text="嗨。",
-            created_at=old,
-        )
-    )
-
-    candidate = pc.PromotionCandidate(
-        candidate_id="cand-1",
-        group_id=123,
-        trigger_text="你好",
-        reply_text="嗨。",
-        source_request_id="candidate-source-req",
-    )
-    pc._write_candidates_index({candidate.candidate_id: candidate})
 
     report = mod.compact_feedback_entries(retention_days=7)
 
-    assert report == {"archived": 1, "retained": 4, "total": 5}
+    assert report == {"archived": 1, "retained": 3, "total": 4}
     retained = {item.request_id for item in mod._iter_feedback_entries(mod.feedback_entries_path())}
     assert retained == {
         "old-corrected",
         "old-ineligible",
         "old-strong",
-        "candidate-source-req",
     }
     archived = {item.request_id for item in mod._iter_feedback_entries(mod.feedback_archive_path())}
-    assert archived == {"old-archived"}
+    assert archived == {"old-plain"}
