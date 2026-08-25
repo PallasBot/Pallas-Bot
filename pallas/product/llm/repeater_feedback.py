@@ -1071,21 +1071,6 @@ def list_group_feedback_entries(
     return rows
 
 
-def is_reply_safe_for_auto_promote(reply_text: str, *, trigger_text: str = "") -> bool:
-    plain = str(reply_text or "").strip()
-    if not plain or len(plain) > _MAX_REPLY_LEN:
-        return False
-    if is_systemish_promote_text(plain, trigger_text):
-        return False
-    from pallas.product.llm.corpus_contamination import is_feedback_reply_collectable
-
-    if not is_feedback_reply_collectable(plain):
-        return False
-    from pallas.product.llm.feedback_learning import is_reply_safe_for_shaped_writeback
-
-    return is_reply_safe_for_shaped_writeback(plain)
-
-
 def group_feedback_bias_snapshot(
     *,
     bot_id: int | None = None,
