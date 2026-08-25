@@ -89,8 +89,12 @@ async def test_image_capture_work_handler_does_not_retry_http_failure(monkeypatc
 
     repo = SimpleNamespace(find_by_cq_code=AsyncMock(return_value=None), insert=AsyncMock())
     monkeypatch.setattr(mod, "image_cache_repo", repo)
-    get = AsyncMock(return_value=SimpleNamespace(status_code=400))
-    monkeypatch.setattr(mod.HTTPXClient, "get", get)
+    status = 400
+
+    async def fake_fetch(_url: str) -> tuple[None, int]:
+        return None, status
+
+    monkeypatch.setattr(mod, "_fetch_image_bytes", fake_fetch)
 
     await mod.handle_image_cache_capture({
         "cq_code": "[CQ:image,file=expired.image]",
@@ -98,10 +102,26 @@ async def test_image_capture_work_handler_does_not_retry_http_failure(monkeypatc
     })
 
     repo.insert.assert_not_awaited()
-    get.assert_awaited_once()
-    assert get.await_args.args[0] == "https://multimedia.nt.qq.com.cn/download?file=expired"
-    assert get.await_args.kwargs["raise_for_status"] is False
-    assert get.await_args.kwargs["timeout"] == mod._IMAGE_CAPTURE_DOWNLOAD_TIMEOUT
+
+
+@pytest.mark.asyncio
+async def test_image_capture_work_handler_times_out_hung_download(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.shared.utils import media_cache as mod
+
+    repo = SimpleNamespace(find_by_cq_code=AsyncMock(return_value=None), insert=AsyncMock())
+    monkeypatch.setattr(mod, "image_cache_repo", repo)
+
+    async def hang(_url: str):
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(mod, "_fetch_image_bytes", hang)
+
+    await mod.handle_image_cache_capture({
+        "cq_code": "[CQ:image,file=hang.image]",
+        "url": "https://multimedia.nt.qq.com.cn/download?file=hang",
+    })
+
+    repo.insert.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -117,12 +137,12 @@ async def test_insert_image_io_uses_detached_model_for_postgresql(monkeypatch: p
         async def insert(self, cache):
             inserted.append(cache)
 
-    async def fake_get(_url, **_kwargs):
-        return SimpleNamespace(status_code=200, content=b"image")
+    async def fake_fetch(_url: str) -> tuple[bytes, int]:
+        return b"image", 200
 
     monkeypatch.setattr(mod, "image_cache_repo", FakeRepository())
     monkeypatch.setattr(mod, "is_postgresql_backend", lambda: True, raising=False)
-    monkeypatch.setattr(mod.HTTPXClient, "get", fake_get)
+    monkeypatch.setattr(mod, "_fetch_image_bytes", fake_fetch)
 
     await mod.handle_image_cache_capture({
         "cq_code": "[CQ:image,file=x.image]",

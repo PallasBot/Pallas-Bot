@@ -36,6 +36,28 @@ def work_aux_batch_sizes(concurrency: int) -> list[int]:
     return [base + (1 if index < extra else 0) for index in range(workers)]
 
 
+_WORK_HANDLER_TIMEOUT_DEFAULT_SEC = 600.0
+
+
+def work_handler_timeout_sec(explicit: float | None) -> float | None:
+    """handler 硬超时兜底：显式传入优先，其次读取 env，都无则用默认值。"""
+    from pallas.core.foundation.config.repo_settings import repo_env_raw_value
+
+    if explicit is not None:
+        return max(1.0, float(explicit))
+    raw = repo_env_raw_value("PALLAS_WORK_HANDLER_TIMEOUT_SEC")
+    if raw is None:
+        return _WORK_HANDLER_TIMEOUT_DEFAULT_SEC
+    try:
+        parsed = float(str(raw).strip())
+    except ValueError:
+        logger.warning("Invalid PALLAS_WORK_HANDLER_TIMEOUT_SEC [{}], falling back to default.", raw)
+        return _WORK_HANDLER_TIMEOUT_DEFAULT_SEC
+    if parsed <= 0:
+        return None
+    return max(1.0, parsed)
+
+
 _IDLE_BACKOFF_BASE_SEC = 0.2
 _IDLE_BACKOFF_MAX_SEC = 2.0
 _IDLE_BACKOFF_EXPONENT_CAP = 8
@@ -87,12 +109,14 @@ async def run_work_service(
     *,
     exclude_kinds: frozenset[str] | None = None,
     priority_kinds: frozenset[str] | None = None,
+    handler_timeout_sec: float | None = None,
 ) -> None:
     from pallas.core.foundation.db import init_db
 
     await init_db()
     store = build_work_job_store()
     concurrency = work_aux_concurrency()
+    handler_timeout_sec = work_handler_timeout_sec(handler_timeout_sec)
     owner_prefix = f"{socket.gethostname()}:{os.getpid()}"
     batch_sizes = work_aux_batch_sizes(concurrency)
     from .observability import WorkAuxRuntimeMetrics
@@ -107,6 +131,7 @@ async def run_work_service(
             metrics=metrics,
             exclude_kinds=exclude_kinds,
             priority_kinds=priority_kinds,
+            handler_timeout_sec=handler_timeout_sec,
         )
         for index, batch_size in enumerate(batch_sizes)
     ]

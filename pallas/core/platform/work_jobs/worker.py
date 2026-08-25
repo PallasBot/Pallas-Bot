@@ -30,6 +30,7 @@ class WorkJobWorker:
         retry_after_sec: float = 5.0,
         batch_size: int = 1,
         max_attempts: int = 8,
+        handler_timeout_sec: float | None = None,
         metrics: WorkAuxRuntimeMetrics | None = None,
         result_committer: WorkResultCommitter | None = None,
         kinds: frozenset[str] | None = None,
@@ -44,6 +45,7 @@ class WorkJobWorker:
         self.retry_after_sec = max(0.0, float(retry_after_sec))
         self.batch_size = max(1, int(batch_size))
         self.max_attempts = max(1, int(max_attempts))
+        self.handler_timeout_sec = max(0.0, float(handler_timeout_sec)) if handler_timeout_sec is not None else None
         self._kinds = frozenset(kinds) if kinds is not None else None
         self._exclude_kinds = frozenset(exclude_kinds) if exclude_kinds is not None else None
         self._bot_owner_ids = frozenset(int(q) for q in bot_owner_ids) if bot_owner_ids is not None else None
@@ -117,6 +119,16 @@ class WorkJobWorker:
                     task.cancel()
                 await asyncio.gather(*tasks, return_exceptions=True)
 
+    async def _run_handler_with_timeout(
+        self,
+        handler: WorkJobHandler,
+        payload: dict[str, Any],
+    ) -> DirectWorkResult | None:
+        """运行单个 handler；开启硬超时后，超时即抛 TimeoutError 交由调用方按失败处理。"""
+        if self.handler_timeout_sec is None:
+            return await handler(payload)
+        return await asyncio.wait_for(handler(payload), timeout=self.handler_timeout_sec)
+
     async def _run_job(self, job) -> str | None:
         handler = self.handlers.get(job.kind)
         if handler is None:
@@ -127,7 +139,10 @@ class WorkJobWorker:
         payload = dict(job.payload)
         if job.kind == "sticker.label.visual":
             payload["job_id"] = job.id
-        handler_task = asyncio.create_task(handler(payload), name=f"work_job_handler:{job.id}")
+        handler_task = asyncio.create_task(
+            self._run_handler_with_timeout(handler, payload),
+            name=f"work_job_handler:{job.id}",
+        )
         try:
             done, _ = await asyncio.wait((handler_task, lease_task), return_when=asyncio.FIRST_COMPLETED)
             if handler_task in done:

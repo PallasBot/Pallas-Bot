@@ -29,6 +29,7 @@ _IMAGE_CAPTURE_MIN_INTERVAL_SEC = 2.0
 _IMAGE_CAPTURE_GLOBAL_RATE_PER_SEC = 4
 _IMAGE_CAPTURE_GLOBAL_WINDOW_SEC = 1.0
 _IMAGE_CAPTURE_MAX_AGE_SEC = 600.0
+_IMAGE_CAPTURE_DOWNLOAD_BUDGET_SEC = 15.0
 _IMAGE_CAPTURE_DOWNLOAD_LIMITED_TIMEOUT = httpx.Timeout(8.0, connect=3.0)
 _image_download_client: httpx.AsyncClient | None = None
 _image_download_lock = asyncio.Lock()
@@ -132,7 +133,17 @@ async def handle_image_cache_capture(payload: dict[str, object]) -> None:
         return
     cache = await image_cache_repo.find_by_cq_code(cq_code)
     if cache is None:
-        content, status = await _fetch_image_bytes(url)
+        try:
+            content, status = await asyncio.wait_for(_fetch_image_bytes(url), _IMAGE_CAPTURE_DOWNLOAD_BUDGET_SEC)
+        except TimeoutError:
+            log_rate_limited(
+                logger,
+                "warning",
+                "image_cache.download.timeout",
+                "image cache download timed out after [{}]s",
+                _IMAGE_CAPTURE_DOWNLOAD_BUDGET_SEC,
+            )
+            return
         if content is None:
             log_rate_limited(
                 logger,

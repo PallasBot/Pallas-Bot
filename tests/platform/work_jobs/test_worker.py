@@ -95,6 +95,41 @@ async def test_worker_dead_letters_when_result_commit_fails() -> None:
     assert (await store.stats())["dead_lettered"] == 1
 
 
+@pytest.mark.asyncio
+async def test_worker_handler_timeout_requeues_and_frees_slot(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.platform.work_jobs.observability import WorkAuxRuntimeMetrics
+    from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
+    from pallas.core.platform.work_jobs.worker import WorkJobWorker
+
+    store = MemoryWorkJobStore()
+    await store.enqueue(WorkJob.create(kind="test", payload={}, idempotency_key="test:timeout"))
+
+    async def handler(_payload: dict) -> None:
+        await asyncio.Event().wait()
+
+    metrics = WorkAuxRuntimeMetrics()
+    worker = WorkJobWorker(
+        store=store,
+        owner="test-worker",
+        handlers={"test": handler},
+        handler_timeout_sec=0.05,
+        retry_after_sec=0,
+        metrics=metrics,
+    )
+
+    assert await worker.run_once() is True
+    assert metrics.snapshot() == {
+        "completed_since_start": 0,
+        "failed_since_start": 1,
+        "retried_since_start": 1,
+        "dead_lettered_since_start": 0,
+    }
+    reclaimed = await store.claim(owner="replacement", lease_sec=1)
+    assert reclaimed is not None
+    assert reclaimed.attempts == 2
+
+
 class SimpleResultCommitter:
     def __init__(self, error: Exception | None = None) -> None:
         self.results: list[DirectWorkResult] = []
