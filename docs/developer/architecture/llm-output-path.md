@@ -33,7 +33,7 @@
 | 生成 + 工具循环 | `complete_with_tool_loop` | 模型提 tool call → 执行工具 → 结果回填上下文继续补全 |
 | 人设输出防火墙 | `pallas/product/llm/persona_output_firewall.py` | 命中规则可带修正指令重试，或回落 fallback |
 | JSON 契约解析 | `structured_reply.py` `parse_structured_reply` | 期望 `reply_segments` 数组逐条成气泡；纯文本退化单段 |
-| 输出过滤 | `output_filter.py` | 语料污染词、续写残片、角色 / 形态守卫 |
+| 输出过滤 | `output_filter.py` | 语料污染词、续写残片、角色 / 形态守卫、长度硬闸（由 reply_shape 的 p50 段长推导 `reply_max_length`，超限找干净断点压短，否则回落 fallback） |
 | 短气泡兜底拆分 | `reply_postprocess.py` `split_short_reply_segments` | short 取向但只有单段时，按句末标点 / 换行拆成多气泡 |
 | 轻量后处理 | `apply_reply_postprocess` | 错别字、句尾句号 |
 | 多气泡投递 | `delivery.py` `deliver_llm_callback_success` | 逐条发送，气泡间按上句长度叠加随机抖动（0.5~3.5s，模拟真人节奏） |
@@ -44,7 +44,7 @@
 | 数据 | 存储 | 粒度 | 影响 |
 | --- | --- | --- | --- |
 | 表达风格锚点 / 例句 | `repeater_semantic_style.py`（`profiles.json`） | **每 bot × 每群** 独立（key `bot_id:group_id:scene`） | 注入「群表达指导」block；重置命令只清本 bot 本群 |
-| 回复画像（气泡数 / 节奏 / 长度） | group config `style_profile`（`group_profiler.py`） | **群维度共享** | 决定 `reply_shape` 的段数、节奏与长度取向 |
+| 回复画像（气泡数 / 节奏 / 长度） | group config `style_profile`（`group_profiler.py`） | **群维度共享** | 决定 `reply_shape` 的段数、节奏与长度取向；其 p50 段长再参与推导 `reply_max_length` 硬上限 |
 
 同群不同 bot 的表达指导互不共享；回复画像是群统计，同群所有 bot 共用。WebUI 管理入口见 `packages/pb_webui/llm_product_api.py`。
 
