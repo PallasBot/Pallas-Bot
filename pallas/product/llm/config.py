@@ -280,6 +280,9 @@ class LlmConfig(BaseModel):
     llm_corpus_cleanup_interval_sec: int = Field(default=86400, ge=3600, le=604800)
     llm_corpus_cleanup_message_history_enabled: bool = Field(default=True)
     llm_corpus_cleanup_max_delete_per_round: int = Field(default=20000, ge=100, le=500000)
+    llm_feedback_retention_scheduled_enabled: bool = Field(default=True)
+    llm_feedback_retention_days: int = Field(default=7, ge=1, le=90)
+    llm_feedback_retention_interval_sec: int = Field(default=86400, ge=3600, le=604800)
     llm_tools_blacklist: list[str] = Field(default_factory=list)
     llm_tools_desc_max_len: int = Field(default=120, ge=32, le=512)
     llm_memory_rag_enabled: bool = Field(default=True)
@@ -531,6 +534,9 @@ def get_llm_config() -> LlmConfig:
                 "LLM_CORPUS_CLEANUP_MAX_DELETE_PER_ROUND",
                 20000,
             ),
+            llm_feedback_retention_scheduled_enabled=_env_bool("LLM_FEEDBACK_RETENTION_SCHEDULED", True),
+            llm_feedback_retention_days=_env_int("LLM_FEEDBACK_RETENTION_DAYS", 7),
+            llm_feedback_retention_interval_sec=_env_int("LLM_FEEDBACK_RETENTION_INTERVAL_SEC", 86400),
             llm_tools_blacklist=_env_str_list("LLM_TOOLS_BLACKLIST"),
             llm_tools_desc_max_len=_env_int("LLM_TOOLS_DESC_MAX_LEN", 120),
             llm_memory_rag_enabled=_env_bool("LLM_MEMORY_RAG_ENABLED", True),

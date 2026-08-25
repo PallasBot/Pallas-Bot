@@ -127,6 +127,17 @@ def is_auto_promote_eligible(candidate: PromotionCandidate) -> bool:
     return support >= PROMOTION_SUPPORT_THRESHOLD and bool(candidate.correction_backed)
 
 
+def protected_feedback_request_ids() -> set[str]:
+    """反馈压缩时需保护的 request_id：仍被待处理或已写回候选引用。"""
+    rows = _load_candidates_index()
+    request_ids: set[str] = set()
+    for item in rows.values():
+        source_request_id = str(item.source_request_id or "").strip()
+        if source_request_id:
+            request_ids.add(source_request_id)
+    return request_ids
+
+
 def refresh_promotion_candidates_for_group(
     *, group_id: int, bot_id: int | None = None, limit: int = 200
 ) -> list[PromotionCandidate]:

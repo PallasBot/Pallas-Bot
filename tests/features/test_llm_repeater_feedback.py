@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import threading
+import time
 from contextlib import contextmanager
 from types import SimpleNamespace
 
@@ -1447,3 +1448,166 @@ async def test_negative_feedback_rejects_only_expression_in_snapshot(monkeypatch
     entries = {item.entry_id: item for item in list_group_expressions(20001)}
     assert entries[included.entry_id].status == "rejected"
     assert entries[unrelated.entry_id].status == "shadow"
+
+
+def test_feedback_retention_noop_when_nothing_expired(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_feedback as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    now = int(time.time())
+    for idx in range(3):
+        mod.append_feedback_entry(
+            mod.build_feedback_entry(
+                entry_id=f"fresh-{idx}",
+                request_id=f"fresh-{idx}",
+                bot_id=10001,
+                group_id=123,
+                user_id=456 + idx,
+                user_text="你好",
+                reply_text="嗨。",
+                created_at=now - 60,
+            )
+        )
+
+    report = mod.compact_feedback_entries(retention_days=7)
+
+    assert report == {"archived": 0, "retained": 3, "total": 3}
+    assert not mod.feedback_archive_path().exists()
+    lines = list(mod._iter_feedback_entries(mod.feedback_entries_path()))
+    assert len(lines) == 3
+
+
+def test_feedback_retention_archives_unprotected_old_entries(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_feedback as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    now = int(time.time())
+    mod.append_feedback_entry(
+        mod.build_feedback_entry(
+            entry_id="old-plain",
+            request_id="old-plain",
+            bot_id=10001,
+            group_id=123,
+            user_id=456,
+            user_text="你好",
+            reply_text="嗨。",
+            created_at=now - 10 * 86400,
+        )
+    )
+    mod.append_feedback_entry(
+        mod.build_feedback_entry(
+            entry_id="old-strong",
+            request_id="old-strong",
+            bot_id=10001,
+            group_id=123,
+            user_id=457,
+            user_text="你好",
+            reply_text="嗨。",
+            created_at=now - 10 * 86400,
+            scene_tier="strong",
+        )
+    )
+
+    report = mod.compact_feedback_entries(retention_days=7)
+
+    assert report == {"archived": 1, "retained": 1, "total": 2}
+    archive_lines = list(mod._iter_feedback_entries(mod.feedback_archive_path()))
+    assert [item.request_id for item in archive_lines] == ["old-plain"]
+    remaining = list(mod._iter_feedback_entries(mod.feedback_entries_path()))
+    assert [item.request_id for item in remaining] == ["old-strong"]
+
+
+def test_feedback_retention_protects_corrected_ineligible_strong_and_candidate_refs(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import promotion_candidates as pc
+    from pallas.product.llm import repeater_feedback as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    now = int(time.time())
+    old = now - 10 * 86400
+
+    mod.append_feedback_entry(
+        mod.build_feedback_entry(
+            entry_id="old-corrected",
+            request_id="old-corrected",
+            bot_id=10001,
+            group_id=123,
+            user_id=456,
+            user_text="你好",
+            reply_text="嗨。",
+            created_at=old,
+            corrected_reply_text="改过了",
+            corrected_at=old + 1,
+        )
+    )
+    mod.append_feedback_entry(
+        mod.build_feedback_entry(
+            entry_id="old-ineligible",
+            request_id="old-ineligible",
+            bot_id=10001,
+            group_id=123,
+            user_id=458,
+            user_text="你好",
+            reply_text="嗨。",
+            created_at=old,
+            eligible_for_bias=False,
+        )
+    )
+    mod.append_feedback_entry(
+        mod.build_feedback_entry(
+            entry_id="old-strong",
+            request_id="old-strong",
+            bot_id=10001,
+            group_id=123,
+            user_id=459,
+            user_text="你好",
+            reply_text="嗨。",
+            created_at=old,
+            scene_tier="strong",
+        )
+    )
+    mod.append_feedback_entry(
+        mod.build_feedback_entry(
+            entry_id="old-candidate-ref",
+            request_id="candidate-source-req",
+            bot_id=10001,
+            group_id=123,
+            user_id=460,
+            user_text="你好",
+            reply_text="嗨。",
+            created_at=old,
+        )
+    )
+    mod.append_feedback_entry(
+        mod.build_feedback_entry(
+            entry_id="old-archived",
+            request_id="old-archived",
+            bot_id=10001,
+            group_id=123,
+            user_id=461,
+            user_text="你好",
+            reply_text="嗨。",
+            created_at=old,
+        )
+    )
+
+    candidate = pc.PromotionCandidate(
+        candidate_id="cand-1",
+        group_id=123,
+        trigger_text="你好",
+        reply_text="嗨。",
+        source_request_id="candidate-source-req",
+    )
+    pc._write_candidates_index({candidate.candidate_id: candidate})
+
+    report = mod.compact_feedback_entries(retention_days=7)
+
+    assert report == {"archived": 1, "retained": 4, "total": 5}
+    retained = {item.request_id for item in mod._iter_feedback_entries(mod.feedback_entries_path())}
+    assert retained == {
+        "old-corrected",
+        "old-ineligible",
+        "old-strong",
+        "candidate-source-req",
+    }
+    archived = {item.request_id for item in mod._iter_feedback_entries(mod.feedback_archive_path())}
+    assert archived == {"old-archived"}

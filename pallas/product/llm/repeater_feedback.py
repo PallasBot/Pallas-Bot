@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 import re
+import threading
 import time
 from collections import deque
 from pathlib import Path
@@ -82,6 +83,7 @@ _group_entries_revisions: dict[int, int] = {}
 _bot_message_index_path = ""
 _bot_message_index_revision: tuple[int, int] | None = None
 _bot_message_index: dict[tuple[int, int, int], LlmRepeaterFeedbackEntry] = {}
+_feedback_index_prewarm_started = False
 
 
 def clear_group_feedback_entries_cache() -> None:
@@ -101,6 +103,28 @@ def clear_group_feedback_entries_cache() -> None:
         _bot_message_index_path = ""
         _bot_message_index_revision = None
         _bot_message_index = {}
+
+
+def schedule_feedback_index_prewarm() -> None:
+    """后台预建 feedback 群索引，避免冷启动首条消息在事件循环里全量构建。
+
+    构建期间与 on-demand 加锁互斥；结果天然被 revision 校验复用。
+    """
+    global _feedback_index_prewarm_started
+    with _group_entries_index_lock:
+        if _feedback_index_prewarm_started:
+            return
+        _feedback_index_prewarm_started = True
+
+    def _run() -> None:
+        try:
+            path = feedback_base_dir(create=False) / "entries.jsonl"
+            if path.exists():
+                _group_entries_index_rows(path, group_id=0)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("feedback group index prewarm failed: {}", exc)
+
+    threading.Thread(target=_run, name="feedback-group-index-prewarm", daemon=True).start()
 
 
 def feedback_base_dir(*, create: bool = True) -> Path:
@@ -357,6 +381,80 @@ def _mutate_feedback_entries[T](
     return result
 
 
+def feedback_archive_path(*, month: str = "") -> Path:
+    """按月归档文件；默认取当前 YYYYMM。"""
+    payload = str(month or "").strip()
+    if not payload:
+        payload = time.strftime("%Y%m")
+    return feedback_base_dir() / f"entries-archive-{payload}.jsonl"
+
+
+def is_retained_feedback_entry(
+    item: LlmRepeaterFeedbackEntry,
+    *,
+    cutoff_created_at: int,
+    protected_request_ids: set[str],
+) -> bool:
+    if int(item.created_at) >= cutoff_created_at:
+        return True
+    if str(item.request_id or "").strip() in protected_request_ids:
+        return True
+    if str(item.corrected_reply_text or "").strip():
+        return True
+    if not item.eligible_for_bias:
+        return True
+    if str(item.scene_tier or "").strip().lower() == "strong":
+        return True
+    return False
+
+
+def compact_feedback_entries(*, retention_days: int = 7) -> dict[str, int]:
+    """压缩 entries.jsonl：超期且不被保护的条目移入按月归档文件。
+
+    保护规则：被 promotion candidates 引用、有校正、被标记 ineligible、strong 场景。
+    """
+    from pallas.core.foundation.fs_lock import interprocess_file_lock
+    from pallas.product.llm.promotion_candidates import protected_feedback_request_ids
+
+    path = feedback_base_dir(create=False) / "entries.jsonl"
+    if not path.exists():
+        return {"archived": 0, "retained": 0, "total": 0}
+
+    retention_days = max(1, int(retention_days))
+    now = int(time.time())
+    cutoff = now - retention_days * 86400
+    protected = protected_feedback_request_ids()
+    archive_path = feedback_archive_path()
+
+    def mutation(rows: list[LlmRepeaterFeedbackEntry]) -> tuple[dict[str, int], bool]:
+        retained: list[LlmRepeaterFeedbackEntry] = []
+        archived: list[LlmRepeaterFeedbackEntry] = []
+        for item in rows:
+            if is_retained_feedback_entry(
+                item,
+                cutoff_created_at=cutoff,
+                protected_request_ids=protected,
+            ):
+                retained.append(item)
+            else:
+                archived.append(item)
+        if not archived:
+            return {"archived": 0, "retained": len(rows), "total": len(rows)}, False
+        archive_body = "".join(json.dumps(item.model_dump(mode="json"), ensure_ascii=False) + "\n" for item in archived)
+        with interprocess_file_lock(archive_path.with_suffix(archive_path.suffix + ".lock")):
+            archive_path.parent.mkdir(parents=True, exist_ok=True)
+            with archive_path.open("a", encoding="utf-8") as handle:
+                handle.write(archive_body)
+        rows[:] = retained
+        return {
+            "archived": len(archived),
+            "retained": len(retained),
+            "total": len(archived) + len(retained),
+        }, True
+
+    return _mutate_feedback_entries(mutation)
+
+
 def _load_all_feedback_entries() -> list[LlmRepeaterFeedbackEntry]:
     path = feedback_entries_path()
     if not path.exists():
@@ -394,6 +492,21 @@ def find_feedback_entry(
     target_entry_id = str(entry_id or "").strip()
     target_request_id = str(request_id or "").strip()
     if not target_entry_id and not target_request_id:
+        return None
+    if bot_id is not None and group_id is not None:
+        path = feedback_base_dir(create=False) / "entries.jsonl"
+        if not path.exists():
+            return None
+        _, _, source_rows = _group_entries_index_rows(path, group_id=int(group_id))
+        for item in reversed(source_rows):
+            if _feedback_entry_matches(
+                item,
+                target_entry_id=target_entry_id,
+                target_request_id=target_request_id,
+                bot_id=bot_id,
+                group_id=group_id,
+            ):
+                return item
         return None
     for item in reversed(_load_all_feedback_entries()):
         if _feedback_entry_matches(

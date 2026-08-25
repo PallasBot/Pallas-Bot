@@ -27,3 +27,16 @@ def test_bind_corpus_prefetch_lifecycle_idempotent():
     assert mod._LIFECYCLE_BOUND is True
     assert mock_driver.on_startup.call_count == 1
     assert mock_driver.on_shutdown.call_count == 1
+
+
+def test_bind_feedback_retention_lifecycle_idempotent():
+    import pallas.product.llm.feedback_retention_scheduler as mod
+
+    mod._LIFECYCLE_BOUND = False
+    mock_driver = MagicMock()
+    with patch.object(mod, "get_driver", return_value=mock_driver):
+        mod.bind_feedback_retention_lifecycle()
+        mod.bind_feedback_retention_lifecycle()
+    assert mod._LIFECYCLE_BOUND is True
+    assert mock_driver.on_startup.call_count == 1
+    assert mock_driver.on_shutdown.call_count == 0
