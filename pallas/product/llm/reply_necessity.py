@@ -143,6 +143,7 @@ def score_reply_necessity(
     user_affinity: float | None = None,
     affinity_silence_threshold: float = -0.3,
     affinity_silence_max_penalty: int = 30,
+    replied_recent_message: bool = False,
 ) -> ReplyNecessityScore:
     plain = str(text or "").strip()
     score = 0
@@ -178,7 +179,7 @@ def score_reply_necessity(
     if has_reply_obligation(plain):
         score += 20
         parts.append("obligation+20")
-    if is_low_value_social_turn(plain) and not (is_mentioned or is_followup):
+    if is_low_value_social_turn(plain) and not (is_mentioned or is_followup) and not replied_recent_message:
         score -= 35
         parts.append("low_social-35")
     if has_recent_back_and_forth:
@@ -187,9 +188,12 @@ def score_reply_necessity(
     if has_candidate_pool:
         score += 10
         parts.append("pool+10")
+    if replied_recent_message and not (is_noise_fragment(plain) or looks_like_spam_or_promo(plain)):
+        score += 55
+        parts.append("replied_recent+55")
     recent_presence = max(0, min(6, int(recent_bot_reply_count)))
     if recent_presence:
-        if (is_to_me or is_mentioned or is_followup) and has_reply_obligation(plain):
+        if (is_to_me or is_mentioned or is_followup or replied_recent_message) and has_reply_obligation(plain):
             parts.append("bot_presence_exempt")
         else:
             penalty = recent_presence * 8
@@ -230,6 +234,7 @@ def evaluate_reply_necessity_gate(
     user_affinity: float | None = None,
     affinity_silence_threshold: float = -0.3,
     affinity_silence_max_penalty: int = 30,
+    replied_recent_message: bool = False,
 ) -> ReplyNecessityGateResult:
     scored = score_reply_necessity(
         text=text,
@@ -244,6 +249,15 @@ def evaluate_reply_necessity_gate(
         user_affinity=user_affinity,
         affinity_silence_threshold=affinity_silence_threshold,
         affinity_silence_max_penalty=affinity_silence_max_penalty,
+        replied_recent_message=replied_recent_message,
     )
     decision: ReplyNecessityGateDecision = "proceed" if scored.score >= int(threshold) else "skip"
+    plain = str(text or "").strip()
+    if (
+        decision == "skip"
+        and replied_recent_message
+        and not is_noise_fragment(plain)
+        and not looks_like_spam_or_promo(plain)
+    ):
+        decision = "proceed"
     return ReplyNecessityGateResult(decision=decision, score=scored.score, detail=scored.detail)

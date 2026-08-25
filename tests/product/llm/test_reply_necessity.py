@@ -200,3 +200,38 @@ def test_affinity_no_penalty_above_threshold() -> None:
         user_affinity=0.0,
     )
     assert "affinity" not in gate.detail
+
+
+def test_replied_recent_message_crosses_threshold() -> None:
+    gate = evaluate_reply_necessity_gate(
+        text="哈哈哈哈哈",
+        replied_recent_message=True,
+    )
+    assert gate.decision == "proceed"
+    assert "replied_recent" in gate.detail
+    assert gate.score >= REPLY_NECESSITY_TRIGGER_SCORE
+
+
+def test_replied_recent_message_does_not_rescue_noise_or_spam() -> None:
+    noise = evaluate_reply_necessity_gate(
+        text="😄😄😄",
+        replied_recent_message=True,
+    )
+    assert noise.decision == "skip"
+    assert "replied_recent" not in noise.detail
+
+    spam = evaluate_reply_necessity_gate(
+        text="点击即玩 免费领",
+        replied_recent_message=True,
+    )
+    assert spam.decision == "skip"
+    assert "replied_recent" not in spam.detail
+
+
+def test_replied_recent_without_recent_message_stays_skip() -> None:
+    gate = evaluate_reply_necessity_gate(
+        text="哈哈哈哈哈",
+        replied_recent_message=False,
+    )
+    assert gate.decision == "skip"
+    assert "replied_recent" not in gate.detail

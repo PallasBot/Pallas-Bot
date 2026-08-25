@@ -637,6 +637,31 @@ async def prepare_and_submit_llm_chat_turn(
         pre_submit_stage_durations_ms["history"] = int((time.perf_counter() - history_started) * 1000)
         context_started = time.perf_counter()
         focus_text = plain or msg
+        reply_candidates = (
+            list_reply_target_candidates(group_id=group_id, current_message_id=message_id)
+            if group_id is not None
+            else []
+        )
+        if force_quote_message_id and not any(item.message_id == force_quote_message_id for item in reply_candidates):
+            candidate_text = str(plain or msg).strip()
+            if candidate_text:
+                from pallas.product.llm.current_turn_decision import ReplyTargetCandidate
+
+                reply_candidates = [
+                    *reply_candidates,
+                    ReplyTargetCandidate(
+                        message_id=force_quote_message_id,
+                        sender_id=user_id,
+                        text=candidate_text[:160],
+                        is_current=False,
+                    ),
+                ]
+        replied_recent_message = False
+        if group_id is not None:
+            replied_id = extract_reply_id_from_raw_message(str(getattr(event, "raw_message", "") or ""))
+            replied_recent_message = bool(replied_id) and any(
+                item.message_id == replied_id for item in reply_candidates
+            )
         recent_plain = [str(getattr(turn, "content", "") or "").strip() for turn in recent_turns[-6:]]
         has_multi_party = (
             isinstance(event, GroupMessageEvent)
@@ -684,6 +709,7 @@ async def prepare_and_submit_llm_chat_turn(
             is_followup=speak_trigger == "followup",
             recent_bot_reply_count=recent_bot_reply_count,
             user_affinity=affinity_value,
+            replied_recent_message=replied_recent_message,
         )
         if group_id is not None:
             from packages.repeater.opportunity_trace import append_conversation_decision_trace
@@ -751,25 +777,6 @@ async def prepare_and_submit_llm_chat_turn(
             "before_turn_decision": int((time.perf_counter() - context_started) * 1000),
         }
         turn_decision_started = time.perf_counter()
-        reply_candidates = (
-            list_reply_target_candidates(group_id=group_id, current_message_id=message_id)
-            if group_id is not None
-            else []
-        )
-        if force_quote_message_id and not any(item.message_id == force_quote_message_id for item in reply_candidates):
-            candidate_text = str(plain or msg).strip()
-            if candidate_text:
-                from pallas.product.llm.current_turn_decision import ReplyTargetCandidate
-
-                reply_candidates = [
-                    *reply_candidates,
-                    ReplyTargetCandidate(
-                        message_id=force_quote_message_id,
-                        sender_id=user_id,
-                        text=candidate_text[:160],
-                        is_current=False,
-                    ),
-                ]
         current_turn_decision = await decide_current_turn_with_model(
             CurrentTurnDecisionInput(
                 text=focus_text,

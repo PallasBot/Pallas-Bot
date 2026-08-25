@@ -656,6 +656,87 @@ async def test_handle_llm_chat_necessity_skip_hard_silent_does_not_dispatch(
 
 
 @pytest.mark.asyncio
+async def test_handle_llm_chat_replied_recent_candidate_reaches_necessity_gate(
+    monkeypatch: pytest.MonkeyPatch,
+    capture_create_task: list[object],
+) -> None:
+    from packages.llm_chat import chat_message as mod
+    from pallas.product.llm.config import LlmConfig
+    from pallas.product.llm.reply_target_candidates import (
+        clear_reply_target_candidates,
+        record_reply_target_candidate,
+    )
+
+    clear_reply_target_candidates()
+    record_reply_target_candidate(group_id=20002, message_id=40003, sender_id=30004, text="笑死我了")
+
+    event = SimpleNamespace(
+        to_me=False,
+        group_id=20002,
+        user_id=30003,
+        message_id=40004,
+        time=123456,
+        raw_message="[CQ:reply,id=40003] 笑死我了",
+        get_plaintext=lambda: "笑死我了",
+        get_message=lambda: "[CQ:reply,id=40003] 笑死我了",
+        get_session_id=lambda: "group_20002_30003",
+    )
+    bot = SimpleNamespace(self_id="10001")
+
+    monkeypatch.setattr(mod, "is_llm_chat_service_enabled", lambda: True)
+    monkeypatch.setattr(
+        mod,
+        "get_llm_chat_config",
+        lambda: SimpleNamespace(llm_chat_system_prompt_path="", llm_chat_min_priority=40),
+    )
+    llm_cfg = LlmConfig(
+        llm_chat_enabled=True,
+        llm_current_turn_decision_enabled=False,
+        llm_speak_followup_enabled=False,
+        llm_speak_perception_enabled=False,
+    )
+    monkeypatch.setattr(mod, "get_llm_config", lambda: llm_cfg)
+    monkeypatch.setattr(
+        mod,
+        "build_persona_llm_context",
+        AsyncMock(return_value=(SimpleNamespace(system="sys", metadata=SimpleNamespace(persona={})), None, None)),
+    )
+    monkeypatch.setattr(
+        mod,
+        "evaluate_llm_reply_gate_result",
+        lambda *_args, **_kwargs: SimpleNamespace(decision="proceed", reason=""),
+    )
+    gate_kwargs: dict[str, object] = {}
+    real_gate = mod.evaluate_reply_necessity_gate
+
+    def fake_gate(**kwargs):
+        gate_kwargs.update(kwargs)
+        return real_gate(**kwargs)
+
+    monkeypatch.setattr(mod, "evaluate_reply_necessity_gate", fake_gate)
+    monkeypatch.setattr(mod, "check_llm_chat_gate", AsyncMock(return_value=None))
+    monkeypatch.setattr(mod, "list_user_llm_messages", AsyncMock(return_value=[]))
+    monkeypatch.setattr(mod, "latest_llm_assistant_reply", AsyncMock(return_value=""))
+    monkeypatch.setattr(
+        mod,
+        "load_recent_bot_plain_replies",
+        AsyncMock(return_value=["笑死我了"]),
+    )
+    submit_mock = AsyncMock(return_value=SimpleNamespace(ok=True, task_id="ai-task-1", status="queued"))
+    monkeypatch.setattr(mod, "submit_chat_task", submit_mock)
+    dispatch_mock = AsyncMock(return_value=True)
+    monkeypatch.setattr("pallas.product.llm.low_engagement.dispatch_low_engagement", dispatch_mock)
+
+    await mod.handle_llm_chat(bot, event)
+    assert len(capture_create_task) == 1
+    await capture_create_task[0]
+
+    assert gate_kwargs.get("replied_recent_message") is True
+    dispatch_mock.assert_awaited_once()
+    submit_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_handle_llm_chat_submits_required_tool_intent_despite_low_social_score(
     monkeypatch: pytest.MonkeyPatch,
     capture_create_task: list[object],
