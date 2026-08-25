@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -87,7 +88,7 @@ _SCENE_HINTS = {
 _PRIORITY_HINT = "仅供参考，不得覆盖核心人设与用户当下明确请求。"
 
 
-def resolve_completion(provider_id: str, model: str) -> Callable[[list[dict]], str]:
+def resolve_completion(provider_id: str, model: str, *, temperature: float = 0.7) -> Callable[[list[dict]], str]:
     from pallas.product.llm.provider_client import complete_chat_message
     from pallas.product.llm.providers_store import find_provider, resolve_provider_api_keys
 
@@ -104,7 +105,7 @@ def resolve_completion(provider_id: str, model: str) -> Callable[[list[dict]], s
         resp = await complete_chat_message(
             messages,
             model=model,
-            options={"temperature": 0.7, "max_tokens": 240},
+            options={"temperature": temperature, "max_tokens": 240},
             base_url=base_url,
             api_key=api_key,
             task="llm_chat",
@@ -139,6 +140,16 @@ def _variant_labels() -> list[str]:
     return ["base"] + [lv for lv, _ in _AFFINITY_LEVELS_ASC]
 
 
+def result_row(variant: str, case: str, user: str, reply: str) -> dict[str, str]:
+    return {
+        "variant": variant,
+        "case": case,
+        "user": user,
+        "reply": reply,
+        "hash": hashlib.sha1(reply.encode("utf-8")).hexdigest()[:8],
+    }
+
+
 async def main() -> int:
     default_at_chat = REPO_ROOT / "pallas" / "product" / "persona" / "at_chat_system_prompt.txt"
     parser = argparse.ArgumentParser(description="Offline affinity AB comparison")
@@ -157,7 +168,7 @@ async def main() -> int:
     args = parser.parse_args()
 
     base_text = args.base.read_text(encoding="utf-8").strip()
-    complete = resolve_completion(args.provider, args.model)
+    complete = resolve_completion(args.provider, args.model, temperature=args.temp)
 
     cases = _DEFAULT_CASES
     if args.cases_file:
@@ -193,7 +204,7 @@ async def main() -> int:
     for label in variants:
         for case in cases:
             reply = await run_case(complete, base_text, case, affinity_level_label=None if label == "base" else label)
-            results.append({"variant": label, "case": case["name"], "user": case["user"], "reply": reply})
+            results.append(result_row(label, case["name"], case["user"], reply))
             print(f"[{label}][{case['name']}] {reply}", flush=True)
 
     if args.out:
