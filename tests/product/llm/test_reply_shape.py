@@ -34,8 +34,16 @@ def test_reply_hard_cap_floor_keeps_minimum() -> None:
     assert cap == 16  # max(min_cap=16, 3*1+12=15)
 
 
-def test_reply_hard_cap_falls_back_to_scene_cap_without_stats() -> None:
-    assert resolve_reply_hard_cap(36) == 36
+def test_reply_hard_cap_default_segment_deduction_without_stats() -> None:
+    # 无统计时用默认段长（6字）× 默认段数推导，不再退回宽松场景 cap
+    cap = resolve_reply_hard_cap(36)
+    assert cap == 6 * 1 + 12  # 6*1+12=18
+
+
+def test_reply_hard_cap_uses_default_segment_when_no_group_stats() -> None:
+    # 无本群统计时用默认段长（6字）推导，不需要传显式 fallback
+    cap = resolve_reply_hard_cap(36, preferred_bubbles=1)
+    assert cap == 6 * 1 + 12  # 6*1+12=18
 
 
 def test_reply_hard_cap_zero_when_scene_cap_absent() -> None:

@@ -9,6 +9,9 @@ from typing import TYPE_CHECKING
 
 from pallas.product.llm.inference_params import chat_reply_token_budget
 
+# 无本群统计时用的默认段长（真人语料段长中位数，约 6 字）
+_DEFAULT_SEGMENT_CHAR_LENGTH_P50 = 6
+
 if TYPE_CHECKING:
     from pallas.product.llm.turn_policy import TurnPolicy
     from pallas.product.persona.group_expression_profile import GroupExpressionProfile
@@ -50,21 +53,21 @@ def resolve_reply_hard_cap(
     segment_char_length_p50: int = 0,
     min_cap: int = 16,
 ) -> int:
-    """用群表达统计的真人数值推导单次回复硬上限（字符数）。
+    """按「段数 × 段中位字长 + 余量」推导回复硬上限（字符数），再 clamp 到场景 cap 内。
 
-    有样本时按「段中位字长 × 段数 + 余量」推导，再 clamp 到场景 cap 内；
-    无样本时直接退回场景 cap。返回值为正即投入使用，否则由调用方决定。
+    本群没有真人统计（segment_char_length_p50 为 0）时，用真人语料中位段作默认段长。
+    返回值为正即投入使用。
     """
     if scene_cap <= 0:
         return 0
     cap = int(scene_cap)
-    if segment_char_length_p50:
-        if bubble_count_p50:
-            bubble_count = max(1, min(3, int(bubble_count_p50)))
-        else:
-            bubble_count = max(1, min(3, int(preferred_bubbles)))
-        derived = int(segment_char_length_p50) * bubble_count + 12
-        cap = min(cap, max(min_cap, derived))
+    segment_p50 = int(segment_char_length_p50) or _DEFAULT_SEGMENT_CHAR_LENGTH_P50
+    if bubble_count_p50:
+        bubble_count = max(1, min(3, int(bubble_count_p50)))
+    else:
+        bubble_count = max(1, min(3, int(preferred_bubbles)))
+    derived = segment_p50 * bubble_count + 12
+    cap = min(cap, max(min_cap, derived))
     return cap
 
 
