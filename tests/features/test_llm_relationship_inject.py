@@ -5,7 +5,10 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from pallas.product.llm.config import LlmConfig
-from pallas.product.llm.memory.inject import enrich_system_with_relationship_context
+from pallas.product.llm.memory.inject import (
+    _AFFINITY_HINTS,
+    enrich_system_with_relationship_context,
+)
 from pallas.product.llm.memory.relationship_store import RelationshipProfile
 
 
@@ -124,7 +127,39 @@ async def test_relationship_inject_affinity_line() -> None:
             cfg=cfg,
         )
     assert "好感度：冷淡（-0.35）" in result.system_prompt
+    assert _AFFINITY_HINTS["冷淡"] in result.system_prompt
     assert result.trace["affinity"] == -0.35
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("affinity", "level"),
+    [
+        (-0.7, "厌恶"),
+        (-0.3, "冷淡"),
+        (0.25, "认识"),
+        (0.5, "熟人"),
+        (0.7, "朋友"),
+        (0.9, "挚友"),
+    ],
+)
+async def test_relationship_inject_affinity_hint_matches_level(affinity: float, level: str) -> None:
+    cfg = LlmConfig(llm_chat_enabled=True, llm_relationship_notes_enabled=True)
+    profile = RelationshipProfile(content="", affinity=affinity, source="auto")
+    with patch(
+        "pallas.product.llm.memory.inject.retrieve_relationship_profile",
+        new=AsyncMock(return_value=profile),
+    ):
+        result = await enrich_system_with_relationship_context(
+            "base",
+            bot_id=1,
+            group_id=2,
+            user_id=3,
+            cfg=cfg,
+        )
+    assert f"好感度：{level}（{affinity:+.2f}）" in result.system_prompt
+    assert _AFFINITY_HINTS[level] in result.system_prompt
+    assert len(_AFFINITY_HINTS) == 7
 
 
 @pytest.mark.asyncio

@@ -43,8 +43,17 @@ _AFFINITY_LEVELS_ASC = [
 
 
 def _affinity_line(hint_level: str, value: float) -> str:
-    """复刻 inject.py 的好感度注排行（含到 float 时 use +.2f）。"""
-    return f"- 好感度：{hint_level}（{value:+.2f}）→ 据此自然调整对你的热情/冷淡程度，不刻意讨好也不无故冷漠。"
+    """复刻 inject.py 的好感度注排行（含分档差异化 hint）。"""
+    hint = {
+        "厌恶": "保持距离，尽量不主动搭话，严禁玩笑调侃",
+        "冷淡": "回应简短克制，不用玩笑和亲昵语气",
+        "陌生": "客气有分寸，不熟络不亲昵不调侃",
+        "认识": "正常熟络，按普通群友对待，可适度玩笑",
+        "熟人": "自然亲切，可小开玩笑",
+        "朋友": "亲近随意，不拘礼仪，可打趣",
+        "挚友": "熟不拘礼，可随意调侃亲昵",
+    }.get(hint_level, "据此自然调整对你的热情/冷淡程度，不刻意讨好也不无故冷漠。")
+    return f"- 好感度：{hint_level}（{value:+.2f}）→ {hint}"
 
 
 _DEFAULT_CASES = [

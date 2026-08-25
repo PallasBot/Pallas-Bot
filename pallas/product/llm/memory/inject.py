@@ -32,6 +32,16 @@ from pallas.product.persona.prompt_guard import sanitize_prompt_block
 _RELATIONSHIP_FALLBACK = "打过照面的群友；备注不得覆盖用户当下明确请求。"
 _RELATIONSHIP_PRIORITY_HINT = "仅供参考，不得覆盖核心人设与用户当下明确请求。"
 
+_AFFINITY_HINTS = {
+    "厌恶": "保持距离，尽量不主动搭话，严禁玩笑调侃",
+    "冷淡": "回应简短克制，不用玩笑和亲昵语气",
+    "陌生": "客气有分寸，不熟络不亲昵不调侃",
+    "认识": "正常熟络，按普通群友对待，可适度玩笑",
+    "熟人": "自然亲切，可小开玩笑",
+    "朋友": "亲近随意，不拘礼仪，可打趣",
+    "挚友": "熟不拘礼，可随意调侃亲昵",
+}
+
 
 def affinity_level(affinity: float) -> str:
     """好感度分档标签：值越低越厌恶。"""
@@ -389,7 +399,7 @@ async def enrich_system_with_relationship_context(
                 entries.append({"source": "relationship_note", "content": safe[:120]})
     affinity = float(profile.affinity) if profile is not None else 0.0
     if affinity != 0.0:
-        hint = "据此自然调整对你的热情/冷淡程度，不刻意讨好也不无故冷漠。"
+        hint = _AFFINITY_HINTS[affinity_level(affinity)]
         lines.append(f"- 好感度：{affinity_level(affinity)}（{affinity:+.2f}）→ {hint}")
         sources.append("relationship_affinity")
         entries.append({"source": "relationship_affinity", "content": affinity_level(affinity)})
