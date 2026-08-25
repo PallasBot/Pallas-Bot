@@ -73,6 +73,11 @@ def is_short_vent(text: str) -> bool:
     return len(plain) <= 24 and bool(_SHORT_VENT_RE.search(plain))
 
 
+def is_high_frequency_short_reaction(text: str) -> bool:
+    """高频短反应（对/6/666/？/草/好/嗯 等），真人语料里的即答主力。"""
+    return str(text or "").strip() in _SHORT_REACTIONS
+
+
 def is_low_value_social_turn(text: str) -> bool:
     plain = str(text or "").strip()
     return bool(plain) and len(plain) <= 24 and not has_reply_obligation(plain)

@@ -219,6 +219,7 @@ def can_bubble_low_engagement_on_necessity_skip(
     """
     from pallas.product.llm.reply_necessity import (
         is_bystander_plain_text,
+        is_high_frequency_short_reaction,
         is_incomplete_utterance,
         is_low_value_social_turn,
         is_noise_fragment,
@@ -228,6 +229,8 @@ def can_bubble_low_engagement_on_necessity_skip(
     plain = str(text or "").strip()
     if not plain:
         return False
+    if is_high_frequency_short_reaction(plain):
+        return True
     if is_noise_fragment(plain):
         return False
     if looks_like_spam_or_promo(plain):

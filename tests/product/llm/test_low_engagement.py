@@ -254,12 +254,25 @@ def test_can_bubble_on_necessity_skip_true_for_low_value_social(text: str) -> No
 
 
 @pytest.mark.parametrize(
+    "text",
+    [
+        "6",  # 高频短反应，放行进冒泡
+        "666",
+        "？",
+        "好",
+        "嗯",
+        "草",
+    ],
+)
+def test_can_bubble_on_necessity_skip_true_for_high_frequency_short_reaction(text: str) -> None:
+    assert can_bubble_low_engagement_on_necessity_skip(text=text, bot_id=123)
+
+
+@pytest.mark.parametrize(
     ("text", "bot_id"),
     [
         ("", 123),
         ("😄😄😄", 123),  # 纯 emoji → noise
-        ("6", 123),  # 单字符噪声
-        ("？", 123),  # 问号噪声
         ("https://example.com 点击即玩 免费领", 123),  # spam
         ("想要加我微信哦", 123),  # promo term
         ("然后", 123),  # 不完整话语
