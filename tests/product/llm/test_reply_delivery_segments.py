@@ -24,9 +24,7 @@ def test_bubble_delay_is_human_like_and_bounded() -> None:
     assert very_long <= 3.5
 
     # 随机性：相同长度不同种子产生不同间隔
-    seeds = [
-        llm_delivery.bubble_delay_seconds("好", rng=random.Random(i)) for i in range(5)
-    ]
+    seeds = [llm_delivery.bubble_delay_seconds("好", rng=random.Random(i)) for i in range(5)]
     assert len(set(seeds)) > 1
 
 
@@ -52,15 +50,11 @@ def test_reply_postprocess_schema_no_longer_advertises_sentence_splitting() -> N
 
 
 @pytest.mark.asyncio
-async def test_delivery_splits_long_plain_short_reply_at_sentence_boundaries(
+async def test_delivery_keeps_short_punctuated_reply_as_one_bubble(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     sender = AsyncMock(
-        side_effect=[
-            type("Receipt", (), {"delivered": True, "message_id": 10})(),
-            type("Receipt", (), {"delivered": True, "message_id": 11})(),
-            type("Receipt", (), {"delivered": True, "message_id": 12})(),
-        ]
+        return_value=type("Receipt", (), {"delivered": True, "message_id": 10})(),
     )
     monkeypatch.setattr(
         "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
@@ -69,10 +63,7 @@ async def test_delivery_splits_long_plain_short_reply_at_sentence_boundaries(
     monkeypatch.setattr(
         llm_delivery,
         "get_llm_config",
-        lambda: LlmConfig(
-            llm_reply_trim_terminal_period_enabled=False,
-            llm_reply_split_randomize_enabled=False,
-        ),
+        lambda: LlmConfig(llm_reply_trim_terminal_period_enabled=False),
     )
 
     reply_text, _text_delivered, _delivered = await llm_delivery.deliver_llm_callback_success(
@@ -95,12 +86,8 @@ async def test_delivery_splits_long_plain_short_reply_at_sentence_boundaries(
         sleeper=lambda _delay: None,
     )
 
-    assert [call.args[2] for call in sender.await_args_list] == [
-        "六点？",
-        "你真狠。",
-        "我努力一下。",
-    ]
-    assert reply_text == "六点？\n你真狠。\n我努力一下。"
+    assert [call.args[2] for call in sender.await_args_list] == ["六点？你真狠。我努力一下。"]
+    assert reply_text == "六点？你真狠。我努力一下。"
 
 
 @pytest.mark.asyncio
@@ -189,12 +176,11 @@ async def test_delivery_keeps_complete_reply_as_one_bubble(monkeypatch: pytest.M
 
 
 @pytest.mark.asyncio
-async def test_delivery_registers_each_successful_text_bubble_for_reply_context(monkeypatch: pytest.MonkeyPatch) -> None:  # noqa: E501
+async def test_delivery_registers_each_successful_text_bubble_for_reply_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:  # noqa: E501
     sender = AsyncMock(
-        side_effect=[
-            type("Receipt", (), {"delivered": True, "message_id": 70001})(),
-            type("Receipt", (), {"delivered": True, "message_id": 70002})(),
-        ]
+        return_value=type("Receipt", (), {"delivered": True, "message_id": 70001})(),
     )
     recorder = Mock()
     monkeypatch.setattr(
@@ -208,10 +194,7 @@ async def test_delivery_registers_each_successful_text_bubble_for_reply_context(
     monkeypatch.setattr(
         llm_delivery,
         "get_llm_config",
-        lambda: LlmConfig(
-            llm_reply_trim_terminal_period_enabled=False,
-            llm_reply_split_randomize_enabled=False,
-        ),
+        lambda: LlmConfig(llm_reply_trim_terminal_period_enabled=False),
     )
 
     await llm_delivery.deliver_llm_callback_success(
@@ -235,8 +218,7 @@ async def test_delivery_registers_each_successful_text_bubble_for_reply_context(
     )
 
     assert recorder.call_args_list == [
-        call(group_id=20002, bot_id=10001, message_id=70001, text="第一句。"),
-        call(group_id=20002, bot_id=10001, message_id=70002, text="第二句。"),
+        call(group_id=20002, bot_id=10001, message_id=70001, text="第一句。第二句。"),
     ]
 
 
@@ -300,10 +282,7 @@ async def test_delivery_splits_short_cjk_space_reply_into_bubbles(monkeypatch: p
     monkeypatch.setattr(
         llm_delivery,
         "get_llm_config",
-        lambda: LlmConfig(
-            llm_reply_trim_terminal_period_enabled=False,
-            llm_reply_split_randomize_enabled=False,
-        ),
+        lambda: LlmConfig(llm_reply_trim_terminal_period_enabled=False),
     )
 
     reply_text, _text_delivered, _delivered = await llm_delivery.deliver_llm_callback_success(
