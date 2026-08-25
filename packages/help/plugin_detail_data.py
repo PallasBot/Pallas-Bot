@@ -15,6 +15,7 @@ from pallas.api.perm import (
 )
 
 from .markdown_generator import HelpMarkdownIssue
+from .plugin_legacy_names import is_plugin_name_in_set
 from .plugin_manager import find_plugin, plugin_display_name
 from .plugin_match import normalize_help_key
 
@@ -153,7 +154,7 @@ def build_plugin_detail_data(
                 )
             )
 
-    if target_plugin.name == "maa":
+    if is_plugin_name_in_set(str(target_plugin.name), {"maa"}):
         from pallas.core.plugin_coord import maa as maa_coord
 
         data.extra_sections.append(("MAA 对接地址", maa_coord.format_maa_http_setup_help()))
@@ -214,7 +215,8 @@ def build_function_detail_data(
     perm_raw = effective_permission_avail_text(target_function)
     cd_raw = effective_command_cooldown_text(target_function)
     extra_sections: list[tuple[str, str]] = []
-    if target_plugin.name == "maa" and func_name in {"绑定设备", "绑定 MAA 设备", "MAA HTTP"}:
+    is_maa = is_plugin_name_in_set(str(target_plugin.name), {"maa"})
+    if is_maa and func_name in {"绑定设备", "绑定 MAA 设备", "MAA HTTP"}:
         from pallas.core.plugin_coord import maa as maa_coord
 
         extra_sections.append(("MAA 对接地址", maa_coord.format_maa_http_setup_help()))
