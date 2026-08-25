@@ -262,18 +262,20 @@ async def invoke_bot_action(
     *,
     timeout_sec: float = _DEFAULT_TIMEOUT,
 ) -> tuple[bool, Any]:
-    """本进程有连接则本地执行；否则经协调通道交给持有目标 Bot 的进程。"""
+    """本进程有连接则本地执行；分片时经协调通道交给持有目标 Bot 的 worker。"""
     from pallas.core.platform.coord.redis_settings import coord_redis_enabled
     from pallas.core.platform.shard.presence import bot_has_cluster_connection, bot_has_local_connection
 
     qq = int(bot_qq)
     if bot_has_local_connection(qq):
         return await _execute_local(action, qq, payload)
+    if not shard_ctx.sharding_active():
+        logger.debug("Bot action [{}] was skipped because bot [{}] is not connected locally.", action, qq)
+        return False, None
     # 协调通道不可用时无法跨进程投递
     if not coord_redis_enabled():
         return False, None
-    # 分片：presence 明确无目标牛则快速失败；非分片（unified 主进程+辅助进程）交给协调通道，由持有目标 Bot 的进程裁决
-    if shard_ctx.sharding_active() and not bot_has_cluster_connection(qq):
+    if not bot_has_cluster_connection(qq):
         logger.debug("Bot action [{}] was skipped because bot [{}] is not connected in the cluster.", action, qq)
         return False, None
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from types import SimpleNamespace
 
 from packages.repeater import fanout_reply as fanout_mod
@@ -41,16 +40,25 @@ def test_invoke_bot_action_skips_offline_remote(monkeypatch):
     asyncio.run(run())
 
 
-def test_invoke_bot_action_routes_via_coord_when_unified(fake_coord_redis, monkeypatch):
-    store, _client = fake_coord_redis
+def test_invoke_bot_action_skips_missing_bot_when_unified(monkeypatch):
     monkeypatch.setattr(ba_mod.shard_ctx, "sharding_active", lambda: False)
     monkeypatch.setattr(presence_mod, "bot_has_local_connection", lambda qq: False)
+    monkeypatch.setattr(
+        "pallas.core.platform.coord.redis_settings.coord_redis_enabled",
+        lambda: True,
+    )
+    published: list[dict[str, object]] = []
     waited: list[str] = []
+
+    def fake_publish(**kwargs: object) -> str:
+        published.append(kwargs)
+        return "unexpected-request"
 
     async def fake_wait(request_id: str, *, deadline: float) -> tuple[bool, object]:
         waited.append(request_id)
         return True, None
 
+    monkeypatch.setattr(ba_mod, "_publish_request", fake_publish)
     monkeypatch.setattr(ba_mod, "_wait_request", fake_wait)
 
     async def run() -> None:
@@ -60,17 +68,12 @@ def test_invoke_bot_action_routes_via_coord_when_unified(fake_coord_redis, monke
             {"group_id": 1, "message_text": "hi"},
             timeout_sec=8.0,
         )
-        assert ok is True
+        assert ok is False
         assert result is None
 
     asyncio.run(run())
-    assert len(waited) == 1
-    keys = [key for key in store if "bot_action" in key]
-    assert len(keys) == 1
-    request = json.loads(store[keys[0]])
-    assert request["action"] == "send_group_msg"
-    assert request["bot_qq"] == 300
-    assert request["payload"] == {"group_id": 1, "message_text": "hi"}
+    assert published == []
+    assert waited == []
 
 
 def test_invoke_bot_action_skips_when_coord_unavailable(monkeypatch):
