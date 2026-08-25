@@ -71,10 +71,8 @@ def test_at_chat_prompt_defines_cuteness_through_natural_reactions() -> None:
 
     assert "带点小得意、嘴硬两句、或者软乎乎地应一句" in prompt
     assert "说话落点常带一点轻快或亲昵" in prompt
-    assert "六点？" in prompt
-    assert "你对我也太狠了吧" in prompt
-    assert "我努力爬起来" in prompt
-    assert "谢谢呀，眼光不错嘛" in prompt
+    assert "先顺着玩一下再回顶" in prompt
+    assert "别每次都拿同一句挡回去" in prompt
 
 
 def test_at_chat_prompt_keeps_playfulness_bounded_and_contextual() -> None:
