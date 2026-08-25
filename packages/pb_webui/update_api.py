@@ -702,9 +702,24 @@ def register_update_router(
         webui_key = f"update_check_webui:{repo}:{asset}:{bool(github_token)}"
         bot_key = f"update_check_bot:{bool(github_token)}"
 
-        async def warm(key: str, loader, ttl: float, stale: float) -> None:
+        async def warm(
+            key: str,
+            loader,
+            ttl: float,
+            stale: float,
+            *,
+            swr: bool = False,
+            persist_snapshot: bool = False,
+        ) -> None:
             try:
-                await cached_read(key=key, loader=loader, ttl_sec=ttl, stale_sec=stale)
+                await cached_read(
+                    key=key,
+                    loader=loader,
+                    ttl_sec=ttl,
+                    stale_sec=stale,
+                    swr=swr,
+                    persist_snapshot=persist_snapshot,
+                )
             except Exception as e:  # noqa: BLE001
                 logger.debug("[WebUI] Cache warm-up read failed for key [{}]: [{}]", key, e)
 
@@ -717,10 +732,60 @@ def register_update_router(
         async def load_community() -> dict[str, Any]:
             return await fetch_community_public_stats()
 
+        from packages.pb_webui import extended_api as ext
+
+        async def load_instances() -> dict[str, Any]:
+            return await ext._instances_payload()
+
+        async def load_plugins() -> list[dict[str, Any]]:
+            return await asyncio.to_thread(ext._list_plugins_dict)
+
+        async def load_bots() -> list[dict[str, Any]]:
+            return await asyncio.to_thread(ext._list_bots_dict)
+
+        async def load_system() -> dict[str, Any]:
+            return await asyncio.to_thread(ext._system_dict)
+
+        async def load_message_stats() -> dict[str, Any]:
+            return await ext._message_stats_overview(self_id=None, include_history=False)
+
+        async def load_plugin_run_stats() -> dict[str, Any]:
+            return await asyncio.to_thread(
+                ext._plugin_run_stats_overview,
+                self_id=None,
+                log_source="all",
+                tb_limit=0,
+                include_log_errors=False,
+                include_history=False,
+            )
+
         await asyncio.gather(
             warm(webui_key, load_webui, 120.0, 900.0),
             warm(bot_key, load_bot, 120.0, 900.0),
             warm("community-stats", load_community, 30.0, 120.0),
+            warm(
+                "instances",
+                load_instances,
+                5.0,
+                30.0,
+                swr=True,
+                persist_snapshot=True,
+            ),
+            warm("plugins", load_plugins, 1.6, 25.0),
+            warm(
+                "message-stats:all",
+                load_message_stats,
+                2.0,
+                10.0,
+            ),
+            warm(
+                "plugin-run-stats:all:logsrc:all:tbl:0:view:full",
+                load_plugin_run_stats,
+                2.0,
+                10.0,
+            ),
+            warm("bots", load_bots, 0.9, 15.0),
+            warm("system", load_system, 0.8, 8.0),
         )
 
     global _warm_console_read_caches_fn
