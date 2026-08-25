@@ -70,7 +70,7 @@ async def cached_read(
     now = time.monotonic()
     hit = _READ_CACHE.get(key)
     if hit and now < float(hit["exp"]):
-        return cache_value_copy(hit["data"])
+        return await asyncio.to_thread(cache_value_copy, hit["data"])
 
     inflight = _READ_INFLIGHT.get(key)
     if inflight is not None and not inflight.done():
@@ -83,16 +83,16 @@ async def cached_read(
         except Exception as exc:
             if stale_hit and time.monotonic() < float(stale_hit["stale_exp"]):
                 logger.warning(format_cache_fallback_warning(key=key, stale_sec=stale_sec, err=exc))
-                return cache_value_copy(stale_hit["data"])
+                return await asyncio.to_thread(cache_value_copy, stale_hit["data"])
             raise
-        stored = cache_value_copy(data)
+        stored = await asyncio.to_thread(cache_value_copy, data)
         cached_at = time.monotonic()
         _READ_CACHE[key] = {
             "data": stored,
             "exp": cached_at + max(0.05, ttl_sec),
             "stale_exp": cached_at + max(ttl_sec, stale_sec),
         }
-        return cache_value_copy(stored)
+        return await asyncio.to_thread(cache_value_copy, stored)
 
     task = asyncio.create_task(run())
     _READ_INFLIGHT[key] = task
