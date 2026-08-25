@@ -12,8 +12,8 @@ from pallas.product.community_stats.config import get_community_stats_config
 from pallas.product.community_stats.endpoints import monitor_overview_urls_for_config, stats_urls_for_config
 from pallas.product.message_scrub.quiet_http_loggers import scrub_http_log_noise
 
-_MONITOR_TIMEOUT_SEC = 5.0
-_STATS_TIMEOUT_SEC = 12.0
+_MONITOR_TIMEOUT_SEC = 3.0
+_STATS_TIMEOUT_SEC = 3.0
 # monitor 字段更全（含 online_versions），但常更慢：先短等优先 overview，否则用 /v1/stats 并再等一段补全
 _MONITOR_PREFER_SEC = 0.45
 _MONITOR_ENRICH_SEC = 1.4

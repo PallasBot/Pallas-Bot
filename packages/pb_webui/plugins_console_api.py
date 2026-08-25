@@ -215,7 +215,7 @@ def register_plugins_console_router(
     @router.get(f"{x}/plugins", include_in_schema=True)
     async def _plugins() -> JSONResponse:
         async def _load() -> list[dict[str, Any]]:
-            return _list_plugins_dict()
+            return await asyncio.to_thread(_list_plugins_dict)
 
         data = await cached_read(key="plugins", loader=_load, ttl_sec=1.6, stale_sec=25.0)
         return JSONResponse({"ok": True, "data": data})
@@ -333,7 +333,7 @@ def register_plugins_console_router(
             raise HTTPException(status_code=400, detail="plugin_name required")
 
         capabilities = build_plugin_capabilities_ui()
-        catalog_rows = _list_plugins_dict()
+        catalog_rows = await asyncio.to_thread(_list_plugins_dict)
         plugin_row = find_capability_plugin_row(capabilities, target)
         plugin_meta = find_catalog_plugin_row(catalog_rows, target) or {}
         if plugin_row is None:
