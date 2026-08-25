@@ -62,6 +62,8 @@ description: >
 | Commit | `chore(release): vX.Y.Z`（Bot / WebUI 相同） |
 | PR 标题 | 与发版 commit 标题相同 |
 | PR 正文 | 只写本版变更；不写打 tag、合入顺序、CI、强推等流程说明 |
+| 合入方式 | **用 merge commit（no-ff）**，保留完整 feature 历史；squash 会压成单条、丢失提交历史。Auto Tag Release / Release 对两种合入方式都兼容 |
+| dev 同步 | 合入后 `dev` 对齐 `main`（fast-forward）；若用 no-ff 合入，`dev` 落后于 `main` 一个 merge commit，直接 reset 到 `origin/main` 即可 |
 
 ## CHANGELOG
 
