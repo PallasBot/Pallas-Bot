@@ -284,7 +284,7 @@ jobs:
             unzip -d data/pb_webui dist.zip
             ```
 
-            默认前端栈为 **React**（`pallas_webui_frontend=react`）。若需 Vue，设置 `pallas_webui_frontend=vue` 并使用含 `public/` 的产物。
+            默认前端栈为 **React**（`pallas_webui_frontend=react`）。
             访问：`http://<host>:<port>/pallas/` · 说明见 [WebUI 部署](https://github.com/${{ github.repository }}/blob/${{ steps.get_version.outputs.version }}/docs/maintainer/install/webui.md) / [开发者文档](https://github.com/${{ github.repository }}/blob/${{ steps.get_version.outputs.version }}/docs/developer/webui.md)。
           files: |
             dist.zip
