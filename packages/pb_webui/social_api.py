@@ -1083,6 +1083,8 @@ def register_social_router(
                 loader=_load,
                 ttl_sec=1.0,
                 stale_sec=12.0,
+                swr=True,
+                persist_snapshot=True,
             )
         except Exception as e:  # noqa: BLE001
             logger.exception("[WebUI] 读取好友申请概览失败")

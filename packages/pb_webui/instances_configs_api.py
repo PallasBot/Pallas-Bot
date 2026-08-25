@@ -228,6 +228,8 @@ def register_instances_configs_router(
                 loader=_instances_payload,
                 ttl_sec=5.0,
                 stale_sec=30.0,
+                swr=True,
+                persist_snapshot=True,
             )
         except Exception as e:  # noqa: BLE001
             logger.exception("[WebUI] 加载实例视图失败")

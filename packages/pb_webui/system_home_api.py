@@ -296,6 +296,8 @@ async def _home_overview_payload() -> dict[str, Any]:
             loader=fetch_community_public_stats,
             ttl_sec=30.0,
             stale_sec=120.0,
+            swr=True,
+            persist_snapshot=True,
         )
 
     (
