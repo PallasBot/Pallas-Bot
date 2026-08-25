@@ -1386,10 +1386,11 @@ def _message_stats_row_from_mem(
     sid: str,
     connection_key: str,
     mem: dict[str, Any],
+    include_history: bool = True,
 ) -> dict[str, Any]:
     counts = mem.get("day_api_counts")
     top_name, top_cnt = _top_api_call_today(counts)
-    return {
+    row: dict[str, Any] = {
         "self_id": sid,
         "connection_key": connection_key,
         "sent": int(mem.get("sent", 0)),
@@ -1400,10 +1401,12 @@ def _message_stats_row_from_mem(
         "today_active_groups": len(_day_active_groups_from_mem(mem)),
         "today_top_api": top_name,
         "today_top_api_count": top_cnt,
-        "api_calls_history": _api_call_history_public(mem),
-        "api_calls_history_by_api": _api_call_history_by_api_series(mem),
-        "message_traffic_history": _msg_traffic_history_public(mem),
     }
+    if include_history:
+        row["api_calls_history"] = _api_call_history_public(mem)
+        row["api_calls_history_by_api"] = _api_call_history_by_api_series(mem)
+        row["message_traffic_history"] = _msg_traffic_history_public(mem)
+    return row
 
 
 def _message_stats_mem_from_shard_blob(rec: dict[str, Any]) -> dict[str, Any]:
@@ -1413,7 +1416,7 @@ def _message_stats_mem_from_shard_blob(rec: dict[str, Any]) -> dict[str, Any]:
     return _msg_stats_shard_import(msg, today=str(msg.get("day_key") or ""))
 
 
-async def _message_stats_overview(*, self_id: str | None) -> dict[str, Any]:
+async def _message_stats_overview(*, self_id: str | None, include_history: bool = True) -> dict[str, Any]:
     from .social_api import _is_onebot_v11_bot
 
     rows: list[dict[str, Any]] = []
@@ -1452,6 +1455,7 @@ async def _message_stats_overview(*, self_id: str | None) -> dict[str, Any]:
                     sid=sid,
                     connection_key=str(rec.get("connection_key") or sid),
                     mem=mem,
+                    include_history=include_history,
                 )
             )
             seen.add(sid)
@@ -1476,7 +1480,14 @@ async def _message_stats_overview(*, self_id: str | None) -> dict[str, Any]:
             mem = dict(mem)
             mem["sent"] = sent
             mem["received"] = received
-            _accum(_message_stats_row_from_mem(sid=sid, connection_key=str(key), mem=mem))
+            _accum(
+                _message_stats_row_from_mem(
+                    sid=sid,
+                    connection_key=str(key),
+                    mem=mem,
+                    include_history=include_history,
+                )
+            )
             seen.add(sid)
     else:
         for key, bot in get_bots().items():
@@ -1500,7 +1511,14 @@ async def _message_stats_overview(*, self_id: str | None) -> dict[str, Any]:
             mem = dict(mem)
             mem["sent"] = sent
             mem["received"] = received
-            _accum(_message_stats_row_from_mem(sid=sid, connection_key=str(key), mem=mem))
+            _accum(
+                _message_stats_row_from_mem(
+                    sid=sid,
+                    connection_key=str(key),
+                    mem=mem,
+                    include_history=include_history,
+                )
+            )
     return {
         "total_sent": total_sent,
         "total_received": total_received,
@@ -2503,6 +2521,7 @@ def _plugin_run_stats_overview(
     log_source: str | None = None,
     tb_limit: int = 0,
     include_log_errors: bool = True,
+    include_history: bool = True,
 ) -> dict[str, Any]:
     from .social_api import _is_onebot_v11_bot
 
@@ -2543,7 +2562,7 @@ def _plugin_run_stats_overview(
                     sid=sid,
                     connection_key=str(rec.get("connection_key") or sid),
                     bucket=bucket,
-                    include_hist=True,
+                    include_hist=include_history,
                 )
             )
             seen.add(sid)
@@ -2562,7 +2581,7 @@ def _plugin_run_stats_overview(
                     sid=sid,
                     connection_key=str(key),
                     bucket=bucket if isinstance(bucket, dict) else {},
-                    include_hist=True,
+                    include_hist=include_history,
                 )
             )
             seen.add(sid)
@@ -2573,7 +2592,7 @@ def _plugin_run_stats_overview(
                     sid=want,
                     connection_key=want,
                     bucket=bucket if isinstance(bucket, dict) else {},
-                    include_hist=True,
+                    include_hist=include_history,
                 )
             )
     else:
@@ -2592,7 +2611,7 @@ def _plugin_run_stats_overview(
                     sid=sid,
                     connection_key=str(key),
                     bucket=bucket if isinstance(bucket, dict) else {},
-                    include_hist=True,
+                    include_hist=include_history,
                 )
             )
     payload: dict[str, Any] = {

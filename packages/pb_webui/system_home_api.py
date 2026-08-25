@@ -268,7 +268,7 @@ async def _home_overview_payload() -> dict[str, Any]:
     async def load_message_stats() -> dict[str, Any]:
         return await cached_read(
             key="message-stats:all",
-            loader=lambda: ext._message_stats_overview(self_id=None),
+            loader=lambda: ext._message_stats_overview(self_id=None, include_history=False),
             ttl_sec=2.0,
             stale_sec=10.0,
         )
@@ -282,6 +282,7 @@ async def _home_overview_payload() -> dict[str, Any]:
                 log_source="all",
                 tb_limit=0,
                 include_log_errors=False,
+                include_history=False,
             ),
             ttl_sec=2.0,
             stale_sec=10.0,
