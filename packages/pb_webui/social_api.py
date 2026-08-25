@@ -1114,7 +1114,9 @@ def register_social_router(
             }
 
         try:
-            payload = await cached_read(key=cache_key, loader=_load, ttl_sec=2.5, stale_sec=25.0)
+            payload = await cached_read(
+                key=cache_key, loader=_load, ttl_sec=2.5, stale_sec=25.0, swr=True, persist_snapshot=True
+            )
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001
@@ -1145,7 +1147,9 @@ def register_social_router(
             }
 
         try:
-            payload = await cached_read(key=cache_key, loader=_load, ttl_sec=2.5, stale_sec=25.0)
+            payload = await cached_read(
+                key=cache_key, loader=_load, ttl_sec=2.5, stale_sec=25.0, swr=True, persist_snapshot=True
+            )
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001
@@ -1204,7 +1208,9 @@ def register_social_router(
 
         cache_key = f"request_overview:{self_id or 'all'}:{int(doubt)}"
         try:
-            data = await cached_read(key=cache_key, loader=_load, ttl_sec=1.2, stale_sec=15.0)
+            data = await cached_read(
+                key=cache_key, loader=_load, ttl_sec=1.2, stale_sec=15.0, swr=True, persist_snapshot=True
+            )
         except Exception as e:  # noqa: BLE001
             logger.exception("[WebUI] 读取审批总览失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
