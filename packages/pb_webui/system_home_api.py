@@ -253,8 +253,8 @@ async def _home_overview_payload() -> dict[str, Any]:
         return await cached_read(
             key="instances",
             loader=ext._instances_payload,
-            ttl_sec=1.0,
-            stale_sec=20.0,
+            ttl_sec=5.0,
+            stale_sec=30.0,
         )
 
     async def load_plugins() -> list[dict[str, Any]]:

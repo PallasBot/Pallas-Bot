@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Header, HTTPException, Query
@@ -28,14 +29,18 @@ async def _instances_payload() -> dict[str, Any]:
     from .system_home_api import _list_bots_dict
 
     db_bots = await list_all_bot_configs_public()
-    snap = pallas_protocol_snapshot()
     db_accounts = [int(b["account"]) for b in db_bots if isinstance(b, dict) and b.get("account") is not None]
+    snap, nonebot_bots, protocol_extension = await asyncio.gather(
+        asyncio.to_thread(pallas_protocol_snapshot),
+        asyncio.to_thread(_list_bots_dict),
+        asyncio.to_thread(protocol_extension_status),
+    )
     bot_profiles = await _collect_online_bot_profiles(ensure_accounts=db_accounts)
     payload: dict[str, Any] = {
-        "nonebot_bots": _list_bots_dict(),
+        "nonebot_bots": nonebot_bots,
         "db_bot_configs": db_bots,
         "pallas_protocol": snap,
-        "protocol_extension": protocol_extension_status(),
+        "protocol_extension": protocol_extension,
         "bot_profiles": bot_profiles,
     }
     if snap is not None:
@@ -221,8 +226,8 @@ def register_instances_configs_router(
             payload = await cached_read(
                 key="instances",
                 loader=_instances_payload,
-                ttl_sec=1.0,
-                stale_sec=20.0,
+                ttl_sec=5.0,
+                stale_sec=30.0,
             )
         except Exception as e:  # noqa: BLE001
             logger.exception("[WebUI] 加载实例视图失败")
