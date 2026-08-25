@@ -40,13 +40,15 @@ def test_invoke_bot_action_skips_offline_remote(monkeypatch):
     asyncio.run(run())
 
 
-def test_invoke_bot_action_skips_missing_bot_when_unified(monkeypatch):
+def test_invoke_bot_action_routes_via_coord_from_aux_when_unified(monkeypatch):
+    """非分片下，无任何本地牛的辅助进程（work bot）仍应经坐标通道投递给主进程。"""
     monkeypatch.setattr(ba_mod.shard_ctx, "sharding_active", lambda: False)
     monkeypatch.setattr(presence_mod, "bot_has_local_connection", lambda qq: False)
     monkeypatch.setattr(
         "pallas.core.platform.coord.redis_settings.coord_redis_enabled",
         lambda: True,
     )
+    monkeypatch.setattr("nonebot.get_bots", dict)
     published: list[dict[str, object]] = []
     waited: list[str] = []
 
@@ -68,6 +70,39 @@ def test_invoke_bot_action_skips_missing_bot_when_unified(monkeypatch):
             {"group_id": 1, "message_text": "hi"},
             timeout_sec=8.0,
         )
+        assert ok is True
+        assert result is None
+
+    asyncio.run(run())
+    assert len(published) == 1
+    assert len(waited) == 1
+
+
+def test_invoke_bot_action_skips_offline_bot_in_unified_main_process(monkeypatch):
+    """单进程/主进程持有本地牛但目标不在本地：无人可执行，快速失败不发坐标请求。"""
+    monkeypatch.setattr(ba_mod.shard_ctx, "sharding_active", lambda: False)
+    monkeypatch.setattr(presence_mod, "bot_has_local_connection", lambda qq: False)
+    monkeypatch.setattr(
+        "pallas.core.platform.coord.redis_settings.coord_redis_enabled",
+        lambda: True,
+    )
+    monkeypatch.setattr("nonebot.get_bots", lambda: {"100": object()})
+    published: list[dict[str, object]] = []
+    waited: list[str] = []
+
+    def fake_publish(**kwargs: object) -> str:
+        published.append(kwargs)
+        return "unexpected-request"
+
+    async def fake_wait(request_id: str, *, deadline: float) -> tuple[bool, object]:
+        waited.append(request_id)
+        return True, None
+
+    monkeypatch.setattr(ba_mod, "_publish_request", fake_publish)
+    monkeypatch.setattr(ba_mod, "_wait_request", fake_wait)
+
+    async def run() -> None:
+        ok, result = await ba_mod.invoke_bot_action("send_group_msg", 300, {"group_id": 1})
         assert ok is False
         assert result is None
 

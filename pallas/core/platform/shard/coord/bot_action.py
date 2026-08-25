@@ -269,15 +269,29 @@ async def invoke_bot_action(
     qq = int(bot_qq)
     if bot_has_local_connection(qq):
         return await _execute_local(action, qq, payload)
-    if not shard_ctx.sharding_active():
-        logger.debug("Bot action [{}] was skipped because bot [{}] is not connected locally.", action, qq)
-        return False, None
     # 协调通道不可用时无法跨进程投递
     if not coord_redis_enabled():
         return False, None
-    if not bot_has_cluster_connection(qq):
-        logger.debug("Bot action [{}] was skipped because bot [{}] is not connected in the cluster.", action, qq)
-        return False, None
+    if shard_ctx.sharding_active():
+        if not bot_has_cluster_connection(qq):
+            logger.debug(
+                "Bot action [{}] was skipped because bot [{}] is not connected in the cluster.",
+                action,
+                qq,
+            )
+            return False, None
+    else:
+        # unified：本进程没有任何本地牛时视为辅助进程，交给持有目标牛的主进程执行；
+        # 主进程本地持有其它牛但目标不在本地时无人可执行，快速失败不发坐标请求。
+        from nonebot import get_bots
+
+        if get_bots():
+            logger.debug(
+                "Bot action [{}] was skipped because bot [{}] is not connected locally.",
+                action,
+                qq,
+            )
+            return False, None
 
     request_id = await asyncio.to_thread(
         _publish_request,
@@ -432,6 +446,10 @@ async def _run_pending_request(request_id: str, local_ids: frozenset[str]) -> No
         return
     bot_key = str(int(data.get("bot_qq") or 0))
     if bot_key not in local_ids:
+        if shard_ctx.sharding_active():
+            return
+        # unified：仅主进程持有牛，目标不在本地则无人可执行，快速失败避免发布方白等。
+        await asyncio.to_thread(_finish_request, str(data.get("request_id") or request_id), ok=False, result=None)
         return
     req_id = str(data.get("request_id") or request_id)
     if req_id in _inflight:
@@ -520,6 +538,8 @@ async def bot_action_redis_listen_loop() -> None:
                 wake_bot_action_request(request_id)
                 local_ids = frozenset(get_bots().keys())
                 if not local_ids:
+                    if not shard_ctx.sharding_active():
+                        await asyncio.to_thread(_finish_request, request_id, ok=False, result=None)
                     continue
                 try:
                     await _run_pending_request(request_id, local_ids)
