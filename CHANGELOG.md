@@ -1,5 +1,59 @@
 # Changelog
 
+## [4.3.12] - 2026-08-25
+
+### 更新公告
+
+- **智能对话**：
+  - 引用近前群消息时可直接原生引用那条消息回复，无需额外生成（按概率触发、同群留冷却）
+  - 高冷场景不再全程沉默：判定无需回复时，低价值短消息仍会用低投入短句接一句，减少冷场
+  - 短句整体发出不再随机拆泡，高频短反应先走本地冒泡，生成开销更省
+  - 语义风格采样放宽并回填补作者信息，更早形成群风格画像
+  - 好感度提示按分档差异化，负面档语气更收敛
+- **AI 治理**：
+  - 退役反哺写回入库链路，仅保留纠错加权；控制台同步移除写回面板（需 WebUI v0.9.14）
+  - 会话反馈列表改走群索引并修复热点，新增周期归档，长尾群不再全量扫表
+- **稳定性**：
+  - 已在群的重复入群邀请不再重复推送
+  - unified 模式修复坐标通道 action 投递；无本地 Bot 时跳过协调投递
+  - 后台任务 aux handler 增加超时兜底，避免队列积压
+- 捆绑控制台 WebUI v0.9.14
+
+### Added
+
+* feat(llm): 引用近前消息放行 necessity gate，打通 QUOTE 通路
+* feat(llm): 语义风格回填补作者信息，放宽采样
+* feat(llm): 高频短反应放行本地冒泡
+* feat(llm): 无群统计时用默认段长推导句长硬闸
+* feat(llm): reply_max_length 真人数值硬闸压长句
+* feat(llm): 好感度分档差异化 hint，负面档加约束语气
+* feat(tools): 语义风格离线产出审计工具
+* feat(webui): 启动预热扩展至仪表盘首屏统计与实例数据
+* feat(webui): 好友群列表与审批总览接入 SWR 持久化快照
+* feat(webui): 读缓存 SWR 持久化快照接入社区统计与账户申请
+
+### Fixed
+
+* fix(webui): 后台刷新结果返回给并发等待方，避免 data:null
+* fix(request_handler): 已在群的重复入群邀请不再推送
+* fix(coord): 统一模式恢复坐标通道投递 bot action
+* fix(coord): unified 无本地 Bot 时跳过协调投递
+* fix(llm): short 短句不再随机拆泡
+* fix(llm): 会话反馈列表改走群索引，消除全量扫描
+* fix(llm): 反馈索引热点修复 + 周期归档
+* fix(work): aux handler 超时兜底，防队列积压
+* fix(tools): affinity_ab 透传 --temp 并输出回复 hash
+
+### Changed
+
+* refactor(llm): 退役反哺写回（promotion_candidates），保留纠错加权
+* refactor(llm): 删除已退役的 auto promote 残留函数
+* refactor(llm): 裁剪系统提示词示例，淡化接话模板
+* fix(webui): home/overview 统计概要瘦身，剔除历史曲线字段
+* fix(webui): 实例探测挪线程池并行并延长缓存 TTL
+* fix(webui): 读缓存深拷贝挪出事件循环线程池
+* fix(webui): 插件目录走线程池，社区统计快失败回退缓存
+
 ## [4.3.11] - 2026-08-24
 
 ### 更新公告
