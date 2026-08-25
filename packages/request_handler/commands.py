@@ -1,8 +1,10 @@
-from nonebot import logger, on_command, on_message, on_request
+from nonebot import logger, on_command, on_message, on_notice, on_request
 from nonebot.adapters import Event
 from nonebot.adapters.onebot.v11 import (
     Bot,
     FriendRequestEvent,
+    GroupDecreaseNoticeEvent,
+    GroupIncreaseNoticeEvent,
     GroupRequestEvent,
     Message,
     MessageEvent,
@@ -22,6 +24,7 @@ from packages.request_handler.runtime import (
     approve_friend_by_uid,
     approve_group_invite_by_gid,
     cached_doubt_friend,
+    clear_joined_group_state,
     clear_quick_approve_state,
     failure_cleanup_friend,
     failure_cleanup_group,
@@ -29,6 +32,7 @@ from packages.request_handler.runtime import (
     get_group_name,
     get_last_notified,
     get_nickname,
+    joined_groups,
     notify_admins,
     notify_ts_expired,
     pending_friend,
@@ -74,6 +78,22 @@ from pallas.api.perm import private_message_permission_for_command, satisfies_co
 from pallas.core.foundation.config import BotConfig, GroupConfig, UserConfig, user_is_bot_admin
 
 request_cmd = on_request(priority=14, block=False)
+
+group_notice_cmd = on_notice(priority=13, block=False)
+
+
+@group_notice_cmd.handle()
+async def handle_group_notice(bot: Bot, event: GroupIncreaseNoticeEvent | GroupDecreaseNoticeEvent):
+    if event.user_id != event.self_id:
+        return
+    bot_key = str(bot.self_id)
+    group_key = str(event.group_id)
+    if isinstance(event, GroupIncreaseNoticeEvent):
+        joined_groups.setdefault(bot_key, set()).add(group_key)
+        clear_joined_group_state(bot_key, group_key)
+    else:
+        joined_groups.get(bot_key, set()).discard(group_key)
+
 
 list_friends_cmd = on_command(
     LIST_FRIEND_COMMAND,
@@ -413,6 +433,15 @@ async def handle_group_request(bot: Bot, event: GroupRequestEvent):
         bot_id = int(bot.self_id)
         bot_key = str(bot_id)
         group_key = str(event.group_id)
+        if group_key in joined_groups.get(bot_key, set()):
+            logger.info(
+                format_plugin_event(
+                    "skip_group_invite_joined",
+                    f"Bot [{bot_id}] ignored a duplicate invitation to group [{event.group_id}] "
+                    f"from user [{event.user_id}]: already in group",
+                )
+            )
+            return
         pending_group.setdefault(bot_key, {})[group_key] = {
             "flag": event.flag,
             "sub_type": "invite",

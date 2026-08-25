@@ -1,20 +1,42 @@
-from nonebot import get_bots, logger
+from nonebot import get_bots, get_driver, logger
 from nonebot.adapters.onebot.v11 import Bot
 from nonebot_plugin_apscheduler import scheduler
 
 from .runtime import (
     cached_doubt_friend,
+    clear_joined_group_state,
     fetch_doubt_friends,
     get_nickname,
+    joined_groups,
     load_doubt_poll_state,
     notify_admins,
     pending_friend,
+    pending_group,
     plugin_config,
     request_handler_plugin_disabled,
     save_doubt_poll_state,
     set_last_notified,
 )
 from .texts import REQUEST_HANDLER_HELP_HINT
+
+
+@get_driver().on_bot_connect
+async def on_bot_connect(bot: Bot) -> None:
+    if bot.type != "OneBot V11" or not bot.self_id.isnumeric():
+        return
+    bot_key = str(bot.self_id)
+    try:
+        result = await bot.get_group_list()
+    except Exception as e:
+        logger.debug(f"bot [{bot_key}] get_group_list on connect failed: {e}")
+        return
+    group_ids = {str(group.get("group_id")) for group in result if isinstance(group, dict) and group.get("group_id")}
+    if not group_ids:
+        return
+    joined_groups[bot_key] = group_ids
+    for group_key in list(pending_group.get(bot_key, {})):
+        if group_key in group_ids:
+            clear_joined_group_state(bot_key, group_key)
 
 
 @scheduler.scheduled_job(

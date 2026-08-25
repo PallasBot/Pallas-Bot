@@ -348,6 +348,19 @@ def clear_quick_approve_state(bot_key: str, kind: str, target_id: str) -> None:
         persist_approval_notice_map(bot_key)
 
 
+# bot 已知所在的群：bot_id -> set(group_id)，由入群/退群通知事件维护，用于丢弃已入群后的重复邀请
+joined_groups: dict[str, set[str]] = {}
+
+
+def clear_joined_group_state(bot_key: str, group_key: str) -> None:
+    """bot 已在群时清掉该群的残留入群申请与快捷审批状态。"""
+    bot_pending = pending_group.get(bot_key)
+    if bot_pending and group_key in bot_pending:
+        bot_pending.pop(group_key, None)
+        persist_pending_group(bot_key)
+    clear_quick_approve_state(bot_key, "group", group_key)
+
+
 # {bot_id: {user_id: flag}}
 pending_friend: dict[str, dict[str, str]] = load_json(FRIEND_REQ_FILE)
 # 被过滤的好友申请 {bot_id: {user_id: flag}}
@@ -551,6 +564,7 @@ async def approve_group_invite_by_gid(bot: Bot, bot_key: str, group_key: str) ->
         return False, f"操作未成功：{e}（请稍后重试）"
     bot_pending.pop(group_key, None)
     persist_pending_group(bot_key)
+    joined_groups.setdefault(bot_key, set()).add(group_key)
     nickname = await get_nickname(bot, req["user_id"])
     group_name = await get_group_name(bot, group_id)
     logger.info(
