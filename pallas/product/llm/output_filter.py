@@ -250,8 +250,28 @@ def _normalize_and_guard_reply(text: str, *, task_type: str) -> str:
     return _clean_and_guard_reply(normalized, task_type=task_type)
 
 
+def _press_reply_to_limit(text: str, *, max_len: int) -> str:
+    """把整段按断点截到 max_len 内：优先句子结尾/行/空格，截不利落则原样返回。"""
+    plain = str(text or "").strip()
+    if not plain or max_len <= 0 or len(plain) <= max_len:
+        return plain
+    for index in range(max_len - 1, 0, -1):
+        if plain[index] not in "。！？!?；;，,、":
+            continue
+        tail = plain[: index + 1].strip()
+        if tail and not looks_like_truncated_reply(tail):
+            return tail
+    for index in range(max_len - 1, 0, -1):
+        if plain[index] not in " \t":
+            continue
+        tail = plain[:index].strip()
+        if tail and not looks_like_truncated_reply(tail):
+            return tail
+    return plain
+
+
 def _enforce_max_length(text: str, *, task: dict, task_type: str) -> str:
-    """行为/场景长度违约：超上限过多则回落 fallback 或静默。"""
+    """行为/场景长度违约：超上限先断点压短，压不短才回落 fallback 或静默。"""
     try:
         max_len = int(task.get("reply_max_length") or 0)
     except (TypeError, ValueError):
@@ -260,11 +280,21 @@ def _enforce_max_length(text: str, *, task: dict, task_type: str) -> str:
         return text
     if len(text) <= max_len:
         return text
-    # 轻微超长仍放行；明显违约才回落
-    if len(text) <= max_len + 12:
-        return text
+    pressed = _press_reply_to_limit(text, max_len=max_len)
+    if pressed and pressed != text:
+        log_rate_limited(
+            logger,
+            "info",
+            "llm.output_filter.length_press",
+            "LLM reply pressed to length cap for task [{}], len [{}] max [{}] -> [{}]",
+            task_type,
+            len(text),
+            max_len,
+            pressed,
+        )
+        return pressed
     fallback = str(task.get("fallback_text") or "").strip()
-    if fallback and fallback != text and len(fallback) <= max_len + 12:
+    if fallback and fallback != text and len(fallback) <= max_len:
         logger.info(
             "LLM reply length over cap for task [{}], len [{}] max [{}] -> fallback",
             task_type,

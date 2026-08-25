@@ -4,6 +4,7 @@ from pallas.core.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE
 from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.output_filter import (
     CHAT_HARD_BLOCK_PHRASES,
+    _press_reply_to_limit,
     match_output_filter,
     output_filter_enabled,
     resolve_output_filtered_reply,
@@ -133,3 +134,28 @@ def test_resolve_output_filtered_reply_enforces_max_length() -> None:
     }
     long = "听说你对科目录得挺全的，我这记性就没那么好啦。对了，你喜欢哪种动物啊？"
     assert resolve_output_filtered_reply(task, long) == "行"
+
+
+def test_press_reply_to_limit_truncates_at_sentence_ending() -> None:
+    pressed = _press_reply_to_limit("哎，今天真是累死了。明天还要早起呢。", max_len=12)
+    assert len(pressed) <= 12
+    assert pressed.endswith("。")
+
+
+def test_press_reply_to_limit_keeps_single_bubble_when_no_clean_cut() -> None:
+    text = "这个参数的中文名确实念起来有点长，你仔细读两遍可能就顺了"
+    assert _press_reply_to_limit(text, max_len=12) == text
+
+
+def test_press_reply_to_limit_truncates_at_space_separator() -> None:
+    pressed = _press_reply_to_limit("早上好 今天天气真不错呀 出去走走吧", max_len=10)
+    assert len(pressed) <= 10
+    assert pressed == "早上好"
+
+
+def test_resolve_output_filtered_reply_presses_overlength_short_band() -> None:
+    task = {"task_type": LLM_CHAT_TASK_TYPE, "reply_max_length": 12}
+    reply = "哎呀这个我回头帮你查查。【我们吃个饭吧】。行了先这样。"
+    filtered = resolve_output_filtered_reply(task, reply)
+    assert filtered == "哎呀这个我回头帮你查查。"
+    assert len(filtered) <= 12

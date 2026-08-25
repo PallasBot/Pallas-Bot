@@ -54,6 +54,18 @@ def scene_allows_teasing(scene: ConversationScene | str | None) -> bool:
     return scene_seriousness(scene) == "casual"
 
 
+def scene_length_cap(scene: ConversationScene | str | None) -> int:
+    """场景最大长度 cap（0 表示不额外收紧）；供 reply_max_length 硬闸推导。"""
+    from pallas.product.llm.kernel.models import behavior_scene_to_conversation_scene
+
+    resolved_scene = scene if isinstance(scene, ConversationScene) else behavior_scene_to_conversation_scene(scene)
+    _style, _drift, scene_cap = _SCENE_STYLE.get(
+        resolved_scene,
+        _SCENE_STYLE[ConversationScene.SMALLTALK],
+    )
+    return int(scene_cap)
+
+
 def resolve_scene_style_constraints(
     scene: ConversationScene | str | None,
     mode: ConversationMode = ConversationMode.NORMAL,

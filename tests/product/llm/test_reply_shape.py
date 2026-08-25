@@ -6,9 +6,40 @@ import random
 import pytest
 
 from pallas.product.llm.inference_params import chat_reply_token_budget
-from pallas.product.llm.reply_shape import resolve_reply_shape, resolve_short_reply_split_decision
+from pallas.product.llm.reply_shape import (
+    resolve_reply_hard_cap,
+    resolve_reply_shape,
+    resolve_short_reply_split_decision,
+)
 from pallas.product.llm.turn_policy import TurnPolicy
 from pallas.product.persona.group_expression_profile import GroupExpressionProfile, GroupReplyShapeHint
+
+
+def test_reply_hard_cap_derives_from_segment_and_bubble_stats() -> None:
+    cap = resolve_reply_hard_cap(
+        28,
+        bubble_count_p50=2,
+        segment_char_length_p50=7,
+    )
+    assert cap == 26  # 7*2 + 12
+
+
+def test_reply_hard_cap_clamps_to_scene_cap() -> None:
+    cap = resolve_reply_hard_cap(24, bubble_count_p50=3, segment_char_length_p50=12)
+    assert cap == 24
+
+
+def test_reply_hard_cap_floor_keeps_minimum() -> None:
+    cap = resolve_reply_hard_cap(20, bubble_count_p50=1, segment_char_length_p50=3)
+    assert cap == 16  # max(min_cap=16, 3*1+12=15)
+
+
+def test_reply_hard_cap_falls_back_to_scene_cap_without_stats() -> None:
+    assert resolve_reply_hard_cap(36) == 36
+
+
+def test_reply_hard_cap_zero_when_scene_cap_absent() -> None:
+    assert resolve_reply_hard_cap(0) == 0
 
 
 def make_turn_policy(*, seriousness: str = "casual", needs_tool: bool = False) -> TurnPolicy:

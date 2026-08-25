@@ -42,6 +42,32 @@ def resolve_group_rhythm(group_expression: GroupExpressionProfile | None) -> str
     return best_name
 
 
+def resolve_reply_hard_cap(
+    scene_cap: int,
+    *,
+    preferred_bubbles: int = 1,
+    bubble_count_p50: int = 0,
+    segment_char_length_p50: int = 0,
+    min_cap: int = 16,
+) -> int:
+    """用群表达统计的真人数值推导单次回复硬上限（字符数）。
+
+    有样本时按「段中位字长 × 段数 + 余量」推导，再 clamp 到场景 cap 内；
+    无样本时直接退回场景 cap。返回值为正即投入使用，否则由调用方决定。
+    """
+    if scene_cap <= 0:
+        return 0
+    cap = int(scene_cap)
+    if segment_char_length_p50:
+        if bubble_count_p50:
+            bubble_count = max(1, min(3, int(bubble_count_p50)))
+        else:
+            bubble_count = max(1, min(3, int(preferred_bubbles)))
+        derived = int(segment_char_length_p50) * bubble_count + 12
+        cap = min(cap, max(min_cap, derived))
+    return cap
+
+
 def resolve_short_reply_split_decision(
     *,
     band: str,

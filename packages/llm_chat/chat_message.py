@@ -935,14 +935,6 @@ async def prepare_and_submit_llm_chat_turn(
             limit=2,
         )
         behavior_actions = [item.action for item in behavior_patterns]
-        from pallas.product.llm.kernel.models import ConversationMode
-        from pallas.product.llm.scene_style import resolve_scene_style_constraints
-
-        scene_constraints = resolve_scene_style_constraints(
-            behavior_scene,
-            ConversationMode.NORMAL,
-            direct_chat=True,
-        )
         behavior_hint = ""
         if can_read_behavioral_learning(llm_cfg):
             behavior_hint = build_behavior_hint_text(scene=behavior_scene, actions=behavior_actions)
@@ -980,6 +972,16 @@ async def prepare_and_submit_llm_chat_turn(
             except Exception:
                 group_expression_profile = None
         reply_shape = resolve_reply_shape(turn_policy, group_expression_profile)
+        from pallas.product.llm.reply_shape import resolve_reply_hard_cap
+        from pallas.product.llm.scene_style import scene_length_cap
+
+        _style_profile = getattr(semantic_style, "style_profile", None) or {}
+        reply_max_length = resolve_reply_hard_cap(
+            scene_length_cap(behavior_scene),
+            preferred_bubbles=reply_shape.preferred_bubbles,
+            bubble_count_p50=int(_style_profile.get("bubble_count_p50") or 0),
+            segment_char_length_p50=int(_style_profile.get("segment_char_length_p50") or 0),
+        )
         semantic_example_sources = list(getattr(semantic_style, "matched_example_sources", []) or [])
         semantic_examples: list[tuple[str, str]] = []
         injected_semantic_sources: list[object] = []
@@ -1116,7 +1118,7 @@ async def prepare_and_submit_llm_chat_turn(
                 "behavior_hint": behavior_hint,
                 "semantic_style_source_example_id": getattr(semantic_style, "source_example_id", "") or None,
                 "semantic_style_direct_candidate": semantic_style.direct_candidate or None,
-                "reply_max_length": int(scene_constraints.max_length or 0),
+                "reply_max_length": int(reply_max_length or 0),
                 "reply_total_length_band": reply_shape.total_length_band,
                 "start_time": time.time(),
                 "self_aliases": self_aliases[:8],
