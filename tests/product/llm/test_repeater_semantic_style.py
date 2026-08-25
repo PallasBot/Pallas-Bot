@@ -313,6 +313,70 @@ async def test_collect_backfill_candidates_uses_online_bot_groups_and_verified_r
     assert [candidate["reply_text"] for candidate in candidates] == ["没救了"]
     assert candidates[0]["bot_id"] == 100
     assert candidates[0]["group_id"] == 42
+    assert candidates[0]["trigger_user_id"] == 11
+    assert candidates[0]["reply_user_id"] == 11
+
+
+@pytest.mark.asyncio
+async def test_backfill_handler_persists_human_pair_when_authors_known(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    label = parse_semantic_style_label({"reuse": "rewrite"})
+    worker = AsyncMock(return_value=(label, None))
+    persist = Mock()
+    monkeypatch.setattr(mod, "label_semantic_style_with_llm", worker)
+    monkeypatch.setattr(mod, "persist_semantic_style_example", persist)
+    monkeypatch.setattr(mod, "semantic_style_collection_enabled", lambda *, bot_id, group_id: True)
+
+    payload = {
+        "example_id": "42:99:100",
+        "message_id": 99,
+        "created_at": 10_000,
+        "expires_at": 10_001,
+        "bot_id": 100,
+        "group_id": 42,
+        "scene": "group_chat",
+        "trigger_text": "前句",
+        "reply_text": "接话",
+        "trigger_user_id": 11,
+        "reply_user_id": 12,
+    }
+    await mod.handle_repeater_semantic_style_backfill(payload, now=10_000)
+
+    example = persist.call_args.args[0]
+    assert example.source_kind == "human_pair"
+    assert example.trigger_user_id == 11
+    assert example.reply_user_id == 12
+
+
+@pytest.mark.asyncio
+async def test_backfill_handler_falls_back_to_legacy_when_authors_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    label = parse_semantic_style_label({"reuse": "rewrite"})
+    worker = AsyncMock(return_value=(label, None))
+    persist = Mock()
+    monkeypatch.setattr(mod, "label_semantic_style_with_llm", worker)
+    monkeypatch.setattr(mod, "persist_semantic_style_example", persist)
+    monkeypatch.setattr(mod, "semantic_style_collection_enabled", lambda *, bot_id, group_id: True)
+
+    payload = {
+        "example_id": "42:99:100",
+        "message_id": 99,
+        "created_at": 10_000,
+        "expires_at": 10_001,
+        "bot_id": 100,
+        "group_id": 42,
+        "scene": "group_chat",
+        "trigger_text": "前句",
+        "reply_text": "接话",
+    }
+    await mod.handle_repeater_semantic_style_backfill(payload, now=10_000)
+
+    example = persist.call_args.args[0]
+    assert example.source_kind == "legacy_unknown"
+    assert example.trigger_user_id == 0
+    assert example.reply_user_id == 0
 
 
 @pytest.mark.asyncio

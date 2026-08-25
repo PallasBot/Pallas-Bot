@@ -41,8 +41,8 @@ SEMANTIC_STYLE_BACKFILL_JOB_TTL_SEC = 7 * 24 * 60 * 60
 SEMANTIC_STYLE_BACKFILL_MAX_PER_DAY = 128
 SEMANTIC_STYLE_BACKFILL_ENABLED = True
 SEMANTIC_STYLE_REALTIME_MAX_PER_DAY = 1000
-SEMANTIC_STYLE_REALTIME_MAX_PER_SCOPE_PER_DAY = 20
-SEMANTIC_STYLE_REALTIME_SAMPLE_DIVISOR = 4
+SEMANTIC_STYLE_REALTIME_MAX_PER_SCOPE_PER_DAY = 40
+SEMANTIC_STYLE_REALTIME_SAMPLE_DIVISOR = 2
 SEMANTIC_STYLE_LABEL_MAX_RETRIES = 2
 _SEMANTIC_STYLE_BACKFILL_GROUP_LIMIT = 128
 _SEMANTIC_STYLE_BACKFILL_PAGE_SIZE = 32
@@ -414,6 +414,8 @@ def build_semantic_style_backfill_batch(
                 "scene": str(item.get("scene") or "group_chat"),
                 "trigger_text": trigger,
                 "reply_text": reply,
+                "trigger_user_id": int(item.get("trigger_user_id") or 0),
+                "reply_user_id": int(item.get("reply_user_id") or 0),
                 "source": "backfill",
             },
             idempotency_key=f"repeater.semantic_style.backfill:{group_id}:{message_id}:{bot_id}",
@@ -581,6 +583,8 @@ async def collect_semantic_style_backfill_candidates(
                         "scene": "group_chat",
                         "trigger_text": trigger_text,
                         "reply_text": reply_text,
+                        "trigger_user_id": int(getattr(predecessor, "user_id", 0) or 0),
+                        "reply_user_id": int(getattr(reply_message, "user_id", 0) or 0),
                     }
                     if key not in seen and semantic_style_backfill_candidate_allowed(candidate, previous):
                         seen.add(key)
@@ -1937,16 +1941,27 @@ async def handle_repeater_semantic_style_backfill(payload: dict[str, Any], *, no
     if label_result is None:
         return
     label, behavior_strategy = label_result
+    trigger_user_id = int(payload.get("trigger_user_id") or 0)
+    reply_user_id = int(payload.get("reply_user_id") or 0)
+    bot_id = int(payload.get("bot_id") or 0)
+    is_human_pair = is_human_semantic_style_pair(
+        trigger_user_id=trigger_user_id,
+        reply_user_id=reply_user_id,
+        bot_id=bot_id,
+    )
     example = SemanticStyleExample(
         example_id=str(payload.get("example_id") or f"{payload.get('group_id')}:{payload.get('message_id')}"),
         created_at=int(payload.get("created_at") or current_time),
-        bot_id=int(payload["bot_id"]),
+        bot_id=bot_id,
         group_id=int(payload["group_id"]),
         scene=str(payload.get("scene") or "default"),
         trigger_text=_short_text(trigger, 240),
         reply_text=_short_text(reply, 240),
         label=label,
         behavior_strategy=behavior_strategy,
+        source_kind="human_pair" if is_human_pair else "legacy_unknown",
+        trigger_user_id=trigger_user_id,
+        reply_user_id=reply_user_id,
     )
     persist_semantic_style_example(example)
 
