@@ -21,7 +21,8 @@ def _build_client(monkeypatch) -> TestClient:
 
 
 @pytest.mark.asyncio
-async def test_home_overview_payload_merges_slices(monkeypatch) -> None:
+async def test_home_overview_payload_merges_slices(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     clear_extended_read_cache()
     monkeypatch.setattr(
         "packages.pb_webui.api.read_current_health_payload",
@@ -55,7 +56,8 @@ async def test_home_overview_payload_merges_slices(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_home_overview_payload_tolerates_slice_failure(monkeypatch) -> None:
+async def test_home_overview_payload_tolerates_slice_failure(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     clear_extended_read_cache()
     monkeypatch.setattr(
         "packages.pb_webui.api.read_current_health_payload",

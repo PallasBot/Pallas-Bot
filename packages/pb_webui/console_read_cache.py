@@ -193,9 +193,9 @@ def _spawn_background_refresh(
     stale_sec: float,
     persist_snapshot: bool,
 ) -> None:
-    async def run() -> None:
+    async def run() -> typing.Any:
         try:
-            await _load_and_store(key, loader, ttl_sec, stale_sec, persist_snapshot, swallow=True, swr=True)
+            return await _load_and_store(key, loader, ttl_sec, stale_sec, persist_snapshot, swallow=True, swr=True)
         finally:
             _READ_INFLIGHT.pop(key, None)
 

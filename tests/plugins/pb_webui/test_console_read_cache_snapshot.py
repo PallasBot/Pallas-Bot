@@ -108,6 +108,36 @@ async def test_snapshot_persists_across_cache_clear(tmp_path, monkeypatch) -> No
 
 
 @pytest.mark.asyncio
+async def test_swr_inflight_refresh_returns_fresh_value(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    clear_extended_read_cache()
+    gate = asyncio.Event()
+    calls = 0
+
+    async def loader() -> str:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return "old"
+        await gate.wait()
+        return "fresh"
+
+    try:
+        assert await cached_read(key="infl-k", loader=loader, ttl_sec=0.01, stale_sec=5.0, swr=True) == "old"
+        await asyncio.sleep(0.03)
+        v2 = await cached_read(key="infl-k", loader=loader, ttl_sec=0.01, stale_sec=5.0, swr=True)
+        assert v2 == "old"
+        assert calls == 2
+        t = asyncio.create_task(cached_read(key="infl-k", loader=loader, ttl_sec=0.01, stale_sec=5.0, swr=True))
+        await asyncio.sleep(0.03)
+        gate.set()
+        assert await t == "fresh"
+    finally:
+        gate.set()
+        clear_extended_read_cache()
+
+
+@pytest.mark.asyncio
 async def test_drop_read_cache_removes_memory_and_snapshot(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     clear_extended_read_cache()
