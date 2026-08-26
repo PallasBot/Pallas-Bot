@@ -112,9 +112,13 @@ async def run_work_service(
     handler_timeout_sec: float | None = None,
 ) -> None:
     from pallas.core.foundation.db import init_db
+    from pallas.core.platform.work_jobs import pg_notify
 
     await init_db()
-    store = build_work_job_store()
+    store = build_work_job_store(
+        completion_retention={"sticker_vision.select": "done"},
+        notify_completed=pg_notify.notify_delivery_ready,
+    )
     concurrency = work_aux_concurrency()
     handler_timeout_sec = work_handler_timeout_sec(handler_timeout_sec)
     owner_prefix = f"{socket.gethostname()}:{os.getpid()}"
