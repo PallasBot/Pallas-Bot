@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import time
 import uuid
+from typing import TYPE_CHECKING
 
 from pymongo import ReturnDocument
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 from .models import WorkJob
 
@@ -23,6 +27,9 @@ def work_job_from_mongo(row) -> WorkJob:
 
 
 class MongoWorkJobStore:
+    def __init__(self, *, completion_retention: Mapping[str, str] | None = None) -> None:
+        self._completion_retention: Mapping[str, str] = completion_retention or {}
+
     async def enqueue(self, job: WorkJob) -> WorkJob:
         from pallas.core.foundation.db.modules import BackgroundJob
 
@@ -168,10 +175,42 @@ class MongoWorkJobStore:
             return 0
         from pallas.core.foundation.db.modules import BackgroundJob
 
-        result = await BackgroundJob.get_pymongo_collection().delete_many({
-            "$or": [{"job_id": job.id, "lease_owner": owner, "lease_id": job.lease_id} for job in jobs]
-        })
-        return int(result.deleted_count)
+        collection = BackgroundJob.get_pymongo_collection()
+        retained: dict[str, list[WorkJob]] = {}
+        removed: list[WorkJob] = []
+        for job in jobs:
+            if job.kind in self._completion_retention:
+                retained.setdefault(job.kind, []).append(job)
+            else:
+                removed.append(job)
+        now = time.time()
+        updated = 0
+        for kind, kind_jobs in retained.items():
+            result = await collection.update_many(
+                {
+                    "$or": [
+                        {"job_id": job.id, "kind": job.kind, "lease_owner": owner, "lease_id": job.lease_id}
+                        for job in kind_jobs
+                    ]
+                },
+                {
+                    "$set": {
+                        "status": self._completion_retention[kind],
+                        "finished_at": now,
+                        "lease_owner": None,
+                        "lease_id": None,
+                        "leased_until": None,
+                    }
+                },
+            )
+            updated += int(result.modified_count)
+        deleted = 0
+        if removed:
+            result = await collection.delete_many({
+                "$or": [{"job_id": job.id, "lease_owner": owner, "lease_id": job.lease_id} for job in removed]
+            })
+            deleted = int(result.deleted_count)
+        return updated + deleted
 
     async def fail(self, *, job_id: str, owner: str, lease_id: str, retry_after_sec: float) -> bool:
         return await self._release(
@@ -202,6 +241,22 @@ class MongoWorkJobStore:
 
         collection = BackgroundJob.get_pymongo_collection()
         if completed:
+            doc = await collection.find_one({"job_id": job_id, "lease_owner": owner, "lease_id": lease_id})
+            if doc is not None and doc.get("kind") in self._completion_retention:
+                status = self._completion_retention[doc["kind"]]
+                result = await collection.update_one(
+                    {"job_id": job_id, "lease_owner": owner, "lease_id": lease_id},
+                    {
+                        "$set": {
+                            "status": status,
+                            "finished_at": time.time(),
+                            "lease_owner": None,
+                            "lease_id": None,
+                            "leased_until": None,
+                        }
+                    },
+                )
+                return bool(result.modified_count)
             # 已完成任务即时删除，避免集合无限膨胀
             result = await collection.delete_one({"job_id": job_id, "lease_owner": owner, "lease_id": lease_id})
             return bool(result.deleted_count)
