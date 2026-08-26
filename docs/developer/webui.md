@@ -1,6 +1,6 @@
 # WebUI 前端开发
 
-控制台 UI 由独立仓库 **[Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI)** 构建，产物由主仓 `pb_webui` 挂载，基址 **`/pallas/`**。本页覆盖本地联调、构建挂载、OpenAPI 契约与窄屏约定。运行日志落盘与导出见 [维护者 · 日志](/maintainer/operate/logs)。
+控制台 UI 由独立仓库 **[Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI)** 构建，产物由主仓 `pb_webui` 挂载，基址 **`/pallas/`**。本页覆盖本地联调、构建挂载、OpenAPI 契约、发布兼容基线与窄屏约定。运行日志落盘与导出见 [维护者 · 日志](/maintainer/operate/logs)。
 
 后端 API 见 [WebUI API](/common/webui/api/)；插件配置热重载见 [WebUI 配置与热重载](/common/webui)。普通 LLM 聊天走 Bot Provider（侧栏 **AI 配置**），与媒体 / RWKV 用的 Pallas-Bot-AI 分开。
 
@@ -34,6 +34,8 @@ npm run build   # → dist/；写入 console-version.json
 ```
 
 WebUI 仓库 Release 提供 **`dist.zip`**（zip 根为 `public-react/`）；Bot 启动时解压到 **`data/pb_webui`**。
+
+WebUI 每个发布版本还包含根目录的 `release-manifest.json`，其中 `requires.bot.min_commit` 是该版本要求的最低 Bot commit（完整 40 位 SHA）。发布校验会确认该 commit 已进入 Bot `main`；Bot 发布时只会捆绑通过该兼容校验的 WebUI tag。
 
 本地手动部署：将构建产物放入 `data/pb_webui/public-react/`，或解压 Release 的 `dist.zip` 到 `data/pb_webui/`。
 
