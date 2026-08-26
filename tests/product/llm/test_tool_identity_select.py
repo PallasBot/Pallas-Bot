@@ -35,6 +35,21 @@ def test_operator_lookup_still_infers_arknights(text: str) -> None:
     assert "arknights" in infer_tool_domains(text)
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "图片里的是谁[CQ:image,url=https://x1,file=a.png]",
+        "图片里是谁[CQ:image,url=https://x2,file=b.png,sub_type=1,summary=&#91;动画表情&#93;]",
+        "我这个表情包里是谁[CQ:image,url=https://x3,file=c.png]",
+        "[CQ:image,url=https://x4,file=d.png] 这个表情里的是谁",
+    ],
+)
+def test_vision_message_does_not_infer_arknights_or_memes(text: str) -> None:
+    domains = infer_tool_domains(text)
+    assert "arknights" not in domains
+    assert "memes" not in domains
+
+
 def test_infer_drink_and_help_command_domains() -> None:
     assert "drink" in infer_tool_domains("帮牛牛喝一杯")
     assert "drink" in infer_tool_domains("让它醒一醒别喝了")

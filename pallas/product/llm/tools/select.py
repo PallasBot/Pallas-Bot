@@ -190,6 +190,12 @@ def infer_tool_domains(user_text: str) -> frozenset[str]:
     text = _normalize_hint(user_text)
     if not text:
         return frozenset()
+    from pallas.product.llm.vision_content import user_message_has_vision_content
+
+    # 带图的识图提问应交给模型视觉理解，不要按文本里的「是谁/表情包」等
+    # 语境词注入方舟算子 / 命令工具域，避免纯识图被误路由。
+    if user_message_has_vision_content(user_text):
+        return frozenset()
     domains: set[str] = set()
     if any(hint.lower() in text for hint in _ARKNIGHTS_HINTS):
         domains.add("arknights")
