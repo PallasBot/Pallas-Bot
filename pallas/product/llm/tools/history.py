@@ -99,7 +99,7 @@ def register_history_tools() -> None:
 async def handle_chat_history(arguments: dict[str, Any], context: ToolInvokeContext | None = None) -> dict[str, Any]:
     if context is None or context.group_id is None:
         return {"ok": False, "error": "group_context_required"}
-    limit = max(6, min(int((arguments or {}).get("limit") or 24), 32))
+    limit = max(6, min(int((arguments or {}).get("limit") or 48), 64))
     rows = await recent_group_message_rows(context, limit=limit)
     return {
         "ok": True,
@@ -125,7 +125,7 @@ async def recent_group_message_rows(context: ToolInvokeContext, *, limit: int) -
         text = sanitize_prompt_literal(str(getattr(message, "plain_text", "") or ""), max_len=180)
         if not text:
             continue
-        if total_chars + len(text) > 3600:
+        if total_chars + len(text) > 7200:
             break
         total_chars += len(text)
         speaker = sanitize_prompt_literal(str(getattr(message, "sender_name", "") or ""), max_len=40)
@@ -141,7 +141,7 @@ async def handle_recent_summary(arguments: dict[str, Any], context: ToolInvokeCo
     del arguments
     if context is None or context.group_id is None:
         return {"ok": False, "error": "group_context_required"}
-    rows = await recent_group_message_rows(context, limit=24)
+    rows = await recent_group_message_rows(context, limit=48)
     if len(rows) < 6:
         return {
             "ok": True,
