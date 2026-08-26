@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
@@ -209,12 +210,17 @@ def normalize_openai_base_url(base_url: str) -> str:
     return str(base_url or "").strip().rstrip("/")
 
 
+def _has_versioned_root(base: str) -> bool:
+    """末尾已是版本段（/v1、/v4 等）或 /openai，视为已带 API 版本根。"""
+    return bool(re.search(r"/v\d+$", base) or base.endswith("/openai"))
+
+
 def openai_api_root(base_url: str) -> str:
-    """OpenAI 兼容根路径：已以 /v1 或 /openai 结尾时不再追加 /v1。"""
+    """OpenAI 兼容根路径：末尾已带版本段（/v1、/v4 等）或 /openai 时不再追加 /v1。"""
     base = normalize_openai_base_url(base_url)
     if not base:
         raise LlmProviderError("llm base url not configured")
-    if base.endswith(("/v1", "/openai")):
+    if _has_versioned_root(base):
         return base
     return f"{base}/v1"
 
@@ -235,7 +241,7 @@ def anthropic_messages_url(base_url: str) -> str:
     base = normalize_openai_base_url(base_url)
     if not base:
         raise LlmProviderError("llm base url not configured")
-    if base.endswith("/v1"):
+    if _has_versioned_root(base):
         return f"{base}/messages"
     return f"{base}/v1/messages"
 
@@ -244,7 +250,7 @@ def anthropic_models_url(base_url: str) -> str:
     base = normalize_openai_base_url(base_url)
     if not base:
         raise LlmProviderError("llm base url not configured")
-    if base.endswith("/v1"):
+    if _has_versioned_root(base):
         return f"{base}/models"
     return f"{base}/v1/models"
 
