@@ -117,6 +117,10 @@ class MessageRepository(Protocol):
         """群内近期消息，按 time 升序。"""
         ...
 
+    async def find_by_message_ids(self, group_id: int, message_ids: list[int]) -> list[Message]:
+        """按群内 message_id 集合查消息（用于解析被引用/回复的消息内容）。"""
+        ...
+
     async def list_recent_group_ids_for_bot(
         self,
         bot_id: int,

@@ -130,6 +130,23 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
         metadata["vision_image_urls"] = list(vision_payload.image_urls)
     if vision_payload.plain_text:
         metadata["vision_plain_text"] = vision_payload.plain_text
+    # 引用(reply)带图消息时，被引用的图不在当前消息文本里，需按 reply_to_message_id
+    # 查原消息并把其中的图片并入视觉上下文，否则「描述一下这张图」会落回历史图。
+    reply_to_id = getattr(request, "reply_to_message_id", None)
+    if reply_to_id is not None and request.group_id is not None:
+        from pallas.core.foundation.db import make_message_repository
+
+        referenced = await make_message_repository().find_by_message_ids(int(request.group_id), [int(reply_to_id)])
+        for message in referenced:
+            referenced_payload = extract_vision_message_payload(str(message.raw_message or ""))
+            if referenced_payload.image_urls:
+                existing = list(metadata.get("vision_image_urls") or [])
+                merged = existing + [url for url in referenced_payload.image_urls if url not in existing]
+                metadata["vision_image_urls"] = merged
+                metadata["has_image"] = True
+                if referenced_payload.plain_text and "vision_plain_text" not in metadata:
+                    metadata["vision_plain_text"] = referenced_payload.plain_text
+                break
     timeline_images = [
         {
             "speaker": str(item.get("speaker") or "").strip(),

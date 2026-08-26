@@ -187,6 +187,19 @@ class MongoMessageRepository:
         docs.reverse()
         return docs
 
+    async def find_by_message_ids(self, group_id: int, message_ids: list[int]) -> list[Message]:
+        ids = {int(item) for item in message_ids if str(item or "").isdigit()}
+        if not ids:
+            return []
+        docs = (
+            await Message
+            .find({"group_id": int(group_id), "message_id": {"$in": list(ids)}})
+            .sort("-time")
+            .limit(len(ids))
+            .to_list()
+        )
+        return docs
+
     async def list_recent_group_ids_for_bot(
         self,
         bot_id: int,

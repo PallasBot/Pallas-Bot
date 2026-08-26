@@ -1864,6 +1864,18 @@ class PgMessageRepository:
         rows.reverse()
         return [row_to_message(r) for r in rows]
 
+    async def find_by_message_ids(self, group_id: int, message_ids: list[int]) -> list[Message]:
+        ids = {int(item) for item in message_ids if str(item or "").isdigit()}
+        if not ids:
+            return []
+        stmt = (
+            select(MessageRow).where(MessageRow.group_id == int(group_id)).where(MessageRow.message_id.in_(list(ids)))
+        )
+        async with get_session(read_only=True) as session:
+            result = await session.execute(stmt)
+            rows = list(result.scalars().all())
+        return [row_to_message(r) for r in rows]
+
     async def list_recent_group_ids_for_bot(
         self,
         bot_id: int,

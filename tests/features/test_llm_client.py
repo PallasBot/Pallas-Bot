@@ -131,6 +131,55 @@ async def test_submit_chat_task_propagates_group_timeline_images_to_kernel_metad
 
 
 @pytest.mark.asyncio
+async def test_submit_chat_task_injects_referenced_image_urls_from_replied_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    submit_kernel = AsyncMock(
+        return_value=ChatSubmitResult(task_id="task-referenced", status="processing", ok=True)
+    )
+    monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_llm_chat_task", submit_kernel)
+    monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: False)
+
+    referenced = SimpleNamespace(
+        raw_message=(
+            "[CQ:image,url=https://multimedia.nt.qq.com.cn/download?appid=1407&amp;fileid=abc123,file=A6D6A97E.png,sub_type=0]"
+        ),
+        plain_text="这是谁",
+    )
+
+    async def fake_find_by_message_ids(_group_id: int, _message_ids: list[int]) -> list[SimpleNamespace]:
+        return [referenced]
+
+    fake_repo = AsyncMock()
+    fake_repo.find_by_message_ids = fake_find_by_message_ids
+    monkeypatch.setattr(
+        "pallas.core.foundation.db.make_message_repository", lambda: fake_repo
+    )
+
+    request = ChatSubmitRequest(
+        request_id="req-referenced",
+        session_id="sess-referenced",
+        user_text="描述一下这张图",
+        system_prompt="system",
+        bot_id=10001,
+        group_id=20002,
+        user_id=30003,
+        reply_to_message_id=8888,
+    )
+
+    result = await submit_chat_task(request, cfg=LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True))
+
+    assert result.ok is True
+    metadata = submit_kernel.await_args.kwargs["metadata"]
+    assert metadata["has_image"] is True
+    assert metadata["vision_image_urls"] == [
+        "https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=abc123"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_submit_chat_task_unified_llm_chat_payload_includes_agent_stage_plan(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
