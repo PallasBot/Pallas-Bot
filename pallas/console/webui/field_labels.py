@@ -253,7 +253,7 @@ FIELD_LABELS: dict[str, str] = {
     "llm_sticker_fit_enabled": "表情适配与反馈",
     "llm_chat_sticker_enabled": "Bot 表情图",
     "llm_chat_sticker_cooldown_sec": "表情图冷却（秒）",
-    "llm_sticker_vision_enabled": "视觉模型选表情图",
+    "llm_sticker_vision_enabled": "视觉模型选表情图 / 聊天看图",
     "llm_sticker_vision_candidate_count": "视觉选图候选数",
     "llm_sticker_vision_timeout_sec": "视觉选图超时（秒）",
     "llm_sticker_vision_max_per_hour": "视觉选图每小时上限",

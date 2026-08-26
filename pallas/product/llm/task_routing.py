@@ -279,6 +279,7 @@ async def resolve_task_route_chain(task: str, *, explicit_model: str | None = No
 _TASK_ROUTING_PREVIEW_TASKS: tuple[str, ...] = (
     "llm_chat",
     "turn_decision",
+    "sticker_vision",
 )
 
 

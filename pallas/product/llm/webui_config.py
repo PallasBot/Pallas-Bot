@@ -731,7 +731,12 @@ class LlmWebuiConfig(BaseModel):
     )
     llm_sticker_vision_enabled: bool = Field(
         default=False,
-        description=field_help("视觉模型选表情图", "仅在 LLM 决定贴图且有至少 3 张语义候选时调用。"),
+        description=field_help(
+            "视觉模型选表情图",
+            "仅在 LLM 决定贴图且有至少 3 张语义候选时调用。配置的视觉模型也会复用为「聊天看图」，"
+            "主对话模型不支持图片时用它把图转成文字描述。",
+            "需要在「接入 → 任务编排」里给「视觉选图」选提供方与模型（带 image 能力）",
+        ),
     )
     llm_sticker_vision_candidate_count: int = Field(
         default=4,
