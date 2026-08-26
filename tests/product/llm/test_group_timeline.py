@@ -171,6 +171,26 @@ def test_format_group_timeline_context_extracts_raw_images_and_keeps_placeholder
     )
 
 
+def test_format_group_timeline_context_extracts_raw_mface_image() -> None:
+    context = format_group_timeline_context([
+        Message.model_construct(
+            group_id=1,
+            user_id=11,
+            bot_id=99,
+            raw_message="[CQ:mface,emoji_id=128077,url=https://example.com/mface.png]",
+            plain_text="",
+            sender_name="兔兔",
+            message_id=101,
+            time=1,
+        ),
+    ])
+
+    assert context.text == "【刚才的群聊】\n- 兔兔：[图片]"
+    assert context.images == (
+        GroupTimelineImage(speaker="兔兔", text="", url="https://example.com/mface.png"),
+    )
+
+
 def test_should_include_group_timeline_for_vision_turn() -> None:
     assert should_include_group_timeline(is_to_me=False, speak_trigger="vision") is True
 

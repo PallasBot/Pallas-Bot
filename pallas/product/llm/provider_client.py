@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 import httpx
@@ -11,6 +11,9 @@ from nonebot import logger
 
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.shared_httpx import get_llm_shared_httpx_client
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 ANTHROPIC_VERSION = "2023-06-01"
 ANTHROPIC_DEFAULT_MAX_TOKENS = 8192
@@ -405,6 +408,8 @@ async def complete_chat_message(
     task: str = "llm_chat",
     request_method: str | None = None,
     provider_id: str | None = None,
+    prepare_candidate_messages: Callable[[list[dict[str, Any]], Any, str], Awaitable[list[dict[str, Any]]]]
+    | None = None,
 ) -> dict[str, Any]:
     c = cfg or get_llm_config()
     explicit_base = str(base_url or "").strip()
@@ -440,10 +445,13 @@ async def complete_chat_message(
             fallback_key = str(c.llm_api_key or "").strip()
             keys = endpoint_api_keys(endpoint, fallback=fallback_key)
             key_failed_over = False
+            candidate_messages = messages
+            if prepare_candidate_messages is not None:
+                candidate_messages = await prepare_candidate_messages(messages, endpoint, use_model)
             for key_index, use_key in enumerate(keys):
                 try:
                     return await _post_provider_chat(
-                        messages,
+                        candidate_messages,
                         base_url=endpoint.base_url,
                         api_key=use_key,
                         model=use_model,
@@ -722,6 +730,50 @@ def messages_to_anthropic_payload(
     options: dict[str, Any],
     tools: list[dict[str, Any]] | None,
 ) -> dict[str, Any]:
+    def anthropic_content_parts(content: Any) -> Any:
+        if not isinstance(content, list):
+            return content
+        parts: list[Any] = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append({"type": "text", "text": part})
+                continue
+            if not isinstance(part, dict):
+                parts.append(part)
+                continue
+            part_type = str(part.get("type") or "").strip().lower()
+            if part_type == "text":
+                parts.append({"type": "text", "text": part.get("text", "")})
+                continue
+            if part_type != "image_url":
+                parts.append(part)
+                continue
+            image_url = part.get("image_url")
+            url = image_url.get("url") if isinstance(image_url, dict) else image_url
+            url = str(url or "").strip()
+            if url.lower().startswith("data:"):
+                header, separator, data = url.partition(",")
+                media_type, _, encoding = header[5:].partition(";")
+                media_type = media_type.strip().lower()
+                if separator and data and media_type in {"image/jpeg", "image/png", "image/gif", "image/webp"}:
+                    if "base64" in {item.strip().lower() for item in encoding.split(";") if item}:
+                        parts.append({
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": media_type,
+                                "data": data,
+                            },
+                        })
+                        continue
+            elif url.lower().startswith(("http://", "https://")):
+                parts.append({
+                    "type": "image",
+                    "source": {"type": "url", "url": url},
+                })
+                continue
+        return parts
+
     system_parts: list[str] = []
     converted: list[dict[str, Any]] = []
 
@@ -777,7 +829,10 @@ def messages_to_anthropic_payload(
                 converted.append({"role": "assistant", "content": blocks})
             continue
         if role == "user":
-            converted.append({"role": "user", "content": content if content is not None else ""})
+            converted.append({
+                "role": "user",
+                "content": anthropic_content_parts(content) if content is not None else "",
+            })
 
     max_tokens = options.get("num_predict")
     if max_tokens is None:

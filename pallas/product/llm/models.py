@@ -55,6 +55,7 @@ class ChatSubmitRequest(BaseModel):
     knowledge_retrieval_trace: dict[str, Any] | None = None
     hybrid_retrieval_trace: dict[str, Any] | None = None
     llm_rewrite_metadata: dict[str, Any] | None = None
+    group_timeline_images: list[dict[str, str]] = Field(default_factory=list)
     tool_metadata: dict[str, Any] | None = None
     include_session_history: bool = True
     session_history_limit: int | None = Field(default=None, ge=1)

@@ -57,7 +57,7 @@ WebUI 可覆盖单工具的描述、hints 与可见性（**AI 配置 → 接话 
 | `alias` | 别名硬触发 | 8 条 |
 | `ambient` | 无人提及，环境感知抽签接话 | 4 条（短时间线，防话痨偏题） |
 
-`to_me` 及上述硬触发均注入完整群聊时间线；`ambient` 感知接话只注入最近 4 条短时间线，其余上下文（会话、记忆、关系、知识）组装与 `to_me` 一致。实现见 `packages/llm_chat/chat_message.py` 的 `build_recent_group_timeline` 调用。
+`to_me` 及上述硬触发均注入完整群聊时间线；`ambient` 感知接话只注入最近 4 条短时间线，其余上下文（会话、记忆、关系、知识）组装与 `to_me` 一致。实现见 `packages/llm_chat/chat_message.py` 的 `build_recent_group_timeline_context` 调用。
 
 ### 观察队列、人物事实与口癖
 

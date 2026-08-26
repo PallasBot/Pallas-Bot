@@ -111,6 +111,10 @@
 
 注入宽度因触发方式不同（见 [Bot 内置 Agent 生命周期](agent-lifecycle.md)）：`ambient` 感知接话只带 4 条短时间线，`@`/别名/接续触发带 8 条。未命中这些触发时群时间线为空。
 
+时间线的文字仍作为 `ChatContextBundle.group_timeline` 进入 system prompt。构建时间线时同时从 `Message.raw_message` 解析最近消息里的 `image` / `mface` CQ 段：图片消息在文字块中显示 `[图片]`，有效 HTTP(S) 图片按时间线顺序最多保留 3 张，并通过 `ChatSubmitRequest.group_timeline_images` 传到 kernel metadata。
+
+Provider 已显式声明 `image` 时，`vision_messages` 在请求前下载这些历史图片，使用内部 Chat 风格 `text` / `image_url` 内容块，作为一条 user 消息插入当前 user 消息之前；请求适配层再按 Provider 的请求方式转换为 Responses 的 `input_text` / `input_image` 或 Anthropic 的 `text` / `image` / `source` 块。文本 Provider 不下载、不调用视觉助手，只看到文字时间线和 `[图片]` 占位。`session_store` 的 `【群环境摘录】` 不在这条能力范围内。
+
 ## messages 序列（走请求消息）
 
 `build_llm_chat_messages`（`session_store.py`）按顺序组装：

@@ -236,6 +236,8 @@ def llm_chat_rule(event: Event) -> bool:
         return False
     if is_to_me:
         return True
+    if user_message_has_vision_content(raw_message):
+        return isinstance(event, GroupMessageEvent)
     llm_cfg = get_llm_config()
     if not llm_cfg.llm_speak_perception_enabled:
         return False

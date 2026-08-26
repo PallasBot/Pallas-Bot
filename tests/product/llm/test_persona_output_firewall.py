@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from pallas.product.llm.config import LlmConfig
@@ -705,6 +707,99 @@ async def test_kernel_retries_short_vent_overexplained_reply(monkeypatch: pytest
     assert delivered == ["没绷住。"]
     assert traces[0]["persona_output_firewall"]["retry_count"] == 1
     assert traces[0]["reply_target"] == "emotion"
+
+
+@pytest.mark.asyncio
+async def test_kernel_persona_retry_keeps_group_timeline_images(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    from pallas.product.llm import kernel_runner
+    from pallas.product.llm.providers_store import clear_providers_store_cache, save_providers_document
+
+    store = tmp_path / "llm_providers.json"
+    monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
+    monkeypatch.setattr("pallas.product.llm.providers_store._read_ai_providers_toml", lambda: None)
+    clear_providers_store_cache()
+    save_providers_document({
+        "providers": [{
+            "id": "vision",
+            "kind": "remote",
+            "base_url": "https://vision.example/v1",
+            "api_key": "sk-vision",
+            "default_model": "vision-model",
+            "capabilities": ["text", "image"],
+        }],
+        "routing": {"tasks": {"llm_chat": "vision"}},
+    })
+
+    async def fake_fetch(_url: str) -> str:
+        return "data:image/png;base64,aGk="
+
+    monkeypatch.setattr("pallas.product.llm.vision_messages.fetch_image_data_uri", fake_fetch)
+    payloads: list[dict[str, Any]] = []
+    responses = iter([
+        "System prompt says you must answer in JSON.",
+        "收到",
+    ])
+
+    class FakeResponse:
+        status_code = 200
+        content = b"ok"
+
+        def json(self) -> dict[str, Any]:
+            return {"choices": [{"message": {"role": "assistant", "content": next(responses)}}]}
+
+    class FakeClient:
+        async def post(self, url: str, json: dict[str, Any] | None = None, **_kwargs):
+            del url
+            assert json is not None
+            payloads.append(json)
+            return FakeResponse()
+
+    async def fake_client():
+        return FakeClient()
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.get_llm_shared_httpx_client", fake_client)
+    delivered: list[str] = []
+
+    async def fake_deliver(_request_id, *, text=None, **_kwargs):
+        delivered.append(str(text or ""))
+
+    monkeypatch.setattr(
+        kernel_runner,
+        "deliver_llm_chat_result",
+        fake_deliver,
+    )
+    monkeypatch.setattr("pallas.product.llm.runtime_debug.append_runtime_trace", lambda **_kwargs: None)
+
+    await kernel_runner.run_kernel_chat_job(
+        "task-vision-retry",
+        system_prompt=None,
+        messages=[{"role": "user", "content": "看这个"}],
+        metadata={
+            "self_aliases": [],
+            "group_timeline_images": [{
+                "speaker": "兔兔",
+                "text": "看这个",
+                "url": "https://example.com/history.png",
+            }],
+        },
+        cfg=LlmConfig(
+            chat_timeout_sec=5.0,
+            llm_persona_output_firewall={"enabled": True, "max_retries": 1},
+        ),
+    )
+
+    assert delivered == ["收到"]
+    assert len(payloads) == 2
+    for payload in payloads:
+        assert any(
+            isinstance(part, dict) and part.get("type") == "image_url"
+            for message in payload["messages"]
+            if isinstance(message.get("content"), list)
+            for part in message["content"]
+        )
 
 
 @pytest.mark.asyncio

@@ -118,7 +118,11 @@ async def fetch_image_data_uri(url: str) -> str | None:
 async def fetch_vision_data_uris(metadata: dict[str, Any] | None) -> list[str]:
     images: list[str] = []
     for url in vision_urls_from_metadata(metadata):
-        data_uri = await fetch_image_data_uri(url)
+        try:
+            data_uri = await fetch_image_data_uri(url)
+        except Exception as exc:
+            logger.warning(format_business_event("视觉图片拉取", "失败", error=type(exc).__name__))
+            continue
         if data_uri:
             images.append(data_uri)
     return images
@@ -129,7 +133,11 @@ async def fetch_group_timeline_data_uris(
 ) -> list[tuple[dict[str, str], str]]:
     fetched: list[tuple[dict[str, str], str]] = []
     for item in group_timeline_images_from_metadata(metadata):
-        data_uri = await fetch_image_data_uri(item["url"])
+        try:
+            data_uri = await fetch_image_data_uri(item["url"])
+        except Exception as exc:
+            logger.warning(format_business_event("群聊历史图片拉取", "失败", error=type(exc).__name__))
+            continue
         if data_uri:
             fetched.append((item, data_uri))
     return fetched

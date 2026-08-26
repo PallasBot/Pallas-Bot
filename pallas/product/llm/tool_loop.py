@@ -251,7 +251,8 @@ async def complete_with_tool_loop(
     tools_enabled = bool(meta.get("tools_enabled")) and bool(tool_schemas) and bool(c.llm_tools_enabled)
     working = build_working_messages(system_prompt=system_prompt, messages=messages)
     task = str(meta.get("task") or "llm_chat").strip() or "llm_chat"
-    from pallas.product.llm.vision_messages import prepare_kernel_chat_messages
+    from pallas.product.llm.providers_store import find_provider, resolve_endpoint_for_task
+    from pallas.product.llm.vision_messages import prepare_messages_for_provider_capabilities
 
     user_text = ""
     if working:
@@ -262,21 +263,38 @@ async def complete_with_tool_loop(
         elif isinstance(meta.get("vision_plain_text"), str):
             user_text = str(meta.get("vision_plain_text") or "")
     model = resolve_model(meta, cfg=c)
-    working, provider_row = await prepare_kernel_chat_messages(
-        working,
-        metadata=meta,
-        task=task,
-        user_text=user_text,
-    )
-    if isinstance(metadata, dict):
-        metadata["vision_prepared"] = True
-        if provider_row is not None:
-            from pallas.product.llm.providers_store import provider_capabilities, provider_model_effort
+    primary_endpoint = resolve_endpoint_for_task(task)
+    provider_row = find_provider(primary_endpoint.provider_id) if primary_endpoint is not None else None
 
-            metadata.setdefault("provider_capabilities", provider_capabilities(provider_row, model))
-            effort = provider_model_effort(provider_row, model)
-            if effort:
-                metadata.setdefault("model_effort", effort)
+    async def prepare_candidate_messages(candidate_messages, endpoint, candidate_model):
+        row = find_provider(str(getattr(endpoint, "provider_id", "") or ""))
+        return await prepare_messages_for_provider_capabilities(
+            candidate_messages,
+            metadata=meta,
+            provider_row=row,
+            model=candidate_model,
+            user_text=user_text,
+        )
+
+    if primary_endpoint is None:
+        working = await prepare_messages_for_provider_capabilities(
+            working,
+            metadata=meta,
+            provider_row=None,
+            model=model,
+            user_text=user_text,
+        )
+        prepare_candidate = None
+    else:
+        prepare_candidate = prepare_candidate_messages
+
+    if isinstance(metadata, dict) and provider_row is not None:
+        from pallas.product.llm.providers_store import provider_capabilities, provider_model_effort
+
+        metadata.setdefault("provider_capabilities", provider_capabilities(provider_row, model))
+        effort = provider_model_effort(provider_row, model)
+        if effort:
+            metadata.setdefault("model_effort", effort)
 
     options = inference_options_from_metadata(meta)
     if provider_row is not None:
@@ -321,6 +339,7 @@ async def complete_with_tool_loop(
             tools=None,
             cfg=c,
             task=task,
+            prepare_candidate_messages=prepare_candidate,
         )
         content = str(last_message.get("content", "") or "").strip()
         assistant_message = dict(last_message)
@@ -399,6 +418,7 @@ async def complete_with_tool_loop(
             tools=tool_schemas,
             cfg=c,
             task=task,
+            prepare_candidate_messages=prepare_candidate,
         )
         provider_trace = last_message.get("_provider_trace")
         if isinstance(provider_trace, dict):

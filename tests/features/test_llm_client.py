@@ -98,6 +98,39 @@ async def test_submit_chat_task_unified_settings_schedule_kernel(monkeypatch: py
 
 
 @pytest.mark.asyncio
+async def test_submit_chat_task_propagates_group_timeline_images_to_kernel_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    submit_kernel = AsyncMock(
+        return_value=ChatSubmitResult(task_id="task-history-image", status="processing", ok=True)
+    )
+    monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_llm_chat_task", submit_kernel)
+    monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: False)
+
+    request = ChatSubmitRequest(
+        request_id="req-history-image",
+        session_id="sess-history-image",
+        user_text="你看到了吗",
+        system_prompt="system",
+        bot_id=10001,
+        group_id=20002,
+        user_id=30003,
+        group_timeline_images=[
+            {
+                "speaker": "兔兔",
+                "text": "看这个",
+                "url": "https://example.com/a.png",
+            }
+        ],
+    )
+
+    result = await submit_chat_task(request, cfg=LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True))
+
+    assert result.ok is True
+    assert submit_kernel.await_args.kwargs["metadata"]["group_timeline_images"] == request.group_timeline_images
+
+
+@pytest.mark.asyncio
 async def test_submit_chat_task_unified_llm_chat_payload_includes_agent_stage_plan(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

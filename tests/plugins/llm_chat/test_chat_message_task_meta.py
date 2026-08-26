@@ -265,6 +265,42 @@ def test_llm_chat_rule_accepts_federated_alias_winner(monkeypatch: pytest.Monkey
     assert mod.llm_chat_rule(event) is True
 
 
+def test_llm_chat_rule_accepts_group_vision_message_without_perception(monkeypatch: pytest.MonkeyPatch) -> None:
+    from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
+    from packages.llm_chat import chat_message as mod
+    from pallas.product.llm.config import LlmConfig
+
+    raw_message = "[CQ:image,file=photo,url=https://example.com/a.png] 看这个"
+    event = GroupMessageEvent(
+        time=1,
+        self_id=10001,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        message_id=40004,
+        user_id=30003,
+        message=Message(raw_message),
+        raw_message=raw_message,
+        font=0,
+        sender={"user_id": 30003, "nickname": "兔兔", "card": "", "role": "member"},
+        group_id=20002,
+    )
+
+    monkeypatch.setattr(mod, "is_llm_chat_service_enabled", lambda: True)
+    monkeypatch.setattr(
+        mod,
+        "get_llm_config",
+        lambda: LlmConfig(
+            llm_speak_perception_enabled=False,
+            llm_speak_mention_enabled=False,
+            llm_speak_ambient_enabled=False,
+            llm_speak_followup_enabled=False,
+        ),
+    )
+
+    assert mod.llm_chat_rule(event) is True
+
+
 @pytest.mark.asyncio
 async def test_resolve_speak_aliases_caches_bot_persona(monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.llm_chat import chat_message as mod
@@ -953,8 +989,20 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     monkeypatch.setattr(mod, "assemble_direct_chat_context", fake_context)
     monkeypatch.setattr(
         mod,
-        "build_recent_group_timeline",
-        AsyncMock(return_value="【刚才的群聊】\n- 兔兔：还是笨蛋欸"),
+        "build_recent_group_timeline_context",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                text="【刚才的群聊】\n- 兔兔：还是笨蛋欸",
+                images=(
+                    SimpleNamespace(
+                        speaker="兔兔",
+                        text="还是笨蛋欸",
+                        url="https://example.com/a.png",
+                    ),
+                ),
+            )
+        ),
+        raising=False,
     )
     reply_context_lookup = Mock(return_value="复读的原话")
     monkeypatch.setattr(mod, "lookup_bot_reply_context", reply_context_lookup, raising=False)
@@ -1060,6 +1108,9 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     assert payload["reply_total_length_band"] == "complete"
     feedback_hint.assert_not_called()
     submit_request = submit_mock.await_args.args[0]
+    assert submit_request.group_timeline_images == [
+        {"speaker": "兔兔", "text": "还是笨蛋欸", "url": "https://example.com/a.png"},
+    ]
     assert "【本轮表达去重】" not in submit_request.system_prompt
     assert "【本轮牛格塑形】" not in submit_request.system_prompt
     assert "【表达习惯参考】" not in submit_request.system_prompt
