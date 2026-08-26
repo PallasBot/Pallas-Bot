@@ -2,8 +2,21 @@
 
 from __future__ import annotations
 
+import re
+
 from pallas.product.llm.tools.identity import is_self_identity_question
 from pallas.product.llm.tools.patterns import domains_from_structure
+
+_RECOGNITION_QUESTION_RE = re.compile(r"(是什么|是谁|是啥|是啥意思|啥意思|什么意思|啥梗|什么梗|是干嘛的)")
+
+
+def is_recognition_question(user_text: str) -> bool:
+    """无图时对「这是什么/是谁/啥意思」的识别性问句，不应注入生成类工具域。"""
+    text = _normalize_hint(user_text).strip()
+    if not text:
+        return False
+    return bool(_RECOGNITION_QUESTION_RE.search(text))
+
 
 _ARKNIGHTS_HINTS = (
     "干员",
@@ -204,7 +217,11 @@ def infer_tool_domains(user_text: str) -> frozenset[str]:
             domains.add("arknights")
     if any(hint in text for hint in _SOCIAL_HINTS):
         domains.add("social")
+    recognition_question = is_recognition_question(user_text)
     for hints, domain in _COMMAND_HINTS:
+        if domain == "memes" and recognition_question:
+            # 「这个表情包是什么」是识别问句，别注入生成类 memes 域，让 LLM 直接回答
+            continue
         if any(hint in text for hint in hints):
             domains.add(domain)
     domains.update(domains_from_structure(user_text))
