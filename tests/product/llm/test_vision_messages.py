@@ -305,6 +305,48 @@ async def test_fetch_image_data_uri_falls_back_to_media_cache_on_http_error(
 
 
 @pytest.mark.asyncio
+async def test_fetch_image_data_uri_prefers_media_cache_before_network(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    from pallas.core.shared.utils import media_cache as mcache
+    from pallas.product.llm import vision_messages as vm
+
+    gif = (
+        b"GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00"
+        b"\x21\xf9\x04\x00\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b"
+    )
+
+    async def fake_get_image(_url: str) -> bytes | None:
+        return gif
+
+    monkeypatch.setattr(mcache, "get_image_by_url", fake_get_image)
+    called = {"bare_get": False}
+
+    class FailingClient:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def get(self, _url: str):
+            called["bare_get"] = True
+            raise httpx.ConnectError("should not reach network")
+
+    monkeypatch.setattr("pallas.product.llm.vision_messages.httpx.AsyncClient", FailingClient)
+
+    uri = await vm.fetch_image_data_uri("https://example.com/cached-by-url.gif")
+    assert uri is not None
+    assert uri.startswith("data:image/gif;base64,")
+    assert called["bare_get"] is False
+
+
+@pytest.mark.asyncio
 async def test_prepare_messages_current_image_download_exception_degrades_to_failed_notice(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

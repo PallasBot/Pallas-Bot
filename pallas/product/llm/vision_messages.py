@@ -123,6 +123,11 @@ async def fetch_image_data_uri(url: str) -> str | None:
         return None
     if target.startswith("data:"):
         return target
+    # QQ 多媒体 URL 常带签名且会过期，裸 GET 每次都先打一次外网拿 400 才回退。
+    # 先查本地缓存：命中就直接复用，避免每次带图都先失败一次并刷 status=400 日志。
+    cached_uri = await _fetch_cached_image_data_uri(target)
+    if cached_uri:
+        return cached_uri
     data_uri: str | None = None
     try:
         timeout = httpx.Timeout(_VISION_FETCH_TIMEOUT_SEC)
