@@ -879,7 +879,7 @@ async def _post_provider_chat(
 
         try:
             row = find_provider(provider_id)
-            effort = provider_model_effort(row) if row else ""
+            effort = provider_model_effort(row, model) if row else ""
         except Exception:
             effort = ""
         if effort:

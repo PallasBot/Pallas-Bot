@@ -153,6 +153,18 @@ def _normalize_model_effort(raw: dict[str, Any]) -> str:
     return ""
 
 
+def _registered_model(row: dict[str, Any] | None, model: str = "") -> dict[str, Any] | None:
+    if not isinstance(row, dict) or not model:
+        return None
+    models = row.get("models")
+    if not isinstance(models, list):
+        return None
+    for item in models:
+        if isinstance(item, dict) and str(item.get("name") or "").strip() == model:
+            return item
+    return None
+
+
 def _normalize_request_method(raw: dict[str, Any]) -> str:
     value = str(raw.get("request_method") or "").strip().lower()
     if value in PROVIDER_REQUEST_METHODS:
@@ -160,9 +172,14 @@ def _normalize_request_method(raw: dict[str, Any]) -> str:
     return DEFAULT_REQUEST_METHOD
 
 
-def provider_capabilities(row: dict[str, Any] | None) -> list[str]:
+def provider_capabilities(row: dict[str, Any] | None, model: str = "") -> list[str]:
     if not isinstance(row, dict):
         return []
+    model_row = _registered_model(row, str(model or "").strip())
+    if model_row is not None:
+        capabilities = _normalize_capabilities(model_row)
+        if capabilities:
+            return capabilities
     return _normalize_capabilities(row)
 
 
@@ -177,19 +194,24 @@ def provider_supports_capability(row: dict[str, Any] | None, capability: str) ->
     return cap in caps
 
 
-def provider_allows_native_vision(row: dict[str, Any] | None) -> bool:
+def provider_allows_native_vision(row: dict[str, Any] | None, model: str = "") -> bool:
     """仅当显式声明 image 时走原生多模态；未配置能力则不默认看图。"""
-    return "image" in provider_capabilities(row)
+    return "image" in provider_capabilities(row, model)
 
 
-def provider_needs_vision_text_fallback(row: dict[str, Any] | None) -> bool:
+def provider_needs_vision_text_fallback(row: dict[str, Any] | None, model: str = "") -> bool:
     """含图且未声明 image 时，转成文字描述/占位。"""
-    return not provider_allows_native_vision(row)
+    return not provider_allows_native_vision(row, model)
 
 
-def provider_model_effort(row: dict[str, Any] | None) -> str:
+def provider_model_effort(row: dict[str, Any] | None, model: str = "") -> str:
     if not isinstance(row, dict):
         return ""
+    model_row = _registered_model(row, str(model or "").strip())
+    if model_row is not None:
+        effort = _normalize_model_effort(model_row)
+        if effort:
+            return effort
     return _normalize_model_effort(row)
 
 
@@ -238,6 +260,7 @@ def _normalize_registered_models(
             "name": name,
             "is_default": bool(source.get("is_default")) or name == default_model,
             "capabilities": _normalize_capabilities(source),
+            "model_effort": _normalize_model_effort(source),
             "pricing_rules": normalized_rules,
         })
 
@@ -765,8 +788,8 @@ def resolve_endpoint_candidates_for_task(task: str = "llm_chat") -> list[Resolve
                 api_key=api_keys[0] if api_keys else "",
                 model=model,
                 kind=kind,
-                capabilities=tuple(provider_capabilities(row)),
-                model_effort=provider_model_effort(row),
+                capabilities=tuple(provider_capabilities(row, model)),
+                model_effort=provider_model_effort(row, model),
                 request_method=provider_request_method(row),
                 api_keys=api_keys,
             )

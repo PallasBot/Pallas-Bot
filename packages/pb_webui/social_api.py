@@ -968,6 +968,7 @@ class _LlmProviderModelBody(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     is_default: bool = False
     capabilities: list[str] = Field(default_factory=list)
+    model_effort: str = ""
     pricing_rules: list[dict[str, Any]] = Field(default_factory=list)
 
 

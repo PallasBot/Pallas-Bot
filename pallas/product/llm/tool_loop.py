@@ -261,6 +261,7 @@ async def complete_with_tool_loop(
             user_text = content
         elif isinstance(meta.get("vision_plain_text"), str):
             user_text = str(meta.get("vision_plain_text") or "")
+    model = resolve_model(meta, cfg=c)
     working, provider_row = await prepare_kernel_chat_messages(
         working,
         metadata=meta,
@@ -272,17 +273,16 @@ async def complete_with_tool_loop(
         if provider_row is not None:
             from pallas.product.llm.providers_store import provider_capabilities, provider_model_effort
 
-            metadata.setdefault("provider_capabilities", provider_capabilities(provider_row))
-            effort = provider_model_effort(provider_row)
+            metadata.setdefault("provider_capabilities", provider_capabilities(provider_row, model))
+            effort = provider_model_effort(provider_row, model)
             if effort:
                 metadata.setdefault("model_effort", effort)
 
-    model = resolve_model(meta, cfg=c)
     options = inference_options_from_metadata(meta)
     if provider_row is not None:
         from pallas.product.llm.providers_store import provider_model_effort, provider_request_method
 
-        effort = provider_model_effort(provider_row)
+        effort = provider_model_effort(provider_row, model)
         if effort and "model_effort" not in options:
             options["model_effort"] = effort
         method = provider_request_method(provider_row)

@@ -130,6 +130,17 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
         metadata["vision_image_urls"] = list(vision_payload.image_urls)
     if vision_payload.plain_text:
         metadata["vision_plain_text"] = vision_payload.plain_text
+    timeline_images = [
+        {
+            "speaker": str(item.get("speaker") or "").strip(),
+            "text": str(item.get("text") or "").strip(),
+            "url": str(item.get("url") or "").strip(),
+        }
+        for item in request.group_timeline_images[:3]
+        if isinstance(item, dict)
+    ]
+    if timeline_images:
+        metadata["group_timeline_images"] = timeline_images
     from pallas.product.llm.providers_store import (
         find_provider,
         provider_capabilities,
@@ -140,10 +151,10 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
     endpoint = resolve_endpoint_for_task(task_name)
     if endpoint is not None:
         row = find_provider(endpoint.provider_id)
-        caps = provider_capabilities(row) if row else list(endpoint.capabilities)
+        caps = provider_capabilities(row, endpoint.model) if row else list(endpoint.capabilities)
         if caps:
             metadata["provider_capabilities"] = caps
-        effort = provider_model_effort(row) if row else endpoint.model_effort
+        effort = provider_model_effort(row, endpoint.model) if row else endpoint.model_effort
         if effort:
             metadata["model_effort"] = effort
         metadata["provider_hint"] = metadata.get("provider_hint") or endpoint.provider_id
