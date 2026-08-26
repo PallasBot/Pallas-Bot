@@ -53,11 +53,15 @@ jobs:
           if [ -n "${PIN_TAG}" ]; then
             CANDIDATES="${PIN_TAG}"
           else
-            CANDIDATES=$(git tag -l 'v*' --sort=-version:refname)
+            CANDIDATES=$(git tag -l 'v[0-9]*' --sort=-version:refname)
           fi
           found=0
           while IFS= read -r TAG; do
             [ -n "${TAG}" ] || continue
+            if [[ ! "${TAG}" =~ ^v[0-9]+(\.[0-9]+){0,2}(\+[0-9A-Za-z.-]+)?$ ]]; then
+              [ -n "${PIN_TAG}" ] && echo "::error::${TAG} 不是正式 WebUI release tag" && exit 1
+              continue
+            fi
             git checkout --quiet "${TAG}"
             MIN_COMMIT=$(node -e '
               const fs = require("fs");
@@ -126,6 +130,7 @@ jobs:
         run: |
           mkdir -p webui-zip-root/public-react
           cp -a "pallas-webui/${{ steps.webui_build.outputs.dir }}/dist/." webui-zip-root/public-react/
+          cp pallas-webui/release-manifest.json webui-zip-root/public-react/release-manifest.json
           (cd webui-zip-root && zip -r ../dist.zip public-react)
 
       - name: Upload WebUI artifact
@@ -361,6 +366,7 @@ jobs:
           push: true
           build-args: |
             PALLAS_BOT_VERSION=${{ steps.get_version.outputs.version }}
+            PALLAS_BOT_COMMIT=${{ github.sha }}
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/pallas-bot:${{ steps.get_version.outputs.version }}
             ${{ secrets.DOCKERHUB_USERNAME }}/pallas-bot:latest

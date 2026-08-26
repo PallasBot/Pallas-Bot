@@ -81,3 +81,45 @@ async def test_apply_bot_update_rejects_branch_track_in_docker(monkeypatch):
 
     with pytest.raises(BotGitUpdateError, match="Docker.*Release"):
         await apply_bot_update(track="branch")
+
+
+@pytest.mark.asyncio
+async def test_apply_webui_update_uses_compatible_release_metadata(monkeypatch, tmp_path):
+    selected = {
+        "tag": "v0.9.13",
+        "asset_url": "https://example.test/releases/download/v0.9.13/dist.zip",
+    }
+    download = AsyncMock(return_value=True)
+    monkeypatch.setattr(
+        update_ops,
+        "webui_update_settings_from_repo",
+        lambda: {
+            "repo": "PallasBot/Pallas-Bot-WebUI",
+            "asset": "dist.zip",
+            "tag": "",
+            "github_token": "",
+        },
+    )
+    monkeypatch.setattr("packages.pb_webui.manager.webui_public_path", lambda: tmp_path)
+    monkeypatch.setattr(
+        "packages.pb_webui.manager.resolve_compatible_webui_release",
+        AsyncMock(return_value=selected),
+    )
+    monkeypatch.setattr("packages.pb_webui.manager.download_and_extract_dist_zip", download)
+    monkeypatch.setattr("packages.pb_webui.manager.get_webui_dist_version", lambda: "v0.9.13")
+    saved: dict[str, str] = {}
+
+    def save_version(tag: str, asset_url: str) -> None:
+        saved.update(tag=tag, asset_url=asset_url)
+
+    monkeypatch.setattr("packages.pb_webui.manager.save_installed_webui_version", save_version)
+    latest = AsyncMock()
+    monkeypatch.setattr("packages.pb_webui.manager.fetch_latest_webui_release", latest)
+
+    result = await update_ops.apply_webui_dist_update()
+
+    assert result["tag"] == "v0.9.13"
+    download.assert_awaited_once()
+    assert download.await_args.args[1] == selected["asset_url"]
+    assert saved == {"tag": "v0.9.13", "asset_url": selected["asset_url"]}
+    latest.assert_not_awaited()

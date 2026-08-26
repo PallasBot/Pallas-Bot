@@ -137,11 +137,12 @@ async def apply_webui_dist_update(
     on_progress: ProgressReporter | None = None,
 ) -> dict[str, str]:
     from packages.pb_webui.manager import (
+        WebuiReleaseCompatibilityError,
         download_and_extract_dist_zip,
-        fetch_latest_webui_release,
         get_webui_dist_version,
         map_webui_download_progress,
-        resolve_github_release_asset_urls,
+        normalize_webui_dist_zip_repo,
+        resolve_compatible_webui_release,
         save_installed_webui_version,
         webui_public_path,
     )
@@ -151,7 +152,7 @@ async def apply_webui_dist_update(
             on_progress(pct, message)
 
     defaults = webui_update_settings_from_repo()
-    repo_name = (repo if repo is not None else defaults["repo"]).strip()
+    repo_name = normalize_webui_dist_zip_repo(repo if repo is not None else defaults["repo"])
     asset_name = (asset if asset is not None else defaults["asset"]).strip() or "dist.zip"
     tag_name = (tag if tag is not None else defaults["tag"]).strip()
     token = github_token if github_token is not None else defaults["github_token"]
@@ -164,14 +165,21 @@ async def apply_webui_dist_update(
         tag_name or "(latest)",
     )
     report(3, "解析 GitHub Release 下载地址…")
-    url_candidates = await resolve_github_release_asset_urls(
-        repo_name,
-        asset_name,
-        tag_name,
-        token=token,
-    )
-    if not url_candidates:
-        raise WebuiUpdateError("未找到可用的下载地址")
+    try:
+        selected = await resolve_compatible_webui_release(
+            repo_name,
+            asset_name,
+            tag_name,
+            token=token,
+        )
+    except WebuiReleaseCompatibilityError as e:
+        raise WebuiUpdateError(str(e)) from e
+    selected_url = str(selected.get("asset_url") or "").strip()
+    selected_tag = str(selected.get("tag") or "").strip()
+    selected_commit = str(selected.get("bot_commit") or "").strip() or None
+    if not selected_url or not selected_tag:
+        raise WebuiUpdateError("兼容的 WebUI Release 缺少固定下载地址")
+    url_candidates = [selected_url]
 
     errors: list[str] = []
     succeeded_url = ""
@@ -186,6 +194,9 @@ async def apply_webui_dist_update(
                 candidate,
                 on_download_progress=download_progress,
                 on_stage=report,
+                require_compatible_manifest=True,
+                github_token=token,
+                current_commit=selected_commit,
             )
             succeeded_url = candidate
             errors.clear()
@@ -198,16 +209,7 @@ async def apply_webui_dist_update(
         raise WebuiUpdateError("下载失败: " + " | ".join(errors))
 
     report(94, "写入版本信息…")
-    try:
-        info = await fetch_latest_webui_release(repo_name, token=token, asset_name=asset_name)
-        new_tag = str(info.get("tag", "") or tag_name).strip()
-    except Exception as e:  # noqa: BLE001
-        logger.warning(
-            "WebUI release metadata could not be fetched for tag [{}]: [{}]",
-            tag_name or "(空)",
-            format_exception_for_log(e),
-        )
-        new_tag = tag_name
+    new_tag = selected_tag
 
     save_installed_webui_version(new_tag, succeeded_url)
     try:

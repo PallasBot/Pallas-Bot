@@ -178,18 +178,21 @@ def _summarize_target(label: str, row: dict[str, Any] | None) -> str:
 async def format_update_check_text() -> str:
     from packages.pb_webui.config import get_pallas_webui_config
     from packages.pb_webui.manager import (
+        DEFAULT_WEBUI_DIST_ZIP_ASSET,
+        DEFAULT_WEBUI_DIST_ZIP_REPO,
         bot_has_release_update,
         bot_is_development_build,
         fetch_latest_bot_release,
-        fetch_latest_webui_release,
         get_bot_current_version,
         get_installed_webui_version,
         inspect_bot_deployment,
+        normalize_webui_dist_zip_repo,
+        resolve_compatible_webui_release,
+        webui_has_release_update,
     )
     from packages.pb_webui.webui_auto_update import auto_update_status_payload
     from pallas.console.webui.plugin_update_snapshot import refresh_plugin_update_snapshot
     from pallas.console.webui.update_apply_progress import has_active_update_apply_job
-    from pallas.core.shared.utils.github_release import release_tags_equivalent
 
     token = _github_token()
     cfg = get_pallas_webui_config()
@@ -232,16 +235,18 @@ async def format_update_check_text() -> str:
     installed = get_installed_webui_version()
     webui_current = str(installed.get("tag") or "").strip() or "unknown"
     web_bits = [f"当前 {webui_current}"]
-    from packages.pb_webui.manager import DEFAULT_WEBUI_DIST_ZIP_REPO
 
-    repo = str(getattr(cfg, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO)
-    asset = str(getattr(cfg, "pallas_webui_dist_zip_asset", "") or "dist.zip")
+    repo = normalize_webui_dist_zip_repo(
+        str(getattr(cfg, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO)
+    )
+    asset = str(getattr(cfg, "pallas_webui_dist_zip_asset", "") or DEFAULT_WEBUI_DIST_ZIP_ASSET)
+    requested_tag = str(getattr(cfg, "pallas_webui_dist_zip_tag", "") or "").strip()
     try:
-        web_latest = await fetch_latest_webui_release(repo, token=token, asset_name=asset)
+        web_latest = await resolve_compatible_webui_release(repo, asset, requested_tag, token=token)
         web_tag = str(web_latest.get("tag") or "").strip()
         if web_tag:
             web_bits.append(f"最新 {web_tag}")
-        if web_tag and webui_current != "unknown" and not release_tags_equivalent(webui_current, web_tag):
+        if webui_has_release_update(latest_tag=web_tag, current_tag=webui_current):
             web_bits.append("有更新")
         else:
             web_bits.append("已是最新或无法比较")

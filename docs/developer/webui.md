@@ -33,16 +33,18 @@ npm install
 npm run build   # → dist/；写入 console-version.json
 ```
 
-WebUI 仓库 Release 提供 **`dist.zip`**（zip 根为 `public-react/`）；Bot 启动时解压到 **`data/pb_webui`**。
+WebUI 仓库 Release 提供 **`dist.zip`**（zip 根为构建产物内容）；Bot 启动时会将其解压到 **`data/pb_webui/public-react/`**。Bot Release 附带的 `dist.zip` 另以 `public-react/` 作为 zip 根，可直接解压到 `data/pb_webui/`。
 
 WebUI 每个发布版本还包含根目录的 `release-manifest.json`，其中 `requires.bot.min_commit` 是该版本要求的最低 Bot commit（完整 40 位 SHA）。发布校验会确认该 commit 已进入 Bot `main`；Bot 发布时只会捆绑通过该兼容校验的 WebUI tag。
 
-本地手动部署：将构建产物放入 `data/pb_webui/public-react/`，或解压 Release 的 `dist.zip` 到 `data/pb_webui/`。
+本地手动部署：将构建产物放入 `data/pb_webui/public-react/`，或将 WebUI 仓库 Release 的 `dist.zip` 解压到 `data/pb_webui/public-react/`。
 
 ```bash
 ./tools/build_webui_dist.sh /path/to/Pallas-Bot-WebUI dist.zip
 unzip -d data/pb_webui dist.zip
 ```
+
+上面的脚本会生成以 `public-react/` 为根的 Bot 部署包；WebUI 仓库 Release 的 zip 根为构建产物内容，应解压到 `data/pb_webui/public-react/`。
 
 自动更新默认从 **`PallasBot/Pallas-Bot-WebUI`** Release 下载 `dist.zip`（配置项 `pallas_webui_dist_zip_repo`）。如需固定兼容版本或使用自建源，可覆盖该配置。
 

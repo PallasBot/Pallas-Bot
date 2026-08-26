@@ -5,11 +5,14 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import shutil
 import tempfile
 import zipfile
 from collections.abc import Callable  # noqa: TC003
+from operator import itemgetter
 from pathlib import Path
+from typing import Any
 
 import httpx
 from nonebot import logger
@@ -25,10 +28,12 @@ from pallas.core.shared.utils.git_mirror import (
     MirrorSpec,
     git_instead_of_args,
     iter_mirrors_for_failover,
+    request_with_mirrors,
     resolve_mirror_for_scope,
     rewrite_github_url,
 )
 from pallas.core.shared.utils.github_release import (
+    fetch_github_releases,
     fetch_latest_release,
     fetch_latest_release_tag_via_github_web,
     github_auth_headers,
@@ -36,6 +41,7 @@ from pallas.core.shared.utils.github_release import (
     github_release_asset_url,
     github_release_asset_url_candidates,
     github_request_ssl_env,
+    release_tags_equivalent,
 )
 from pallas.core.shared.utils.stream_download import (
     StreamDownloadProgress,
@@ -116,6 +122,66 @@ async def resolve_github_release_asset_urls(
         seen.add(u)
         dedup.append(u)
     return dedup
+
+
+class WebuiReleaseCompatibilityError(RuntimeError):
+    """WebUI Release 缺少兼容当前 Bot 所需的发布信息。"""
+
+
+def parse_webui_release_manifest(payload: object) -> dict[str, int | str]:
+    """校验 WebUI Release manifest，并返回兼容检查所需字段。"""
+    if not isinstance(payload, dict):
+        raise ValueError("WebUI release manifest 必须是 JSON 对象")
+    if type(payload.get("schema_version")) is not int or payload.get("schema_version") != 1:
+        raise ValueError("WebUI release manifest 的 schema_version 必须为 1")
+    requires = payload.get("requires")
+    bot = requires.get("bot") if isinstance(requires, dict) else None
+    minimum = bot.get("min_commit") if isinstance(bot, dict) else None
+    if not isinstance(minimum, str) or not re.fullmatch(r"[0-9a-f]{40}", minimum):
+        raise ValueError("WebUI release manifest 缺少有效的 Bot min_commit")
+    return {"schema_version": 1, "min_bot_commit": minimum}
+
+
+async def _fetch_webui_release_list(repo: str, *, token: str = "") -> list[dict[str, Any]]:
+    with github_request_ssl_env():
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=httpx.Timeout(30.0, connect=10.0),
+            headers={"User-Agent": "Pallas-Bot-PallasWebUI/1.0"},
+        ) as client:
+            return await fetch_github_releases(
+                repo,
+                client=client,
+                limit=None,
+                token=token,
+                mirror_scope="webui",
+            )
+
+
+async def _fetch_webui_release_manifest(url: str, *, token: str = "") -> object:
+    manifest_url = (url or "").strip()
+    if not manifest_url:
+        raise ValueError("WebUI Release 缺少 release-manifest.json 资产")
+    headers = {"User-Agent": "Pallas-Bot-PallasWebUI/1.0"}
+    headers.update(github_auth_headers(token))
+    with github_request_ssl_env():
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=httpx.Timeout(30.0, connect=10.0),
+            headers={"User-Agent": "Pallas-Bot-PallasWebUI/1.0"},
+        ) as client:
+
+            async def getter(url: str) -> httpx.Response:
+                response = await client.get(url, headers=headers)
+                response.raise_for_status()
+                return response
+
+            response = await request_with_mirrors(
+                manifest_url,
+                list(iter_mirrors_for_failover("webui")),
+                getter,
+            )
+            return response.json()
 
 
 DEFAULT_WEBUI_DIST_ZIP_REPO = "PallasBot/Pallas-Bot-WebUI"
@@ -206,13 +272,59 @@ def _sync_extract_dist_zip_file(zip_path: Path, public_dir: Path) -> None:
         shutil.copytree(source, public_dir, dirs_exist_ok=True)
 
 
+def _read_webui_release_manifest_from_archive(archive_path: Path) -> dict[str, int | str]:
+    with zipfile.ZipFile(archive_path) as zf:
+        manifests = [
+            member
+            for member in zf.infolist()
+            if not member.is_dir()
+            and member.filename.replace("\\", "/").rstrip("/").split("/")[-1] == "release-manifest.json"
+        ]
+        if not manifests:
+            raise ValueError("WebUI dist 缺少 release-manifest.json")
+        if len(manifests) > 1:
+            raise ValueError("WebUI dist 包含多个 release-manifest.json")
+        try:
+            payload = json.loads(zf.read(manifests[0]).decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as e:
+            raise ValueError("WebUI dist 的 release-manifest.json 无效") from e
+    return parse_webui_release_manifest(payload)
+
+
+async def validate_webui_dist_archive(
+    archive_path: Path,
+    *,
+    token: str = "",
+    current_commit: str | None = None,
+) -> dict[str, int | str]:
+    """在安装前校验 WebUI 压缩包声明的 Bot 兼容基线。"""
+    manifest = await asyncio.to_thread(_read_webui_release_manifest_from_archive, archive_path)
+    bot_commit = (current_commit if current_commit is not None else get_bot_current_commit()).strip()
+    if re.fullmatch(r"[0-9a-f]{40}", bot_commit) is None:
+        raise WebuiReleaseCompatibilityError("当前 Bot 没有可用于兼容性检查的完整 commit")
+    minimum = str(manifest["min_bot_commit"])
+    if not await is_bot_commit_compatible(minimum, bot_commit, token=token):
+        raise WebuiReleaseCompatibilityError("WebUI dist 与当前 Bot 不兼容")
+    return manifest
+
+
 async def extract_bundled_webui_dist(
     public_dir: Path,
     archive_path: Path = BUNDLED_WEBUI_DIST_ZIP,
+    *,
+    require_compatible_manifest: bool = False,
+    token: str = "",
+    current_commit: str | None = None,
 ) -> bool:
     if not await asyncio.to_thread(archive_path.is_file):
         return False
     try:
+        if require_compatible_manifest:
+            await validate_webui_dist_archive(
+                archive_path,
+                token=token,
+                current_commit=current_commit,
+            )
         await asyncio.to_thread(_sync_extract_dist_zip_file, archive_path, public_dir)
     except Exception as e:  # noqa: BLE001
         logger.warning("[WebUI] 内置 WebUI dist 解压失败：{}", format_exception_for_log(e))
@@ -375,6 +487,9 @@ async def download_and_extract_dist_zip(
     follow_redirects: bool = True,
     on_download_progress: Callable[[StreamDownloadProgress], None] | None = None,
     on_stage: ProgressReporter | None = None,
+    require_compatible_manifest: bool = False,
+    github_token: str = "",
+    current_commit: str | None = None,
 ) -> bool:
     url = (url or "").strip()
     if not url:
@@ -402,7 +517,16 @@ async def download_and_extract_dist_zip(
             on_progress=on_download_progress,
         )
         if on_stage is not None:
-            on_stage(85, "正在解压 WebUI dist…")
+            stage_message = "正在校验 WebUI 兼容性…" if require_compatible_manifest else "正在解压 WebUI dist…"
+            on_stage(82 if require_compatible_manifest else 85, stage_message)
+        if require_compatible_manifest:
+            await validate_webui_dist_archive(
+                zip_path,
+                token=github_token,
+                current_commit=current_commit,
+            )
+            if on_stage is not None:
+                on_stage(85, "正在解压 WebUI dist…")
         await asyncio.to_thread(_sync_extract_dist_zip_file, zip_path, public_dir)
         logger.info("[WebUI] 已解压 dist 到 {}", public_dir)
         if on_stage is not None:
@@ -614,6 +738,96 @@ def _git_rev_parse_text(*args: str, timeout_s: float = 8.0) -> str | None:
         return None
 
 
+def get_bot_current_commit() -> str:
+    """返回当前 Bot 的完整 Git commit；构建元数据可作为 Git 兜底。"""
+    commit = _git_rev_parse_text("HEAD")
+    if commit:
+        return commit
+    return (os.environ.get("PALLAS_BOT_COMMIT") or "").strip()
+
+
+def is_bot_commit_ancestor(ancestor: str, descendant: str) -> bool:
+    """判断 ``ancestor`` 是否已经包含在当前 Bot 的 ``descendant`` 历史中。"""
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", ancestor, descendant],
+            cwd=_BOT_ROOT,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=8.0,
+            check=False,
+        )
+    except Exception:  # noqa: BLE001
+        return False
+    return result.returncode == 0
+
+
+def _git_repository_is_shallow() -> bool | None:
+    result = _git_rev_parse_text("--is-shallow-repository")
+    if result == "true":
+        return True
+    if result == "false":
+        return False
+    return None
+
+
+async def _fetch_bot_commit_compare_status(
+    ancestor: str,
+    descendant: str,
+    *,
+    token: str = "",
+) -> str:
+    if re.fullmatch(r"[0-9a-f]{40}", ancestor) is None or re.fullmatch(r"[0-9a-f]{40}", descendant) is None:
+        return ""
+    compare_url = f"https://api.github.com/repos/PallasBot/Pallas-Bot/compare/{ancestor}...{descendant}"
+    headers = {"User-Agent": "Pallas-Bot-PallasWebUI/1.0"}
+    headers.update(github_auth_headers(token))
+    with github_request_ssl_env():
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            timeout=httpx.Timeout(30.0, connect=10.0),
+            headers={"User-Agent": "Pallas-Bot-PallasWebUI/1.0"},
+        ) as client:
+
+            async def getter(url: str) -> httpx.Response:
+                response = await client.get(url, headers=headers)
+                response.raise_for_status()
+                return response
+
+            try:
+                response = await request_with_mirrors(
+                    compare_url,
+                    list(iter_mirrors_for_failover("bot")),
+                    getter,
+                )
+                data = response.json()
+            except Exception as e:  # noqa: BLE001
+                logger.debug(
+                    "[WebUI] Bot commit compare 请求失败：{}",
+                    format_exception_for_log(e),
+                )
+                return ""
+    return str(data.get("status") or "").strip().lower() if isinstance(data, dict) else ""
+
+
+async def is_bot_commit_compatible(
+    ancestor: str,
+    descendant: str,
+    *,
+    token: str = "",
+) -> bool:
+    """判断 Bot 是否包含基线 commit，必要时用 GitHub compare 补足浅仓信息。"""
+    if await asyncio.to_thread(is_bot_commit_ancestor, ancestor, descendant):
+        return True
+    shallow = await asyncio.to_thread(_git_repository_is_shallow)
+    if shallow is False:
+        return False
+    status = await _fetch_bot_commit_compare_status(ancestor, descendant, token=token)
+    return status in {"ahead", "identical"}
+
+
 def resolve_bot_upstream_ref(*, preferred_branch: str = "") -> str:
     """解析分支更新目标，返回 ``origin/<branch>``；无法解析时返回空串。
 
@@ -800,9 +1014,9 @@ def is_bot_release_style_tag(tag: str) -> bool:
 
 
 def webui_has_release_update(*, latest_tag: str, current_tag: str) -> bool:
-    """WebUI dist 是否落后于 GitHub 最新带 dist 的 release。
+    """WebUI dist 是否落后于 GitHub 最新正式 release。
 
-    dist 随 Bot Release tag 发布；本地 ``console-version.json`` 的 npm 版号（如 ``0.6.35``）不可比。
+    本地 ``console-version.json`` 的 npm 版号（如 ``0.6.35``）不可比。
     """
     from pallas.core.shared.utils.github_release import release_tags_equivalent
 
@@ -813,6 +1027,133 @@ def webui_has_release_update(*, latest_tag: str, current_tag: str) -> bool:
     if not is_bot_release_style_tag(latest) or not is_bot_release_style_tag(current):
         return False
     return not release_tags_equivalent(current, latest)
+
+
+def _webui_release_asset_url(release: dict[str, Any], asset_name: str) -> str:
+    preferred = (asset_name or "").strip().lower()
+    if not preferred:
+        return ""
+    assets = release.get("assets")
+    if not isinstance(assets, list):
+        return ""
+    for asset in assets:
+        if not isinstance(asset, dict):
+            continue
+        name = str(asset.get("name") or "").strip().lower()
+        if name != preferred:
+            continue
+        return str(asset.get("url") or asset.get("browser_download_url") or "").strip()
+    return ""
+
+
+def _webui_release_version_key(tag: str) -> tuple[int, int, int] | None:
+    match = re.fullmatch(
+        r"[vV](\d+)(?:\.(\d+))?(?:\.(\d+))?(?:\+[0-9A-Za-z.-]+)?",
+        (tag or "").strip(),
+    )
+    if match is None:
+        return None
+    return tuple(int(part or 0) for part in match.groups())  # type: ignore[return-value]
+
+
+async def resolve_compatible_webui_release(
+    repo: str,
+    preferred_asset: str = DEFAULT_WEBUI_DIST_ZIP_ASSET,
+    tag: str = "",
+    *,
+    token: str = "",
+    current_commit: str | None = None,
+) -> dict[str, Any]:
+    """选择与当前 Bot commit 兼容的最新 WebUI Release。"""
+    repo_name = normalize_webui_dist_zip_repo(repo)
+    asset_name = (preferred_asset or "").strip() or DEFAULT_WEBUI_DIST_ZIP_ASSET
+    pinned_tag = (tag or "").strip()
+    bot_commit = (current_commit if current_commit is not None else get_bot_current_commit()).strip()
+    if re.fullmatch(r"[0-9a-f]{40}", bot_commit) is None:
+        raise WebuiReleaseCompatibilityError("当前 Bot 没有可用于兼容性检查的完整 commit")
+
+    releases = await _fetch_webui_release_list(repo_name, token=token)
+    candidates: list[dict[str, Any]] = []
+    for release in releases:
+        if not isinstance(release, dict):
+            continue
+        release_tag = str(release.get("tag") or release.get("tag_name") or "").strip()
+        if pinned_tag and not release_tags_equivalent(release_tag, pinned_tag):
+            continue
+        if bool(release.get("prerelease")) or bool(release.get("draft")):
+            continue
+        version_key = _webui_release_version_key(release_tag)
+        if version_key is None or not is_bot_release_style_tag(release_tag):
+            continue
+        candidates.append({"release": release, "tag": release_tag, "version_key": version_key})
+
+    if pinned_tag and not candidates:
+        raise WebuiReleaseCompatibilityError(f"指定 WebUI Release {pinned_tag} 不存在或不是正式版本")
+    candidates.sort(key=itemgetter("version_key"), reverse=True)
+
+    saw_pinned_tag = False
+    for item in candidates:
+        release = item["release"]
+        release_tag = item["tag"]
+        if pinned_tag:
+            saw_pinned_tag = True
+        asset_url = _webui_release_asset_url(release, asset_name)
+        manifest_url = _webui_release_asset_url(release, "release-manifest.json")
+        if not asset_url or not manifest_url:
+            logger.debug("[WebUI] Release [{}] 缺少所需资产，跳过", release_tag)
+            continue
+        try:
+            manifest = parse_webui_release_manifest(
+                await _fetch_webui_release_manifest(manifest_url, token=token),
+            )
+        except Exception as e:  # noqa: BLE001
+            logger.debug(
+                "[WebUI] Release [{}] manifest 无效，跳过：{}",
+                release_tag,
+                format_exception_for_log(e),
+            )
+            continue
+        minimum = str(manifest["min_bot_commit"])
+        if not await is_bot_commit_compatible(minimum, bot_commit, token=token):
+            logger.debug(
+                "[WebUI] Release [{}] 要求的 Bot commit [{}] 与当前 commit 不兼容，跳过",
+                release_tag,
+                minimum,
+            )
+            continue
+        return {
+            "tag": release_tag,
+            "html_url": str(release.get("html_url") or "").strip(),
+            "asset_url": asset_url,
+            "body": str(release.get("body") or "").strip(),
+            "manifest": manifest,
+            "min_bot_commit": minimum,
+            "bot_commit": bot_commit,
+        }
+
+    if pinned_tag and saw_pinned_tag:
+        raise WebuiReleaseCompatibilityError(f"指定 WebUI Release {pinned_tag} 与当前 Bot 不兼容")
+    raise WebuiReleaseCompatibilityError("没有找到与当前 Bot 兼容的 WebUI Release")
+
+
+async def resolve_webui_release_asset_urls(
+    repo: str,
+    preferred_asset: str = DEFAULT_WEBUI_DIST_ZIP_ASSET,
+    tag: str = "",
+    *,
+    token: str = "",
+    current_commit: str | None = None,
+) -> list[str]:
+    """返回已通过兼容性校验的 WebUI Release 固定资产地址。"""
+    release = await resolve_compatible_webui_release(
+        repo,
+        preferred_asset,
+        tag,
+        token=token,
+        current_commit=current_commit,
+    )
+    asset_url = str(release.get("asset_url") or "").strip()
+    return [asset_url] if asset_url else []
 
 
 def bot_is_development_build(
