@@ -1381,7 +1381,10 @@ async def prepare_and_submit_llm_chat_turn(
                 include_group_ambient_history=not include_recent_pair,
                 prepared_messages=prepared_messages,
                 group_timeline_images=group_timeline_images,
-                reply_to_message_id=resolved_reply_message_id,
+                # 用用户实际引用(reply)的目标消息 id，而非 bot 的 QUOTE 决策 id。
+                # 用户 reply 一张带图消息再问「这是谁」时，bot 可能以 PLAIN 回复，
+                # resolved_reply_message_id 会因此为 None；replied_message_id 才稳定携带用户引用目标。
+                reply_to_message_id=replied_message_id,
                 llm_rewrite_metadata={
                     "task": "llm_chat",
                     "current_turn_action": current_turn_decision.action,
