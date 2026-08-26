@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from pallas.product.llm.config import LlmConfig, get_llm_config
+from pallas.product.llm.event_observation import record_provider_prompt_hit
 from pallas.product.llm.provider_client import complete_chat_message
 from pallas.product.llm.tools.context import ToolInvokeContext
 from pallas.product.llm.tools.registry import execute_tool_async
@@ -335,6 +336,7 @@ async def complete_with_tool_loop(
             )
 
     if not tools_enabled:
+        record_provider_prompt_hit(working)
         last_message = await complete_chat_message(
             working,
             model=model,
@@ -415,6 +417,7 @@ async def complete_with_tool_loop(
             round_options["tool_choice"] = "required"
             # DeepSeek thinking 模式不支持 tool_choice=required
             round_options["model_effort"] = "disable"
+        record_provider_prompt_hit(working)
         last_message = await complete_chat_message(
             working,
             model=model,

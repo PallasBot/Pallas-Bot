@@ -53,6 +53,7 @@ from pallas.product.llm.current_turn_decision import (
     should_include_recent_pair_for_turn,
     should_read_persistent_memory_for_turn,
 )
+from pallas.product.llm.event_observation import record_event_stage
 from pallas.product.llm.followup_window import in_followup_window, note_hard_speak_trigger
 from pallas.product.llm.governance import check_llm_chat_gate, refresh_llm_chat_cooldown
 from pallas.product.llm.group_timeline import build_recent_group_timeline_context, should_include_group_timeline
@@ -75,7 +76,10 @@ from pallas.product.llm.memory.auto_episode import maybe_auto_save_episode
 from pallas.product.llm.memory.auto_ip_knowledge import schedule_auto_save_ip_knowledge
 from pallas.product.llm.message_guard import normalize_llm_chat_user_text
 from pallas.product.llm.models import ChatCompletionMessage
-from pallas.product.llm.persona_context import build_persona_llm_context
+from pallas.product.llm.persona_context import (
+    build_persona_llm_context,
+    llm_chat_prompt_override,
+)
 from pallas.product.llm.reply_gate import evaluate_llm_reply_gate_result, reply_gate_skip_metric
 from pallas.product.llm.reply_necessity import evaluate_reply_necessity_gate
 from pallas.product.llm.reply_shape import resolve_reply_shape
@@ -640,6 +644,7 @@ async def prepare_and_submit_llm_chat_turn(
                 group_id,
                 plain or msg,
                 mode="normal",
+                base_system=llm_chat_prompt_override.get(),
                 base_system_path=chat_cfg.llm_chat_system_prompt_path or None,
             )
             persona_bundle = bundle
@@ -700,6 +705,7 @@ async def prepare_and_submit_llm_chat_turn(
                 group_id,
                 user_id,
             )
+            record_event_stage("reply_gate", "skipped", reason=str(gate_result.reason))
             return
         if should_wait_for_more(plain or msg, is_to_me=is_to_me):
             emit_turn_telemetry(
@@ -723,6 +729,7 @@ async def prepare_and_submit_llm_chat_turn(
                 group_id,
                 user_id,
             )
+            record_event_stage("reply_gate", "deferred", reason="wait_for_more")
             return
         emit_turn_telemetry(
             turn_id=turn_id,

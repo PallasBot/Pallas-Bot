@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from contextvars import ContextVar
+
 from pallas.product.persona.compile_persona_prompt import (
     PROMPT_PROFILE_CHAT,
     PersonaPromptBundle,
@@ -11,6 +13,11 @@ from pallas.product.persona.compile_persona_prompt import (
 from pallas.product.persona.model import ResolvedPersona
 
 from .inference_params import derive_llm_inference_params
+
+llm_chat_prompt_override: ContextVar[str | None] = ContextVar(
+    "llm_chat_prompt_override",
+    default=None,
+)
 
 
 async def build_persona_llm_context(
@@ -22,6 +29,8 @@ async def build_persona_llm_context(
     base_system: str | None = None,
     base_system_path: str | None = None,
 ) -> tuple[PersonaPromptBundle, float | None, int | None]:
+    if base_system is None:
+        base_system = llm_chat_prompt_override.get()
     resolved_base_path = base_system_path
     if not resolved_base_path:
         resolved_base_path = str(resolve_at_chat_system_prompt_path())
