@@ -208,6 +208,14 @@ class ImageCacheRepository(Protocol):
 
     async def find_by_content_hash(self, content_hash: str) -> ImageCache | None: ...
 
+    async def find_by_url(self, url: str) -> ImageCache | None:
+        """按 URL 在完整 CQ 字符串中查找图片缓存。
+
+        ``url`` 需已用 ``html.escape(url, quote=False)`` 转义，以匹配存储的
+        ``cq_code``（内部 URL 是 HTML entity 形态）。返回最近一条带 blob 的缓存。
+        """
+        ...
+
     async def bind_content_hash(self, cq_code: str, content_hash: str) -> None: ...
 
     async def find_latest_with_blob(self) -> ImageCache | None:

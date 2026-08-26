@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import html
 import re
 import time
 from datetime import date, datetime, timedelta
@@ -305,6 +306,19 @@ async def bind_image_content_hash(cq_code: str, content: bytes) -> str:
 
 async def get_image_by_content_hash(content_hash: str) -> bytes | None:
     cache = await image_cache_repo.find_by_content_hash(content_hash)
+    return await asyncio.to_thread(_read_cache_blob, cache)
+
+
+async def get_image_by_url(url: str) -> bytes | None:
+    """按 URL 匹配完整 CQ 字符串取缓存二进制。
+
+    缓存 ``cq_code`` 内的 URL 是 HTML entity 形态（``&amp;``），而视觉侧拿到的是解码后的
+    URL，因此这里先做 html.escape 再查询。
+    """
+    escaped = html.escape(str(url or ""), quote=False)
+    if not escaped:
+        return None
+    cache = await image_cache_repo.find_by_url(escaped)
     return await asyncio.to_thread(_read_cache_blob, cache)
 
 

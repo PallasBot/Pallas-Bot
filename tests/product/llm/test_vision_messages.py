@@ -217,6 +217,58 @@ async def test_prepare_messages_history_image_download_exception_keeps_original_
     assert prepared == messages
 
 
+def test_image_bytes_to_data_uri_sniffs_mime_and_ignores_over_size() -> None:
+    from pallas.product.llm.vision_messages import image_bytes_to_data_uri
+
+    gif = (
+        b"GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00"
+        b"\x21\xf9\x04\x00\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b"
+    )
+    uri = image_bytes_to_data_uri(gif)
+    assert uri is not None
+    assert uri.startswith("data:image/gif;base64,")
+    assert image_bytes_to_data_uri(b"not an image") is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_image_data_uri_falls_back_to_media_cache_on_http_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    from pallas.core.shared.utils import media_cache as mcache
+    from pallas.product.llm import vision_messages as vm
+
+    gif = (
+        b"GIF89a\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff\x00\x00\x00"
+        b"\x21\xf9\x04\x00\x00\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b"
+    )
+
+    async def fake_get_image(_url: str) -> bytes | None:
+        return gif
+
+    monkeypatch.setattr(mcache, "get_image_by_url", fake_get_image)
+
+    class FailingClient:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def get(self, _url: str):
+            raise httpx.ConnectError("network down")
+
+    monkeypatch.setattr("pallas.product.llm.vision_messages.httpx.AsyncClient", FailingClient)
+
+    uri = await vm.fetch_image_data_uri("https://example.com/expired.gif")
+    assert uri is not None
+    assert uri.startswith("data:image/gif;base64,")
+
+
 @pytest.mark.asyncio
 async def test_prepare_messages_current_image_download_exception_degrades_to_plain_text(
     monkeypatch: pytest.MonkeyPatch,

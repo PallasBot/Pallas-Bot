@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from io import BytesIO
 from typing import Any
 
 import httpx
@@ -23,6 +24,29 @@ _VISION_MAX_BYTES = 8_000_000
 _VISION_MAX_IMAGES = 3
 _DEFAULT_VISION_PROMPT = "请看看这张图。"
 _DESCRIBE_SYSTEM = "你是图片理解助手。用一两句中文描述图片主要内容，不要寒暄。"
+
+
+def image_bytes_to_data_uri(data: bytes) -> str | None:
+    """用 Pillow 探测二进制图片的真实 MIME，转成 data URI；非图片返回 None。"""
+    if not data or len(data) > _VISION_MAX_BYTES:
+        return None
+    try:
+        from PIL import Image, UnidentifiedImageError
+
+        with Image.open(BytesIO(data)) as image:
+            fmt = str(image.format or "").lower()
+    except (OSError, UnidentifiedImageError):
+        return None
+    mime = {
+        "jpeg": "image/jpeg",
+        "png": "image/png",
+        "gif": "image/gif",
+        "webp": "image/webp",
+    }.get(fmt)
+    if not mime:
+        return None
+    encoded = base64.b64encode(data).decode("ascii")
+    return f"data:{mime};base64,{encoded}"
 
 
 def metadata_has_vision(metadata: dict[str, Any] | None) -> bool:
@@ -94,25 +118,45 @@ async def fetch_image_data_uri(url: str) -> str | None:
         return None
     if target.startswith("data:"):
         return target
+    data_uri: str | None = None
     try:
         timeout = httpx.Timeout(_VISION_FETCH_TIMEOUT_SEC)
         async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
             response = await client.get(target)
-        if response.status_code != 200:
+        if response.status_code == 200:
+            data = response.content
+            if data and len(data) <= _VISION_MAX_BYTES:
+                mime = str(response.headers.get("content-type") or "image/jpeg").split(";")[0].strip() or "image/jpeg"
+                if not mime.startswith("image/"):
+                    mime = "image/jpeg"
+                encoded = base64.b64encode(data).decode("ascii")
+                data_uri = f"data:{mime};base64,{encoded}"
+        else:
             logger.warning(format_business_event("视觉图片拉取", "失败", status=response.status_code))
-            return None
-        data = response.content
-        if not data or len(data) > _VISION_MAX_BYTES:
-            logger.warning(format_business_event("视觉图片拉取", "已拒绝", bytes=len(data or b"")))
-            return None
-        mime = str(response.headers.get("content-type") or "image/jpeg").split(";")[0].strip() or "image/jpeg"
-        if not mime.startswith("image/"):
-            mime = "image/jpeg"
-        encoded = base64.b64encode(data).decode("ascii")
-        return f"data:{mime};base64,{encoded}"
     except httpx.HTTPError as exc:
         logger.warning(format_business_event("视觉图片拉取", "失败", error=type(exc).__name__))
+    if data_uri:
+        return data_uri
+    return await _fetch_cached_image_data_uri(target)
+
+
+async def _fetch_cached_image_data_uri(url: str) -> str | None:
+    """裸 GET 失败时回退到图片缓存，避免 QQ URL 过期导致图被丢。"""
+    from pallas.core.shared.utils import media_cache
+
+    try:
+        cached = await media_cache.get_image_by_url(url)
+    except Exception as exc:
+        logger.warning(format_business_event("视觉图片拉取", "缓存回退失败", error=type(exc).__name__))
         return None
+    if not cached:
+        return None
+    data_uri = image_bytes_to_data_uri(cached)
+    if data_uri:
+        logger.info(format_business_event("视觉图片拉取", "缓存命中", bytes=len(cached)))
+    else:
+        logger.warning(format_business_event("视觉图片拉取", "缓存内容非法", bytes=len(cached)))
+    return data_uri
 
 
 async def fetch_vision_data_uris(metadata: dict[str, Any] | None) -> list[str]:

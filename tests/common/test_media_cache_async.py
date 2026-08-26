@@ -176,6 +176,31 @@ async def test_image_cache_hit_touches_metadata_without_rewriting_blob(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_get_image_by_url_escapes_html_entities_before_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.shared.utils import media_cache as mod
+
+    cached = SimpleNamespace(blob_data=b"image-bytes")
+    repo = SimpleNamespace(find_by_url=AsyncMock(return_value=cached))
+    monkeypatch.setattr(mod, "image_cache_repo", repo)
+
+    data = await mod.get_image_by_url("https://multimedia.nt.qq.com.cn/download?appid=1&rkey=x")
+
+    assert data == b"image-bytes"
+    called_url = repo.find_by_url.await_args.args[0]
+    assert called_url == "https://multimedia.nt.qq.com.cn/download?appid=1&amp;rkey=x"
+
+
+@pytest.mark.asyncio
+async def test_get_image_by_url_miss_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.shared.utils import media_cache as mod
+
+    repo = SimpleNamespace(find_by_url=AsyncMock(return_value=None))
+    monkeypatch.setattr(mod, "image_cache_repo", repo)
+
+    assert await mod.get_image_by_url("https://example.com/x.png") is None
+
+
+@pytest.mark.asyncio
 async def test_prune_image_cache_uses_default_retention_policy(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.core.shared.utils import media_cache as mod
 

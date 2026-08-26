@@ -2531,6 +2531,17 @@ class PgImageCacheRepository:
             row = (await session.execute(stmt)).scalars().first()
             return await image_cache_fill_blob(row_to_image_cache(row) if row else None)
 
+    async def find_by_url(self, url: str) -> ImageCache | None:
+        async with get_session(read_only=True) as session:
+            stmt = (
+                select(ImageCacheRow)
+                .where(ImageCacheRow.cq_code.contains(url), image_cache_has_blob_clause())
+                .order_by(ImageCacheRow.date.desc(), ImageCacheRow.id.desc())
+                .limit(1)
+            )
+            row = (await session.execute(stmt)).scalars().first()
+            return await image_cache_fill_blob(row_to_image_cache(row) if row else None)
+
     async def bind_content_hash(self, cq_code: str, content_hash: str) -> None:
         async with get_session() as session:
             await session.execute(

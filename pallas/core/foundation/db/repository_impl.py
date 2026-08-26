@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import TYPE_CHECKING, Any
 
 from beanie.operators import Or
@@ -360,6 +361,14 @@ class MongoImageCacheRepository:
 
     async def find_by_content_hash(self, content_hash: str) -> ImageCache | None:
         cache = await ImageCache.find_one(ImageCache.content_hash == content_hash)
+        return await image_cache_fill_blob(cache)
+
+    async def find_by_url(self, url: str) -> ImageCache | None:
+        query = {
+            "cq_code": {"$regex": re.escape(url)},
+            "$or": [{"blob_path": {"$nin": [None, ""]}}, {"blob_data": {"$nin": [None, b""]}}],
+        }
+        cache = await ImageCache.find(query).sort("-date", "-id").first_or_none()
         return await image_cache_fill_blob(cache)
 
     async def bind_content_hash(self, cq_code: str, content_hash: str) -> None:
