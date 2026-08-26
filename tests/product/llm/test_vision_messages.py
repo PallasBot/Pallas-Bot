@@ -114,7 +114,7 @@ def test_replace_last_user_content() -> None:
 
 
 @pytest.mark.asyncio
-async def test_prepare_messages_native_vision_inserts_group_timeline_images_before_current_user(
+async def test_prepare_messages_native_vision_plain_text_ignores_group_timeline_images(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def fake_fetch(url: str) -> str | None:
@@ -140,6 +140,40 @@ async def test_prepare_messages_native_vision_inserts_group_timeline_images_befo
         model="vision-model",
     )
 
+    assert prepared == messages
+
+
+@pytest.mark.asyncio
+async def test_prepare_messages_native_vision_with_current_image_injects_group_timeline_images(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_fetch(url: str) -> str | None:
+        return {
+            "https://example.com/current.png": "data:image/png;base64,Y3VycmVudA==",
+            "https://example.com/history.png": "data:image/png;base64,aGk=",
+        }.get(url)
+
+    monkeypatch.setattr("pallas.product.llm.vision_messages.fetch_image_data_uri", fake_fetch)
+    messages = [
+        {"role": "system", "content": "system"},
+        {"role": "assistant", "content": "上一句"},
+        {"role": "user", "content": "原始消息"},
+    ]
+
+    prepared = await prepare_messages_for_provider_capabilities(
+        messages,
+        metadata={
+            "has_image": True,
+            "vision_image_urls": ["https://example.com/current.png"],
+            "vision_plain_text": "现在呢",
+            "group_timeline_images": [
+                {"speaker": "兔兔", "text": "看这个", "url": "https://example.com/history.png"},
+            ],
+        },
+        provider_row={"id": "vision", "capabilities": ["text", "image"]},
+        model="vision-model",
+    )
+
     assert [item["role"] for item in prepared] == ["system", "assistant", "user", "user"]
     history_content = prepared[-2]["content"]
     assert history_content[0] == {"type": "text", "text": "【刚才群聊中的图片】"}
@@ -148,7 +182,8 @@ async def test_prepare_messages_native_vision_inserts_group_timeline_images_befo
         "type": "image_url",
         "image_url": {"url": "data:image/png;base64,aGk="},
     }
-    assert prepared[-1]["content"] == "现在呢"
+    last = prepared[-1]["content"]
+    assert any(item.get("type") == "image_url" for item in last)
 
 
 @pytest.mark.asyncio
@@ -270,7 +305,7 @@ async def test_fetch_image_data_uri_falls_back_to_media_cache_on_http_error(
 
 
 @pytest.mark.asyncio
-async def test_prepare_messages_current_image_download_exception_degrades_to_plain_text(
+async def test_prepare_messages_current_image_download_exception_degrades_to_failed_notice(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def fake_fetch(_url: str) -> str | None:
@@ -290,4 +325,49 @@ async def test_prepare_messages_current_image_download_exception_degrades_to_pla
         model="vision-model",
     )
 
-    assert prepared[-1]["content"] == "看看这张"
+    verbose = str(prepared[-1]["content"])
+    assert verbose.startswith("看看这张")
+    assert "图片加载失败" in verbose
+
+
+@pytest.mark.asyncio
+async def test_describe_vision_content_for_history_injects_description(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm.vision_messages import describe_vision_content_for_history
+
+    async def fake_describe(_metadata: dict) -> str:
+        return "[图片理解]\n一头萨摩耶犬"
+
+    monkeypatch.setattr("pallas.product.llm.vision_messages.describe_images_as_text", fake_describe)
+
+    raw = "[CQ:image,file=a.jpg,url=https://example.com/a.png] 这是谁"
+    out = await describe_vision_content_for_history(raw)
+    assert "萨摩耶" in out
+    assert "这是谁" in out
+    assert "CQ:image" not in out
+
+
+@pytest.mark.asyncio
+async def test_describe_vision_content_for_history_no_urls_is_unchanged() -> None:
+    from pallas.product.llm.vision_messages import describe_vision_content_for_history
+
+    raw = "纯文本，没有图"
+    out = await describe_vision_content_for_history(raw)
+    assert out == raw
+
+
+@pytest.mark.asyncio
+async def test_describe_vision_content_for_history_describe_failure_keeps_raw(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm.vision_messages import describe_vision_content_for_history
+
+    async def fake_describe(_metadata: dict) -> str:
+        raise RuntimeError("provider down")
+
+    monkeypatch.setattr("pallas.product.llm.vision_messages.describe_images_as_text", fake_describe)
+
+    raw = "[CQ:image,file=a.jpg,url=https://example.com/a.png] 这是谁"
+    out = await describe_vision_content_for_history(raw)
+    assert out == raw

@@ -400,9 +400,7 @@ async def prepare_messages_for_provider_capabilities(
                         openai_group_timeline_user_content(fetched_history),
                     )
             else:
-                logger.warning(
-                    format_business_event("视觉多模态请求", "已降级", reason="no_fetchable_images")
-                )
+                logger.warning(format_business_event("视觉多模态请求", "已降级", reason="no_fetchable_images"))
                 degraded = f"{plain or _DEFAULT_VISION_PROMPT}\n{_VISION_FETCH_FAILED_NOTICE}".strip()
                 working = replace_last_user_content(working, degraded)
         return working

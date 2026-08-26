@@ -80,7 +80,15 @@ async def append_llm_message(
         return False
     cfg = get_llm_config()
     role_key = normalize_enum(role, ALLOWED_ROLES, "user")
-    safe_content = sanitize_stored_content(role_key, content, max_len=cfg.llm_session_max_content_len)
+    raw_content = content
+    if role_key == "user" and cfg.llm_session_vision_describe_enabled:
+        try:
+            from pallas.product.llm.vision_messages import describe_vision_content_for_history
+
+            raw_content = await describe_vision_content_for_history(content)
+        except Exception as exc:
+            logger.warning("会话历史图片描述失败，已回退原文: [{}]", type(exc).__name__)
+    safe_content = sanitize_stored_content(role_key, raw_content, max_len=cfg.llm_session_max_content_len)
     if not safe_content:
         return False
 

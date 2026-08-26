@@ -710,7 +710,7 @@ async def test_kernel_retries_short_vent_overexplained_reply(monkeypatch: pytest
 
 
 @pytest.mark.asyncio
-async def test_kernel_persona_retry_keeps_group_timeline_images(
+async def test_kernel_persona_retry_plain_text_drops_group_timeline_images(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path,
 ) -> None:
@@ -794,7 +794,7 @@ async def test_kernel_persona_retry_keeps_group_timeline_images(
     assert delivered == ["收到"]
     assert len(payloads) == 2
     for payload in payloads:
-        assert any(
+        assert not any(
             isinstance(part, dict) and part.get("type") == "image_url"
             for message in payload["messages"]
             if isinstance(message.get("content"), list)
