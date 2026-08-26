@@ -9,6 +9,7 @@ from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.provider_client import complete_chat_message
 from pallas.product.llm.tools.context import ToolInvokeContext
 from pallas.product.llm.tools.registry import execute_tool_async
+from pallas.product.llm.turn_telemetry import telemetry_metadata
 
 
 def parse_tool_arguments(raw: Any) -> dict[str, Any]:
@@ -297,6 +298,8 @@ async def complete_with_tool_loop(
             metadata.setdefault("model_effort", effort)
 
     options = inference_options_from_metadata(meta)
+    telemetry_context = telemetry_metadata(meta)
+    telemetry_kwargs = {"telemetry_context": telemetry_context} if telemetry_context else {}
     if provider_row is not None:
         from pallas.product.llm.providers_store import provider_model_effort, provider_request_method
 
@@ -340,6 +343,7 @@ async def complete_with_tool_loop(
             cfg=c,
             task=task,
             prepare_candidate_messages=prepare_candidate,
+            **telemetry_kwargs,
         )
         content = str(last_message.get("content", "") or "").strip()
         assistant_message = dict(last_message)
@@ -419,6 +423,7 @@ async def complete_with_tool_loop(
             cfg=c,
             task=task,
             prepare_candidate_messages=prepare_candidate,
+            **telemetry_kwargs,
         )
         provider_trace = last_message.get("_provider_trace")
         if isinstance(provider_trace, dict):

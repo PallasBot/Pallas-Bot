@@ -11,6 +11,7 @@ from nonebot import logger
 
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.shared_httpx import get_llm_shared_httpx_client
+from pallas.product.llm.turn_telemetry import record_turn_event
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -51,6 +52,49 @@ def _required_tool_choice_is_incompatible(exc: BaseException) -> bool:
     return "tool_choice" in detail and any(
         marker in detail for marker in ("does not support", "not support", "unsupported", "invalid_parameter")
     )
+
+
+def _provider_failure_class(exc: BaseException) -> str:
+    if isinstance(exc, LlmProviderError) and exc.status is not None:
+        return f"http_{exc.status}"
+    if isinstance(exc, TimeoutError):
+        return "timeout"
+    return "provider_error"
+
+
+def _emit_provider_attempt(
+    *,
+    telemetry_context: dict[str, str] | None,
+    decision: str,
+    reason: str,
+    provider: str,
+    model: str,
+    request_method: str,
+    attempt: int,
+    latency_ms: int,
+    failure_class: str | None = None,
+) -> None:
+    context = telemetry_context if isinstance(telemetry_context, dict) else {}
+    turn_id = str(context.get("turn_id") or "").strip()
+    if not turn_id:
+        return
+    try:
+        record_turn_event(
+            turn_id=turn_id,
+            stage="provider",
+            decision=decision,
+            reason=reason,
+            text="",
+            request_id=context.get("request_id"),
+            provider=provider,
+            model=model,
+            request_method=request_method,
+            attempt=attempt,
+            latency_ms=latency_ms,
+            failure_class=failure_class,
+        )
+    except Exception:
+        pass
 
 
 def mask_api_key_hint(key: str) -> str:
@@ -410,6 +454,7 @@ async def complete_chat_message(
     provider_id: str | None = None,
     prepare_candidate_messages: Callable[[list[dict[str, Any]], Any, str], Awaitable[list[dict[str, Any]]]]
     | None = None,
+    telemetry_context: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     c = cfg or get_llm_config()
     explicit_base = str(base_url or "").strip()
@@ -417,6 +462,7 @@ async def complete_chat_message(
     explicit_model = str(model or "").strip()
     opts = options if isinstance(options, dict) else {}
     method = str(request_method or opts.get("request_method") or "chat_completions").strip().lower()
+    telemetry_kwargs = {"telemetry_context": telemetry_context} if telemetry_context is not None else {}
 
     if explicit_base:
         resolved_key = explicit_key or str(c.llm_api_key or "").strip()
@@ -432,6 +478,7 @@ async def complete_chat_message(
             request_method=method,
             task=task,
             provider_id=str(provider_id or ""),
+            **telemetry_kwargs,
         )
 
     from pallas.product.llm.providers_store import resolve_endpoint_candidates_for_task
@@ -461,6 +508,7 @@ async def complete_chat_message(
                         request_method=use_method,
                         task=task,
                         provider_id=str(getattr(endpoint, "provider_id", "") or ""),
+                        **telemetry_kwargs,
                     )
                 except LlmProviderError as exc:
                     last_error = exc
@@ -504,6 +552,7 @@ async def complete_chat_message(
         request_method=method,
         task=task,
         provider_id="",
+        **telemetry_kwargs,
     )
 
 
@@ -905,6 +954,7 @@ async def _post_provider_chat(
     request_method: str = "chat_completions",
     task: str = "llm_chat",
     provider_id: str = "",
+    telemetry_context: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     import time
 
@@ -982,15 +1032,50 @@ async def _post_provider_chat(
             provider_id=provider_id,
         )
 
+    resolved_method = resolve_request_method(request_method, base_url)
+    provider_name = provider_id or host_from_url(base_url)
+    attempt = 0
+
+    async def request_attempt(options_for_attempt: dict[str, Any]) -> dict[str, Any]:
+        nonlocal attempt
+        attempt += 1
+        attempt_started = time.monotonic()
+        try:
+            result = await request(options_for_attempt)
+        except Exception as exc:
+            _emit_provider_attempt(
+                telemetry_context=telemetry_context,
+                decision="failed",
+                reason="tool_choice_retry" if _required_tool_choice_is_incompatible(exc) else "provider_request",
+                provider=provider_name,
+                model=model,
+                request_method=resolved_method,
+                attempt=attempt,
+                latency_ms=int((time.monotonic() - attempt_started) * 1000),
+                failure_class=_provider_failure_class(exc),
+            )
+            raise
+        _emit_provider_attempt(
+            telemetry_context=telemetry_context,
+            decision="success",
+            reason="provider_request",
+            provider=provider_name,
+            model=model,
+            request_method=resolved_method,
+            attempt=attempt,
+            latency_ms=int((time.monotonic() - attempt_started) * 1000),
+        )
+        return result
+
     started = time.monotonic()
     try:
-        result = await request(use_options)
+        result = await request_attempt(use_options)
     except Exception as exc:
         if tools and requested_tool_choice == "required" and _required_tool_choice_is_incompatible(exc):
             _required_tool_choice_incompatible.add(cache_key)
             retry_options = {**use_options, "tool_choice": "auto"}
             try:
-                result = await request(retry_options)
+                result = await request_attempt(retry_options)
             except Exception:
                 pass
             else:
@@ -1003,11 +1088,7 @@ async def _post_provider_chat(
                     pass
                 return with_provider_trace(result, latency_ms=latency_ms, retried_tool_choice=True)
         latency_ms = int((time.monotonic() - started) * 1000)
-        fail_cls = "provider_error"
-        if isinstance(exc, LlmProviderError) and exc.status is not None:
-            fail_cls = f"http_{exc.status}"
-        elif isinstance(exc, TimeoutError):
-            fail_cls = "timeout"
+        fail_cls = _provider_failure_class(exc)
         try:
             from pallas.product.llm.provider_request_metrics import record_provider_request
 

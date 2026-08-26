@@ -39,6 +39,14 @@
 | 多气泡投递 | `delivery.py` `deliver_llm_callback_success` | 逐条发送，气泡间按上句长度叠加随机抖动（0.5~3.5s，模拟真人节奏） |
 | 学习回写 | 会话 / `behavior_store` / `expression_learn` / `repeater_feedback` / `auto_episode` | 投递成功后写历史、行为与表达 |
 
+## LLM turn telemetry
+
+LLM turn telemetry 从消息进入 `llm_chat` handler 后开始，以随机 `turn_id` 关联 `ingress`、speak perception、reply gate、necessity、submit、Provider、output 和 delivery 各阶段。首期不覆盖完全未匹配 `llm_chat` rule 的入站消息，也不改变任何门控、生成或投递决策。
+
+事件写入独立的 `data/pb_webui/llm_telemetry/` JSONL 文件，并由按日 report 聚合。事件只保留固定 allowlist、文本形态与长度分桶，以及运行时 HMAC hash；不写入用户消息、Bot 回复、prompt、异常正文或原始 Bot/群/用户/消息 ID。`turn_id` 会随异步 TaskManager metadata 贯穿到 Provider 和 callback delivery。
+
+Telemetry 是 best-effort 的旁路观测：写 key、序列化、目录或文件失败时只记录限频运维日志，不阻断聊天。完整 prompt 和消息内容仍属于独立的 runtime snapshot/trace 调试路径，不能把两类数据混为同一份报告。
+
 ## 表达数据粒度
 
 | 数据 | 存储 | 粒度 | 影响 |
