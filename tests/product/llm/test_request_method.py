@@ -22,6 +22,46 @@ def test_messages_to_responses_payload_basic() -> None:
     assert payload["input"] == [{"role": "user", "content": "你好"}]
 
 
+def test_messages_to_responses_payload_converts_vision_content() -> None:
+    payload = messages_to_responses_payload(
+        [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "这是什么？"},
+                    {"type": "image_url", "image_url": {"url": "https://example.com/a.png"}},
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+                    {"type": "input_text", "text": "补充问题"},
+                    {"type": "input_image", "image_url": "https://example.com/b.png", "detail": "high"},
+                ],
+            }
+        ],
+        model="deepseek-v4-flash-vision-exp",
+        options={},
+        tools=None,
+    )
+    assert payload["input"] == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "这是什么？"},
+                {
+                    "type": "input_image",
+                    "image_url": "https://example.com/a.png",
+                    "detail": "auto",
+                },
+                {
+                    "type": "input_image",
+                    "image_url": "data:image/png;base64,abc",
+                    "detail": "auto",
+                },
+                {"type": "input_text", "text": "补充问题"},
+                {"type": "input_image", "image_url": "https://example.com/b.png", "detail": "high"},
+            ],
+        }
+    ]
+
+
 def test_tools_for_responses_api_flattens_chat_schema() -> None:
     flat = tools_for_responses_api([
         {

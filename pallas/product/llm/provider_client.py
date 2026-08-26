@@ -506,6 +506,36 @@ def messages_to_responses_payload(
     options: dict[str, Any],
     tools: list[dict[str, Any]] | None,
 ) -> dict[str, Any]:
+    def responses_content_parts(content: Any) -> Any:
+        if not isinstance(content, list):
+            return content
+        parts: list[Any] = []
+        for part in content:
+            if not isinstance(part, dict):
+                parts.append(part)
+                continue
+            part_type = str(part.get("type") or "").strip().lower()
+            if part_type == "text":
+                parts.append({"type": "input_text", "text": part.get("text", "")})
+                continue
+            if part_type == "image_url":
+                image_url = part.get("image_url")
+                if isinstance(image_url, dict):
+                    url = image_url.get("url")
+                    detail = image_url.get("detail", "auto")
+                else:
+                    url = image_url
+                    detail = "auto"
+                if url:
+                    parts.append({
+                        "type": "input_image",
+                        "image_url": url,
+                        "detail": detail,
+                    })
+                    continue
+            parts.append(part)
+        return parts
+
     instructions = ""
     input_items: list[dict[str, Any]] = []
     for item in messages:
@@ -545,7 +575,10 @@ def messages_to_responses_payload(
         if role in {"user", "assistant"}:
             if role == "assistant":
                 _append_responses_reasoning_item(input_items, item)
-            input_items.append({"role": role, "content": content if content is not None else ""})
+            input_items.append({
+                "role": role,
+                "content": responses_content_parts(content) if content is not None else "",
+            })
 
     payload: dict[str, Any] = {"model": model, "input": input_items}
     if instructions:
