@@ -55,7 +55,7 @@ from pallas.product.llm.current_turn_decision import (
 )
 from pallas.product.llm.followup_window import in_followup_window, note_hard_speak_trigger
 from pallas.product.llm.governance import check_llm_chat_gate, refresh_llm_chat_cooldown
-from pallas.product.llm.group_timeline import build_recent_group_timeline
+from pallas.product.llm.group_timeline import build_recent_group_timeline_context, should_include_group_timeline
 from pallas.product.llm.kernel import (
     ConversationContext,
     behavior_scene_to_conversation_scene,
@@ -90,6 +90,7 @@ from pallas.product.llm.speak_perception import evaluate_speak_perception, speak
 from pallas.product.llm.task_metrics import record_bot_llm_task
 from pallas.product.llm.tools.time_now import current_time_text
 from pallas.product.llm.turn_policy import resolve_turn_policy
+from pallas.product.llm.vision_content import user_message_has_vision_content
 from pallas.product.persona.peer_bots_prompt import save_peer_alias_from_teach
 from pallas.product.persona.prompt_guard import sanitize_prompt_literal
 from pallas.product.persona.self_identity import (
@@ -311,6 +312,7 @@ async def handle_llm_chat(
         return
 
     msg = str(event.get_message()).strip()
+    has_vision_content = user_message_has_vision_content(msg)
     if not msg:
         if not plain and not getattr(event, "reply", None):
             return
@@ -368,12 +370,13 @@ async def handle_llm_chat(
                 min_alias_len=llm_cfg.llm_speak_min_alias_len,
             )
         )
+        vision_force = has_vision_content
         should_eval, _merged = note_ambient_turn_and_should_flush(
             bot_id=bot_id,
             group_id=group_id,
             user_id=user_id,
             text=plain or msg,
-            force=followup_active or mention_force,
+            force=followup_active or mention_force or vision_force,
         )
         if not should_eval:
             record_bot_llm_task(LLM_CHAT_TASK_TYPE, "ambient_turn_coalesce")
@@ -401,6 +404,7 @@ async def handle_llm_chat(
             min_alias_len=llm_cfg.llm_speak_min_alias_len,
             group_id=group_id,
             followup_active=followup_active,
+            has_vision_content=has_vision_content,
         )
         for metric in speak_perception_metrics(decision):
             record_bot_llm_task(LLM_CHAT_TASK_TYPE, metric)
@@ -869,15 +873,23 @@ async def prepare_and_submit_llm_chat_turn(
         )
         direct_context_started = time.perf_counter()
         group_timeline = ""
-        if group_id is not None and (is_to_me or speak_trigger in {"alias", "mention", "followup", "ambient"}):
+        group_timeline_images: list[dict[str, str]] = []
+        if group_id is not None and should_include_group_timeline(
+            is_to_me=is_to_me,
+            speak_trigger=speak_trigger,
+        ):
             try:
                 ambient = speak_trigger == "ambient"
-                group_timeline = await build_recent_group_timeline(
+                timeline_context = await build_recent_group_timeline_context(
                     int(group_id),
                     current_message_id=message_id or None,
                     self_bot_id=int(bot.self_id),
                     limit=4 if ambient else 8,
                 )
+                group_timeline = timeline_context.text
+                group_timeline_images = [
+                    {"speaker": item.speaker, "text": item.text, "url": item.url} for item in timeline_context.images
+                ]
             except Exception:
                 logger.debug("group timeline context skipped for group [{}]", group_id)
         replied_message_id = extract_reply_id_from_raw_message(str(getattr(event, "raw_message", "") or ""))
@@ -1153,6 +1165,7 @@ async def prepare_and_submit_llm_chat_turn(
                 session_history_limit=None,
                 include_group_ambient_history=not include_recent_pair,
                 prepared_messages=prepared_messages,
+                group_timeline_images=group_timeline_images,
                 llm_rewrite_metadata={
                     "task": "llm_chat",
                     "current_turn_action": current_turn_decision.action,
