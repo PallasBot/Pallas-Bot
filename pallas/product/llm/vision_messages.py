@@ -132,31 +132,49 @@ async def fetch_image_data_uri(url: str) -> str | None:
         return None
     if target.startswith("data:"):
         return target
-    # QQ 多媒体 URL 常带签名且会过期，裸 GET 每次都先打一次外网拿 400 才回退。
-    # 先查本地缓存：命中就直接复用，避免每次带图都先失败一次并刷 status=400 日志。
+    # QQ 多媒体 URL 常带签名且会过期，裸 GET（无 Referer/浏览器指纹）会拿 400。
+    # 先查本地缓存命中就直接复用；否则走 reference_resolve 的平台下载传输层
+    # （curl_cffi 模拟 chrome124 指纹 + Referer: https://qun.qq.com/），失败再回退缓存。
     cached_uri = await _fetch_cached_image_data_uri(target)
     if cached_uri:
         return cached_uri
-    data_uri: str | None = None
-    try:
-        timeout = httpx.Timeout(_VISION_FETCH_TIMEOUT_SEC)
-        async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-            response = await client.get(target)
-        if response.status_code == 200:
-            data = response.content
-            if data and len(data) <= _VISION_MAX_BYTES:
-                mime = str(response.headers.get("content-type") or "image/jpeg").split(";")[0].strip() or "image/jpeg"
-                if not mime.startswith("image/"):
-                    mime = "image/jpeg"
-                encoded = base64.b64encode(data).decode("ascii")
-                data_uri = f"data:{mime};base64,{encoded}"
-        else:
-            logger.warning(format_business_event("视觉图片拉取", "失败", status=response.status_code))
-    except httpx.HTTPError as exc:
-        logger.warning(format_business_event("视觉图片拉取", "失败", error=type(exc).__name__))
-    if data_uri:
-        return data_uri
+    data = await _download_reference_bytes(target)
+    if data:
+        data_uri = image_bytes_to_data_uri(data)
+        if data_uri:
+            logger.info(format_business_event("视觉图片拉取", "成功", cache_miss=True, bytes=len(data)))
+            return data_uri
     return await _fetch_cached_image_data_uri(target)
+
+
+async def _download_reference_bytes(url: str) -> bytes | None:
+    """用 reference_resolve 的平台下载传输层拉取图片字节（curl_cffi 指纹 + Referer）。"""
+    try:
+        from pallas.core.platform.media.reference_resolve import (
+            ReferenceDownloadOptions,
+            download_reference_bytes_with_transport,
+            is_platform_reference_url,
+        )
+    except Exception as exc:
+        logger.warning(format_business_event("视觉图片拉取", "下载层不可用", error=type(exc).__name__))
+        return None
+    if not is_platform_reference_url(url):
+        return None
+    options = ReferenceDownloadOptions()
+    try:
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            data = await download_reference_bytes_with_transport(
+                client,
+                url,
+                options=options,
+                download_timeout=_VISION_FETCH_TIMEOUT_SEC,
+            )
+    except Exception as exc:
+        logger.warning(format_business_event("视觉图片拉取", "失败", error=type(exc).__name__))
+        return None
+    if data and len(data) <= _VISION_MAX_BYTES:
+        return data
+    return None
 
 
 async def _fetch_cached_image_data_uri(url: str) -> str | None:
