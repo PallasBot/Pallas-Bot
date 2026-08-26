@@ -88,6 +88,7 @@ from pallas.product.llm.session_store import build_llm_chat_messages, list_user_
 from pallas.product.llm.session_summary import schedule_session_summary
 from pallas.product.llm.speak_perception import evaluate_speak_perception, speak_perception_metrics
 from pallas.product.llm.task_metrics import record_bot_llm_task
+from pallas.product.llm.tools.time_now import current_time_text
 from pallas.product.llm.turn_policy import resolve_turn_policy
 from pallas.product.persona.peer_bots_prompt import save_peer_alias_from_teach
 from pallas.product.persona.prompt_guard import sanitize_prompt_literal
@@ -1023,6 +1024,7 @@ async def prepare_and_submit_llm_chat_turn(
             context=chat_context,
             group_expression=group_expression,
             reply_shape=reply_shape,
+            current_time=current_time_text(),
             tool_context=ToolPromptContext(
                 action_tools_enabled=bool(tool_meta.get("tool_schemas")),
                 ask_before_call=bool(tool_meta.get("ask_before_call")),

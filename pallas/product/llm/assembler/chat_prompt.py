@@ -41,6 +41,7 @@ class ChatPromptAssembler:
         "identity",
         "reply_shape",
         "turn_policy",
+        "current_time",
         "group_timeline",
         "memory",
         "knowledge",
@@ -61,6 +62,7 @@ class ChatPromptAssembler:
         context: ChatContextBundle,
         group_expression: ResolvedGroupExpression | None,
         reply_shape: ReplyShapePolicy,
+        current_time: str = "",
         tool_context: ToolPromptContext | None = None,
         section_overrides: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> str:
@@ -72,6 +74,7 @@ class ChatPromptAssembler:
                 context=context,
                 group_expression=group_expression,
                 reply_shape=reply_shape,
+                current_time=current_time,
                 tool_context=tool_context,
                 section_overrides=section_overrides,
             )
@@ -86,6 +89,7 @@ class ChatPromptAssembler:
         context: ChatContextBundle,
         group_expression: ResolvedGroupExpression | None,
         reply_shape: ReplyShapePolicy,
+        current_time: str = "",
         tool_context: ToolPromptContext | None = None,
         section_overrides: Mapping[str, Mapping[str, Any]] | None = None,
     ) -> list[str]:
@@ -95,12 +99,19 @@ class ChatPromptAssembler:
             self_identity,
             self.reply_shape_block(reply_shape),
             self._turn_policy_block(turn_policy),
+            self.current_time_block(current_time),
             *context.blocks(),
             self._group_expression_block(group_expression),
             self._group_behavior_reference_block(group_expression),
             self._tool_context_block(tool_context),
         ]
         return apply_prompt_section_overrides(self.section_ids, sections, section_overrides)
+
+    @staticmethod
+    def current_time_block(current_time: str) -> str:
+        if not current_time.strip():
+            return ""
+        return f"【当前时间】\n- 本轮时间：{current_time}（时区：Asia/Shanghai，北京时间）。"
 
     @staticmethod
     def _join_unique(sections: list[str]) -> str:
