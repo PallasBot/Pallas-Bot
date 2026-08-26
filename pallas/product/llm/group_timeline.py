@@ -58,15 +58,13 @@ def format_group_timeline_context(
         if message_id > 0:
             speaker_by_id[message_id] = speaker
         rendered.append((message, speaker, text, has_image))
-        if has_image and payload is not None and len(image_items) < _TIMELINE_MAX_IMAGES:
+        if has_image and payload is not None:
             for url in payload.image_urls:
                 key = url.casefold()
                 if key in seen_urls:
                     continue
                 seen_urls.add(key)
                 image_items.append(GroupTimelineImage(speaker=speaker, text=text, url=url))
-                if len(image_items) >= _TIMELINE_MAX_IMAGES:
-                    break
     for message, speaker, text, has_image in rendered:
         tail = ""
         reply_to = int(message.reply_to_message_id) if message.reply_to_message_id is not None else 0
@@ -78,7 +76,7 @@ def format_group_timeline_context(
         return GroupTimelineContext()
     return GroupTimelineContext(
         text=sanitize_prompt_block("\n".join(lines), max_len=2400),
-        images=tuple(image_items),
+        images=tuple(image_items[-_TIMELINE_MAX_IMAGES:]),
     )
 
 

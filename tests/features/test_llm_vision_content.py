@@ -31,3 +31,14 @@ def test_extract_url_from_cq_segment_file_http() -> None:
 
     url = extract_url_from_cq_segment("[CQ:image,file=https://cdn.example.com/x.jpg]")
     assert url == "https://cdn.example.com/x.jpg"
+
+
+def test_extract_url_from_cq_segment_decodes_html_entities() -> None:
+    from pallas.product.llm.vision_content import extract_url_from_cq_segment
+
+    url = extract_url_from_cq_segment(
+        "[CQ:image,file=photo.png,"
+        "url=https://multimedia.nt.qq.com.cn/download?appid=100&amp;fileid=abc&amp;rkey=xyz]"
+    )
+
+    assert url == "https://multimedia.nt.qq.com.cn/download?appid=100&fileid=abc&rkey=xyz"

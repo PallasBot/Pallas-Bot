@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from html import unescape
 from urllib.parse import unquote
 
 _CQ_VISION_RE = re.compile(r"\[CQ:(?:image|mface|record)", re.IGNORECASE)
@@ -55,7 +56,7 @@ def extract_url_from_cq_segment(segment: str) -> str:
             continue
         key, value = part.split("=", 1)
         key = key.strip().lower()
-        value = unquote(value.strip())
+        value = unescape(unquote(value.strip()))
         if not value:
             continue
         if key == "url" and _HTTP_URL_RE.match(value):

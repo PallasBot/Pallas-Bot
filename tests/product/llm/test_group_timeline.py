@@ -213,7 +213,7 @@ def test_format_group_timeline_context_keeps_image_without_url_as_text_placehold
     assert context.images == ()
 
 
-def test_format_group_timeline_context_deduplicates_urls_and_caps_history_images() -> None:
+def test_format_group_timeline_context_deduplicates_urls_and_keeps_latest_images() -> None:
     messages = [
         Message.model_construct(
             group_id=1,
@@ -240,7 +240,7 @@ def test_format_group_timeline_context_deduplicates_urls_and_caps_history_images
     context = format_group_timeline_context(messages)
 
     assert [item.url for item in context.images] == [
-        "https://example.com/a.png",
         "https://example.com/b.png",
         "https://example.com/c.png",
+        "https://example.com/d.png",
     ]
