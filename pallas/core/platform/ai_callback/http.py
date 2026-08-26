@@ -2,10 +2,15 @@
 
 from __future__ import annotations
 
-from fastapi import File, Form, UploadFile
+from fastapi import File, Form, HTTPException, Request, UploadFile
 from nonebot import get_app
 
 from pallas.core.platform.ai_callback.runner import run_ai_callback
+from pallas.core.platform.ai_callback.task_registration import (
+    AiTaskRegistrationRequest,
+    register_ai_task_from_aux,
+    unregister_ai_task_from_aux,
+)
 from pallas.core.platform.bot_runtime.roles import is_hub_role
 from pallas.core.platform.shard.coord.ai_callback_forward import forward_ai_callback_to_worker
 
@@ -18,6 +23,22 @@ def register_ai_callback_http() -> None:
         return
 
     app = get_app()
+
+    @app.post("/pallas/api/internal/ai/tasks/{task_id}")
+    async def register_ai_task_route(
+        task_id: str,
+        body: AiTaskRegistrationRequest,
+        request: Request,
+    ):
+        if body.task_id != task_id:
+            raise HTTPException(status_code=400, detail="task_id_mismatch")
+        client_host = request.client.host if request.client else None
+        return await register_ai_task_from_aux(task_id, body.task_status, client_host=client_host)
+
+    @app.delete("/pallas/api/internal/ai/tasks/{task_id}")
+    async def unregister_ai_task_route(task_id: str, request: Request):
+        client_host = request.client.host if request.client else None
+        return await unregister_ai_task_from_aux(task_id, client_host=client_host)
 
     @app.post("/callback/{task_id}")
     async def ai_callback_route(

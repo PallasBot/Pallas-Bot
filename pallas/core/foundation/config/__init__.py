@@ -1,5 +1,6 @@
 # type: ignore
 import asyncio
+import os
 import time
 from typing import Any
 
@@ -466,6 +467,10 @@ class TaskManager:
         from pallas.core.platform.shard.coord.ai_task_registry import register_ai_task
 
         await asyncio.to_thread(register_ai_task, task_id, task_status)
+        if os.environ.get("PALLAS_BOT_ROLE", "").strip().lower() == "work":
+            from pallas.core.platform.ai_callback.task_registration import register_ai_task_in_bot_process
+
+            await register_ai_task_in_bot_process(task_id, task_status)
 
     @classmethod
     async def get_task(cls, task_id: str) -> dict | None:
@@ -511,3 +516,7 @@ class TaskManager:
         from pallas.core.platform.shard.coord.ai_task_registry import remove_ai_task
 
         await asyncio.to_thread(remove_ai_task, task_id)
+        if os.environ.get("PALLAS_BOT_ROLE", "").strip().lower() == "work":
+            from pallas.core.platform.ai_callback.task_registration import unregister_ai_task_in_bot_process
+
+            await unregister_ai_task_in_bot_process(task_id)
