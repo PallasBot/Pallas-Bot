@@ -28,6 +28,15 @@ _VISION_MAX_BYTES = 8_000_000
 _VISION_MAX_IMAGES = 3
 _DEFAULT_VISION_PROMPT = "请看看这张图。"
 _VISION_FETCH_FAILED_NOTICE = "（用户发送了图片，但图片加载失败，无法查看。请如实告知用户你暂时看不到这张图。）"
+
+
+def _is_recognition_ask(user_text: str) -> bool:
+    """用户对当前图的识别性问句（这是谁/这是什么/啥梗），应聚焦当前图而非时间线历史图。"""
+    from pallas.product.llm.tools.select import is_recognition_question
+
+    return is_recognition_question(user_text)
+
+
 _DESCRIBE_SYSTEM = "你是图片理解助手。用一两句中文描述图片主要内容，不要寒暄。"
 
 
@@ -398,12 +407,15 @@ async def prepare_messages_for_provider_capabilities(
                     format_business_event("视觉多模态请求", "已准备", images=len(data_uris), plain_len=len(plain))
                 )
                 working = replace_last_user_content(working, content)
-                fetched_history = await fetch_group_timeline_data_uris(metadata)
-                if fetched_history:
-                    working = insert_before_last_user_content(
-                        working,
-                        openai_group_timeline_user_content(fetched_history),
-                    )
+                # 识别问句（这是谁/这是什么）时用户是针对「当前这张图」提问，
+                # 别再注入「刚才群聊中的图片」，避免历史图抢占模型对当前图的注意力。
+                if not _is_recognition_ask(user_text):
+                    fetched_history = await fetch_group_timeline_data_uris(metadata)
+                    if fetched_history:
+                        working = insert_before_last_user_content(
+                            working,
+                            openai_group_timeline_user_content(fetched_history),
+                        )
             else:
                 logger.warning(format_business_event("视觉多模态请求", "已降级", reason="no_fetchable_images"))
                 degraded = f"{plain or _DEFAULT_VISION_PROMPT}\n{_VISION_FETCH_FAILED_NOTICE}".strip()

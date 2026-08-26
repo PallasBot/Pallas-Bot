@@ -187,7 +187,55 @@ async def test_prepare_messages_native_vision_with_current_image_injects_group_t
 
 
 @pytest.mark.asyncio
-async def test_prepare_messages_text_provider_ignores_group_timeline_images() -> None:
+async def test_prepare_messages_native_vision_recognition_ask_skips_group_timeline_images(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_fetch(url: str) -> str | None:
+        return {
+            "https://example.com/current.png": "data:image/png;base64,Y3VycmVudA==",
+            "https://example.com/history.png": "data:image/png;base64,aGk=",
+        }.get(url)
+
+    monkeypatch.setattr("pallas.product.llm.vision_messages.fetch_image_data_uri", fake_fetch)
+    messages = [
+        {"role": "system", "content": "system"},
+        {"role": "assistant", "content": "上一句"},
+        {"role": "user", "content": "原始消息"},
+    ]
+
+    prepared = await prepare_messages_for_provider_capabilities(
+        messages,
+        metadata={
+            "has_image": True,
+            "vision_image_urls": ["https://example.com/current.png"],
+            "vision_plain_text": "这是谁呀",
+            "group_timeline_images": [
+                {"speaker": "兔兔", "text": "看这个", "url": "https://example.com/history.png"},
+            ],
+        },
+        provider_row={"id": "vision", "capabilities": ["text", "image"]},
+        model="vision-model",
+        user_text="这是谁呀",
+    )
+
+    assert [item["role"] for item in prepared] == ["system", "assistant", "user"]
+    last = prepared[-1]["content"]
+    assert any(item.get("type") == "image_url" for item in last)
+    assert not any(
+        part.get("type") == "text" and "刚才群聊中的图片" in str(part.get("text") or "")
+        for parts in (item.get("content") for item in prepared if isinstance(item.get("content"), list))
+        for part in parts
+    )
+
+
+@pytest.mark.asyncio
+async def test_prepare_messages_text_provider_ignores_group_timeline_images(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_fetch(_url: str) -> str | None:
+        return None
+
+    monkeypatch.setattr("pallas.product.llm.vision_messages.fetch_image_data_uri", fake_fetch)
     messages = [{"role": "user", "content": "现在呢"}]
 
     prepared = await prepare_messages_for_provider_capabilities(
