@@ -159,3 +159,13 @@ def test_resolve_output_filtered_reply_presses_overlength_short_band() -> None:
     filtered = resolve_output_filtered_reply(task, reply)
     assert filtered == "哎呀这个我回头帮你查查。"
     assert len(filtered) <= 12
+
+
+def test_resolve_output_filtered_reply_keeps_multi_bubble_when_each_fits() -> None:
+    """多泡回复：每个气泡各自落在上限内时保持分条，而不是整串 join 后一刀切静默。"""
+    task = {"task_type": LLM_CHAT_TASK_TYPE, "reply_max_length": 24}
+    reply = '{"reply_segments":["这是土狼，会搞笑。","然后呢？","别怕别怕。"]}'
+    filtered = resolve_output_filtered_reply(task, reply)
+    assert filtered == "这是土狼，会搞笑。\n然后呢？\n别怕别怕。"
+    for segment in filtered.split("\n"):
+        assert len(segment) <= 24

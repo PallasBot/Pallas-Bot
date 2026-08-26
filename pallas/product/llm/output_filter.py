@@ -354,12 +354,31 @@ def resolve_output_filtered_chat_reply(task: dict, reply: StructuredChatReply) -
         return StructuredChatReply()
     filtered = replace(reply, reply_segments=tuple(reply_segments))
     text = filtered.logical_text
-    enforced_text = _enforce_max_length(text, task=task, task_type=task_type)
-    if not enforced_text:
-        return StructuredChatReply()
-    if enforced_text != text:
-        filtered = replace(filtered, reply_segments=(enforced_text,))
-        text = enforced_text
+    try:
+        max_len = int(task.get("reply_max_length") or 0)
+    except (TypeError, ValueError):
+        max_len = 0
+    # 多泡回复：每个气泡各自都落在单点上限内，就保持分条投递，而不是把
+    # 整串 join 后按一刀切压短/静默（否则合理的分段长回复会被整个吞掉）。
+    if max_len > 0 and filtered.reply_segments and all(len(seg) <= max_len for seg in filtered.reply_segments):
+        log_rate_limited(
+            logger,
+            "info",
+            "llm.output_filter.multi_bubble_kept",
+            "LLM reply kept as segments for task [{}], len [{}] max [{}], segments [{}]",
+            task_type,
+            len(text),
+            max_len,
+            len(filtered.reply_segments),
+        )
+        text = filtered.logical_text
+    else:
+        enforced_text = _enforce_max_length(text, task=task, task_type=task_type)
+        if not enforced_text:
+            return StructuredChatReply()
+        if enforced_text != text:
+            filtered = replace(filtered, reply_segments=(enforced_text,))
+            text = enforced_text
     if not filter_enabled:
         return filtered
     hit = match_output_filter(text, profile) or match_output_filter("".join(filtered.reply_segments), profile)
