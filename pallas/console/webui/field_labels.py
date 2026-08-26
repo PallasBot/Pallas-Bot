@@ -385,6 +385,8 @@ FIELD_LABELS: dict[str, str] = {
     "pallas_webui_log_lines_max": "运行日志行数上限",
     "path": "样式目录路径",
     "play_endpoint": "播放接口路径",
+    "poke_limit_max": "时段内戳一戳回应上限",
+    "poke_limit_window": "戳一戳限流窗口（秒）",
     "reaction_probability": "表情回应概率",
     "remote_find_enabled": "本机没有时查社区",
     "repeat_ignore_user_ids": "复读忽略 QQ 列表",

@@ -131,6 +131,22 @@ class BotConfig(Config):
         """
         await self._update_in_memory(f"cooldown{KEY_JOINER}{action_type}{KEY_JOINER}{self.group_id}", 0)
 
+    async def allow_window_action(self, action_type: str, limit: int, window: float) -> bool:
+        """
+        时段窗口内是否允许执行；允许则记录一次，达到上限返回 False。
+
+        用于防止短期内反复触发导致无限响应（如戳一戳）。
+        """
+        now = time.time()
+        key = f"window{KEY_JOINER}{action_type}{KEY_JOINER}{self.group_id}"
+        stamps = await self._find_in_memory(key)
+        stamps = [t for t in stamps if now - t < window] if stamps else []
+        if len(stamps) >= limit:
+            return False
+        stamps.append(now)
+        await self._update_in_memory(key, stamps)
+        return True
+
     _drink_handlers = []
     _sober_up_handlers = []
 
