@@ -43,7 +43,7 @@ async def test_work_service_initializes_database_before_building_store(monkeypat
     import asyncio
 
     monkeypatch.setattr("pallas.core.foundation.db.init_db", init_db)
-    monkeypatch.setattr(service, "build_work_job_store", lambda: steps.append("store"))
+    monkeypatch.setattr(service, "build_work_job_store", lambda **_kwargs: steps.append("store"))
     monkeypatch.setattr(service, "WorkJobWorker", lambda **_kwargs: Worker())
     monkeypatch.setattr(service, "work_aux_concurrency", lambda: 1)
 

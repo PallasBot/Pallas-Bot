@@ -16,6 +16,9 @@ from pallas.core.platform.work_jobs.runtime import build_work_job_store
 from pallas.product.llm.inference_params import task_token_budget
 
 _DISPATCH_TASK: asyncio.Task[None] | None = None
+_LISTEN_TASK: asyncio.Task[None] | None = None
+DELIVERY_WAKE_EVENT = asyncio.Event()
+_DISPATCH_FALLBACK_SEC = 2.0
 _VISION_SELECT_SEMAPHORE = asyncio.Semaphore(1)
 _VISION_ENQUEUED_AT: deque[float] = deque()
 VISION_CANDIDATE_MAX_SIDE = 384
@@ -384,24 +387,30 @@ async def save_sticker_vision_delivery(
     state: str,
     error: str = "",
 ) -> None:
-    """记录主进程实际发图结果，领取后不让任务停留在模糊的 sending。"""
+    """记录主进程实际发图结果，领取后不让任务停留在模糊的 sending；终态 sent/failed 会删除该行。"""
     delivery = payload.get("delivery") if isinstance(payload.get("delivery"), dict) else {}
     value = dict(payload)
     value["delivery"] = {**delivery, "state": state, "finished_at": time.time(), "error": error[:240] or None}
+    is_terminal = state in {"sent", "failed"}
     from pallas.core.foundation.db.runtime import is_postgresql_backend
 
     if is_postgresql_backend():
-        from sqlalchemy import update
+        from sqlalchemy import delete, update
 
         from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
 
         async with get_session() as session:
             await session.execute(update(BackgroundJobRow).where(BackgroundJobRow.id == job_id).values(payload=value))
+            if is_terminal:
+                await session.execute(delete(BackgroundJobRow).where(BackgroundJobRow.id == job_id))
             await session.commit()
         return
     from pallas.core.foundation.db.modules import BackgroundJob
 
-    await BackgroundJob.get_pymongo_collection().update_one({"job_id": job_id}, {"$set": {"payload": value}})
+    collection = BackgroundJob.get_pymongo_collection()
+    await collection.update_one({"job_id": job_id}, {"$set": {"payload": value}})
+    if is_terminal:
+        await collection.delete_one({"job_id": job_id})
 
 
 async def read_sticker_vision_result(job_id: str) -> tuple[bool, str | None]:
@@ -563,25 +572,48 @@ async def dispatch_sticker_vision_delivery_once() -> bool:
 
 async def run_sticker_vision_delivery_dispatcher() -> None:
     while True:
-        if not await dispatch_sticker_vision_delivery_once():
-            await asyncio.sleep(0.5)
+        woke = await _wait_for_dispatch_wake()
+        await dispatch_sticker_vision_delivery_once()
+        DELIVERY_WAKE_EVENT.clear()
+        if not woke:
+            # 无 NOTIFY 唤醒（Mongo / 未收到通知）：降频轮询兜底，避免空转挤占事件循环。
+            await asyncio.sleep(_DISPATCH_FALLBACK_SEC)
+
+
+async def _wait_for_dispatch_wake() -> bool:
+    """等待事件触发；返回是否被显式唤醒（True）或超时兜底（False）。"""
+    try:
+        await asyncio.wait_for(DELIVERY_WAKE_EVENT.wait(), timeout=_DISPATCH_FALLBACK_SEC)
+        return True
+    except TimeoutError:
+        return False
+
+
+async def _set_delivery_wake_event() -> None:
+    DELIVERY_WAKE_EVENT.set()
 
 
 def bind_sticker_vision_delivery_dispatcher() -> None:
     from nonebot import get_driver
 
+    from pallas.core.platform.work_jobs import pg_notify
+
     driver = get_driver()
 
     @driver.on_startup
     async def _on_startup() -> None:
-        global _DISPATCH_TASK
+        global _DISPATCH_TASK, _LISTEN_TASK
+        if _LISTEN_TASK is None or _LISTEN_TASK.done():
+            _LISTEN_TASK = asyncio.create_task(pg_notify.listen_delivery_ready(_set_delivery_wake_event))
         if _DISPATCH_TASK is None or _DISPATCH_TASK.done():
             _DISPATCH_TASK = asyncio.create_task(run_sticker_vision_delivery_dispatcher())
 
     @driver.on_shutdown
     async def _on_shutdown() -> None:
-        global _DISPATCH_TASK
-        if _DISPATCH_TASK is not None:
-            _DISPATCH_TASK.cancel()
-            await asyncio.gather(_DISPATCH_TASK, return_exceptions=True)
-            _DISPATCH_TASK = None
+        global _DISPATCH_TASK, _LISTEN_TASK
+        for task_name in ("_LISTEN_TASK", "_DISPATCH_TASK"):
+            task = globals().get(task_name)
+            if task is not None:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+                globals()[task_name] = None

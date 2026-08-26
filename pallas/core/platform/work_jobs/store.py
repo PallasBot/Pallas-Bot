@@ -9,6 +9,8 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from .models import WorkJob
 
 
@@ -58,7 +60,7 @@ class WorkJobStore(Protocol):
 class MemoryWorkJobStore:
     """仅用于测试和不可用时的显式降级，不作为生产持久化队列。"""
 
-    def __init__(self) -> None:
+    def __init__(self, *, completion_retention: Mapping[str, str] | None = None) -> None:
         self._jobs: dict[str, WorkJob] = {}
         self._idempotency: dict[str, str] = {}
         self._available_at: dict[str, float] = {}
@@ -66,7 +68,17 @@ class MemoryWorkJobStore:
         self._leases: dict[str, tuple[str, float, str]] = {}
         self._completed: set[str] = set()
         self._dead_lettered: set[str] = set()
+        self._retained: set[str] = set()
+        self._completion_retention: Mapping[str, str] = completion_retention or {}
         self._lock = asyncio.Lock()
+
+    def _retain_or_complete(self, job_id: str, job: WorkJob) -> None:
+        """完成命中映射的kind：保留并打上终态标记；未命中则记入_completed。"""
+        status = self._completion_retention.get(job.kind)
+        if status is not None:
+            self._retained.add(job_id)
+            return
+        self._completed.add(job_id)
 
     async def enqueue(self, job: WorkJob) -> WorkJob:
         async with self._lock:
@@ -88,7 +100,9 @@ class MemoryWorkJobStore:
                 self._available_at[job.id] = time.monotonic()
                 self._enqueued_at[job.id] = time.monotonic()
                 return job, True
-            if existing_id not in self._completed and existing_id not in self._dead_lettered:
+            if existing_id in self._retained or (
+                existing_id not in self._completed and existing_id not in self._dead_lettered
+            ):
                 return self._jobs[existing_id], False
             self._jobs.pop(existing_id, None)
             self._available_at.pop(existing_id, None)
@@ -122,6 +136,7 @@ class MemoryWorkJobStore:
                     continue
                 if (
                     job_id in self._completed
+                    or job_id in self._retained
                     or job_id in self._dead_lettered
                     or self._available_at.get(job_id, 0.0) > now
                 ):
@@ -158,6 +173,7 @@ class MemoryWorkJobStore:
                     continue
                 if (
                     job_id in self._completed
+                    or job_id in self._retained
                     or job_id in self._dead_lettered
                     or self._available_at.get(job_id, 0.0) > now
                 ):
@@ -186,7 +202,9 @@ class MemoryWorkJobStore:
             lease = self._leases.get(job_id)
             if lease is None or lease[0] != owner or lease[2] != lease_id:
                 return False
-            self._completed.add(job_id)
+            job = self._jobs.get(job_id)
+            if job is not None:
+                self._retain_or_complete(job_id, job)
             self._leases.pop(job_id, None)
             return True
 
@@ -198,7 +216,9 @@ class MemoryWorkJobStore:
                 lease = self._leases.get(job_id)
                 if lease is None or lease[0] != owner or lease[2] != job.lease_id:
                     continue
-                self._completed.add(job_id)
+                current = self._jobs.get(job_id)
+                if current is not None:
+                    self._retain_or_complete(job_id, current)
                 self._leases.pop(job_id, None)
                 completed += 1
         return completed
@@ -227,12 +247,15 @@ class MemoryWorkJobStore:
             pending = [
                 job
                 for job_id, job in self._jobs.items()
-                if job_id not in self._completed and job_id not in self._leases
+                if job_id not in self._completed and job_id not in self._retained and job_id not in self._leases
             ]
             leased = [
                 job
                 for job_id, job in self._jobs.items()
-                if job_id not in self._completed and job_id in self._leases and self._leases[job_id][1] > now
+                if job_id not in self._completed
+                and job_id not in self._retained
+                and job_id in self._leases
+                and self._leases[job_id][1] > now
             ]
             oldest_created = min((self._enqueued_at[job.id] for job in pending), default=None)
             return {

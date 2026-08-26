@@ -285,6 +285,31 @@ async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any
 
 _warm_console_read_caches_fn = None
 
+# 进程级共享的外部请求信号量：所有「打外部」的 warm loader 在访问外部前统一经它，
+# 保证同刻最多 2 个外部请求，避免冷启动风暴三路并发打外部 GitHub/社区接口。
+_EXTERNAL_SEM = asyncio.Semaphore(2)
+
+# 外部批相对本地批的延后秒数，给首屏本地缓存先建好、避免与首屏 HTTP 抢事件循环。
+_STAGGER_EXTERNAL_WARM_SEC = 1.0
+
+# 本地批 warm 键：全走 asyncio.to_thread / 内存，不打外部。
+_LOCAL_WARM_KEYS = (
+    "instances",
+    "plugins",
+    "message-stats:all",
+    "plugin-run-stats:all:logsrc:all:tbl:0:view:full",
+    "bots",
+    "system",
+)
+_COMMUNITY_STATS_WARM_KEY = "community-stats"
+
+
+def _batch_warm_keys(webui_key: str, bot_key: str) -> tuple[list[str], list[str]]:
+    """把首屏预热 warm 键拆成 (本地批, 外部批)，便于测试与顺序控制。"""
+    local_keys = list(_LOCAL_WARM_KEYS)
+    external_keys = [webui_key, bot_key, _COMMUNITY_STATS_WARM_KEY]
+    return local_keys, external_keys
+
 
 def set_warm_console_read_caches_impl(fn) -> None:
     global _warm_console_read_caches_fn
@@ -797,34 +822,36 @@ def register_update_router(
                 include_history=False,
             )
 
-        await asyncio.gather(
-            warm(webui_key, load_webui, 120.0, 900.0),
-            warm(bot_key, load_bot, 120.0, 900.0),
-            warm("community-stats", load_community, 30.0, 120.0),
-            warm(
-                "instances",
-                load_instances,
-                5.0,
-                30.0,
-                swr=True,
-                persist_snapshot=True,
-            ),
-            warm("plugins", load_plugins, 1.6, 25.0),
-            warm(
-                "message-stats:all",
-                load_message_stats,
-                2.0,
-                10.0,
-            ),
-            warm(
-                "plugin-run-stats:all:logsrc:all:tbl:0:view:full",
-                load_plugin_run_stats,
-                2.0,
-                10.0,
-            ),
-            warm("bots", load_bots, 0.9, 15.0),
-            warm("system", load_system, 0.8, 8.0),
-        )
+        # 局部 warm 调用按键映射；本地批走 to_thread/内存，外部批经共享信号量。
+        local_loader_spec: dict[str, tuple] = {
+            "instances": (load_instances, 5.0, 30.0, {"swr": True, "persist_snapshot": True}),
+            "plugins": (load_plugins, 1.6, 25.0, {}),
+            "message-stats:all": (load_message_stats, 2.0, 10.0, {}),
+            "plugin-run-stats:all:logsrc:all:tbl:0:view:full": (load_plugin_run_stats, 2.0, 10.0, {}),
+            "bots": (load_bots, 0.9, 15.0, {}),
+            "system": (load_system, 0.8, 8.0, {}),
+        }
+        external_loader_spec: dict[str, tuple] = {
+            webui_key: (load_webui, 120.0, 900.0),
+            bot_key: (load_bot, 120.0, 900.0),
+            _COMMUNITY_STATS_WARM_KEY: (load_community, 30.0, 120.0),
+        }
+
+        local_keys, external_keys = _batch_warm_keys(webui_key, bot_key)
+
+        async def warm_local(key: str) -> None:
+            loader, ttl, stale, kwargs = local_loader_spec[key]
+            await warm(key, loader, ttl, stale, **kwargs)
+
+        async def warm_external(key: str) -> None:
+            loader, ttl, stale = external_loader_spec[key]
+            async with _EXTERNAL_SEM:
+                await warm(key, loader, ttl, stale)
+
+        # 本地批先建好首屏缓存；外部批延后并受共享信号量约束（同刻最多 2 路）。
+        await asyncio.gather(*(warm_local(k) for k in local_keys))
+        await asyncio.sleep(_STAGGER_EXTERNAL_WARM_SEC)
+        await asyncio.gather(*(warm_external(k) for k in external_keys))
 
     global _warm_console_read_caches_fn
     _warm_console_read_caches_fn = _warm_console_read_caches_impl
