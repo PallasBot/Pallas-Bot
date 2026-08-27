@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from bisect import bisect_left
 from operator import itemgetter
 from typing import Any
 
@@ -168,16 +169,32 @@ async def _rebuild_pairs_from_messages(
         return []
 
     by_message_id = {int(getattr(item, "message_id", 0) or 0): item for item in ordered}
+    # 真人序列：剔除 bot/状态消息后保留真人前后顺序，用于「跳过 bot 找相邻接话」。
+    # adjacent 对的 trigger 端取 reply 之前最近的一条真人消息；reply 端可为真人(接入 direct_pairs)
+    # 或 bot(settle self_reflection)，两者都从真人序列里取 trigger。
+    human_ordered = [
+        item
+        for item in ordered
+        if item is not None
+        and sender_kind(int(getattr(item, "user_id", 0) or 0), self_bot_id=bot_id) == "human"
+        and _text(getattr(item, "plain_text", "") or getattr(item, "raw_message", ""))
+    ]
+    human_times = [int(getattr(item, "time", 0) or 0) for item in human_ordered]
     pairs: list[tuple[str, str, str, int, int, int, int, bool]] = []
     seen: set[tuple[int, int]] = set()
 
-    for index, reply_message in enumerate(ordered):
+    for reply_message in ordered:
         reply_user_id = int(getattr(reply_message, "user_id", 0) or 0)
         reply_text = _text(getattr(reply_message, "plain_text", "") or getattr(reply_message, "raw_message", ""))
         if not reply_text:
             continue
         reply_is_bot = sender_kind(reply_user_id, self_bot_id=bot_id) != "human"
+        reply_id = int(getattr(reply_message, "message_id", 0) or 0)
+        if reply_id <= 0:
+            continue
+        reply_time = int(getattr(reply_message, "time", 0) or 0)
         replied_message_id = int(getattr(reply_message, "reply_to_message_id", 0) or 0)
+        # 1) 引用对：reply 显式引用了一条已知真人消息。
         if replied_message_id > 0:
             trigger = by_message_id.get(replied_message_id)
             if trigger is not None:
@@ -186,42 +203,40 @@ async def _rebuild_pairs_from_messages(
                 if (
                     trigger_text
                     and sender_kind(trigger_user_id, self_bot_id=bot_id) == "human"
-                    and (replied_message_id, int(getattr(reply_message, "message_id", 0) or 0)) not in seen
+                    and (replied_message_id, reply_id) not in seen
                 ):
-                    seen.add((replied_message_id, int(getattr(reply_message, "message_id", 0) or 0)))
+                    seen.add((replied_message_id, reply_id))
                     pairs.append((
                         trigger_text,
                         reply_text,
                         "quoted",
                         trigger_user_id,
                         reply_user_id,
-                        int(getattr(reply_message, "message_id", 0) or 0),
-                        int(getattr(reply_message, "time", 0) or 0),
+                        reply_id,
+                        reply_time,
                         reply_is_bot,
                     ))
                     continue
-        if index == 0:
+        # 2) 相邻对：取 reply 之前「最近的一条真人消息」作 trigger，跳过中间 bot/状态消息。
+        pos = bisect_left(human_times, reply_time)
+        if pos == 0:
             continue
-        predecessor = ordered[index - 1]
-        predecessor_user_id = int(getattr(predecessor, "user_id", 0) or 0)
-        if sender_kind(predecessor_user_id, self_bot_id=bot_id) != "human":
+        predecessor = human_ordered[pos - 1]
+        predecessor_id = int(getattr(predecessor, "message_id", 0) or 0)
+        if predecessor_id == reply_id or (predecessor_id, reply_id) in seen:
             continue
         trigger_text = _text(getattr(predecessor, "plain_text", "") or getattr(predecessor, "raw_message", ""))
         if not trigger_text or trigger_text == reply_text:
             continue
-        message_id = int(getattr(reply_message, "message_id", 0) or 0)
-        predecessor_id = int(getattr(predecessor, "message_id", 0) or 0)
-        if (predecessor_id, message_id) in seen:
-            continue
-        seen.add((predecessor_id, message_id))
+        seen.add((predecessor_id, reply_id))
         pairs.append((
             trigger_text,
             reply_text,
             "adjacent",
-            predecessor_user_id,
+            int(getattr(predecessor, "user_id", 0) or 0),
             reply_user_id,
-            message_id,
-            int(getattr(reply_message, "time", 0) or 0),
+            reply_id,
+            reply_time,
             reply_is_bot,
         ))
         if len(pairs) >= limit:

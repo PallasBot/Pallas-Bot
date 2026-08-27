@@ -18,6 +18,13 @@
 * feat(webui): 后端首屏预热梯次化并用信号量限外部请求
 * feat(release): 按 Bot commit 选择兼容 WebUI
 * feat(greeting): 戳一戳回应增加时段次数上限
+* feat(insight): 新增群洞察处理器，从 message 表重建成对语义样本并批量标注
+* feat(insight): 群维度扫描并支持指定语义采集账号，成对纳入 Bot 自我接话强化 self_reflection
+* feat(llm): 语义风格改为从 message 表重建成对样本，不再依赖实时 learn（测试群也能有数据）
+* feat(llm): 回复形状改为纯 message 表驱动，语义层仅贡献群表达指导
+* feat(llm): 接通近期回复去重提示，同句重回时换说法避免复述上一句
+* feat(llm): 按 greeting/夸赞/附和等场景注入温和语气提示
+* feat(llm): 观测回复拒绝语气（想得美/少来/别吵等），并扩展离线质量场景覆盖暖性中性对话
 
 ### Fixed
 
@@ -49,6 +56,12 @@
 * fix(ingress): 日志行右对齐且回复不截断
 * fix(ingress): info日志显示reply引用，便于排查用户是否引用消息
 * fix(help): MAA 远控插件二三级帮助显示对接地址
+* fix(insight): sweep 等待 bot 连接后再执行，并增加轮转游标提高每轮采样量，修复大群号被饿死
+* fix(insight): 成对取数按 message_id 去重并分页回溯，避免多 bot 并发重复记录塞满窗口
+* fix(llm): 分离人格与回复形状，避免默认动作压住同一群内多条回复的形态
+* fix(llm): 拦截普通中文逗号尾半截句（如「这牛确实挺针对的，」）
+* fix(llm): 禁止编造现实动作、设备状态或线下行程
+* fix(llm): 拦截对白中 Markdown 与 URL 泄漏，避免占位/链接直接发出
 
 ### Changed
 
