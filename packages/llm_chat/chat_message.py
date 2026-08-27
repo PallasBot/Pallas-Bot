@@ -53,9 +53,10 @@ from pallas.product.llm.current_turn_decision import (
     should_include_recent_pair_for_turn,
     should_read_persistent_memory_for_turn,
 )
+from pallas.product.llm.event_observation import record_event_stage
 from pallas.product.llm.followup_window import in_followup_window, note_hard_speak_trigger
 from pallas.product.llm.governance import check_llm_chat_gate, refresh_llm_chat_cooldown
-from pallas.product.llm.group_timeline import build_recent_group_timeline
+from pallas.product.llm.group_timeline import build_recent_group_timeline_context, should_include_group_timeline
 from pallas.product.llm.kernel import (
     ConversationContext,
     behavior_scene_to_conversation_scene,
@@ -75,7 +76,10 @@ from pallas.product.llm.memory.auto_episode import maybe_auto_save_episode
 from pallas.product.llm.memory.auto_ip_knowledge import schedule_auto_save_ip_knowledge
 from pallas.product.llm.message_guard import normalize_llm_chat_user_text
 from pallas.product.llm.models import ChatCompletionMessage
-from pallas.product.llm.persona_context import build_persona_llm_context
+from pallas.product.llm.persona_context import (
+    build_persona_llm_context,
+    llm_chat_prompt_override,
+)
 from pallas.product.llm.reply_gate import evaluate_llm_reply_gate_result, reply_gate_skip_metric
 from pallas.product.llm.reply_necessity import evaluate_reply_necessity_gate
 from pallas.product.llm.reply_shape import resolve_reply_shape
@@ -88,7 +92,10 @@ from pallas.product.llm.session_store import build_llm_chat_messages, list_user_
 from pallas.product.llm.session_summary import schedule_session_summary
 from pallas.product.llm.speak_perception import evaluate_speak_perception, speak_perception_metrics
 from pallas.product.llm.task_metrics import record_bot_llm_task
+from pallas.product.llm.tools.time_now import current_time_text
 from pallas.product.llm.turn_policy import resolve_turn_policy
+from pallas.product.llm.turn_telemetry import new_turn_id, record_turn_event
+from pallas.product.llm.vision_content import user_message_has_vision_content, vision_payload_from_segments
 from pallas.product.persona.peer_bots_prompt import save_peer_alias_from_teach
 from pallas.product.persona.prompt_guard import sanitize_prompt_literal
 from pallas.product.persona.self_identity import (
@@ -124,6 +131,41 @@ def load_chat_prompt_overrides(bot_id: int, group_id: int | None):
 
 def clear_speak_alias_cache_for_tests() -> None:
     _speak_alias_cache.clear()
+
+
+def emit_turn_telemetry(
+    *,
+    turn_id: str | None = None,
+    stage: str,
+    decision: str,
+    text: str,
+    msg: str,
+    message_id: int,
+    bot_id: int,
+    group_id: int | None,
+    user_id: int,
+    is_to_me: bool,
+    speak_trigger: str,
+    request_id: str | None = None,
+    score: int | None = None,
+    factors: list[str] | None = None,
+    **fields: object,
+) -> None:
+    record_turn_event(
+        turn_id=turn_id,
+        stage=stage,
+        decision=decision,
+        text=text,
+        has_cq="[CQ:" in msg,
+        message_id=message_id,
+        request_id=request_id,
+        scope={"bot": bot_id, "group": group_id, "user": user_id},
+        is_to_me=is_to_me,
+        speak_trigger=speak_trigger or None,
+        score=score,
+        factors=factors,
+        **fields,
+    )
 
 
 def build_injection_snapshot(
@@ -234,6 +276,8 @@ def llm_chat_rule(event: Event) -> bool:
         return False
     if is_to_me:
         return True
+    if user_message_has_vision_content(raw_message):
+        return isinstance(event, GroupMessageEvent)
     llm_cfg = get_llm_config()
     if not llm_cfg.llm_speak_perception_enabled:
         return False
@@ -310,6 +354,7 @@ async def handle_llm_chat(
         return
 
     msg = str(event.get_message()).strip()
+    has_vision_content = user_message_has_vision_content(msg)
     if not msg:
         if not plain and not getattr(event, "reply", None):
             return
@@ -335,6 +380,36 @@ async def handle_llm_chat(
     followup_max_total = int(llm_cfg.llm_speak_followup_max_total_sec)
 
     bot_id = int(bot.self_id)
+    turn_id = new_turn_id()
+    emit_turn_telemetry(
+        turn_id=turn_id,
+        stage="ingress",
+        decision="accepted",
+        reason="handler_entered",
+        text=plain or msg,
+        msg=msg,
+        message_id=message_id,
+        bot_id=bot_id,
+        group_id=group_id,
+        user_id=user_id,
+        is_to_me=is_to_me,
+        speak_trigger=speak_trigger,
+    )
+    if is_to_me:
+        emit_turn_telemetry(
+            turn_id=turn_id,
+            stage="speak",
+            decision="proceed",
+            reason="to_me",
+            text=plain or msg,
+            msg=msg,
+            message_id=message_id,
+            bot_id=bot_id,
+            group_id=group_id,
+            user_id=user_id,
+            is_to_me=is_to_me,
+            speak_trigger=speak_trigger or "to_me",
+        )
     if is_to_me and llm_cfg.llm_speak_followup_enabled:
         note_hard_speak_trigger(
             bot_id,
@@ -367,15 +442,30 @@ async def handle_llm_chat(
                 min_alias_len=llm_cfg.llm_speak_min_alias_len,
             )
         )
+        vision_force = has_vision_content
         should_eval, _merged = note_ambient_turn_and_should_flush(
             bot_id=bot_id,
             group_id=group_id,
             user_id=user_id,
             text=plain or msg,
-            force=followup_active or mention_force,
+            force=followup_active or mention_force or vision_force,
         )
         if not should_eval:
             record_bot_llm_task(LLM_CHAT_TASK_TYPE, "ambient_turn_coalesce")
+            emit_turn_telemetry(
+                turn_id=turn_id,
+                stage="speak",
+                decision="skip",
+                reason="ambient_coalesced",
+                text=plain or msg,
+                msg=msg,
+                message_id=message_id,
+                bot_id=bot_id,
+                group_id=group_id,
+                user_id=user_id,
+                is_to_me=is_to_me,
+                speak_trigger=speak_trigger,
+            )
             return
         persona_speak_bias = 1.0
         try:
@@ -400,9 +490,25 @@ async def handle_llm_chat(
             min_alias_len=llm_cfg.llm_speak_min_alias_len,
             group_id=group_id,
             followup_active=followup_active,
+            has_vision_content=has_vision_content,
         )
         for metric in speak_perception_metrics(decision):
             record_bot_llm_task(LLM_CHAT_TASK_TYPE, metric)
+        emit_turn_telemetry(
+            turn_id=turn_id,
+            stage="speak",
+            decision="proceed" if decision.should_speak else "skip",
+            reason=decision.reason,
+            text=plain or msg,
+            msg=msg,
+            message_id=message_id,
+            bot_id=bot_id,
+            group_id=group_id,
+            user_id=user_id,
+            is_to_me=is_to_me,
+            speak_trigger=decision.reason,
+            score=int(decision.score),
+        )
         if not decision.should_speak:
             return
         speak_trigger = decision.reason
@@ -499,6 +605,7 @@ async def handle_llm_chat(
             message_id=message_id,
             is_to_me=is_to_me,
             speak_trigger=speak_trigger,
+            turn_id=turn_id,
             llm_cfg=llm_cfg,
             chat_cfg=cfg,
             force_quote_message_id=force_quote_message_id,
@@ -506,6 +613,21 @@ async def handle_llm_chat(
         name=f"llm_chat_prepare:{int(bot.self_id)}:{group_id or 0}:{user_id}",
     )
     record_bot_llm_task(LLM_CHAT_TASK_TYPE, "background_enqueued")
+
+
+def _referenced_vision_metadata(event: Event) -> dict[str, object] | None:
+    """从 event.reply.message 提取被引用消息的图片直链与文字（NoneBot 收包已填充 reply）。"""
+    reply = getattr(event, "reply", None)
+    message = getattr(reply, "message", None) if reply is not None else None
+    if message is None:
+        return None
+    try:
+        payload = vision_payload_from_segments(message)
+    except Exception:
+        return None
+    if not payload.image_urls:
+        return None
+    return {"image_urls": list(payload.image_urls), "plain_text": payload.plain_text}
 
 
 async def prepare_and_submit_llm_chat_turn(
@@ -519,11 +641,13 @@ async def prepare_and_submit_llm_chat_turn(
     message_id: int,
     is_to_me: bool,
     speak_trigger: str,
+    turn_id: str | None = None,
     llm_cfg: LlmConfig,
     chat_cfg: Config,
     force_quote_message_id: int | None = None,
 ) -> None:
     try:
+        turn_id = turn_id or new_turn_id()
         route_started = time.perf_counter()
         session_id = event.get_session_id()
         system_prompt = ""
@@ -535,6 +659,7 @@ async def prepare_and_submit_llm_chat_turn(
                 group_id,
                 plain or msg,
                 mode="normal",
+                base_system=llm_chat_prompt_override.get(),
                 base_system_path=chat_cfg.llm_chat_system_prompt_path or None,
             )
             persona_bundle = bundle
@@ -570,6 +695,20 @@ async def prepare_and_submit_llm_chat_turn(
         )
         gate_decision = gate_result.decision
         if gate_decision == "skip":
+            emit_turn_telemetry(
+                turn_id=turn_id,
+                stage="reply_gate",
+                decision="skip",
+                reason=gate_result.reason,
+                text=plain or msg,
+                msg=msg,
+                message_id=message_id,
+                bot_id=int(bot.self_id),
+                group_id=group_id,
+                user_id=user_id,
+                is_to_me=is_to_me,
+                speak_trigger=speak_trigger,
+            )
             record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_gate_skip")
             skip_metric = reply_gate_skip_metric(gate_result.reason)
             if skip_metric:
@@ -581,8 +720,23 @@ async def prepare_and_submit_llm_chat_turn(
                 group_id,
                 user_id,
             )
+            record_event_stage("reply_gate", "skipped", reason=str(gate_result.reason))
             return
         if should_wait_for_more(plain or msg, is_to_me=is_to_me):
+            emit_turn_telemetry(
+                turn_id=turn_id,
+                stage="reply_gate",
+                decision="defer",
+                reason="wait_for_more",
+                text=plain or msg,
+                msg=msg,
+                message_id=message_id,
+                bot_id=int(bot.self_id),
+                group_id=group_id,
+                user_id=user_id,
+                is_to_me=is_to_me,
+                speak_trigger=speak_trigger,
+            )
             record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_gate_defer")
             logger.debug(
                 "llm chat route skipped: reason=wait_for_more message_id={} group={} user={}",
@@ -590,7 +744,22 @@ async def prepare_and_submit_llm_chat_turn(
                 group_id,
                 user_id,
             )
+            record_event_stage("reply_gate", "deferred", reason="wait_for_more")
             return
+        emit_turn_telemetry(
+            turn_id=turn_id,
+            stage="reply_gate",
+            decision="proceed",
+            reason=getattr(gate_result, "reason", None) or "ok",
+            text=plain or msg,
+            msg=msg,
+            message_id=message_id,
+            bot_id=int(bot.self_id),
+            group_id=group_id,
+            user_id=user_id,
+            is_to_me=is_to_me,
+            speak_trigger=speak_trigger,
+        )
         record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_gate_proceed")
 
         corpus_fallback = ""
@@ -598,6 +767,20 @@ async def prepare_and_submit_llm_chat_turn(
 
         gate = await check_llm_chat_gate(event, group_id, cfg=llm_cfg)
         if gate == "cooldown":
+            emit_turn_telemetry(
+                turn_id=turn_id,
+                stage="reply_gate",
+                decision="defer",
+                reason="cooldown",
+                text=plain or msg,
+                msg=msg,
+                message_id=message_id,
+                bot_id=int(bot.self_id),
+                group_id=group_id,
+                user_id=user_id,
+                is_to_me=is_to_me,
+                speak_trigger=speak_trigger,
+            )
             stash_pending_chat(int(bot.self_id), group_id, user_id, plain or msg, message_id=message_id)
             record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_gate_defer")
             logger.debug(
@@ -608,6 +791,20 @@ async def prepare_and_submit_llm_chat_turn(
             )
             return
         if gate is not None:
+            emit_turn_telemetry(
+                turn_id=turn_id,
+                stage="reply_gate",
+                decision="skip",
+                reason=gate,
+                text=plain or msg,
+                msg=msg,
+                message_id=message_id,
+                bot_id=int(bot.self_id),
+                group_id=group_id,
+                user_id=user_id,
+                is_to_me=is_to_me,
+                speak_trigger=speak_trigger,
+            )
             record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_gate_skip")
             logger.debug(
                 "llm chat route skipped: reason={} message_id={} group={} user={}",
@@ -723,12 +920,16 @@ async def prepare_and_submit_llm_chat_turn(
                 "detail": necessity.detail,
                 "speak_trigger": speak_trigger or "to_me",
             })
+        necessity_factors = [
+            item.strip() for item in str(getattr(necessity, "detail", "") or "").split(",") if item.strip()
+        ]
         if necessity.decision == "skip" and not required_tool_intent and not is_to_me:
             from pallas.product.llm.low_engagement import (
                 can_bubble_low_engagement_on_necessity_skip,
                 dispatch_low_engagement,
             )
 
+            emitted_low_engagement = False
             if group_id is not None and can_bubble_low_engagement_on_necessity_skip(
                 text=focus_text,
                 bot_id=int(bot.self_id),
@@ -747,6 +948,7 @@ async def prepare_and_submit_llm_chat_turn(
                     logger.debug("low engagement dispatch failed: {}", exc)
                     emitted = False
                 if emitted:
+                    emitted_low_engagement = True
                     record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_necessity_low_engagement")
                     logger.debug(
                         "llm chat route: reply_necessity_low_engagement message_id={} group={} user={}",
@@ -754,6 +956,22 @@ async def prepare_and_submit_llm_chat_turn(
                         group_id,
                         user_id,
                     )
+            emit_turn_telemetry(
+                turn_id=turn_id,
+                stage="necessity",
+                decision="low_engagement" if emitted_low_engagement else "skip",
+                reason="low_engagement" if emitted_low_engagement else "reply_necessity",
+                text=focus_text,
+                msg=msg,
+                message_id=message_id,
+                bot_id=int(bot.self_id),
+                group_id=group_id,
+                user_id=user_id,
+                is_to_me=is_to_me,
+                speak_trigger=speak_trigger,
+                score=int(necessity.score),
+                factors=necessity_factors,
+            )
             record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_necessity_skip")
             logger.debug(
                 "llm chat route skipped: reason=reply_necessity message_id={} group={} user={} score={} detail={}",
@@ -764,6 +982,22 @@ async def prepare_and_submit_llm_chat_turn(
                 necessity.detail,
             )
             return
+        emit_turn_telemetry(
+            turn_id=turn_id,
+            stage="necessity",
+            decision="proceed",
+            reason=getattr(necessity, "decision", None) or "proceed",
+            text=focus_text,
+            msg=msg,
+            message_id=message_id,
+            bot_id=int(bot.self_id),
+            group_id=group_id,
+            user_id=user_id,
+            is_to_me=is_to_me,
+            speak_trigger=speak_trigger,
+            score=int(necessity.score),
+            factors=necessity_factors,
+        )
         direct_ctx = ConversationContext.for_direct_chat(
             plain_text=focus_text,
             group_id=group_id,
@@ -868,15 +1102,23 @@ async def prepare_and_submit_llm_chat_turn(
         )
         direct_context_started = time.perf_counter()
         group_timeline = ""
-        if group_id is not None and (is_to_me or speak_trigger in {"alias", "mention", "followup", "ambient"}):
+        group_timeline_images: list[dict[str, str]] = []
+        if group_id is not None and should_include_group_timeline(
+            is_to_me=is_to_me,
+            speak_trigger=speak_trigger,
+        ):
             try:
                 ambient = speak_trigger == "ambient"
-                group_timeline = await build_recent_group_timeline(
+                timeline_context = await build_recent_group_timeline_context(
                     int(group_id),
                     current_message_id=message_id or None,
                     self_bot_id=int(bot.self_id),
                     limit=4 if ambient else 8,
                 )
+                group_timeline = timeline_context.text
+                group_timeline_images = [
+                    {"speaker": item.speaker, "text": item.text, "url": item.url} for item in timeline_context.images
+                ]
             except Exception:
                 logger.debug("group timeline context skipped for group [{}]", group_id)
         replied_message_id = extract_reply_id_from_raw_message(str(getattr(event, "raw_message", "") or ""))
@@ -1023,6 +1265,7 @@ async def prepare_and_submit_llm_chat_turn(
             context=chat_context,
             group_expression=group_expression,
             reply_shape=reply_shape,
+            current_time=current_time_text(),
             tool_context=ToolPromptContext(
                 action_tools_enabled=bool(tool_meta.get("tool_schemas")),
                 ask_before_call=bool(tool_meta.get("ask_before_call")),
@@ -1123,6 +1366,7 @@ async def prepare_and_submit_llm_chat_turn(
                 "start_time": time.time(),
                 "self_aliases": self_aliases[:8],
                 "speak_trigger": speak_trigger or "to_me",
+                "turn_id": turn_id,
                 "command_source_segments": command_source_segments,
                 "injection_snapshot": injection_snapshot,
             },
@@ -1151,6 +1395,13 @@ async def prepare_and_submit_llm_chat_turn(
                 session_history_limit=None,
                 include_group_ambient_history=not include_recent_pair,
                 prepared_messages=prepared_messages,
+                group_timeline_images=group_timeline_images,
+                # 用用户实际引用(reply)的目标消息 id，而非 bot 的 QUOTE 决策 id。
+                # 用户 reply 一张带图消息再问「这是谁」时，bot 可能以 PLAIN 回复，
+                # resolved_reply_message_id 会因此为 None；replied_message_id 才稳定携带用户引用目标。
+                reply_to_message_id=replied_message_id,
+                # 优先用 event.reply.message 预提取的引用图，避免消息库 id 匹配失败/未入库而丢图。
+                referenced_message=_referenced_vision_metadata(event),
                 llm_rewrite_metadata={
                     "task": "llm_chat",
                     "current_turn_action": current_turn_decision.action,
@@ -1166,13 +1417,30 @@ async def prepare_and_submit_llm_chat_turn(
                     "pre_submit_context_durations_ms": pre_submit_context_durations_ms,
                     "semantic_style_direct_candidate": semantic_style.direct_candidate or None,
                     "semantic_style_source_example_id": getattr(semantic_style, "source_example_id", "") or None,
+                    "turn_id": turn_id,
                 },
                 tool_metadata=tool_meta,
             ),
             cfg=llm_cfg,
+            bot=bot,
         )
         pre_submit_stage_durations_ms["submit"] = int((time.perf_counter() - submit_started) * 1000)
         if not result.ok:
+            emit_turn_telemetry(
+                turn_id=turn_id,
+                stage="submit",
+                decision="failed",
+                reason="submit_rejected",
+                text=focus_text,
+                msg=msg,
+                message_id=message_id,
+                bot_id=int(bot.self_id),
+                group_id=group_id,
+                user_id=user_id,
+                is_to_me=is_to_me,
+                speak_trigger=speak_trigger,
+                request_id=request_id,
+            )
             await TaskManager.remove_task(request_id)
             record_bot_llm_task(LLM_CHAT_TASK_TYPE, "submit_skip")
             logger.debug(
@@ -1185,6 +1453,21 @@ async def prepare_and_submit_llm_chat_turn(
             return
 
         await refresh_llm_chat_cooldown(event, default_cd_sec=llm_cfg.llm_chat_cooldown_sec)
+        emit_turn_telemetry(
+            turn_id=turn_id,
+            stage="submit",
+            decision="accepted",
+            reason="submitted",
+            text=focus_text,
+            msg=msg,
+            message_id=message_id,
+            bot_id=int(bot.self_id),
+            group_id=group_id,
+            user_id=user_id,
+            is_to_me=is_to_me,
+            speak_trigger=speak_trigger,
+            request_id=request_id,
+        )
         record_bot_llm_task(LLM_CHAT_TASK_TYPE, "submit_ok")
         logger.info(
             format_plugin_event(
@@ -1225,6 +1508,20 @@ async def prepare_and_submit_llm_chat_turn(
             await TaskManager.remove_task(request_id)
 
     except Exception as exc:
+        emit_turn_telemetry(
+            turn_id=turn_id,
+            stage="submit",
+            decision="failed",
+            reason="turn_error",
+            text=plain or msg,
+            msg=msg,
+            message_id=message_id,
+            bot_id=int(bot.self_id),
+            group_id=group_id,
+            user_id=user_id,
+            is_to_me=is_to_me,
+            speak_trigger=speak_trigger,
+        )
         logger.warning(
             "llm chat background prepare failed bot={} group={} user={} err={}: {}",
             bot.self_id,

@@ -335,3 +335,118 @@ async def test_vision_dispatch_falls_back_to_original_candidate_when_selection_m
     assert sent.kwargs["group_id"] == 200
     assert "image" in str(sent.kwargs["message"])
     save.assert_awaited_once_with("job-fallback", payload, state="sent")
+
+
+@pytest.mark.asyncio
+async def test_save_sticker_vision_delivery_terminal_deletes_pg_row(monkeypatch) -> None:
+    from unittest.mock import AsyncMock, MagicMock
+
+    from sqlalchemy import Delete, Update
+
+    from pallas.product.llm import sticker_vision
+
+    session = MagicMock()
+    session.execute = AsyncMock()
+    session.commit = AsyncMock()
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=session)
+    cm.__aexit__ = AsyncMock(return_value=False)
+
+    import pallas.core.foundation.db.repository_pg as repo_pg
+
+    monkeypatch.setattr(repo_pg, "get_session", lambda **kw: cm)
+    monkeypatch.setattr("pallas.core.foundation.db.runtime.is_postgresql_backend", lambda: True)
+
+    await sticker_vision.save_sticker_vision_delivery(
+        "job-x", {"job_id": "job-x", "delivery": {"bot_id": 1}}, state="sent"
+    )
+
+    statements = [call.args[0] for call in session.execute.call_args_list]
+    assert any(isinstance(s, Delete) for s in statements)
+    assert any(isinstance(s, Update) for s in statements)
+
+
+@pytest.mark.asyncio
+async def test_save_sticker_vision_delivery_non_terminal_updates_pg_row(monkeypatch) -> None:
+    from unittest.mock import AsyncMock, MagicMock
+
+    from sqlalchemy import Delete, Update
+
+    from pallas.product.llm import sticker_vision
+
+    session = MagicMock()
+    session.execute = AsyncMock()
+    session.commit = AsyncMock()
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=session)
+    cm.__aexit__ = AsyncMock(return_value=False)
+
+    import pallas.core.foundation.db.repository_pg as repo_pg
+
+    monkeypatch.setattr(repo_pg, "get_session", lambda **kw: cm)
+    monkeypatch.setattr("pallas.core.foundation.db.runtime.is_postgresql_backend", lambda: True)
+
+    await sticker_vision.save_sticker_vision_delivery(
+        "job-x", {"job_id": "job-x", "delivery": {"bot_id": 1}}, state="sending"
+    )
+
+    statements = [call.args[0] for call in session.execute.call_args_list]
+    assert any(isinstance(s, Update) for s in statements)
+    assert not any(isinstance(s, Delete) for s in statements)
+
+
+@pytest.mark.asyncio
+async def test_save_sticker_vision_delivery_terminal_deletes_mongo_row(monkeypatch) -> None:
+    from unittest.mock import AsyncMock, MagicMock
+
+    from pallas.product.llm import sticker_vision
+
+    collection = MagicMock()
+    collection.update_one = AsyncMock()
+    collection.delete_one = AsyncMock()
+    from pallas.core.foundation.db import modules as db_modules
+
+    monkeypatch.setattr(db_modules.BackgroundJob, "get_pymongo_collection", lambda: collection)
+    monkeypatch.setattr("pallas.core.foundation.db.runtime.is_postgresql_backend", lambda: False)
+
+    await sticker_vision.save_sticker_vision_delivery(
+        "job-x", {"job_id": "job-x", "delivery": {"bot_id": 1}}, state="failed"
+    )
+
+    await_call = collection.update_one.await_args
+    assert await_call.args[0] == {"job_id": "job-x"}
+    assert await_call.args[1]["$set"]["payload"]["delivery"]["state"] == "failed"
+    collection.delete_one.assert_awaited_once_with({"job_id": "job-x"})
+
+
+@pytest.mark.asyncio
+async def test_wait_for_dispatch_wake_returns_true_when_event_set(monkeypatch) -> None:
+    from pallas.product.llm import sticker_vision
+
+    monkeypatch.setattr(sticker_vision, "_DISPATCH_FALLBACK_SEC", 0.05)
+    sticker_vision.DELIVERY_WAKE_EVENT.set()
+    try:
+        assert await sticker_vision._wait_for_dispatch_wake() is True
+    finally:
+        sticker_vision.DELIVERY_WAKE_EVENT.clear()
+
+
+@pytest.mark.asyncio
+async def test_wait_for_dispatch_wake_returns_false_on_timeout(monkeypatch) -> None:
+    from pallas.product.llm import sticker_vision
+
+    monkeypatch.setattr(sticker_vision, "_DISPATCH_FALLBACK_SEC", 0.01)
+    sticker_vision.DELIVERY_WAKE_EVENT.clear()
+    assert await sticker_vision._wait_for_dispatch_wake() is False
+
+
+@pytest.mark.asyncio
+async def test_set_delivery_wake_event_sets_event() -> None:
+    from pallas.product.llm import sticker_vision
+
+    try:
+        sticker_vision.DELIVERY_WAKE_EVENT.clear()
+        await sticker_vision._set_delivery_wake_event()
+        assert sticker_vision.DELIVERY_WAKE_EVENT.is_set()
+    finally:
+        sticker_vision.DELIVERY_WAKE_EVENT.clear()

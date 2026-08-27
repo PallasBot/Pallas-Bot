@@ -271,6 +271,7 @@ def evaluate_speak_perception(
     bot_recently_replied: bool = False,
     has_recent_back_and_forth: bool = False,
     followup_active: bool = False,
+    has_vision_content: bool = False,
     rng: random.Random | None = None,
     now: float | None = None,
     record_ambient: bool = True,
@@ -284,6 +285,9 @@ def evaluate_speak_perception(
 
     if is_to_me:
         return SpeakDecision(True, "to_me", 100)
+
+    if has_vision_content:
+        return SpeakDecision(True, "vision", 100)
 
     if looks_like_bot_command(plain):
         return SpeakDecision(False, "command", 0)

@@ -29,12 +29,11 @@ from .manager import (
     download_and_extract_dist_zip,
     extract_bundled_webui_dist,
     fetch_latest_bot_release,
-    fetch_latest_webui_release,
     get_bot_current_version,
     get_installed_webui_version,
     get_webui_dist_version,
-    github_release_asset_url,
-    resolve_github_release_asset_urls,
+    normalize_webui_dist_zip_repo,
+    resolve_compatible_webui_release,
     save_installed_webui_version,
     webui_frontend_stack,
     webui_has_release_update,
@@ -44,6 +43,20 @@ from .public import register_routes
 
 app = get_app()
 driver = get_driver()
+
+
+async def resolve_webui_release_for_runtime(
+    repo: str,
+    asset: str,
+    tag: str = "",
+    *,
+    token: str = "",
+) -> dict[str, object]:
+    repo_name = normalize_webui_dist_zip_repo(repo or DEFAULT_WEBUI_DIST_ZIP_REPO)
+    asset_name = (asset or "dist.zip").strip() or "dist.zip"
+    tag_name = (tag or "").strip()
+    return await resolve_compatible_webui_release(repo_name, asset_name, tag_name, token=token)
+
 
 if not is_sharded_worker():
     install_pallas_http_request_context_middleware(app)
@@ -125,27 +138,31 @@ if not is_sharded_worker():
             if check_webui_exists(public):
                 return
             logger.info("[WebUI] 首次部署，正在初始化静态资源")
-            if await extract_bundled_webui_dist(public):
+            tok = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
+            if await extract_bundled_webui_dist(
+                public,
+                require_compatible_manifest=True,
+                token=tok,
+            ):
                 webui_ver = get_webui_dist_version()
                 set_console_meta({"static_root": str(public), "http_base": base, "version": webui_ver})
                 logger.info("[WebUI] 静态资源就绪，请刷新页面")
                 return
             logger.info("[WebUI] 未找到可用内置 dist，后台拉取静态资源")
-            tok = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
             url = (plugin_config.pallas_webui_dist_zip_url or "").strip()
             url_candidates: list[str] = []
             resolve_err = ""
+            selected: dict[str, object] = {}
+            selected_tag = ""
             if not url:
                 try:
                     repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "")
                     asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "")
                     tag = str(getattr(plugin_config, "pallas_webui_dist_zip_tag", "") or "")
-                    url_candidates = await resolve_github_release_asset_urls(repo, asset, tag, token=tok)
-                    url = github_release_asset_url(
-                        str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or ""),
-                        str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or ""),
-                        str(getattr(plugin_config, "pallas_webui_dist_zip_tag", "") or ""),
-                    )
+                    selected = await resolve_webui_release_for_runtime(repo, asset, tag, token=tok)
+                    url = str(selected.get("asset_url", "") or "").strip()
+                    url_candidates = [url] if url else []
+                    selected_tag = str(selected.get("tag", "") or "").strip()
                 except Exception as e:
                     resolve_err = format_exception_for_log(e)
                     url = ""
@@ -162,7 +179,14 @@ if not is_sharded_worker():
             succeeded_url = ""
             for candidate in url_candidates or [url]:
                 try:
-                    await download_and_extract_dist_zip(public, candidate)
+                    selected_commit = str(selected.get("bot_commit", "") or "").strip() or None
+                    await download_and_extract_dist_zip(
+                        public,
+                        candidate,
+                        require_compatible_manifest=True,
+                        github_token=tok,
+                        current_commit=selected_commit,
+                    )
                     succeeded_url = candidate
                     errors.clear()
                     break
@@ -174,16 +198,7 @@ if not is_sharded_worker():
                 register_startup_warning("console", "dist-bootstrap-failed")
             elif succeeded_url:
                 try:
-                    tag = str(getattr(plugin_config, "pallas_webui_dist_zip_tag", "") or "").strip()
-                    if not tag:
-                        try:
-                            repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or "")
-                            asset_fb = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
-                            info = await fetch_latest_webui_release(repo, token=tok, asset_name=asset_fb)
-                            tag = info.get("tag", "")
-                        except Exception:
-                            tag = ""
-                    save_installed_webui_version(tag, succeeded_url)
+                    save_installed_webui_version(selected_tag, succeeded_url)
                 except Exception:
                     pass
                 logger.info("[WebUI] 静态资源就绪，请刷新页面")
@@ -195,9 +210,10 @@ if not is_sharded_worker():
             try:
                 repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO)
                 asset_chk = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
+                requested_tag = str(getattr(plugin_config, "pallas_webui_dist_zip_tag", "") or "")
                 installed = get_installed_webui_version()
                 current_tag = str(installed.get("tag", "") or "").strip()
-                latest_info = await fetch_latest_webui_release(repo, token=tok, asset_name=asset_chk)
+                latest_info = await resolve_webui_release_for_runtime(repo, asset_chk, requested_tag, token=tok)
                 latest_tag = str(latest_info.get("tag", "") or "").strip()
                 if webui_has_release_update(latest_tag=latest_tag, current_tag=current_tag):
                     release_url = str(latest_info.get("html_url", "") or "").strip()

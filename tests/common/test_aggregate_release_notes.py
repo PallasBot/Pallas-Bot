@@ -52,6 +52,19 @@ def test_aggregate_up_to_date_falls_back_to_latest() -> None:
     assert "v0.9.0" not in text
 
 
+def test_aggregate_does_not_fallback_to_draft_latest() -> None:
+    releases = [
+        {"tag": "v1.0.0", "body": "draft", "draft": True, "prerelease": False},
+    ]
+    text = aggregate_release_notes(
+        releases,
+        current_tag="v0.9.0",
+        latest_tag="v1.0.0",
+    )
+
+    assert text == ""
+
+
 def test_aggregate_skips_prerelease_unless_latest() -> None:
     releases = [
         {"tag": "v1.1.0-rc.1", "body": "rc", "prerelease": True},
@@ -66,6 +79,22 @@ def test_aggregate_skips_prerelease_unless_latest() -> None:
     assert "v1.1.0-rc.1" not in text
     assert "## v1.0.1" in text
     assert "v1.0.0" not in text
+
+
+def test_aggregate_starts_at_selected_compatible_latest_release() -> None:
+    releases = [
+        {"tag": "v0.9.16", "body": "incompatible", "prerelease": False},
+        {"tag": "v0.9.13", "body": "compatible", "prerelease": False},
+        {"tag": "v0.9.12", "body": "current", "prerelease": False},
+    ]
+    text = aggregate_release_notes(
+        releases,
+        current_tag="v0.9.12",
+        latest_tag="v0.9.13",
+    )
+
+    assert "## v0.9.13" in text
+    assert "incompatible" not in text
 
 
 def test_aggregate_max_releases_truncation_footer() -> None:

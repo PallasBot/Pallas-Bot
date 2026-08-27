@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 构建 Pallas-Bot-WebUI（React，仓库根）并打包 dist.zip。
+# 构建 Pallas-Bot-WebUI（React，仓库根）并打包含兼容 manifest 的 dist.zip。
 # zip 根为 public-react/：解压到 data/pb_webui → data/pb_webui/public-react/index.html。
 # 兼容旧布局：若存在 <webui>/react/package.json，则仍在 react/ 子目录构建。
 set -euo pipefail
@@ -9,6 +9,10 @@ OUT_ZIP="${2:-dist.zip}"
 
 if [[ ! -f "${WEBUI_DIR}/package.json" ]]; then
   echo "未找到 ${WEBUI_DIR}/package.json" >&2
+  exit 1
+fi
+if [[ ! -f "${WEBUI_DIR}/release-manifest.json" ]]; then
+  echo "未找到 ${WEBUI_DIR}/release-manifest.json" >&2
   exit 1
 fi
 
@@ -42,6 +46,7 @@ trap 'rm -rf "${STAGE}"' EXIT
 
 mkdir -p "${STAGE}/${ZIP_ROOT}"
 cp -a "${BUILD_DIR}/dist/." "${STAGE}/${ZIP_ROOT}/"
+cp "${WEBUI_DIR}/release-manifest.json" "${STAGE}/${ZIP_ROOT}/release-manifest.json"
 (
   cd "${STAGE}"
   zip -r "${OUT_ABS}" "${ZIP_ROOT}"

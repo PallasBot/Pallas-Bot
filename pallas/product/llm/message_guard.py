@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 
+from pallas.product.llm.vision_content import user_message_has_vision_content
 from pallas.product.persona.prompt_guard import sanitize_prompt_block, sanitize_prompt_literal
 
 _CQ_AT_LEADING_RE = re.compile(r"^\s*\[CQ:at,qq=(?P<qq>\d+)(?:[^\]]*)?\]", re.IGNORECASE)
@@ -86,9 +87,16 @@ def normalize_llm_chat_user_text(
     mention_names: tuple[str, ...] | list[str] | None = None,
 ) -> str:
     """@ 闲聊提交给 LLM 的用户句：优先 plain，并剥掉开头 @ bot。"""
+    raw_text = str(raw or "").strip()
+    if user_message_has_vision_content(raw_text):
+        return strip_leading_self_at_mentions(
+            raw_text,
+            bot_self_id=bot_self_id,
+            mention_names=mention_names,
+        )
     base = str(plain or "").strip()
     if not base:
-        base = str(raw or "").strip()
+        base = raw_text
     stripped = strip_leading_self_at_mentions(
         base,
         bot_self_id=bot_self_id,
@@ -97,7 +105,7 @@ def normalize_llm_chat_user_text(
     if stripped:
         return stripped
     return strip_leading_self_at_mentions(
-        str(raw or "").strip(),
+        raw_text,
         bot_self_id=bot_self_id,
         mention_names=mention_names,
     )

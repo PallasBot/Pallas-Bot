@@ -153,7 +153,7 @@ async def run_case(
     return await complete(messages, temperature=temperature)
 
 
-async def main() -> int:
+def build_parser() -> argparse.ArgumentParser:
     default_at_chat = REPO_ROOT / "pallas" / "product" / "persona" / "at_chat_system_prompt.txt"
     parser = argparse.ArgumentParser(description="Offline persona prompt AB comparison")
     parser.add_argument("--provider", default=_DEFAULT_PROVIDER)
@@ -169,31 +169,36 @@ async def main() -> int:
         action="store_true",
         help="追加生产链路 ChatPromptAssembler 的回复形状块",
     )
+    parser.add_argument(
+        "--mode",
+        choices=("direct", "event"),
+        default="direct",
+        help="direct=离线直连 prompt AB；event=走生产事件链（OneBot 事件→dispatch→LLM→投递）",
+    )
+    parser.add_argument("--text", default="", help="event 模式单用例正文")
+    parser.add_argument("--image", action="append", help="event 模式可重复图片 URL 或本地路径")
+    parser.add_argument("--to-me", action="store_true", help="event 模式生成真实 @，使 is_to_me 为真")
+    parser.add_argument(
+        "--sender-role", choices=("member", "admin", "owner"), default="member", help="event 模式发送者角色"
+    )
+    parser.add_argument("--bot-id", default="10001", help="event 模式 bot 编号")
+    parser.add_argument("--group-id", default="20002", help="event 模式群号")
+    parser.add_argument("--user-id", default="30003", help="event 模式发送者 QQ")
+    parser.add_argument("--message-id", default="1", help="event 模式消息 id")
+    parser.add_argument("--sender-nickname", default="测试用户", help="event 模式发送者昵称")
+    parser.add_argument("--timeout", type=float, default=90.0, help="event 模式单个用例超时（秒）")
+    parser.add_argument("--fixture", type=Path, help="event 模式 JSONL fixture；优先于单用例参数")
     parser.add_argument("--out", type=Path, default=REPO_ROOT / "data" / "llm" / "persona_ab_out.jsonl")
-    args = parser.parse_args()
+    return parser
 
-    complete = resolve_completion(args.provider, args.model)
-    base_a = args.base_a.read_text(encoding="utf-8").strip()
-    base_b = args.base_b.read_text(encoding="utf-8").strip() if args.base_b else None
 
-    cases = _DEFAULT_CASES
-    if args.case:
-        wanted = set(args.case)
-        cases = [c for c in _DEFAULT_CASES if c["name"] in wanted]
-    if not cases:
-        print("no cases selected", file=sys.stderr)
-        return 2
-
-    variants = [("A", base_a)]
-    if base_b:
-        variants.append(("B", base_b))
-
-    results = []
-    for label, base in variants:
+async def _run_direct(complete, bases: dict[str, str], cases: list[dict], args) -> list[dict]:
+    results: list[dict] = []
+    for label in bases:
         for case in cases:
             reply = await run_case(
                 complete,
-                base,
+                bases[label],
                 case,
                 temperature=args.temp,
                 relationship=args.relationship,
@@ -202,6 +207,90 @@ async def main() -> int:
             )
             results.append({"variant": label, "case": case["name"], "user": case["user"], "reply": reply})
             print(f"[{label}][{case['name']}] {reply}", flush=True)
+    return results
+
+
+async def _run_event(bases: dict[str, str], cases: list[dict], args) -> list[dict]:
+    from pallas.core.foundation.config.repo_settings import apply_repo_settings_to_environ
+    from pallas.core.foundation.db import init_db
+    from tools.llm_event_harness import (
+        EventFixture,
+        LocalImageServer,
+        build_group_message_payload,
+        load_event_fixtures,
+        run_event_case,
+    )
+
+    apply_repo_settings_to_environ()
+    await init_db()
+
+    if args.fixture:
+        fixtures = load_event_fixtures(args.fixture)
+    else:
+        def _as_local(path: str) -> Path | None:
+            candidate = Path(path).expanduser().resolve()
+            return candidate if candidate.is_file() else None
+
+        local_paths = [p for p in (_as_local(x) for x in (args.image or [])) if p is not None]
+        remote_images = [x for x in (args.image or []) if _as_local(x) is None]
+        with LocalImageServer(local_paths) as image_server:
+            served_images = [image_server.url_for(path) for path in local_paths]
+            payload = build_group_message_payload(
+                text=args.text,
+                images=[*served_images, *remote_images],
+                to_me=args.to_me,
+                bot_id=args.bot_id,
+                group_id=args.group_id,
+                user_id=args.user_id,
+                message_id=args.message_id,
+                sender_nickname=args.sender_nickname,
+                sender_role=args.sender_role,
+            )
+            fixtures = [EventFixture(name="cli", event=payload)]
+    if args.case:
+        wanted = set(args.case)
+        fixtures = [f for f in fixtures if f.name in wanted]
+
+    results: list[dict] = []
+    for label in bases:
+        for fixture in fixtures:
+            result = await run_event_case(
+                fixture,
+                prompt=bases[label],
+                provider=args.provider,
+                model=args.model,
+                temperature=args.temp,
+                timeout=args.timeout,
+                variant=label,
+            )
+            row = {**result.as_dict(), "variant": label, "case": fixture.name}
+            results.append(row)
+            print(f"[{label}][{fixture.name}] {result.status} {result.reply or ''}", flush=True)
+    return results
+
+
+async def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+
+    base_a = args.base_a.read_text(encoding="utf-8").strip()
+    base_b = args.base_b.read_text(encoding="utf-8").strip() if args.base_b else None
+
+    bases = {"A": base_a}
+    if base_b:
+        bases["B"] = base_b
+
+    if args.mode == "event":
+        results = await _run_event(bases, _DEFAULT_CASES, args)
+    else:
+        complete = resolve_completion(args.provider, args.model)
+        cases = _DEFAULT_CASES
+        if args.case:
+            wanted = set(args.case)
+            cases = [c for c in _DEFAULT_CASES if c["name"] in wanted]
+        if not cases:
+            print("no cases selected", file=sys.stderr)
+            return 2
+        results = await _run_direct(complete, bases, cases, args)
 
     if args.out:
         args.out.parent.mkdir(parents=True, exist_ok=True)

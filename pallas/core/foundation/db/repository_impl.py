@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import TYPE_CHECKING, Any
 
 from beanie.operators import Or
@@ -186,6 +187,20 @@ class MongoMessageRepository:
         docs.reverse()
         return docs
 
+    async def find_by_message_ids(self, group_id: int, message_ids: list[int]) -> list[Message]:
+        # 注意 QQ 新版 message_id 可能是负数，isdigit() 不认负号会误过滤，导致引用图查不到。
+        ids = {int(item) for item in message_ids if str(item or "").strip().lstrip("-").isdigit() and item is not None}
+        if not ids:
+            return []
+        docs = (
+            await Message
+            .find({"group_id": int(group_id), "message_id": {"$in": list(ids)}})
+            .sort("-time")
+            .limit(len(ids))
+            .to_list()
+        )
+        return docs
+
     async def list_recent_group_ids_for_bot(
         self,
         bot_id: int,
@@ -360,6 +375,14 @@ class MongoImageCacheRepository:
 
     async def find_by_content_hash(self, content_hash: str) -> ImageCache | None:
         cache = await ImageCache.find_one(ImageCache.content_hash == content_hash)
+        return await image_cache_fill_blob(cache)
+
+    async def find_by_url(self, url: str) -> ImageCache | None:
+        query = {
+            "cq_code": {"$regex": re.escape(url)},
+            "$or": [{"blob_path": {"$nin": [None, ""]}}, {"blob_data": {"$nin": [None, b""]}}],
+        }
+        cache = await ImageCache.find(query).sort("-date", "-id").first_or_none()
         return await image_cache_fill_blob(cache)
 
     async def bind_content_hash(self, cq_code: str, content_hash: str) -> None:

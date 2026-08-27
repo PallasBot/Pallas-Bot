@@ -336,6 +336,8 @@ async def handle_notice(event: _NoticeEvent):
         config = BotConfig(event.self_id, event.group_id)  # type: ignore
         if not await config.is_cooldown("poke"):
             return
+        if not await config.allow_window_action("poke", plugin_config.poke_limit_max, plugin_config.poke_limit_window):
+            return
         await config.refresh_cooldown("poke")
         await asyncio.sleep(random.randint(1, 3))
         await get_bot(str(event.self_id)).call_api(

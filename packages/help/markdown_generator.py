@@ -11,6 +11,7 @@ from pallas.api.perm import (
 
 from .config import Config
 from .help_constants import HELP_STATUS_OFF, HELP_STATUS_ON, HELP_STATUS_PLACEHOLDER
+from .plugin_legacy_names import is_plugin_name_in_set
 from .plugin_manager import find_plugin, get_help_menu_plugins, plugin_display_name
 from .plugin_match import normalize_help_key
 
@@ -248,7 +249,7 @@ def generate_plugin_functions_markdown(
             markdown_content += f"{_wrap_paragraphs_for_help_page(detail_hint)}\n\n"
             markdown_content += "| # | 功能 | 怎么说 | 场景 | 何人可用 |\n"
             markdown_content += "|---|------|--------|------|----------|\n"
-            say_wrap = 28 if target_plugin.name == "maa" else 24
+            say_wrap = 28 if is_plugin_name_in_set(str(target_plugin.name), {"maa"}) else 24
             for i, item in enumerate(user_menu, 1):
                 func_name = _sanitize_pipe(str(item.get("func", f"未命名功能 {i}") or ""))
                 say_cell = _markdown_table_cell_truncate(help_say_phrase(item), say_wrap)
@@ -261,7 +262,7 @@ def generate_plugin_functions_markdown(
         markdown_content += "## 说明\n\n"
         markdown_content += f"{description}\n\n"
 
-        if target_plugin.name == "maa":
+        if is_plugin_name_in_set(str(target_plugin.name), {"maa"}):
             from pallas.core.plugin_coord import maa as maa_coord
 
             maa_http = _wrap_paragraphs_for_help_page(maa_coord.format_maa_http_setup_help())
@@ -361,7 +362,8 @@ def generate_function_detail_markdown(
     if detail_des:
         markdown_content += f"## 怎么用\n\n{_wrap_paragraphs_for_help_page(str(detail_des))}\n\n"
 
-    if target_plugin.name == "maa" and func_name in {"绑定设备", "绑定 MAA 设备", "MAA HTTP"}:
+    is_maa = is_plugin_name_in_set(str(target_plugin.name), {"maa"})
+    if is_maa and func_name in {"绑定设备", "绑定 MAA 设备", "MAA HTTP"}:
         from pallas.core.plugin_coord import maa as maa_coord
 
         maa_http = _wrap_paragraphs_for_help_page(maa_coord.format_maa_http_setup_help())

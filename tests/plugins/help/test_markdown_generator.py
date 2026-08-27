@@ -1,8 +1,13 @@
+from types import SimpleNamespace
+
 from packages.help.help_constants import HELP_STATUS_OFF, HELP_STATUS_ON
 from packages.help.markdown_generator import (
+    HelpMarkdownIssue,
     _is_numbered_list_block,
     _plugin_page_status_banner,
     _wrap_paragraphs_for_help_page,
+    generate_function_detail_markdown,
+    generate_plugin_functions_markdown,
     generate_plugins_markdown,
     help_list_status_mark,
 )
@@ -103,3 +108,58 @@ def test_generate_plugins_markdown_reuses_filtered_plugins(monkeypatch) -> None:
 
     assert "示例插件" in text
     assert called is False
+
+
+def _maa_plugin(name: str, func_names: list[str]) -> SimpleNamespace:
+    menu = [{"func": n, "say": f"牛牛{n}"} for n in func_names]
+    return SimpleNamespace(
+        name=name,
+        metadata=SimpleNamespace(
+            name="MAA 远控",
+            description="desc",
+            usage="MAA 远控相关功能",
+            extra={"menu_data": menu},
+        ),
+    )
+
+
+def test_plugin_functions_markdown_maa_section_present_for_full_module_name(monkeypatch) -> None:
+    plugin = _maa_plugin("pallas_plugin_maa", ["绑定设备"])
+    monkeypatch.setattr("packages.help.markdown_generator.find_plugin", lambda _name: plugin)
+
+    text, issue = generate_plugin_functions_markdown("pallas_plugin_maa")
+
+    assert issue == HelpMarkdownIssue.OK
+    assert "## MAA 对接地址" in text
+
+
+def test_plugin_functions_markdown_maa_section_absent_for_other_plugin(monkeypatch) -> None:
+    plugin = SimpleNamespace(
+        name="drink",
+        metadata=SimpleNamespace(name="喝酒", description="desc", usage="喝酒相关功能", extra={"menu_data": []}),
+    )
+    monkeypatch.setattr("packages.help.markdown_generator.find_plugin", lambda _name: plugin)
+
+    text, _ = generate_plugin_functions_markdown("drink")
+
+    assert "## MAA 对接地址" not in text
+
+
+def test_function_detail_markdown_maa_section_present_for_full_module_name(monkeypatch) -> None:
+    plugin = _maa_plugin("pallas_plugin_maa", ["绑定设备"])
+    monkeypatch.setattr("packages.help.markdown_generator.find_plugin", lambda _name: plugin)
+
+    text, issue = generate_function_detail_markdown("pallas_plugin_maa", "绑定设备")
+
+    assert issue == HelpMarkdownIssue.OK
+    assert "## MAA 对接地址" in text
+
+
+def test_function_detail_markdown_maa_section_absent_for_other_func(monkeypatch) -> None:
+    plugin = _maa_plugin("pallas_plugin_maa", ["其他功能"])
+    monkeypatch.setattr("packages.help.markdown_generator.find_plugin", lambda _name: plugin)
+
+    text, issue = generate_function_detail_markdown("pallas_plugin_maa", "其他功能")
+
+    assert issue == HelpMarkdownIssue.OK
+    assert "## MAA 对接地址" not in text

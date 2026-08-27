@@ -121,6 +121,7 @@ _BUSINESS_EVENT_ACTIONS = {
     "视觉多模态请求": "Vision multimodal request",
     "视觉文本回退": "Vision text fallback",
     "智能对话提交": "Chat submission",
+    "表情回应": "Reaction reply",
 }
 
 _BUSINESS_EVENT_RESULTS = {

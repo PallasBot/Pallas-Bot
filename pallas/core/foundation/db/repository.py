@@ -117,6 +117,10 @@ class MessageRepository(Protocol):
         """群内近期消息，按 time 升序。"""
         ...
 
+    async def find_by_message_ids(self, group_id: int, message_ids: list[int]) -> list[Message]:
+        """按群内 message_id 集合查消息（用于解析被引用/回复的消息内容）。"""
+        ...
+
     async def list_recent_group_ids_for_bot(
         self,
         bot_id: int,
@@ -207,6 +211,14 @@ class ImageCacheRepository(Protocol):
         ...
 
     async def find_by_content_hash(self, content_hash: str) -> ImageCache | None: ...
+
+    async def find_by_url(self, url: str) -> ImageCache | None:
+        """按 URL 在完整 CQ 字符串中查找图片缓存。
+
+        ``url`` 需已用 ``html.escape(url, quote=False)`` 转义，以匹配存储的
+        ``cq_code``（内部 URL 是 HTML entity 形态）。返回最近一条带 blob 的缓存。
+        """
+        ...
 
     async def bind_content_hash(self, cq_code: str, content_hash: str) -> None: ...
 

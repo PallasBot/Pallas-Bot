@@ -1,6 +1,7 @@
 from pathlib import Path
 
 WORKFLOW = Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release.yml"
+DIST_SCRIPT = Path(__file__).resolve().parents[2] / "tools" / "build_webui_dist.sh"
 
 
 def release_workflow_text() -> str:
@@ -27,3 +28,18 @@ def test_release_docker_image_reuses_webui_artifact() -> None:
     assert "uses: actions/download-artifact@" in docker_job
     assert "name: webui-dist-zip" in docker_job
     assert "path: resource/webui" in docker_job
+
+
+def test_release_webui_artifact_contains_compatibility_manifest() -> None:
+    text = release_workflow_text()
+    script = DIST_SCRIPT.read_text(encoding="utf-8")
+
+    assert "release-manifest.json" in text
+    assert "release-manifest.json" in script
+
+
+def test_release_resolves_only_formal_webui_tags() -> None:
+    text = release_workflow_text()
+
+    assert "git tag -l 'v[0-9]*'" in text
+    assert "=~ ^v[0-9]+" in text

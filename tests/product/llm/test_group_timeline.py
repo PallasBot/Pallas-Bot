@@ -5,7 +5,12 @@ import pytest
 
 from pallas.core.foundation.db import Message
 from pallas.product.llm import group_timeline
-from pallas.product.llm.group_timeline import format_group_timeline
+from pallas.product.llm.group_timeline import (
+    GroupTimelineImage,
+    format_group_timeline,
+    format_group_timeline_context,
+    should_include_group_timeline,
+)
 
 
 def test_format_group_timeline_keeps_speakers_order_and_reply_target() -> None:
@@ -144,3 +149,98 @@ def test_format_group_timeline_labels_own_and_peer_bot_messages(
     assert "- 牛牛：我自己说的" in timeline
     assert "- 别的牛：别的牛说的" in timeline
     assert "- 阿灿：真人说的" in timeline
+
+
+def test_format_group_timeline_context_extracts_raw_images_and_keeps_placeholder() -> None:
+    context = format_group_timeline_context([
+        Message.model_construct(
+            group_id=1,
+            user_id=11,
+            bot_id=99,
+            raw_message="[CQ:image,file=photo,url=https://example.com/a.png] 看这个",
+            plain_text="看这个",
+            sender_name="兔兔",
+            message_id=101,
+            time=1,
+        ),
+    ])
+
+    assert context.text == "【刚才的群聊】\n- 兔兔：[图片] 看这个"
+    assert context.images == (
+        GroupTimelineImage(speaker="兔兔", text="看这个", url="https://example.com/a.png"),
+    )
+
+
+def test_format_group_timeline_context_extracts_raw_mface_image() -> None:
+    context = format_group_timeline_context([
+        Message.model_construct(
+            group_id=1,
+            user_id=11,
+            bot_id=99,
+            raw_message="[CQ:mface,emoji_id=128077,url=https://example.com/mface.png]",
+            plain_text="",
+            sender_name="兔兔",
+            message_id=101,
+            time=1,
+        ),
+    ])
+
+    assert context.text == "【刚才的群聊】\n- 兔兔：[图片]"
+    assert context.images == (
+        GroupTimelineImage(speaker="兔兔", text="", url="https://example.com/mface.png"),
+    )
+
+
+def test_should_include_group_timeline_for_vision_turn() -> None:
+    assert should_include_group_timeline(is_to_me=False, speak_trigger="vision") is True
+
+
+def test_format_group_timeline_context_keeps_image_without_url_as_text_placeholder() -> None:
+    context = format_group_timeline_context([
+        Message.model_construct(
+            group_id=1,
+            user_id=11,
+            bot_id=99,
+            raw_message="[CQ:image,file=photo]",
+            plain_text="",
+            sender_name="兔兔",
+            message_id=101,
+            time=1,
+        ),
+    ])
+
+    assert context.text == "【刚才的群聊】\n- 兔兔：[图片]"
+    assert context.images == ()
+
+
+def test_format_group_timeline_context_deduplicates_urls_and_keeps_latest_images() -> None:
+    messages = [
+        Message.model_construct(
+            group_id=1,
+            user_id=index,
+            bot_id=99,
+            raw_message=f"[CQ:image,url={url}] 图片{index}",
+            plain_text=f"图片{index}",
+            sender_name=f"用户{index}",
+            message_id=index,
+            time=index,
+        )
+        for index, url in enumerate(
+            [
+                "https://example.com/a.png",
+                "HTTPS://EXAMPLE.COM/A.PNG",
+                "https://example.com/b.png",
+                "https://example.com/c.png",
+                "https://example.com/d.png",
+            ],
+            start=1,
+        )
+    ]
+
+    context = format_group_timeline_context(messages)
+
+    assert [item.url for item in context.images] == [
+        "https://example.com/b.png",
+        "https://example.com/c.png",
+        "https://example.com/d.png",
+    ]

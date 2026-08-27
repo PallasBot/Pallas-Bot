@@ -14,6 +14,7 @@ from pallas.product.llm.repeater_semantic_style import (
     semantic_style_injection_enabled,
 )
 from pallas.product.llm.reply_shape import resolve_reply_shape
+from pallas.product.llm.tools.time_now import current_time_text
 from pallas.product.llm.turn_policy import TurnPolicy
 
 _SECTION_META = (
@@ -22,6 +23,7 @@ _SECTION_META = (
     ("identity", "自我身份", "persona.self_identity"),
     ("reply_shape", "回复形状与输出契约", "llm.reply_shape"),
     ("turn_policy", "本轮策略", "llm.turn_policy"),
+    ("current_time", "当前时间", "llm.tools.time_now"),
     ("group_timeline", "群聊上下文", "llm.assembler.context"),
     ("memory", "长期记忆", "llm.assembler.context"),
     ("knowledge", "知识检索", "llm.assembler.context"),
@@ -122,6 +124,7 @@ async def build_prompt_preview(
         context=context,
         group_expression=group_expression,
         reply_shape=reply_shape,
+        current_time=current_time_text(),
         tool_context=None,
         section_overrides=section_overrides,
     )

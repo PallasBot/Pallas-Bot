@@ -24,8 +24,15 @@ jobs:
     outputs:
       webui_console_version: ${{ steps.webui_ref.outputs.console_version }}
       webui_git_ref: ${{ steps.webui_ref.outputs.resolved_ref }}
+      webui_git_commit: ${{ steps.webui_ref.outputs.webui_commit }}
+      webui_bot_commit: ${{ steps.webui_ref.outputs.bot_commit }}
 
     steps:
+      - name: Checkout Bot release commit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
       - name: Checkout WebUI repo
         uses: actions/checkout@v6
         with:
@@ -44,25 +51,39 @@ jobs:
           set -euo pipefail
           git fetch origin --tags --force
           if [ -n "${PIN_TAG}" ]; then
-            git checkout "${PIN_TAG}"
-            echo "console_version=${PIN_TAG}" >> "$GITHUB_OUTPUT"
-            echo "resolved_ref=${PIN_TAG}" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          TAG=$(git tag -l 'v*' --merged HEAD --sort=-version:refname | head -n1)
-          if [ -z "${TAG}" ]; then
-            TAG=$(git tag -l 'v*' --sort=-version:refname | head -n1)
-          fi
-          if [ -n "${TAG}" ]; then
-            git checkout "${TAG}"
-            echo "console_version=${TAG}" >> "$GITHUB_OUTPUT"
-            echo "resolved_ref=${TAG}" >> "$GITHUB_OUTPUT"
+            CANDIDATES="${PIN_TAG}"
           else
-            echo "::warning::WebUI 仓库无 v* tag，使用 main；console 版本取自 package.json"
-            VER=$(node -p "require('./package.json').version")
-            echo "console_version=${VER}" >> "$GITHUB_OUTPUT"
-            echo "resolved_ref=main" >> "$GITHUB_OUTPUT"
+            CANDIDATES=$(git tag -l 'v[0-9]*' --sort=-version:refname)
           fi
+          found=0
+          while IFS= read -r TAG; do
+            [ -n "${TAG}" ] || continue
+            if [[ ! "${TAG}" =~ ^v[0-9]+(\.[0-9]+){0,2}(\+[0-9A-Za-z.-]+)?$ ]]; then
+              [ -n "${PIN_TAG}" ] && echo "::error::${TAG} 不是正式 WebUI release tag" && exit 1
+              continue
+            fi
+            git checkout --quiet "${TAG}"
+            MIN_COMMIT=$(node -e '
+              const fs = require("fs");
+              const m = JSON.parse(fs.readFileSync("release-manifest.json", "utf8"));
+              const c = m?.requires?.bot?.min_commit;
+              if (m?.schema_version !== 1 || !/^[0-9a-f]{40}$/.test(c || "")) process.exit(2);
+              process.stdout.write(c);
+            ' 2>/dev/null) || {
+              [ -n "${PIN_TAG}" ] && echo "::error::${TAG} has no valid release-manifest.json" && exit 1
+              continue
+            }
+            if git -C "${GITHUB_WORKSPACE}" merge-base --is-ancestor "${MIN_COMMIT}" "${GITHUB_SHA}"; then
+              echo "console_version=${TAG}" >> "$GITHUB_OUTPUT"
+              echo "resolved_ref=${TAG}" >> "$GITHUB_OUTPUT"
+              echo "webui_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+              echo "bot_commit=${MIN_COMMIT}" >> "$GITHUB_OUTPUT"
+              found=1
+              break
+            fi
+            [ -n "${PIN_TAG}" ] && echo "::error::WebUI ${TAG} requires Bot commit ${MIN_COMMIT}, not reachable from ${GITHUB_SHA}" && exit 1
+          done <<< "${CANDIDATES}"
+          [ "${found}" -eq 1 ] || { echo "::error::No WebUI tag is compatible with Bot commit ${GITHUB_SHA}"; exit 1; }
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -109,6 +130,7 @@ jobs:
         run: |
           mkdir -p webui-zip-root/public-react
           cp -a "pallas-webui/${{ steps.webui_build.outputs.dir }}/dist/." webui-zip-root/public-react/
+          cp pallas-webui/release-manifest.json webui-zip-root/public-react/release-manifest.json
           (cd webui-zip-root && zip -r ../dist.zip public-react)
 
       - name: Upload WebUI artifact
@@ -258,6 +280,7 @@ jobs:
             ## WebUI
 
             附件 **`dist.zip`**：控制台前端静态资源（来自 [Pallas-Bot-WebUI](https://github.com/PallasBot/Pallas-Bot-WebUI) `${{ needs.build-webui-dist.outputs.webui_git_ref }}`，console `${{ needs.build-webui-dist.outputs.webui_console_version }}`）。
+            兼容基线：Bot commit `${{ needs.build-webui-dist.outputs.webui_bot_commit }}`；WebUI commit `${{ needs.build-webui-dist.outputs.webui_git_commit }}`。
 
             ## 非 Docker 部署包
 
@@ -343,6 +366,7 @@ jobs:
           push: true
           build-args: |
             PALLAS_BOT_VERSION=${{ steps.get_version.outputs.version }}
+            PALLAS_BOT_COMMIT=${{ github.sha }}
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/pallas-bot:${{ steps.get_version.outputs.version }}
             ${{ secrets.DOCKERHUB_USERNAME }}/pallas-bot:latest

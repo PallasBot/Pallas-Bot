@@ -114,6 +114,20 @@ def test_evaluate_to_me_always() -> None:
     assert d.reason == "to_me"
 
 
+def test_evaluate_vision_content_without_text() -> None:
+    clear_speak_perception_state()
+    d = evaluate_speak_perception(
+        plain_text="",
+        aliases=["牛牛"],
+        is_to_me=False,
+        bot_id=1,
+        ambient_enabled=False,
+        has_vision_content=True,
+    )
+    assert d.should_speak
+    assert d.reason == "vision"
+
+
 def test_evaluate_mention_force() -> None:
     clear_speak_perception_state()
     d = evaluate_speak_perception(

@@ -8,6 +8,16 @@ class Config(BaseModel, extra="ignore"):
         default=True,
         description="牛牛被移出群后，是否自动将其加入黑名单。",
     )
+    poke_limit_max: int = Field(
+        default=3,
+        ge=1,
+        description="时段内戳一戳回应的最大次数，避免无限戳。",
+    )
+    poke_limit_window: int = Field(
+        default=60,
+        ge=1,
+        description="戳一戳限流的时间窗口（秒）。",
+    )
 
 
 plugin_webui = install_hot_reload_config(Config, config_module=__name__)

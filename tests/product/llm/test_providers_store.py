@@ -88,6 +88,60 @@ def test_providers_store_migrates_legacy_pricing_to_registered_models(tmp_path: 
     assert models[1]["pricing_rules"][0]["kind"] == "token"
 
 
+def test_endpoint_uses_registered_model_capabilities_and_effort(tmp_path: Path, monkeypatch) -> None:
+    store = tmp_path / "llm_providers.json"
+    monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
+    clear_providers_store_cache()
+    save_providers_document({
+        "providers": [
+            {
+                "id": "gateway",
+                "base_url": "https://example.test/v1",
+                "default_model": "vision-model",
+                "task_models": {"llm_chat": "vision-model"},
+                "capabilities": ["text"],
+                "model_effort": "low",
+                "models": [
+                    {"name": "vision-model", "capabilities": ["text", "image"], "model_effort": "medium"},
+                    {"name": "plain-model", "capabilities": ["text"], "model_effort": "disable"},
+                ],
+            }
+        ],
+        "routing": {"tasks": {"llm_chat": "gateway"}},
+    })
+
+    endpoint = resolve_endpoint_for_task("llm_chat")
+
+    assert endpoint is not None
+    assert endpoint.capabilities == ("text", "image")
+    assert endpoint.model_effort == "medium"
+
+
+def test_endpoint_falls_back_to_provider_capabilities_and_effort(tmp_path: Path, monkeypatch) -> None:
+    store = tmp_path / "llm_providers.json"
+    monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
+    clear_providers_store_cache()
+    save_providers_document({
+        "providers": [
+            {
+                "id": "gateway",
+                "base_url": "https://example.test/v1",
+                "default_model": "plain-model",
+                "capabilities": ["text", "image"],
+                "model_effort": "high",
+                "models": [{"name": "plain-model"}],
+            }
+        ],
+        "routing": {"tasks": {"llm_chat": "gateway"}},
+    })
+
+    endpoint = resolve_endpoint_for_task("llm_chat")
+
+    assert endpoint is not None
+    assert endpoint.capabilities == ("text", "image")
+    assert endpoint.model_effort == "high"
+
+
 def test_providers_store_preserves_api_key_on_blank_update(tmp_path: Path, monkeypatch) -> None:
     store = tmp_path / "llm_providers.json"
     monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)

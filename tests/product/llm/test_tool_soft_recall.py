@@ -133,6 +133,15 @@ def test_imperative_stem_bonus_addressed(monkeypatch) -> None:
     assert score >= 6
 
 
+def test_recognition_question_does_not_force_memes_domain() -> None:
+    """无图识别问句（这个表情包是什么）不注入生成类 memes 域，避免 LLM 误调推荐工具。"""
+    for text in ("这个表情包是什么", "这个表情包是谁", "这个梗是什么意思"):
+        assert "memes" not in infer_tool_domains(text)
+    for text in ("做个摸表情", "来张举牌表情", "帮我做表情"):
+        assert "memes" in infer_tool_domains(text)
+
+
+
 def _song_spec():
     return build_command_tool_spec(
         parse_llm_command_tool_decl(

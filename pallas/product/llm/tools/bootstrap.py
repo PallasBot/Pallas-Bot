@@ -12,6 +12,7 @@ from pallas.product.llm.tools.plugin_bootstrap import clear_plugin_command_tools
 from pallas.product.llm.tools.reply import register_reply_tools
 from pallas.product.llm.tools.social import register_social_tools
 from pallas.product.llm.tools.tasks import register_task_tools
+from pallas.product.llm.tools.time_now import register_time_tools
 from pallas.product.llm.tools.web import register_web_tools
 
 _BOOTSTRAPPED = False
@@ -36,6 +37,7 @@ def ensure_llm_tools_bootstrapped(*, force: bool = False) -> None:
     register_person_tools()
     register_social_tools()
     register_task_tools()
+    register_time_tools()
     register_plugin_command_tools()
     register_mcp_tools()
     _BOOTSTRAPPED = True

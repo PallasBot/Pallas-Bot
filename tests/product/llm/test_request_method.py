@@ -22,6 +22,69 @@ def test_messages_to_responses_payload_basic() -> None:
     assert payload["input"] == [{"role": "user", "content": "你好"}]
 
 
+def test_messages_to_responses_payload_converts_vision_content() -> None:
+    payload = messages_to_responses_payload(
+        [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "这是什么？"},
+                    {"type": "image_url", "image_url": {"url": "https://example.com/a.png"}},
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,abc"}},
+                    {"type": "input_text", "text": "补充问题"},
+                    {"type": "input_image", "image_url": "https://example.com/b.png", "detail": "high"},
+                ],
+            }
+        ],
+        model="deepseek-v4-flash-vision-exp",
+        options={},
+        tools=None,
+    )
+    assert payload["input"] == [
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "这是什么？"},
+                {
+                    "type": "input_image",
+                    "image_url": "https://example.com/a.png",
+                    "detail": "auto",
+                },
+                {
+                    "type": "input_image",
+                    "image_url": "data:image/png;base64,abc",
+                    "detail": "auto",
+                },
+                {"type": "input_text", "text": "补充问题"},
+                {"type": "input_image", "image_url": "https://example.com/b.png", "detail": "high"},
+            ],
+        }
+    ]
+
+
+def test_group_timeline_vision_content_converts_to_responses_input() -> None:
+    from pallas.product.llm.vision_messages import openai_group_timeline_user_content
+
+    chat_content = openai_group_timeline_user_content([
+        (
+            {"speaker": "兔兔", "text": "看这个", "url": "https://example.com/a.png"},
+            "data:image/png;base64,abc",
+        )
+    ])
+    payload = messages_to_responses_payload(
+        [{"role": "user", "content": chat_content}],
+        model="deepseek-v4-flash-vision-exp",
+        options={},
+        tools=None,
+    )
+
+    assert payload["input"][0]["content"] == [
+        {"type": "input_text", "text": "【刚才群聊中的图片】"},
+        {"type": "input_text", "text": "兔兔：看这个"},
+        {"type": "input_image", "image_url": "data:image/png;base64,abc", "detail": "auto"},
+    ]
+
+
 def test_tools_for_responses_api_flattens_chat_schema() -> None:
     flat = tools_for_responses_api([
         {

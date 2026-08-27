@@ -1,6 +1,9 @@
 from types import SimpleNamespace
 
+from packages.help.markdown_generator import HelpMarkdownIssue
 from packages.help.plugin_detail_data import (
+    build_function_detail_data,
+    build_plugin_detail_data,
     command_match_tokens,
     normalize_plugin_usage_text,
     search_command_help_targets,
@@ -92,3 +95,51 @@ def test_search_command_help_targets_multiple_candidates() -> None:
 def test_search_command_help_targets_no_match() -> None:
     plugins = [_make_plugin("drink", [{"func": "牛牛喝酒", "trigger_condition": "牛牛喝酒"}])]
     assert search_command_help_targets("不存在的命令", plugins) == []
+
+
+def _maa_plugin(name: str, func_names: list[str]) -> SimpleNamespace:
+    menu = [{"func": n} for n in func_names]
+    return SimpleNamespace(
+        name=name,
+        metadata=SimpleNamespace(name="MAA 远控", extra={"menu_data": menu}),
+    )
+
+
+def test_build_plugin_detail_data_maa_section_for_full_module_name(monkeypatch) -> None:
+    plugin = _maa_plugin("pallas_plugin_maa", ["绑定设备"])
+    monkeypatch.setattr("packages.help.plugin_detail_data.find_plugin", lambda _name: plugin)
+
+    data, issue = build_plugin_detail_data("pallas_plugin_maa", plugin_enabled=True)
+
+    assert issue == HelpMarkdownIssue.OK
+    assert any(title == "MAA 对接地址" for title, _ in data.extra_sections)
+
+
+def test_build_plugin_detail_data_no_maa_section_for_other_plugin(monkeypatch) -> None:
+    plugin = _make_plugin("drink", [{"func": "牛牛喝酒"}], display="喝酒")
+    monkeypatch.setattr("packages.help.plugin_detail_data.find_plugin", lambda _name: plugin)
+
+    data, issue = build_plugin_detail_data("drink", plugin_enabled=True)
+
+    assert issue == HelpMarkdownIssue.OK
+    assert not data.extra_sections
+
+
+def test_build_function_detail_data_maa_section_for_full_module_name(monkeypatch) -> None:
+    plugin = _maa_plugin("pallas_plugin_maa", ["绑定设备"])
+    monkeypatch.setattr("packages.help.plugin_detail_data.find_plugin", lambda _name: plugin)
+
+    data, issue = build_function_detail_data("pallas_plugin_maa", "绑定设备")
+
+    assert issue == HelpMarkdownIssue.OK
+    assert any(title == "MAA 对接地址" for title, _ in data.extra_sections)
+
+
+def test_build_function_detail_data_no_maa_section_for_other_func(monkeypatch) -> None:
+    plugin = _maa_plugin("pallas_plugin_maa", ["其他功能"])
+    monkeypatch.setattr("packages.help.plugin_detail_data.find_plugin", lambda _name: plugin)
+
+    data, issue = build_function_detail_data("pallas_plugin_maa", "其他功能")
+
+    assert issue == HelpMarkdownIssue.OK
+    assert not data.extra_sections

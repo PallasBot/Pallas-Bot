@@ -145,3 +145,39 @@ async def test_memory_store_does_not_complete_a_reclaimed_lease() -> None:
 
     assert await store.complete_many(jobs=[first], owner="worker-a") == 0
     assert await store.complete_many(jobs=[second], owner="worker-b") == 1
+
+
+@pytest.mark.asyncio
+async def test_memory_store_complete_retains_configured_kind_as_terminal() -> None:
+    from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
+
+    store = MemoryWorkJobStore(completion_retention={"sticker_vision.select": "done"})
+    job = WorkJob.create(kind="sticker_vision.select", payload={"mock": 1}, idempotency_key="s:v:retain:1")
+    await store.enqueue(job)
+    claimed = await store.claim(owner="worker", lease_sec=1)
+    assert claimed is not None
+
+    assert await store.complete(job_id=claimed.id, owner="worker", lease_id=claimed.lease_id or "")
+
+    # 完成后仍可读到该任务，state 反映完成态
+    after = store._jobs[claimed.id]
+    assert after.kind == "sticker_vision.select"
+    assert store._completed == set()  # 完成保留不再放入 _completed 以免被 requeue 复活
+
+
+@pytest.mark.asyncio
+async def test_memory_store_retained_terminal_cannot_be_requeued() -> None:
+    from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
+
+    store = MemoryWorkJobStore(completion_retention={"sticker_vision.select": "done"})
+    job = WorkJob.create(kind="sticker_vision.select", payload={}, idempotency_key="s:v:req:1")
+    await store.enqueue(job)
+    leased = await store.claim(owner="worker", lease_sec=1)
+    assert leased is not None
+    await store.complete(job_id=leased.id, owner="worker", lease_id=leased.lease_id or "")
+
+    replacement = WorkJob.create(kind="sticker_vision.select", payload={}, idempotency_key="s:v:req:1")
+    _, reactivated = await store.requeue_terminal(replacement)
+    assert reactivated is False

@@ -70,7 +70,7 @@ class Config(BaseModel):
         default="",
         description=field_help(
             "要下载的发布版本标签",
-            "例如 v1.0.0；留空表示使用最新版 latest",
+            "例如 v1.0.0；留空表示使用最新兼容的正式 release",
             "仅在上面的 zip 直链留空时生效",
         ),
         json_schema_extra=_ui("前端包", 30),

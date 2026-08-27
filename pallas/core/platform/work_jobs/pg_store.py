@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import time
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import case, delete, func, or_, select, tuple_, update
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable, Mapping
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from .models import WorkJob
@@ -44,7 +48,37 @@ def build_requeue_terminal_statement(job: WorkJob, *, now: float):
     ).returning(BackgroundJobRow)
 
 
+def build_complete_retained_statement(
+    job_ids: list[str], *, kind: str, status: str, now: float, owner: str | None = None
+):
+    from pallas.core.foundation.db.repository_pg import BackgroundJobRow
+
+    where_conds = [BackgroundJobRow.id.in_(job_ids), BackgroundJobRow.kind == kind]
+    if owner is not None:
+        where_conds.append(BackgroundJobRow.lease_owner == owner)
+    return (
+        update(BackgroundJobRow)
+        .where(*where_conds)
+        .values(
+            status=status,
+            finished_at=now,
+            lease_owner=None,
+            lease_id=None,
+            leased_until=None,
+        )
+    )
+
+
 class PostgresWorkJobStore:
+    def __init__(
+        self,
+        *,
+        completion_retention: Mapping[str, str] | None = None,
+        notify_completed: Callable[[], Awaitable[None]] | None = None,
+    ) -> None:
+        self._completion_retention: Mapping[str, str] = completion_retention or {}
+        self._notify_completed = notify_completed
+
     async def enqueue(self, job: WorkJob) -> WorkJob:
         from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
 
@@ -269,17 +303,43 @@ class PostgresWorkJobStore:
             return 0
         from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
 
+        retained: dict[str, list[WorkJob]] = {}
+        removed: list[WorkJob] = []
+        for job in jobs:
+            if job.kind in self._completion_retention:
+                retained.setdefault(job.kind, []).append(job)
+            else:
+                removed.append(job)
+
+        updated = 0
+        deleted = 0
         async with get_session() as session:
-            result = await session.execute(
-                delete(BackgroundJobRow).where(
-                    BackgroundJobRow.lease_owner == owner,
-                    tuple_(BackgroundJobRow.id, BackgroundJobRow.lease_id).in_([
-                        (job.id, job.lease_id) for job in jobs
-                    ]),
+            now = time.time()
+            for kind, kind_jobs in retained.items():
+                result = await session.execute(
+                    build_complete_retained_statement(
+                        job_ids=[job.id for job in kind_jobs],
+                        kind=kind,
+                        status=self._completion_retention[kind],
+                        now=now,
+                        owner=owner,
+                    )
                 )
-            )
+                updated += int(result.rowcount or 0)
+            if removed:
+                result = await session.execute(
+                    delete(BackgroundJobRow).where(
+                        BackgroundJobRow.lease_owner == owner,
+                        tuple_(BackgroundJobRow.id, BackgroundJobRow.lease_id).in_([
+                            (job.id, job.lease_id) for job in removed
+                        ]),
+                    )
+                )
+                deleted += int(result.rowcount or 0)
             await session.commit()
-        return int(result.rowcount or 0)
+        if updated > 0 and self._notify_completed is not None:
+            await self._notify_completed()
+        return updated + deleted
 
     async def fail(self, *, job_id: str, owner: str, lease_id: str, retry_after_sec: float) -> bool:
         return await self._release(
@@ -311,6 +371,28 @@ class PostgresWorkJobStore:
 
         async with get_session() as session:
             if completed:
+                row = (
+                    await session.execute(
+                        select(BackgroundJobRow).where(
+                            BackgroundJobRow.id == job_id,
+                            BackgroundJobRow.lease_owner == owner,
+                            BackgroundJobRow.lease_id == lease_id,
+                        )
+                    )
+                ).scalar_one_or_none()
+                if row is not None and row.kind in self._completion_retention:
+                    await session.execute(
+                        build_complete_retained_statement(
+                            job_ids=[job_id],
+                            kind=row.kind,
+                            status=self._completion_retention[row.kind],
+                            now=time.time(),
+                        )
+                    )
+                    await session.commit()
+                    if self._notify_completed is not None:
+                        await self._notify_completed()
+                    return True
                 # 已完成任务即时删除，避免表无限膨胀；幂等防重由 enqueue 的 idempotency 唯一约束承担
                 result = await session.execute(
                     delete(BackgroundJobRow).where(

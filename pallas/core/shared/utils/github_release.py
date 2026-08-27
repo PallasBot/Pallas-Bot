@@ -161,11 +161,26 @@ def aggregate_release_notes(
     selected: list[dict[str, Any]] = []
     hit_current = False
     truncated_by_count = False
-    for rel in releases:
+    latest_index = next(
+        (
+            index
+            for index, rel in enumerate(releases)
+            if isinstance(rel, dict)
+            and release_tags_equivalent(
+                str(rel.get("tag") or rel.get("tag_name") or ""),
+                latest,
+            )
+        ),
+        None,
+    )
+    release_range = releases[latest_index:] if latest_index is not None else releases
+    for rel in release_range:
         if not isinstance(rel, dict):
             continue
         tag = str(rel.get("tag") or rel.get("tag_name") or "").strip()
         if not tag:
+            continue
+        if bool(rel.get("draft")):
             continue
         if bool(rel.get("prerelease")) and not release_tags_equivalent(tag, latest):
             continue
@@ -182,7 +197,7 @@ def aggregate_release_notes(
             if not isinstance(rel, dict):
                 continue
             tag = str(rel.get("tag") or rel.get("tag_name") or "").strip()
-            if tag and release_tags_equivalent(tag, latest):
+            if tag and not bool(rel.get("draft")) and release_tags_equivalent(tag, latest):
                 selected = [rel]
                 truncated_by_count = False
                 hit_current = True
@@ -228,10 +243,11 @@ async def fetch_release_notes_range(
     latest_tag: str,
     token: str = "",
     user_agent: str = "Pallas-Bot/1.0",
-    limit: int = _DEFAULT_RELEASES_FETCH_LIMIT,
+    limit: int | None = _DEFAULT_RELEASES_FETCH_LIMIT,
     max_releases: int = _DEFAULT_MAX_RELEASES,
     notes_max: int = _DEFAULT_NOTES_MAX,
     changelog_url: str = "",
+    mirror_scope: str | None = "bot",
 ) -> str:
     """拉取仓库最近 releases 并拼成更新说明。失败时返回空串。"""
     owner, _, name = (repo or "").strip().partition("/")
@@ -246,7 +262,13 @@ async def fetch_release_notes_range(
             timeout=httpx.Timeout(15.0, connect=8.0),
             headers=headers,
         ) as client:
-            releases = await fetch_github_releases(repo, client=client, limit=limit, token=token)
+            releases = await fetch_github_releases(
+                repo,
+                client=client,
+                limit=limit,
+                token=token,
+                mirror_scope=mirror_scope,
+            )
     return aggregate_release_notes(
         releases,
         current_tag=current_tag,
@@ -305,8 +327,9 @@ async def fetch_github_releases(
     repo: str,
     *,
     client: httpx.AsyncClient,
-    limit: int = 10,
+    limit: int | None = 10,
     token: str = "",
+    mirror_scope: str | None = "bot",
 ) -> list[dict[str, Any]]:
     """从 GitHub API 获取最近的 release 列表。
 
@@ -315,9 +338,10 @@ async def fetch_github_releases(
     owner, _, name = (repo or "").strip().partition("/")
     if not owner or not name:
         return []
-    api_url = f"https://api.github.com/repos/{owner}/{name}/releases?per_page={limit}"
+    page_size = 100 if limit is None else max(1, min(int(limit), 100))
+    api_url = f"https://api.github.com/repos/{owner}/{name}/releases?per_page={page_size}"
     auth_headers = github_auth_headers(token)
-    mirrors = list(iter_mirrors_for_failover("bot"))
+    mirrors = list(iter_mirrors_for_failover(mirror_scope))
 
     async def getter(url: str) -> httpx.Response:
         resp = await client.get(url, headers=auth_headers)
@@ -325,17 +349,28 @@ async def fetch_github_releases(
             resp.raise_for_status()
         return resp
 
-    try:
-        resp = await request_with_mirrors(api_url, mirrors, getter)
-    except Exception:  # noqa: BLE001
-        return []
-    data = resp.json()
-    if not isinstance(data, list):
-        return []
+    pages: list[dict[str, Any]] = []
+    next_url: str | None = api_url
+    seen_urls: set[str] = set()
+    while next_url and next_url not in seen_urls:
+        seen_urls.add(next_url)
+        try:
+            resp = await request_with_mirrors(next_url, mirrors, getter)
+        except Exception:  # noqa: BLE001
+            return pages
+        data = resp.json()
+        if not isinstance(data, list):
+            return pages
+        pages.extend(item for item in data if isinstance(item, dict))
+        if limit is not None:
+            break
+        next_link = resp.links.get("next")
+        next_url = str(next_link.get("url") or "").strip() if next_link else ""
+
+    if limit is not None:
+        pages = pages[: int(limit)]
     out: list[dict[str, Any]] = []
-    for rel in data:
-        if not isinstance(rel, dict):
-            continue
+    for rel in pages:
         tag = str(rel.get("tag_name", "")).strip()
         if not tag:
             continue
@@ -349,6 +384,7 @@ async def fetch_github_releases(
             "tag_name": tag,
             "name": str(rel.get("name") or tag).strip(),
             "prerelease": bool(rel.get("prerelease", False)),
+            "draft": bool(rel.get("draft", False)),
             "published_at": str(rel.get("published_at") or ""),
             "html_url": str(rel.get("html_url") or "").strip(),
             "body": str(rel.get("body") or "").strip(),

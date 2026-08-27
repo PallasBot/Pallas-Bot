@@ -49,6 +49,7 @@ async def test_build_prompt_preview_returns_ordered_sections_and_prompt(monkeypa
         "identity",
         "reply_shape",
         "turn_policy",
+        "current_time",
         "group_timeline",
         "memory",
         "knowledge",

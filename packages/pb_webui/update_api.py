@@ -38,20 +38,35 @@ async def warm_console_read_caches() -> None:
 
 async def _load_webui_update_check_payload(plugin_config: Config) -> dict[str, Any]:
     from pallas.core.shared.utils.format_exception import format_exception_for_log
-    from pallas.core.shared.utils.github_release import fetch_release_notes_range, release_tags_equivalent
+    from pallas.core.shared.utils.github_release import fetch_release_notes_range
 
-    from .manager import fetch_latest_webui_release, get_installed_webui_version
+    from .manager import (
+        DEFAULT_WEBUI_DIST_ZIP_ASSET,
+        DEFAULT_WEBUI_DIST_ZIP_REPO,
+        get_installed_webui_version,
+        normalize_webui_dist_zip_repo,
+        resolve_compatible_webui_release,
+        webui_has_release_update,
+    )
 
-    repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO)
-    asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
+    repo = normalize_webui_dist_zip_repo(
+        str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO),
+    )
+    asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or DEFAULT_WEBUI_DIST_ZIP_ASSET)
+    requested_tag = str(getattr(plugin_config, "pallas_webui_dist_zip_tag", "") or "").strip()
     github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
     installed = get_installed_webui_version()
     current_tag = str(installed.get("tag", "") or "").strip()
     try:
-        latest = await fetch_latest_webui_release(repo, token=github_token, asset_name=asset)
-        latest_tag = str(latest.get("tag", "") or "").strip()
-        release_url = str(latest.get("html_url", "") or "").strip()
-        asset_url = str(latest.get("asset_url", "") or "").strip()
+        selected = await resolve_compatible_webui_release(
+            repo,
+            asset,
+            requested_tag,
+            token=github_token,
+        )
+        latest_tag = str(selected.get("tag", "") or "").strip()
+        release_url = str(selected.get("html_url", "") or "").strip()
+        asset_url = str(selected.get("asset_url", "") or "").strip()
     except Exception as e:  # noqa: BLE001
         err_msg = format_exception_for_log(e)
         logger.warning("[WebUI] WebUI update check failed for repository [{}]: [{}]", repo, err_msg)
@@ -63,10 +78,12 @@ async def _load_webui_update_check_payload(plugin_config: Config) -> dict[str, A
             "asset_url": "",
             "release_notes": "",
             "error": err_msg,
+            "compatibility": {"status": "unavailable", "reason": err_msg},
+            "requested_tag": requested_tag or None,
             "checked_at": time.time(),
         }
-    has_update = bool(latest_tag and not release_tags_equivalent(current_tag, latest_tag))
-    # dist 资产可能来自主仓 Release，产品变更史写在 WebUI 仓 CHANGELOG
+    has_update = webui_has_release_update(latest_tag=latest_tag, current_tag=current_tag)
+    # 资产与兼容清单来自 WebUI Release，产品变更史写在 WebUI 仓 CHANGELOG
     changelog_url = "https://github.com/PallasBot/Pallas-Bot-WebUI/blob/main/CHANGELOG.md"
     release_notes = await fetch_release_notes_range(
         repo,
@@ -74,10 +91,12 @@ async def _load_webui_update_check_payload(plugin_config: Config) -> dict[str, A
         latest_tag=latest_tag,
         token=github_token,
         user_agent="Pallas-Bot-PallasWebUI/1.0",
+        limit=None,
         changelog_url=changelog_url,
+        mirror_scope="webui",
     )
     if not release_notes:
-        notes_raw = str(latest.get("body", "") or "").strip()
+        notes_raw = str(selected.get("body", "") or "").strip()
         notes_max = 12000
         release_notes = (
             notes_raw
@@ -92,8 +111,34 @@ async def _load_webui_update_check_payload(plugin_config: Config) -> dict[str, A
         "asset_url": asset_url,
         "release_notes": release_notes,
         "error": None,
+        "compatibility": {
+            "status": "compatible",
+            "bot_commit": str(selected.get("bot_commit", "") or "").strip(),
+            "min_bot_commit": str(selected.get("min_bot_commit", "") or "").strip(),
+        },
+        "bot_commit": str(selected.get("bot_commit", "") or "").strip(),
+        "min_bot_commit": str(selected.get("min_bot_commit", "") or "").strip(),
+        "requested_tag": requested_tag or None,
         "checked_at": time.time(),
     }
+
+
+def _webui_update_cache_key(plugin_config: Config) -> str:
+    from .manager import (
+        DEFAULT_WEBUI_DIST_ZIP_ASSET,
+        DEFAULT_WEBUI_DIST_ZIP_REPO,
+        get_bot_current_commit,
+        normalize_webui_dist_zip_repo,
+    )
+
+    repo = normalize_webui_dist_zip_repo(
+        str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO),
+    )
+    asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or DEFAULT_WEBUI_DIST_ZIP_ASSET)
+    tag = str(getattr(plugin_config, "pallas_webui_dist_zip_tag", "") or "").strip()
+    token = bool(str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip())
+    commit = get_bot_current_commit() or "unknown"
+    return f"update_check_webui:{repo}:{asset}:{tag}:{commit}:{token}"
 
 
 def _bot_restart_available() -> bool:
@@ -240,6 +285,31 @@ async def _load_bot_update_check_payload(plugin_config: Config) -> dict[str, Any
 
 _warm_console_read_caches_fn = None
 
+# 进程级共享的外部请求信号量：所有「打外部」的 warm loader 在访问外部前统一经它，
+# 保证同刻最多 2 个外部请求，避免冷启动风暴三路并发打外部 GitHub/社区接口。
+_EXTERNAL_SEM = asyncio.Semaphore(2)
+
+# 外部批相对本地批的延后秒数，给首屏本地缓存先建好、避免与首屏 HTTP 抢事件循环。
+_STAGGER_EXTERNAL_WARM_SEC = 1.0
+
+# 本地批 warm 键：全走 asyncio.to_thread / 内存，不打外部。
+_LOCAL_WARM_KEYS = (
+    "instances",
+    "plugins",
+    "message-stats:all",
+    "plugin-run-stats:all:logsrc:all:tbl:0:view:full",
+    "bots",
+    "system",
+)
+_COMMUNITY_STATS_WARM_KEY = "community-stats"
+
+
+def _batch_warm_keys(webui_key: str, bot_key: str) -> tuple[list[str], list[str]]:
+    """把首屏预热 warm 键拆成 (本地批, 外部批)，便于测试与顺序控制。"""
+    local_keys = list(_LOCAL_WARM_KEYS)
+    external_keys = [webui_key, bot_key, _COMMUNITY_STATS_WARM_KEY]
+    return local_keys, external_keys
+
 
 def set_warm_console_read_caches_impl(fn) -> None:
     global _warm_console_read_caches_fn
@@ -256,10 +326,7 @@ def register_update_router(
 
     @router.get(f"{x}/update/check", include_in_schema=True)
     async def _update_check() -> JSONResponse:
-        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO)
-        asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
-        github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
-        cache_key = f"update_check_webui:{repo}:{asset}:{bool(github_token)}"
+        cache_key = _webui_update_cache_key(plugin_config)
 
         async def _load() -> dict[str, Any]:
             return await _load_webui_update_check_payload(plugin_config)
@@ -281,10 +348,8 @@ def register_update_router(
     @router.get(f"{x}/update/check-all", include_in_schema=True)
     async def _update_check_all() -> JSONResponse:
         """一次返回 WebUI 与 Bot 更新检查结果（GS 控制台同款聚合接口）。"""
-        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO)
-        asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
-        webui_key = f"update_check_webui:{repo}:{asset}:{bool(github_token)}"
+        webui_key = _webui_update_cache_key(plugin_config)
         bot_key = f"update_check_bot:{bool(github_token)}"
 
         async def load_webui() -> dict[str, Any]:
@@ -696,10 +761,8 @@ def register_update_router(
     async def _warm_console_read_caches_impl() -> None:
         from pallas.product.community_stats.public_stats import fetch_community_public_stats
 
-        repo = str(getattr(plugin_config, "pallas_webui_dist_zip_repo", "") or DEFAULT_WEBUI_DIST_ZIP_REPO)
-        asset = str(getattr(plugin_config, "pallas_webui_dist_zip_asset", "") or "dist.zip")
         github_token = str(getattr(plugin_config, "pallas_protocol_github_token", "") or "").strip()
-        webui_key = f"update_check_webui:{repo}:{asset}:{bool(github_token)}"
+        webui_key = _webui_update_cache_key(plugin_config)
         bot_key = f"update_check_bot:{bool(github_token)}"
 
         async def warm(
@@ -759,34 +822,36 @@ def register_update_router(
                 include_history=False,
             )
 
-        await asyncio.gather(
-            warm(webui_key, load_webui, 120.0, 900.0),
-            warm(bot_key, load_bot, 120.0, 900.0),
-            warm("community-stats", load_community, 30.0, 120.0),
-            warm(
-                "instances",
-                load_instances,
-                5.0,
-                30.0,
-                swr=True,
-                persist_snapshot=True,
-            ),
-            warm("plugins", load_plugins, 1.6, 25.0),
-            warm(
-                "message-stats:all",
-                load_message_stats,
-                2.0,
-                10.0,
-            ),
-            warm(
-                "plugin-run-stats:all:logsrc:all:tbl:0:view:full",
-                load_plugin_run_stats,
-                2.0,
-                10.0,
-            ),
-            warm("bots", load_bots, 0.9, 15.0),
-            warm("system", load_system, 0.8, 8.0),
-        )
+        # 局部 warm 调用按键映射；本地批走 to_thread/内存，外部批经共享信号量。
+        local_loader_spec: dict[str, tuple] = {
+            "instances": (load_instances, 5.0, 30.0, {"swr": True, "persist_snapshot": True}),
+            "plugins": (load_plugins, 1.6, 25.0, {}),
+            "message-stats:all": (load_message_stats, 2.0, 10.0, {}),
+            "plugin-run-stats:all:logsrc:all:tbl:0:view:full": (load_plugin_run_stats, 2.0, 10.0, {}),
+            "bots": (load_bots, 0.9, 15.0, {}),
+            "system": (load_system, 0.8, 8.0, {}),
+        }
+        external_loader_spec: dict[str, tuple] = {
+            webui_key: (load_webui, 120.0, 900.0),
+            bot_key: (load_bot, 120.0, 900.0),
+            _COMMUNITY_STATS_WARM_KEY: (load_community, 30.0, 120.0),
+        }
+
+        local_keys, external_keys = _batch_warm_keys(webui_key, bot_key)
+
+        async def warm_local(key: str) -> None:
+            loader, ttl, stale, kwargs = local_loader_spec[key]
+            await warm(key, loader, ttl, stale, **kwargs)
+
+        async def warm_external(key: str) -> None:
+            loader, ttl, stale = external_loader_spec[key]
+            async with _EXTERNAL_SEM:
+                await warm(key, loader, ttl, stale)
+
+        # 本地批先建好首屏缓存；外部批延后并受共享信号量约束（同刻最多 2 路）。
+        await asyncio.gather(*(warm_local(k) for k in local_keys))
+        await asyncio.sleep(_STAGGER_EXTERNAL_WARM_SEC)
+        await asyncio.gather(*(warm_external(k) for k in external_keys))
 
     global _warm_console_read_caches_fn
     _warm_console_read_caches_fn = _warm_console_read_caches_impl

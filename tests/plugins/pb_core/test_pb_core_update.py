@@ -71,8 +71,20 @@ async def test_format_update_check_text_success():
             return_value={"tag": "v0.8.0"},
         ),
         patch(
+            "packages.pb_webui.manager.resolve_compatible_webui_release",
+            new=AsyncMock(
+                return_value={
+                    "tag": "v0.8.0",
+                    "html_url": "https://example.com/releases/v0.8.0",
+                    "asset_url": "https://example.com/releases/download/v0.8.0/dist.zip",
+                    "min_bot_commit": "a" * 40,
+                    "bot_commit": "f" * 40,
+                },
+            ),
+        ) as compatible_resolver,
+        patch(
             "packages.pb_webui.manager.fetch_latest_webui_release",
-            new=AsyncMock(return_value={"tag": "v0.8.0"}),
+            new=AsyncMock(side_effect=AssertionError("牛牛更新不应直接查询 latest")),
         ),
         patch(
             "pallas.console.webui.plugin_update_snapshot.refresh_plugin_update_snapshot",
@@ -94,6 +106,7 @@ async def test_format_update_check_text_success():
     ):
         cfg.return_value.pallas_webui_dist_zip_repo = "PallasBot/Pallas-Bot"
         cfg.return_value.pallas_webui_dist_zip_asset = "dist.zip"
+        cfg.return_value.pallas_webui_dist_zip_tag = ""
         text = await format_update_check_text()
     assert "【Bot】" in text
     assert "当前 v1.0.0" in text
@@ -106,6 +119,12 @@ async def test_format_update_check_text_success():
     assert "牛牛更新 帮助" in text
     assert "汇报号" not in text  # 完整用法不挂在检查结果后
     assert text.count("\n") < 20
+    compatible_resolver.assert_awaited_once_with(
+        "PallasBot/Pallas-Bot-WebUI",
+        "dist.zip",
+        "",
+        token="",
+    )
 
 
 @pytest.mark.asyncio

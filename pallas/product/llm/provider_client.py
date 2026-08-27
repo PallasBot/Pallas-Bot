@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+import re
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 import httpx
@@ -11,6 +12,10 @@ from nonebot import logger
 
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.shared_httpx import get_llm_shared_httpx_client
+from pallas.product.llm.turn_telemetry import record_turn_event
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 ANTHROPIC_VERSION = "2023-06-01"
 ANTHROPIC_DEFAULT_MAX_TOKENS = 8192
@@ -48,6 +53,49 @@ def _required_tool_choice_is_incompatible(exc: BaseException) -> bool:
     return "tool_choice" in detail and any(
         marker in detail for marker in ("does not support", "not support", "unsupported", "invalid_parameter")
     )
+
+
+def _provider_failure_class(exc: BaseException) -> str:
+    if isinstance(exc, LlmProviderError) and exc.status is not None:
+        return f"http_{exc.status}"
+    if isinstance(exc, TimeoutError):
+        return "timeout"
+    return "provider_error"
+
+
+def _emit_provider_attempt(
+    *,
+    telemetry_context: dict[str, str] | None,
+    decision: str,
+    reason: str,
+    provider: str,
+    model: str,
+    request_method: str,
+    attempt: int,
+    latency_ms: int,
+    failure_class: str | None = None,
+) -> None:
+    context = telemetry_context if isinstance(telemetry_context, dict) else {}
+    turn_id = str(context.get("turn_id") or "").strip()
+    if not turn_id:
+        return
+    try:
+        record_turn_event(
+            turn_id=turn_id,
+            stage="provider",
+            decision=decision,
+            reason=reason,
+            text="",
+            request_id=context.get("request_id"),
+            provider=provider,
+            model=model,
+            request_method=request_method,
+            attempt=attempt,
+            latency_ms=latency_ms,
+            failure_class=failure_class,
+        )
+    except Exception:
+        pass
 
 
 def mask_api_key_hint(key: str) -> str:
@@ -162,12 +210,17 @@ def normalize_openai_base_url(base_url: str) -> str:
     return str(base_url or "").strip().rstrip("/")
 
 
+def _has_versioned_root(base: str) -> bool:
+    """末尾已是版本段（/v1、/v4 等）或 /openai，视为已带 API 版本根。"""
+    return bool(re.search(r"/v\d+$", base) or base.endswith("/openai"))
+
+
 def openai_api_root(base_url: str) -> str:
-    """OpenAI 兼容根路径：已以 /v1 或 /openai 结尾时不再追加 /v1。"""
+    """OpenAI 兼容根路径：末尾已带版本段（/v1、/v4 等）或 /openai 时不再追加 /v1。"""
     base = normalize_openai_base_url(base_url)
     if not base:
         raise LlmProviderError("llm base url not configured")
-    if base.endswith(("/v1", "/openai")):
+    if _has_versioned_root(base):
         return base
     return f"{base}/v1"
 
@@ -188,7 +241,7 @@ def anthropic_messages_url(base_url: str) -> str:
     base = normalize_openai_base_url(base_url)
     if not base:
         raise LlmProviderError("llm base url not configured")
-    if base.endswith("/v1"):
+    if _has_versioned_root(base):
         return f"{base}/messages"
     return f"{base}/v1/messages"
 
@@ -197,7 +250,7 @@ def anthropic_models_url(base_url: str) -> str:
     base = normalize_openai_base_url(base_url)
     if not base:
         raise LlmProviderError("llm base url not configured")
-    if base.endswith("/v1"):
+    if _has_versioned_root(base):
         return f"{base}/models"
     return f"{base}/v1/models"
 
@@ -405,6 +458,9 @@ async def complete_chat_message(
     task: str = "llm_chat",
     request_method: str | None = None,
     provider_id: str | None = None,
+    prepare_candidate_messages: Callable[[list[dict[str, Any]], Any, str], Awaitable[list[dict[str, Any]]]]
+    | None = None,
+    telemetry_context: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     c = cfg or get_llm_config()
     explicit_base = str(base_url or "").strip()
@@ -412,6 +468,7 @@ async def complete_chat_message(
     explicit_model = str(model or "").strip()
     opts = options if isinstance(options, dict) else {}
     method = str(request_method or opts.get("request_method") or "chat_completions").strip().lower()
+    telemetry_kwargs = {"telemetry_context": telemetry_context} if telemetry_context is not None else {}
 
     if explicit_base:
         resolved_key = explicit_key or str(c.llm_api_key or "").strip()
@@ -427,6 +484,7 @@ async def complete_chat_message(
             request_method=method,
             task=task,
             provider_id=str(provider_id or ""),
+            **telemetry_kwargs,
         )
 
     from pallas.product.llm.providers_store import resolve_endpoint_candidates_for_task
@@ -440,10 +498,13 @@ async def complete_chat_message(
             fallback_key = str(c.llm_api_key or "").strip()
             keys = endpoint_api_keys(endpoint, fallback=fallback_key)
             key_failed_over = False
+            candidate_messages = messages
+            if prepare_candidate_messages is not None:
+                candidate_messages = await prepare_candidate_messages(messages, endpoint, use_model)
             for key_index, use_key in enumerate(keys):
                 try:
                     return await _post_provider_chat(
-                        messages,
+                        candidate_messages,
                         base_url=endpoint.base_url,
                         api_key=use_key,
                         model=use_model,
@@ -453,6 +514,7 @@ async def complete_chat_message(
                         request_method=use_method,
                         task=task,
                         provider_id=str(getattr(endpoint, "provider_id", "") or ""),
+                        **telemetry_kwargs,
                     )
                 except LlmProviderError as exc:
                     last_error = exc
@@ -496,6 +558,7 @@ async def complete_chat_message(
         request_method=method,
         task=task,
         provider_id="",
+        **telemetry_kwargs,
     )
 
 
@@ -506,6 +569,36 @@ def messages_to_responses_payload(
     options: dict[str, Any],
     tools: list[dict[str, Any]] | None,
 ) -> dict[str, Any]:
+    def responses_content_parts(content: Any) -> Any:
+        if not isinstance(content, list):
+            return content
+        parts: list[Any] = []
+        for part in content:
+            if not isinstance(part, dict):
+                parts.append(part)
+                continue
+            part_type = str(part.get("type") or "").strip().lower()
+            if part_type == "text":
+                parts.append({"type": "input_text", "text": part.get("text", "")})
+                continue
+            if part_type == "image_url":
+                image_url = part.get("image_url")
+                if isinstance(image_url, dict):
+                    url = image_url.get("url")
+                    detail = image_url.get("detail", "auto")
+                else:
+                    url = image_url
+                    detail = "auto"
+                if url:
+                    parts.append({
+                        "type": "input_image",
+                        "image_url": url,
+                        "detail": detail,
+                    })
+                    continue
+            parts.append(part)
+        return parts
+
     instructions = ""
     input_items: list[dict[str, Any]] = []
     for item in messages:
@@ -545,7 +638,10 @@ def messages_to_responses_payload(
         if role in {"user", "assistant"}:
             if role == "assistant":
                 _append_responses_reasoning_item(input_items, item)
-            input_items.append({"role": role, "content": content if content is not None else ""})
+            input_items.append({
+                "role": role,
+                "content": responses_content_parts(content) if content is not None else "",
+            })
 
     payload: dict[str, Any] = {"model": model, "input": input_items}
     if instructions:
@@ -689,6 +785,50 @@ def messages_to_anthropic_payload(
     options: dict[str, Any],
     tools: list[dict[str, Any]] | None,
 ) -> dict[str, Any]:
+    def anthropic_content_parts(content: Any) -> Any:
+        if not isinstance(content, list):
+            return content
+        parts: list[Any] = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append({"type": "text", "text": part})
+                continue
+            if not isinstance(part, dict):
+                parts.append(part)
+                continue
+            part_type = str(part.get("type") or "").strip().lower()
+            if part_type == "text":
+                parts.append({"type": "text", "text": part.get("text", "")})
+                continue
+            if part_type != "image_url":
+                parts.append(part)
+                continue
+            image_url = part.get("image_url")
+            url = image_url.get("url") if isinstance(image_url, dict) else image_url
+            url = str(url or "").strip()
+            if url.lower().startswith("data:"):
+                header, separator, data = url.partition(",")
+                media_type, _, encoding = header[5:].partition(";")
+                media_type = media_type.strip().lower()
+                if separator and data and media_type in {"image/jpeg", "image/png", "image/gif", "image/webp"}:
+                    if "base64" in {item.strip().lower() for item in encoding.split(";") if item}:
+                        parts.append({
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": media_type,
+                                "data": data,
+                            },
+                        })
+                        continue
+            elif url.lower().startswith(("http://", "https://")):
+                parts.append({
+                    "type": "image",
+                    "source": {"type": "url", "url": url},
+                })
+                continue
+        return parts
+
     system_parts: list[str] = []
     converted: list[dict[str, Any]] = []
 
@@ -744,7 +884,10 @@ def messages_to_anthropic_payload(
                 converted.append({"role": "assistant", "content": blocks})
             continue
         if role == "user":
-            converted.append({"role": "user", "content": content if content is not None else ""})
+            converted.append({
+                "role": "user",
+                "content": anthropic_content_parts(content) if content is not None else "",
+            })
 
     max_tokens = options.get("num_predict")
     if max_tokens is None:
@@ -817,6 +960,7 @@ async def _post_provider_chat(
     request_method: str = "chat_completions",
     task: str = "llm_chat",
     provider_id: str = "",
+    telemetry_context: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     import time
 
@@ -846,7 +990,7 @@ async def _post_provider_chat(
 
         try:
             row = find_provider(provider_id)
-            effort = provider_model_effort(row) if row else ""
+            effort = provider_model_effort(row, model) if row else ""
         except Exception:
             effort = ""
         if effort:
@@ -894,15 +1038,50 @@ async def _post_provider_chat(
             provider_id=provider_id,
         )
 
+    resolved_method = resolve_request_method(request_method, base_url)
+    provider_name = provider_id or host_from_url(base_url)
+    attempt = 0
+
+    async def request_attempt(options_for_attempt: dict[str, Any]) -> dict[str, Any]:
+        nonlocal attempt
+        attempt += 1
+        attempt_started = time.monotonic()
+        try:
+            result = await request(options_for_attempt)
+        except Exception as exc:
+            _emit_provider_attempt(
+                telemetry_context=telemetry_context,
+                decision="failed",
+                reason="tool_choice_retry" if _required_tool_choice_is_incompatible(exc) else "provider_request",
+                provider=provider_name,
+                model=model,
+                request_method=resolved_method,
+                attempt=attempt,
+                latency_ms=int((time.monotonic() - attempt_started) * 1000),
+                failure_class=_provider_failure_class(exc),
+            )
+            raise
+        _emit_provider_attempt(
+            telemetry_context=telemetry_context,
+            decision="success",
+            reason="provider_request",
+            provider=provider_name,
+            model=model,
+            request_method=resolved_method,
+            attempt=attempt,
+            latency_ms=int((time.monotonic() - attempt_started) * 1000),
+        )
+        return result
+
     started = time.monotonic()
     try:
-        result = await request(use_options)
+        result = await request_attempt(use_options)
     except Exception as exc:
         if tools and requested_tool_choice == "required" and _required_tool_choice_is_incompatible(exc):
             _required_tool_choice_incompatible.add(cache_key)
             retry_options = {**use_options, "tool_choice": "auto"}
             try:
-                result = await request(retry_options)
+                result = await request_attempt(retry_options)
             except Exception:
                 pass
             else:
@@ -915,11 +1094,7 @@ async def _post_provider_chat(
                     pass
                 return with_provider_trace(result, latency_ms=latency_ms, retried_tool_choice=True)
         latency_ms = int((time.monotonic() - started) * 1000)
-        fail_cls = "provider_error"
-        if isinstance(exc, LlmProviderError) and exc.status is not None:
-            fail_cls = f"http_{exc.status}"
-        elif isinstance(exc, TimeoutError):
-            fail_cls = "timeout"
+        fail_cls = _provider_failure_class(exc)
         try:
             from pallas.product.llm.provider_request_metrics import record_provider_request
 

@@ -1,5 +1,6 @@
 # type: ignore
 import asyncio
+import os
 import time
 from typing import Any
 
@@ -129,6 +130,22 @@ class BotConfig(Config):
         重置冷却时间
         """
         await self._update_in_memory(f"cooldown{KEY_JOINER}{action_type}{KEY_JOINER}{self.group_id}", 0)
+
+    async def allow_window_action(self, action_type: str, limit: int, window: float) -> bool:
+        """
+        时段窗口内是否允许执行；允许则记录一次，达到上限返回 False。
+
+        用于防止短期内反复触发导致无限响应（如戳一戳）。
+        """
+        now = time.time()
+        key = f"window{KEY_JOINER}{action_type}{KEY_JOINER}{self.group_id}"
+        stamps = await self._find_in_memory(key)
+        stamps = [t for t in stamps if now - t < window] if stamps else []
+        if len(stamps) >= limit:
+            return False
+        stamps.append(now)
+        await self._update_in_memory(key, stamps)
+        return True
 
     _drink_handlers = []
     _sober_up_handlers = []
@@ -466,6 +483,10 @@ class TaskManager:
         from pallas.core.platform.shard.coord.ai_task_registry import register_ai_task
 
         await asyncio.to_thread(register_ai_task, task_id, task_status)
+        if os.environ.get("PALLAS_BOT_ROLE", "").strip().lower() == "work":
+            from pallas.core.platform.ai_callback.task_registration import register_ai_task_in_bot_process
+
+            await register_ai_task_in_bot_process(task_id, task_status)
 
     @classmethod
     async def get_task(cls, task_id: str) -> dict | None:
@@ -511,3 +532,7 @@ class TaskManager:
         from pallas.core.platform.shard.coord.ai_task_registry import remove_ai_task
 
         await asyncio.to_thread(remove_ai_task, task_id)
+        if os.environ.get("PALLAS_BOT_ROLE", "").strip().lower() == "work":
+            from pallas.core.platform.ai_callback.task_registration import unregister_ai_task_in_bot_process
+
+            await unregister_ai_task_in_bot_process(task_id)

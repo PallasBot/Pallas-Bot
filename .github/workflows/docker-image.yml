@@ -45,4 +45,5 @@ jobs:
           push: true
           build-args: |
             PALLAS_BOT_VERSION=${{ steps.pallas_ver.outputs.label }}
+            PALLAS_BOT_COMMIT=${{ github.sha }}
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/pallas-bot:latest

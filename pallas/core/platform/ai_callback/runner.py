@@ -27,6 +27,7 @@ from pallas.product.llm.delivery import (
     maybe_append_llm_repeater_feedback,
     track_llm_callback,
 )
+from pallas.product.llm.turn_telemetry import record_turn_event
 
 __all__ = [
     "deliver_llm_chat_result",
@@ -115,6 +116,27 @@ async def run_ai_callback(
         await config.update_sing_progress(sing_progress)
 
     if status == "failed":
+        turn_id = str(task.get("turn_id") or "").strip()
+        if turn_id:
+            try:
+                record_turn_event(
+                    turn_id=turn_id,
+                    stage="output",
+                    decision="failed",
+                    reason="callback_failed",
+                    text="",
+                    message_id=task.get("message_id"),
+                    request_id=task_id,
+                    scope={
+                        "bot": task.get("bot_id"),
+                        "group": task.get("group_id"),
+                        "user": task.get("user_id"),
+                    },
+                    is_to_me=bool(task.get("is_to_me", False)),
+                    speak_trigger=str(task.get("speak_trigger") or "") or None,
+                )
+            except Exception:
+                logger.debug("LLM callback failure telemetry skipped for task [{}]", task_id)
         track_llm_callback(task, "callback_fail")
         invoke_media_task_failure(task)
         if bot is not None and group_id:

@@ -11,13 +11,14 @@ from pallas.product.llm.session_summary import (
 )
 
 
-def test_summary_messages_excludes_existing_summary() -> None:
+@pytest.mark.asyncio
+async def test_summary_messages_excludes_existing_summary() -> None:
     turns = [
         LlmChatTurn(role="user", content="你好啊", user_id=1, created_at=1),
         LlmChatTurn(role="assistant", content="早呀", user_id=2, created_at=2),
         LlmChatTurn(role="user", content="【此前对话摘要】旧内容", user_id=1, created_at=0),
     ]
-    out = _summary_messages(turns)
+    out = await _summary_messages(turns)
     assert "旧内容" not in out
     assert "你好啊" in out
     assert "早呀" in out

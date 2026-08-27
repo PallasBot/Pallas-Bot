@@ -152,5 +152,5 @@ async def register_plugin_manager():
     refreshed = await refresh_disabled_plugin_snapshot()
     if not refreshed and not disabled_plugin_snapshot_ready():
         logger.warning("[帮助] 插件禁用快照未就绪，暂时回退按需读取配置")
-    logger.debug("[帮助] 插件禁用预处理已注册")
+    logger.debug("[Help] plugin-disabled preprocessor registered")
     register_plugin_startup_ready("help", detail="插件禁用预处理已注册")

@@ -237,6 +237,70 @@ def test_anthropic_payload_conversion() -> None:
     assert message["tool_calls"][0]["function"]["arguments"] == '{"q": "x"}'
 
 
+def test_anthropic_payload_converts_openai_vision_blocks() -> None:
+    from pallas.product.llm.provider_client import messages_to_anthropic_payload
+
+    payload = messages_to_anthropic_payload(
+        [{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "看看"},
+                {
+                    "type": "image_url",
+                    "image_url": {"url": "data:image/png;base64,aGk="},
+                },
+            ],
+        }],
+        model="claude-sonnet-4-5",
+        options={},
+        tools=None,
+    )
+
+    assert payload["messages"][0]["content"] == [
+        {"type": "text", "text": "看看"},
+        {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": "image/png",
+                "data": "aGk=",
+            },
+        },
+    ]
+
+
+def test_anthropic_payload_accepts_remote_and_case_insensitive_image_urls() -> None:
+    from pallas.product.llm.provider_client import messages_to_anthropic_payload
+
+    payload = messages_to_anthropic_payload(
+        [{
+            "role": "user",
+            "content": [
+                {"type": "image_url", "image_url": {"url": "https://example.com/photo.png"}},
+                {"type": "image_url", "image_url": {"url": "data:IMAGE/PNG;BASE64,aGk="}},
+            ],
+        }],
+        model="claude-sonnet-4-5",
+        options={},
+        tools=None,
+    )
+
+    assert payload["messages"][0]["content"] == [
+        {
+            "type": "image",
+            "source": {"type": "url", "url": "https://example.com/photo.png"},
+        },
+        {
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": "image/png",
+                "data": "aGk=",
+            },
+        },
+    ]
+
+
 def test_parse_tool_arguments_json() -> None:
     assert parse_tool_arguments('{"name":"amiya"}') == {"name": "amiya"}
     assert parse_tool_arguments({"x": 1}) == {"x": 1}
@@ -437,6 +501,110 @@ async def test_complete_chat_message_falls_back_to_next_provider(
     assert len(seen_urls) == 2
     assert "primary.example" in seen_urls[0]
     assert "backup.example" in seen_urls[1]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("primary_capabilities", "backup_capabilities", "backup_has_image"),
+    [
+        (["text", "image"], ["text"], False),
+        (["text"], ["text", "image"], True),
+    ],
+)
+async def test_provider_fallback_reprepares_messages_for_each_capability(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    primary_capabilities: list[str],
+    backup_capabilities: list[str],
+    backup_has_image: bool,
+) -> None:
+    from pallas.product.llm.providers_store import (
+        clear_providers_store_cache,
+        save_providers_document,
+    )
+
+    store = tmp_path / "llm_providers.json"
+    monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
+    monkeypatch.setattr("pallas.product.llm.providers_store._read_ai_providers_toml", lambda: None)
+    clear_providers_store_cache()
+    save_providers_document({
+        "providers": [
+            {
+                "id": "vision-primary",
+                "kind": "remote",
+                "base_url": "https://vision-primary.example/v1",
+                "api_key": "sk-primary",
+                "default_model": "vision-model",
+                "capabilities": primary_capabilities,
+            },
+            {
+                "id": "text-backup",
+                "kind": "remote",
+                "base_url": "https://text-backup.example/v1",
+                "api_key": "sk-backup",
+                "default_model": "text-model",
+                "capabilities": backup_capabilities,
+            },
+        ],
+        "routing": {"chain_fallback": ["vision-primary", "text-backup"], "tasks": {"llm_chat": "vision-primary"}},
+    })
+
+    async def fake_fetch(_url: str) -> str:
+        return "data:image/png;base64,aGk="
+
+    monkeypatch.setattr("pallas.product.llm.vision_messages.fetch_image_data_uri", fake_fetch)
+    seen_payloads: list[dict[str, Any]] = []
+
+    class FailThenOkResponse:
+        def __init__(self, *, ok: bool) -> None:
+            self.status_code = 200 if ok else 500
+            self.text = "ok" if ok else "boom"
+            self.content = self.text.encode()
+
+        def json(self) -> dict[str, Any]:
+            return {"choices": [{"message": {"role": "assistant", "content": "fallback-ok"}}]}
+
+    class FakeClient:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        async def post(self, url: str, json: dict[str, Any] | None = None, headers=None, timeout=None):
+            if "vision-primary.example" in url:
+                return FailThenOkResponse(ok=False)
+            assert json is not None
+            seen_payloads.append(json)
+            return FailThenOkResponse(ok=True)
+
+    async def fake_client():
+        return FakeClient()
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.get_llm_shared_httpx_client", fake_client)
+    content, _assistant = await complete_with_tool_loop(
+        system_prompt=None,
+        messages=[{"role": "user", "content": "现在呢"}],
+        metadata={
+            "task": "llm_chat",
+            "group_timeline_images": [
+                {"speaker": "兔兔", "text": "看这个", "url": "https://example.com/history.png"},
+            ],
+        },
+        cfg=LlmConfig(chat_timeout_sec=5.0),
+    )
+
+    assert content == "fallback-ok"
+    assert len(seen_payloads) == 1
+    backup_messages = seen_payloads[0]["messages"]
+    if backup_has_image:
+        assert [item["role"] for item in backup_messages] == ["user", "user"]
+        assert any(
+            part.get("type") == "image_url"
+            for part in backup_messages[0]["content"]
+            if isinstance(part, dict)
+        )
+        assert backup_messages[-1]["content"] == "现在呢"
+    else:
+        assert [item["role"] for item in backup_messages] == ["user"]
+        assert backup_messages[0]["content"] == "现在呢"
 
 
 @pytest.mark.asyncio

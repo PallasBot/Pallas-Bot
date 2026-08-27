@@ -159,3 +159,51 @@ def test_resolve_output_filtered_reply_presses_overlength_short_band() -> None:
     filtered = resolve_output_filtered_reply(task, reply)
     assert filtered == "哎呀这个我回头帮你查查。"
     assert len(filtered) <= 12
+
+
+def test_resolve_output_filtered_reply_splits_recognition_answer_when_over_cap() -> None:
+    """识别问句的超限单泡应按句读拆成多泡，保留题目答案而非硬截断。"""
+    task = {
+        "task_type": LLM_CHAT_TASK_TYPE,
+        "reply_max_length": 24,
+        "user_text": "这是谁",
+    }
+    reply = "这是一个金发绿眼戴眼镜的年轻人。答案：这是柯西。"
+    filtered = resolve_output_filtered_reply(task, reply)
+    assert "这是柯西" in filtered
+    for segment in filtered.split("\n"):
+        assert len(segment) <= 24
+
+
+def test_resolve_output_filtered_reply_splits_recognition_multi_segment_over_cap() -> None:
+    """识别问句多段（join 后含换行）整体超限，仍应按断点重切保住答案而非压短。"""
+    task = {
+        "task_type": LLM_CHAT_TASK_TYPE,
+        "reply_max_length": 26,
+        "user_text": "这是谁",
+    }
+    reply = "这个看着像是个cosplay的妹子，黑长发、白衬衫、黑色短裤，但我不太确定具体是谁，感觉有点像宫子。\n这个是"
+    filtered = resolve_output_filtered_reply(task, reply)
+    assert "宫子" in filtered
+    assert filtered.split("\n")
+    for segment in filtered.split("\n"):
+        assert len(segment) <= 26
+
+
+def test_resolve_output_filtered_reply_does_not_split_non_recognition_over_cap() -> None:
+    """非识别问句的超限单泡仍走压短/静默，不拆成多泡。"""
+    task = {"task_type": LLM_CHAT_TASK_TYPE, "reply_max_length": 12}
+    reply = "哎呀这个我回头帮你查查。【我们吃个饭吧】。行了先这样。"
+    filtered = resolve_output_filtered_reply(task, reply)
+    assert filtered == "哎呀这个我回头帮你查查。"
+    assert len(filtered) <= 12
+
+
+def test_resolve_output_filtered_reply_keeps_multi_bubble_when_each_fits() -> None:
+    """多泡回复：每个气泡各自落在上限内时保持分条，而不是整串 join 后一刀切静默。"""
+    task = {"task_type": LLM_CHAT_TASK_TYPE, "reply_max_length": 24}
+    reply = '{"reply_segments":["这是土狼，会搞笑。","然后呢？","别怕别怕。"]}'
+    filtered = resolve_output_filtered_reply(task, reply)
+    assert filtered == "这是土狼，会搞笑。\n然后呢？\n别怕别怕。"
+    for segment in filtered.split("\n"):
+        assert len(segment) <= 24

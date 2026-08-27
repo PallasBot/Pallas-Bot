@@ -27,6 +27,7 @@ from pallas.product.llm.config import get_llm_config
 from pallas.product.llm.kernel.memory_governance import can_write_runtime_state_summary
 from pallas.product.llm.session_store import append_llm_message, compact_user_llm_history_with_summary
 from pallas.product.llm.task_metrics import record_bot_llm_route, record_bot_llm_task
+from pallas.product.llm.turn_telemetry import record_turn_event
 
 STICKER_IMAGE_MAX_SIDE = 320
 _STICKER_JPEG_QUALITY = 90
@@ -476,6 +477,43 @@ def track_llm_callback(task: dict, event: str) -> None:
             record_bot_llm_route(task_type, resolve_llm_reply_route(task))
 
 
+def emit_turn_delivery_telemetry(
+    task_id: str,
+    task: dict,
+    *,
+    stage: str,
+    decision: str,
+    reason: str,
+    text: str = "",
+    bot_id: object = None,
+    group_id: object = None,
+    **fields: object,
+) -> None:
+    turn_id = str(task.get("turn_id") or "").strip()
+    if not turn_id:
+        return
+    try:
+        record_turn_event(
+            turn_id=turn_id,
+            stage=stage,
+            decision=decision,
+            reason=reason,
+            text=text,
+            message_id=task.get("message_id"),
+            request_id=task_id,
+            scope={
+                "bot": bot_id if bot_id is not None else task.get("bot_id"),
+                "group": group_id if group_id is not None else task.get("group_id"),
+                "user": task.get("user_id"),
+            },
+            is_to_me=bool(task.get("is_to_me", False)),
+            speak_trigger=str(task.get("speak_trigger") or "") or None,
+            **fields,
+        )
+    except Exception:
+        logger.debug("LLM turn delivery telemetry skipped for task [{}]", task_id)
+
+
 async def deliver_llm_callback_success(
     task_id: str,
     task: dict,
@@ -604,6 +642,33 @@ async def deliver_llm_callback_success(
                         "AI callback reply silenced after unapproved mention token removal",
                     )
                 reply_text = "\n".join(delivery_segments)
+    fallback_used = bool(not had_reply_before_filter and reply_text)
+    if not delivery_segments:
+        output_decision = "silent"
+        output_action = "silent"
+        output_reason = "empty_after_filter" if had_reply_before_filter else "empty_output"
+    elif fallback_used:
+        output_decision = "success"
+        output_action = "fallback"
+        output_reason = "empty_fallback"
+    else:
+        output_decision = "success"
+        output_action = "processed"
+        output_reason = "accepted"
+    emit_turn_delivery_telemetry(
+        task_id,
+        task,
+        stage="output",
+        decision=output_decision,
+        reason=output_reason,
+        text=reply_text,
+        bot_id=bot_id,
+        group_id=group_id,
+        output_filter_action=output_action,
+        output_filter_reason=output_reason,
+        fallback=fallback_used,
+        segment_count=len(delivery_segments),
+    )
     sticker_intent = str(structured_reply.sticker_intent or "")
     if marker_intent and sticker_intent in ("", "none"):
         sticker_intent = marker_to_sticker_tokens(marker_intent)
@@ -614,6 +679,8 @@ async def deliver_llm_callback_success(
         and bot is not None
         and bool(getattr(cfg, "llm_chat_sticker_enabled", False))
     )
+    sent_indexes: list[int] = []
+    sent_message_ids: list[object] = []
     if delivery_segments and group_id and bot is not None:
         logger.info(
             f"Bot [{getattr(bot, 'self_id', bot_id_str or '<missing>')}] delivering a "
@@ -625,7 +692,6 @@ async def deliver_llm_callback_success(
             group_id=group_id,
             mention_cooldown_sec=int(cfg.llm_reply_mention_cooldown_sec),
         )
-        sent_indexes: list[int] = []
         from pallas.product.llm.sticker_followup import suppress_outgoing_sticker_followup
 
         for index, segment in enumerate(delivery_segments):
@@ -644,6 +710,8 @@ async def deliver_llm_callback_success(
                 )
             if index == 0:
                 bot_message_id = receipt.message_id
+            if receipt.message_id is not None:
+                sent_message_ids.append(receipt.message_id)
             ok = receipt.delivered
             if index == 0 and ok and at_user_id is not None:
                 note_llm_reply_mention_sent(group_id)
@@ -666,6 +734,36 @@ async def deliver_llm_callback_success(
             sent_indexes.append(index)
         text_delivered = len(sent_indexes) == len(delivery_segments)
         delivered = text_delivered and delivered
+    if not delivery_segments or not (group_id and bot is not None):
+        delivery_status = "silent"
+        delivery_decision = "silent"
+        delivery_reason = "no_delivery_segments"
+    elif not sent_indexes:
+        delivery_status = "failed"
+        delivery_decision = "failed"
+        delivery_reason = "delivery_failed"
+    elif text_delivered:
+        delivery_status = "sent"
+        delivery_decision = "sent"
+        delivery_reason = "delivery_complete"
+    else:
+        delivery_status = "partial"
+        delivery_decision = "partial"
+        delivery_reason = "delivery_partial"
+    emit_turn_delivery_telemetry(
+        task_id,
+        task,
+        stage="delivery",
+        decision=delivery_decision,
+        reason=delivery_reason,
+        text=reply_text,
+        bot_id=bot_id,
+        group_id=group_id,
+        delivery_status=delivery_status,
+        sent_bubble_count=len(sent_indexes),
+        total_bubble_count=len(delivery_segments),
+        sent_message_ids=sent_message_ids,
+    )
     if text_delivered and should_append_llm_session(task) and learned_reply_text:
         raw_group_id = task.get("group_id")
         scope_group = int(raw_group_id) if raw_group_id is not None else None

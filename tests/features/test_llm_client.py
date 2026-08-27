@@ -98,6 +98,182 @@ async def test_submit_chat_task_unified_settings_schedule_kernel(monkeypatch: py
 
 
 @pytest.mark.asyncio
+async def test_submit_chat_task_propagates_group_timeline_images_to_kernel_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    submit_kernel = AsyncMock(
+        return_value=ChatSubmitResult(task_id="task-history-image", status="processing", ok=True)
+    )
+    monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_llm_chat_task", submit_kernel)
+    monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: False)
+
+    request = ChatSubmitRequest(
+        request_id="req-history-image",
+        session_id="sess-history-image",
+        user_text="你看到了吗",
+        system_prompt="system",
+        bot_id=10001,
+        group_id=20002,
+        user_id=30003,
+        group_timeline_images=[
+            {
+                "speaker": "兔兔",
+                "text": "看这个",
+                "url": "https://example.com/a.png",
+            }
+        ],
+    )
+
+    result = await submit_chat_task(request, cfg=LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True))
+
+    assert result.ok is True
+    assert submit_kernel.await_args.kwargs["metadata"]["group_timeline_images"] == request.group_timeline_images
+
+
+@pytest.mark.asyncio
+async def test_submit_chat_task_injects_referenced_image_urls_from_replied_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    submit_kernel = AsyncMock(
+        return_value=ChatSubmitResult(task_id="task-referenced", status="processing", ok=True)
+    )
+    monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_llm_chat_task", submit_kernel)
+    monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: False)
+
+    referenced = SimpleNamespace(
+        raw_message=(
+            "[CQ:image,url=https://multimedia.nt.qq.com.cn/download?appid=1407&amp;fileid=abc123,file=A6D6A97E.png,sub_type=0]"
+        ),
+        plain_text="这是谁",
+    )
+
+    async def fake_find_by_message_ids(_group_id: int, _message_ids: list[int]) -> list[SimpleNamespace]:
+        return [referenced]
+
+    fake_repo = AsyncMock()
+    fake_repo.find_by_message_ids = fake_find_by_message_ids
+    monkeypatch.setattr(
+        "pallas.core.foundation.db.make_message_repository", lambda: fake_repo
+    )
+
+    request = ChatSubmitRequest(
+        request_id="req-referenced",
+        session_id="sess-referenced",
+        user_text="描述一下这张图",
+        system_prompt="system",
+        bot_id=10001,
+        group_id=20002,
+        user_id=30003,
+        reply_to_message_id=8888,
+    )
+
+    result = await submit_chat_task(request, cfg=LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True))
+
+    assert result.ok is True
+    metadata = submit_kernel.await_args.kwargs["metadata"]
+    assert metadata["has_image"] is True
+    assert metadata["vision_image_urls"] == [
+        "https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=abc123"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_submit_chat_task_injects_referenced_image_urls_from_event_reply_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    submit_kernel = AsyncMock(
+        return_value=ChatSubmitResult(task_id="task-reply-msg", status="processing", ok=True)
+    )
+    monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_llm_chat_task", submit_kernel)
+    monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: False)
+
+    # event.reply.message 预提取路径：即使消息库查不到（返回空），也优先用 referenced_message。
+    fake_repo = AsyncMock()
+    fake_repo.find_by_message_ids = AsyncMock(return_value=[])
+    monkeypatch.setattr(
+        "pallas.core.foundation.db.make_message_repository", lambda: fake_repo
+    )
+
+    request = ChatSubmitRequest(
+        request_id="req-reply-msg",
+        session_id="sess-reply-msg",
+        user_text="这是谁",
+        system_prompt="system",
+        bot_id=10001,
+        group_id=20002,
+        user_id=30003,
+        reply_to_message_id=1831340925,
+        referenced_message={
+            "image_urls": ["https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=reply3467"],
+            "plain_text": "这是谁",
+        },
+    )
+
+    result = await submit_chat_task(request, cfg=LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True))
+
+    assert result.ok is True
+    metadata = submit_kernel.await_args.kwargs["metadata"]
+    assert metadata["has_image"] is True
+    assert metadata["vision_image_urls"] == [
+        "https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=reply3467"
+    ]
+    assert metadata["vision_plain_text"] == "这是谁"
+
+
+@pytest.mark.asyncio
+async def test_submit_chat_task_injects_referenced_image_urls_from_get_msg_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    submit_kernel = AsyncMock(
+        return_value=ChatSubmitResult(task_id="task-msg-fallback", status="processing", ok=True)
+    )
+    monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_llm_chat_task", submit_kernel)
+    monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: False)
+
+    # 本地消息库未命中 → 返回空，触发 get_msg 兜底
+    fake_repo = AsyncMock()
+    fake_repo.find_by_message_ids = AsyncMock(return_value=[])
+    monkeypatch.setattr(
+        "pallas.core.foundation.db.make_message_repository", lambda: fake_repo
+    )
+
+    image_segment = SimpleNamespace(type="image", data={"url": "https://multimedia.nt.qq.com.cn/download?appid=1407&amp;fileid=fallback1"})
+    bot = SimpleNamespace(
+        self_id=10001,
+        call_api=AsyncMock(return_value={"data": {"message": [image_segment]}}),
+    )
+
+    request = ChatSubmitRequest(
+        request_id="req-msg-fallback",
+        session_id="sess-msg-fallback",
+        user_text="描述一下这张图",
+        system_prompt="system",
+        bot_id=10001,
+        group_id=20002,
+        user_id=30003,
+        reply_to_message_id=9999,
+    )
+
+    result = await submit_chat_task(
+        request,
+        cfg=LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True),
+        bot=bot,
+    )
+
+    assert result.ok is True
+    metadata = submit_kernel.await_args.kwargs["metadata"]
+    assert metadata["has_image"] is True
+    assert metadata["vision_image_urls"] == [
+        "https://multimedia.nt.qq.com.cn/download?appid=1407&fileid=fallback1"
+    ]
+    assert bot.call_api.await_args.kwargs == {"message_id": 9999}
+
+
+@pytest.mark.asyncio
 async def test_submit_chat_task_unified_llm_chat_payload_includes_agent_stage_plan(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

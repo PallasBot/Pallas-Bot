@@ -226,6 +226,7 @@ class LlmConfig(BaseModel):
     llm_session_private_ttl_sec: int = Field(default=259200, ge=0, le=2592000)
     llm_session_max_content_len: int = Field(default=4000, ge=64, le=16000)
     llm_session_strip_vision_enabled: bool = Field(default=True)
+    llm_session_vision_describe_enabled: bool = Field(default=True)
     llm_governance_enabled: bool = Field(default=True)
     llm_tools_enabled: bool = Field(default=True)
     llm_tools_selective: bool = Field(default=True)
@@ -467,6 +468,7 @@ def get_llm_config() -> LlmConfig:
             llm_session_private_ttl_sec=_env_int("LLM_SESSION_PRIVATE_TTL_SEC", 259200),
             llm_session_max_content_len=_env_int("LLM_SESSION_MAX_CONTENT_LEN", 4000),
             llm_session_strip_vision_enabled=_env_bool("LLM_SESSION_STRIP_VISION_ENABLED", True),
+            llm_session_vision_describe_enabled=_env_bool("LLM_SESSION_VISION_DESCRIBE_ENABLED", True),
             llm_governance_enabled=_env_bool("LLM_GOVERNANCE_ENABLED", True),
             llm_tools_enabled=_env_bool("LLM_TOOLS_ENABLED", True),
             llm_tools_selective=_env_bool("LLM_TOOLS_SELECTIVE", True),

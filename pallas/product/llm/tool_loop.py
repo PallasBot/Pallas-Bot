@@ -6,9 +6,11 @@ import json
 from typing import Any
 
 from pallas.product.llm.config import LlmConfig, get_llm_config
+from pallas.product.llm.event_observation import record_provider_prompt_hit
 from pallas.product.llm.provider_client import complete_chat_message
 from pallas.product.llm.tools.context import ToolInvokeContext
 from pallas.product.llm.tools.registry import execute_tool_async
+from pallas.product.llm.turn_telemetry import telemetry_metadata
 
 
 def parse_tool_arguments(raw: Any) -> dict[str, Any]:
@@ -251,7 +253,8 @@ async def complete_with_tool_loop(
     tools_enabled = bool(meta.get("tools_enabled")) and bool(tool_schemas) and bool(c.llm_tools_enabled)
     working = build_working_messages(system_prompt=system_prompt, messages=messages)
     task = str(meta.get("task") or "llm_chat").strip() or "llm_chat"
-    from pallas.product.llm.vision_messages import prepare_kernel_chat_messages
+    from pallas.product.llm.providers_store import find_provider, resolve_endpoint_for_task
+    from pallas.product.llm.vision_messages import prepare_messages_for_provider_capabilities
 
     user_text = ""
     if working:
@@ -261,28 +264,47 @@ async def complete_with_tool_loop(
             user_text = content
         elif isinstance(meta.get("vision_plain_text"), str):
             user_text = str(meta.get("vision_plain_text") or "")
-    working, provider_row = await prepare_kernel_chat_messages(
-        working,
-        metadata=meta,
-        task=task,
-        user_text=user_text,
-    )
-    if isinstance(metadata, dict):
-        metadata["vision_prepared"] = True
-        if provider_row is not None:
-            from pallas.product.llm.providers_store import provider_capabilities, provider_model_effort
-
-            metadata.setdefault("provider_capabilities", provider_capabilities(provider_row))
-            effort = provider_model_effort(provider_row)
-            if effort:
-                metadata.setdefault("model_effort", effort)
-
     model = resolve_model(meta, cfg=c)
+    primary_endpoint = resolve_endpoint_for_task(task)
+    provider_row = find_provider(primary_endpoint.provider_id) if primary_endpoint is not None else None
+
+    async def prepare_candidate_messages(candidate_messages, endpoint, candidate_model):
+        row = find_provider(str(getattr(endpoint, "provider_id", "") or ""))
+        return await prepare_messages_for_provider_capabilities(
+            candidate_messages,
+            metadata=meta,
+            provider_row=row,
+            model=candidate_model,
+            user_text=user_text,
+        )
+
+    if primary_endpoint is None:
+        working = await prepare_messages_for_provider_capabilities(
+            working,
+            metadata=meta,
+            provider_row=None,
+            model=model,
+            user_text=user_text,
+        )
+        prepare_candidate = None
+    else:
+        prepare_candidate = prepare_candidate_messages
+
+    if isinstance(metadata, dict) and provider_row is not None:
+        from pallas.product.llm.providers_store import provider_capabilities, provider_model_effort
+
+        metadata.setdefault("provider_capabilities", provider_capabilities(provider_row, model))
+        effort = provider_model_effort(provider_row, model)
+        if effort:
+            metadata.setdefault("model_effort", effort)
+
     options = inference_options_from_metadata(meta)
+    telemetry_context = telemetry_metadata(meta)
+    telemetry_kwargs = {"telemetry_context": telemetry_context} if telemetry_context else {}
     if provider_row is not None:
         from pallas.product.llm.providers_store import provider_model_effort, provider_request_method
 
-        effort = provider_model_effort(provider_row)
+        effort = provider_model_effort(provider_row, model)
         if effort and "model_effort" not in options:
             options["model_effort"] = effort
         method = provider_request_method(provider_row)
@@ -314,6 +336,7 @@ async def complete_with_tool_loop(
             )
 
     if not tools_enabled:
+        record_provider_prompt_hit(working)
         last_message = await complete_chat_message(
             working,
             model=model,
@@ -321,6 +344,8 @@ async def complete_with_tool_loop(
             tools=None,
             cfg=c,
             task=task,
+            prepare_candidate_messages=prepare_candidate,
+            **telemetry_kwargs,
         )
         content = str(last_message.get("content", "") or "").strip()
         assistant_message = dict(last_message)
@@ -392,6 +417,7 @@ async def complete_with_tool_loop(
             round_options["tool_choice"] = "required"
             # DeepSeek thinking 模式不支持 tool_choice=required
             round_options["model_effort"] = "disable"
+        record_provider_prompt_hit(working)
         last_message = await complete_chat_message(
             working,
             model=model,
@@ -399,6 +425,8 @@ async def complete_with_tool_loop(
             tools=tool_schemas,
             cfg=c,
             task=task,
+            prepare_candidate_messages=prepare_candidate,
+            **telemetry_kwargs,
         )
         provider_trace = last_message.get("_provider_trace")
         if isinstance(provider_trace, dict):

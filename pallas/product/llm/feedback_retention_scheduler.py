@@ -79,7 +79,7 @@ async def start_feedback_retention_job() -> None:
         misfire_grace_time=600,
         next_run_time=datetime.now() + timedelta(seconds=300),
     )
-    logger.debug("反馈归档：周期 [{}s] 保留 [{}d]", interval_sec, retention_days)
+    logger.debug("Feedback retention: interval [{}s], retention [{}d]", interval_sec, retention_days)
     register_startup_scheduled("反馈归档", f"间隔 [{interval_sec}s] 保留 [{retention_days}d]")
 
 

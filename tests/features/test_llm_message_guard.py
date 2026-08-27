@@ -77,3 +77,14 @@ def test_normalize_llm_chat_user_text_prefers_plain() -> None:
         mention_names=["帕拉丝"],
     )
     assert text == "你在干嘛"
+
+
+def test_normalize_llm_chat_user_text_keeps_image_cq_with_plain_text() -> None:
+    text = normalize_llm_chat_user_text(
+        "[CQ:image,file=photo,url=https://example.com/a.png] 看这个",
+        plain="看这个",
+        bot_self_id=12345,
+        mention_names=["帕拉丝"],
+    )
+
+    assert text == "[CQ:image,file=photo,url=https://example.com/a.png] 看这个"

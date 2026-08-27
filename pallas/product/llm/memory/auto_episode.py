@@ -93,12 +93,16 @@ async def maybe_auto_save_episode(
 
 
 def _group_episode_transcript(messages: list[Any], *, bot_id: int) -> str:
+    from pallas.product.llm.sender_identity import is_peer_bot
+
     rows: list[tuple[int, str, str]] = []
     participants: set[int] = set()
     total_chars = 0
     for message in messages[-_group_episode_message_limit:]:
         user_id = int(getattr(message, "user_id", 0) or 0)
         if not user_id or user_id == int(bot_id):
+            continue
+        if is_peer_bot(user_id):
             continue
         text = str(getattr(message, "plain_text", "") or getattr(message, "content", "") or "").strip()
         if not text:

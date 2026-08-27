@@ -9,6 +9,9 @@ WORKDIR /app
 # CI 传入发版 tag 或 git describe，运行时 /health 的 pallas_bot 优先读此环境变量
 ARG PALLAS_BOT_VERSION=
 ENV PALLAS_BOT_VERSION=${PALLAS_BOT_VERSION}
+# CI 传入完整 commit，供无 Git 的容器校验 WebUI Release 兼容性
+ARG PALLAS_BOT_COMMIT=
+ENV PALLAS_BOT_COMMIT=${PALLAS_BOT_COMMIT}
 
 # 默认只使用 Docker CLI 连接显式挂载的宿主机 daemon；不在容器内启动 dockerd
 ARG INSTALL_DOCKER_CLI=1
