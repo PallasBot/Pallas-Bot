@@ -1027,8 +1027,6 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     )
     monkeypatch.setattr(mod, "GroupMessageEvent", SimpleNamespace)
     monkeypatch.setattr(mod, "resolve_conversation_feature_level", lambda *_args, **_kwargs: "full_conversation_kernel")
-    feedback_hint = Mock(return_value="【维护者样本参考】\n- 可写一句群内短梗。")
-    monkeypatch.setattr(mod, "build_group_feedback_chat_hint", feedback_hint, raising=False)
     monkeypatch.setattr(mod, "can_read_behavioral_learning", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(
         mod,
@@ -1107,7 +1105,6 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     assert payload["reply_candidate_ids"] == [40003, 40004]
     reply_context_lookup.assert_called_once_with(group_id=20002, bot_id=10001, message_id=70001)
     assert payload["reply_total_length_band"] == "complete"
-    feedback_hint.assert_not_called()
     submit_request = submit_mock.await_args.args[0]
     assert submit_request.group_timeline_images == [
         {"speaker": "兔兔", "text": "还是笨蛋欸", "url": "https://example.com/a.png"},
