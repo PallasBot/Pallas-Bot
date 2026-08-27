@@ -94,6 +94,11 @@ _QUALITY_SCENARIOS = (
     ("short_question", "真的假的", "ACK", "fact", "简短回应", ("长篇科普",)),
     ("correction", "不是这个意思", "ANSWER", "answer", "承认理解偏差并澄清", ("强辩",)),
     ("unknown_fact", "这个消息确定吗", "ANSWER", "answer", "标明不确定性", ("编造来源",)),
+    ("greeting", "早呀", "ACK", "fact", "温柔回应问候", ("想得美", "少来", "别吵", "自己挣去")),
+    ("warm_praise", "你真的好会说话", "ACK", "emotion", "大方接住夸奖", ("想得美", "少来", "别吵", "自己挣去")),
+    ("agreement", "确实是这样", "ACK", "fact", "自然附和一声", ("想得美", "少来", "别吵", "自己挣去")),
+    ("thanks", "谢谢你的帮助", "ACK", "emotion", "真诚接收感谢", ("想得美", "少来", "别吵", "自己挣去")),
+    ("q_tease", "就不告诉你", "JOKE", "short_tease", "轻短接梗且不升级", ("想得美", "少来", "别吵", "自己挣去")),
 )
 
 ANONYMOUS_QUALITY_MATRIX = tuple(
