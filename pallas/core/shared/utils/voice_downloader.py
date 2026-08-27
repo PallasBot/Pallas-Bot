@@ -126,7 +126,7 @@ def schedule_ensure_voices() -> None:
     if voices_ready():
         return
     if _background_ensure_task is not None and not _background_ensure_task.done():
-        logger.debug("[语音] 后台下载已在进行，跳过")
+        logger.debug("[Voice] background download already in progress, skipping")
         return
     logger.info("[语音] 缺失，已调度后台下载（不阻塞启动）")
     loop = asyncio.get_running_loop()

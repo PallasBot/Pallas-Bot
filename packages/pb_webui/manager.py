@@ -1100,7 +1100,7 @@ async def resolve_compatible_webui_release(
         asset_url = _webui_release_asset_url(release, asset_name)
         manifest_url = _webui_release_asset_url(release, "release-manifest.json")
         if not asset_url or not manifest_url:
-            logger.debug("[WebUI] Release [{}] 缺少所需资产，跳过", release_tag)
+            logger.debug("[WebUI] Release [{}] missing required assets, skipping", release_tag)
             continue
         try:
             manifest = parse_webui_release_manifest(

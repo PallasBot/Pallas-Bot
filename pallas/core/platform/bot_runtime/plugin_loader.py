@@ -261,7 +261,7 @@ def hot_load_extra_dir_plugin(plugin_id: str, *, role_label: str = "runtime") ->
     if not pid:
         return False
     if pid in runtime_loaded_short_names():
-        logger.debug("运行时热加载：{} 已加载，跳过", pid)
+        logger.debug("Runtime hot load: {} already loaded, skipping", pid)
         return False
 
     from pallas.core.foundation.config.repo_settings import resolve_extra_plugin_dirs
@@ -270,7 +270,7 @@ def hot_load_extra_dir_plugin(plugin_id: str, *, role_label: str = "runtime") ->
     loaded_short = runtime_loaded_short_names()
     load_apscheduler_plugin_first(role_label=role_label, loaded_short=loaded_short)
     if _load_slot_key(pid) in loaded_short:
-        logger.debug("运行时热加载：{} 同名槽位已占用", pid)
+        logger.debug("Runtime hot load: {} slot already occupied", pid)
         return False
 
     for rel_dir in resolve_extra_plugin_dirs():

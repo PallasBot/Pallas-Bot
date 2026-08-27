@@ -89,5 +89,5 @@ def register_silence_gate_runtime() -> None:
     async def silence_gate_preprocessor(bot, event) -> None:
         await suppress_group_silence(bot, event)
 
-    logger.debug("[静默门控] 已注册全局压制预处理")
+    logger.debug("[Silence gate] global suppression preprocessor registered")
     _GATE_REGISTERED = True

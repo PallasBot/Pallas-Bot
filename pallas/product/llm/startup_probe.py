@@ -138,7 +138,7 @@ def install_llm_startup_probe() -> None:
                     "[LLM] Provider is not configured. Configure it in the console or set LLM_BASE_URL and LLM_MODEL.",
                 )
             else:
-                logger.debug("[LLM] 内核模式未配置 Provider（开关均为关）")
+                logger.debug("[LLM] core mode has no Provider configured (all switches off)")
             return
         if llm_switches_on:
             register_startup_warning(
@@ -151,4 +151,4 @@ def install_llm_startup_probe() -> None:
                 result.get("error") or "unknown",
             )
         else:
-            logger.debug("[LLM] Provider 无响应（开关均为关）")
+            logger.debug("[LLM] Provider unreachable (all switches off)")
