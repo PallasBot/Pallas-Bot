@@ -5,6 +5,7 @@ import json
 from pallas.product.llm.reply_effect import (
     append_reply_effect_record,
     build_reply_effect_prompt,
+    has_rejection_tone,
     heuristic_reply_effect_scores,
     parse_reply_effect_scores,
 )
@@ -47,3 +48,27 @@ def test_build_reply_effect_prompt_contains_axes() -> None:
     prompt = build_reply_effect_prompt("哈哈", followups=["确实"])
     assert "uncanny_risk" in prompt
     assert "哈哈" in prompt
+
+
+def test_heuristic_flags_rejection_tone() -> None:
+    assert has_rejection_tone("想得美，自己挣去")
+    assert has_rejection_tone("少来这套，哭也没用")
+    assert has_rejection_tone("别吵我")
+    assert has_rejection_tone("自己挨去")
+
+
+def test_heuristic_clears_warm_and_neutral_replies() -> None:
+    assert not has_rejection_tone("那就先这样吧")
+    assert not has_rejection_tone("你好呀，想聊点什么")
+    assert not has_rejection_tone("早，今天天气不错")
+
+
+def test_evaluate_record_carries_rejection_tone_flag(tmp_path) -> None:
+    from pallas.product.llm.reply_effect import evaluate_and_record_reply_effect
+
+    path = tmp_path / "eval.jsonl"
+    evaluate_and_record_reply_effect("想得美，自己挣去", path=path)
+    evaluate_and_record_reply_effect("那就先这样吧", path=path)
+    lines = path.read_text(encoding="utf-8").strip().splitlines()
+    assert json.loads(lines[0])["rejection_tone"] is True
+    assert json.loads(lines[1])["rejection_tone"] is False
