@@ -267,6 +267,7 @@ def test_llm_chat_rule_accepts_federated_alias_winner(monkeypatch: pytest.Monkey
 
 def test_llm_chat_rule_accepts_group_vision_message_without_perception(monkeypatch: pytest.MonkeyPatch) -> None:
     from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
+
     from packages.llm_chat import chat_message as mod
     from pallas.product.llm.config import LlmConfig
 
@@ -1139,11 +1140,10 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     assert "引用只决定回复哪条消息" in submit_request.system_prompt
     assert "不要因引用把话一次说完" in submit_request.system_prompt
     assert "「行啊」「好呀」" in submit_request.system_prompt
-    assert "【本轮表达去重】" not in "\n".join(submit_request.style_user_hints)
-    assert "【收尾变化参考】" not in "\n".join(submit_request.style_user_hints)
-    assert "本轮直接回答当前问题，别补一整套客套。" not in "\n".join(submit_request.style_user_hints)
-    assert "【本轮临时措辞】" not in "\n".join(submit_request.style_user_hints)
-    assert submit_request.style_user_hints == []
+    style_hints = "\n".join(submit_request.style_user_hints)
+    assert "【本轮表达去重】" in style_hints
+    assert "其实" in style_hints
+    assert "【收尾变化参考】" in style_hints
     assert "persona_shaping_active" not in submit_request.llm_rewrite_metadata
     assert "variation_hint" not in submit_request.llm_rewrite_metadata
     assert "same_utterance_redup" not in submit_request.llm_rewrite_metadata

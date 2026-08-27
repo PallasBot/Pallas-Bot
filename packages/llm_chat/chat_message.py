@@ -87,13 +87,21 @@ from pallas.product.llm.reply_target_candidates import (
     list_reply_target_candidates,
     record_reply_target_candidate,
 )
-from pallas.product.llm.reply_variation import should_wait_for_more
+from pallas.product.llm.reply_variation import (
+    build_recent_reply_ending_hint,
+    build_recent_reply_variation_hint,
+    should_wait_for_more,
+)
 from pallas.product.llm.session_store import build_llm_chat_messages, list_user_llm_messages
 from pallas.product.llm.session_summary import schedule_session_summary
 from pallas.product.llm.speak_perception import evaluate_speak_perception, speak_perception_metrics
 from pallas.product.llm.task_metrics import record_bot_llm_task
 from pallas.product.llm.tools.time_now import current_time_text
 from pallas.product.llm.turn_policy import resolve_turn_policy
+from pallas.product.llm.turn_style_layers import (
+    build_same_utterance_redup_hint,
+    find_previous_reply_for_utterance,
+)
 from pallas.product.llm.turn_telemetry import new_turn_id, record_turn_event
 from pallas.product.llm.vision_content import user_message_has_vision_content, vision_payload_from_segments
 from pallas.product.persona.peer_bots_prompt import save_peer_alias_from_teach
@@ -1376,6 +1384,24 @@ async def prepare_and_submit_llm_chat_turn(
         )
 
         submit_started = time.perf_counter()
+        style_user_hints: list[str] = []
+        if recent_turns:
+            variation_hint = build_recent_reply_variation_hint(recent_turns)
+            ending_hint = build_recent_reply_ending_hint(recent_turns)
+            if variation_hint:
+                style_user_hints.append(variation_hint)
+            if ending_hint:
+                style_user_hints.append(ending_hint)
+            previous_reply = find_previous_reply_for_utterance(
+                llm_user_text,
+                recent_turns=recent_turns,
+            )
+            same_utterance_hint = build_same_utterance_redup_hint(
+                user_text=llm_user_text,
+                previous_reply=previous_reply,
+            )
+            if same_utterance_hint:
+                style_user_hints.append(same_utterance_hint)
         result = await submit_chat_task(
             ChatSubmitRequest(
                 request_id=request_id,
@@ -1396,6 +1422,7 @@ async def prepare_and_submit_llm_chat_turn(
                 include_group_ambient_history=not include_recent_pair,
                 prepared_messages=prepared_messages,
                 group_timeline_images=group_timeline_images,
+                style_user_hints=style_user_hints,
                 # 用用户实际引用(reply)的目标消息 id，而非 bot 的 QUOTE 决策 id。
                 # 用户 reply 一张带图消息再问「这是谁」时，bot 可能以 PLAIN 回复，
                 # resolved_reply_message_id 会因此为 None；replied_message_id 才稳定携带用户引用目标。
