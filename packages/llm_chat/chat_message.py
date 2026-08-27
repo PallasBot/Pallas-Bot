@@ -1248,9 +1248,9 @@ async def prepare_and_submit_llm_chat_turn(
             matched_examples=semantic_examples,
             baseline_note=str(getattr(semantic_style, "baseline_note", "") or ""),
             behavior_strategies=[
-                (str(item.scene or ""), str(item.action or ""), str(item.outcome or ""))
+                item
                 for item in (getattr(semantic_style, "behavior_strategies", None) or [])[:2]
-                if str(item.scene or "").strip() and str(item.action or "").strip()
+                if str(getattr(item, "scene", "") or "").strip() and str(getattr(item, "action", "") or "").strip()
             ],
         )
         core_persona = system_prompt

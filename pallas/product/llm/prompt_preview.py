@@ -106,11 +106,7 @@ async def build_prompt_preview(
         ],
         baseline_note=str(getattr(semantic_style, "baseline_note", "") or ""),
         behavior_strategies=[
-            (
-                str(item.scene or ""),
-                str(item.action or ""),
-                str(item.outcome or ""),
-            )
+            item
             for item in (getattr(semantic_style, "behavior_strategies", None) or [])[:2]
             if str(getattr(item, "scene", "") or "").strip() and str(getattr(item, "action", "") or "").strip()
         ],

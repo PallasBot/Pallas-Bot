@@ -3,6 +3,7 @@ from pallas.product.llm.assembler.chat_prompt import (
     ResolvedGroupExpression,
 )
 from pallas.product.llm.assembler.context import ChatContextBundle
+from pallas.product.llm.repeater_semantic_style import BehaviorStrategy
 from pallas.product.llm.reply_shape import ReplyShapePolicy
 from pallas.product.llm.turn_policy import TurnPolicy
 
@@ -82,8 +83,21 @@ def test_chat_prompt_assembler_renders_behavior_strategy_reference_and_baseline(
             matched_examples=[("你又来了", "我一直都在呀")],
             baseline_note="本群真人单条短气泡为主（占比约 83%），单段中位约 6 字。",
             behavior_strategies=[
-                ("对方吐槽工作压力", "先短句接住情绪，再问一句具体的事", "对方愿意多讲"),
-                ("群里问吃什么", "直接给具体建议", ""),
+                BehaviorStrategy(
+                    scene="对方吐槽工作压力",
+                    action="先短句接住情绪，再问一句具体的事",
+                    outcome="对方愿意多讲",
+                ),
+                BehaviorStrategy(
+                    scene="群里问吃什么",
+                    action="直接给具体建议",
+                ),
+                BehaviorStrategy(
+                    scene="对方拿我开玩笑",
+                    action="笑着怼回去再反问一句",
+                    outcome="气氛不错",
+                    learning_type="self_reflection",
+                ),
             ],
         ),
         reply_shape=ReplyShapePolicy(
@@ -101,6 +115,8 @@ def test_chat_prompt_assembler_renders_behavior_strategy_reference_and_baseline(
     assert "只借鉴什么时候说短/长、怎么接，不要复刻原话" in prompt
     assert "类似「对方吐槽工作压力」时，真人会先短句接住情绪，再问一句具体的事，结果对方愿意多讲。" in prompt
     assert "类似「群里问吃什么」时，真人会直接给具体建议。" in prompt
+    assert "【接话复盘】" in prompt
+    assert "类似「对方拿我开玩笑」时，我之前是这样接的：笑着怼回去再反问一句，结果气氛不错。" in prompt
     assert "本群真人单条短气泡为主" in prompt
     assert prompt.index("【回复形状与输出契约】") < prompt.index("【群表达指导】") < prompt.index("【真人接话参考】")
 
