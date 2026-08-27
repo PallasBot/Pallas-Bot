@@ -188,7 +188,8 @@ class MongoMessageRepository:
         return docs
 
     async def find_by_message_ids(self, group_id: int, message_ids: list[int]) -> list[Message]:
-        ids = {int(item) for item in message_ids if str(item or "").isdigit()}
+        # 注意 QQ 新版 message_id 可能是负数，isdigit() 不认负号会误过滤，导致引用图查不到。
+        ids = {int(item) for item in message_ids if str(item or "").strip().lstrip("-").isdigit() and item is not None}
         if not ids:
             return []
         docs = (
