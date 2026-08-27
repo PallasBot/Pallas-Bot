@@ -26,7 +26,7 @@ _SCENE = "group_chat"
 _MAX_PAIRS_PER_JOB = 40
 _SWEEP_INTERVAL_SEC = 20 * 60
 _SWEEP_BATCH_SIZE = 24
-_PAIR_PAGE_LIMIT = 6
+_PAIR_PAGE_LIMIT = 12
 _SWEEP_STARTUP_POLL_SEC = 30
 
 # 群级「语义采集 bot 指定」配置键：群维度指定一个稳定账号承担该群语义学习，
