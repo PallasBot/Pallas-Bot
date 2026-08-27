@@ -25,6 +25,7 @@ from pallas.product.llm.behavior import BehaviorAction, BehaviorRun, BehaviorSce
 from pallas.product.llm.behavior_store import append_behavior_run
 from pallas.product.llm.config import get_llm_config
 from pallas.product.llm.kernel.memory_governance import can_write_runtime_state_summary
+from pallas.product.llm.reply_effect import has_rejection_tone
 from pallas.product.llm.session_store import append_llm_message, compact_user_llm_history_with_summary
 from pallas.product.llm.task_metrics import record_bot_llm_route, record_bot_llm_task
 from pallas.product.llm.turn_telemetry import record_turn_event
@@ -864,6 +865,7 @@ async def deliver_llm_callback_success(
                     **({"agent_trace": parsed_agent_trace} if parsed_agent_trace else {}),
                     "bubble_count": len(delivery_segments),
                     "bubble_rhythm": "multi" if len(delivery_segments) > 1 else "single",
+                    "rejection_tone": has_rejection_tone(learned_reply_text),
                 },
             )
         )
