@@ -26,6 +26,7 @@ _MAX_PAIRS_PER_JOB = 40
 _SWEEP_INTERVAL_SEC = 20 * 60
 _SWEEP_BATCH_SIZE = 8
 _PAIR_PAGE_LIMIT = 6
+_SWEEP_STARTUP_POLL_SEC = 30
 
 # 群级「语义采集 bot 指定」配置键：群维度指定一个稳定账号承担该群语义学习，
 # 避免多 bot 并发群里任一台离线就停更。未指定时回退到「该群有处理记录的本地 bot 中最小者」。
@@ -243,7 +244,8 @@ async def _sweep_semantic_groups() -> None:
     cutoff = now_ts - _SEMANTIC_LOOKBACK_DAYS * 24 * 60 * 60
     seen_groups: set[int] = set()
     enqueued = 0
-    for bot_id in await _local_bot_ids():
+    _local = await _local_bot_ids()
+    for bot_id in _local:
         try:
             group_ids = await repo.list_recent_group_ids_for_bot(bot_id, since_time=cutoff, limit=128)
         except Exception as exc:
@@ -330,6 +332,11 @@ def _day_key(ts: int) -> int:
 
 async def _sweep_loop() -> None:
     while True:
+        _local = await _local_bot_ids()
+        if not _local:
+            logger.info("Group insight sweep waiting for bots to connect")
+            await asyncio.sleep(_SWEEP_STARTUP_POLL_SEC)
+            continue
         try:
             await _sweep_semantic_groups()
         except Exception as exc:
