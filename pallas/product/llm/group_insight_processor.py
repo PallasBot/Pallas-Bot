@@ -25,6 +25,13 @@ _SCENE = "group_chat"
 _MAX_PAIRS_PER_JOB = 40
 _SWEEP_INTERVAL_SEC = 20 * 60
 _SWEEP_BATCH_SIZE = 8
+_PAIR_PAGE_LIMIT = 6
+
+# 群级「语义采集 bot 指定」配置键：群维度指定一个稳定账号承担该群语义学习，
+# 避免多 bot 并发群里任一台离线就停更。未指定时回退到「该群有处理记录的本地 bot 中最小者」。
+_SEMANTIC_BOT_KEY = "semantic_style_bot_id"
+_SEMANTIC_BOT_PLUGIN = "repeater"
+_SEMANTIC_LOOKBACK_DAYS = 7
 
 _GROUP_INSIGHT_LIFECYCLE_BOUND = False
 
@@ -116,11 +123,34 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
 async def _rebuild_pairs_from_messages(
     *, bot_id: int, group_id: int, limit: int = _MAX_PAIRS_PER_JOB
 ) -> list[tuple[str, str, str, int, int, int, int]]:
-    """从 message 表重建成人「前句→接话」对，返回 (trigger, reply, relation, t_uid, r_uid, mid, created_at)。"""
+    """从 message 表重建成人「前句→接话」对，返回 (trigger, reply, relation, t_uid, r_uid, mid, created_at)。
+
+    多 bot 并发旁路记录会让同一条真人消息以不同 ``bot_id`` 落多行（message_id 相同），
+    若只取最近一窗口会被 bot 重复记录塞满。这里按 message_id 去重（保留任意一条，
+    因为同 message_id 的 user_id/正文/时间一致），并分页回溯避免窗口过窄。
+    """
     repo = make_message_repository()
     now_ts = int(time.time())
-    messages = await repo.find_recent_in_group(group_id, before_time=now_ts + 1, limit=80)
-    ordered = list(messages)
+    before_time = now_ts + 1
+    unique_map: dict[int, object] = {}
+    for _ in range(_PAIR_PAGE_LIMIT):
+        batch = await repo.find_recent_in_group(group_id, before_time=before_time, limit=32)
+        if not batch:
+            break
+        earliest = None
+        for item in batch:
+            mid = int(getattr(item, "message_id", 0) or 0)
+            if mid <= 0:
+                continue
+            unique_map.setdefault(mid, item)
+            ts = int(getattr(item, "time", 0) or 0)
+            if earliest is None or ts < earliest:
+                earliest = ts
+        if earliest is None or earliest >= before_time:
+            break
+        before_time = earliest
+
+    ordered = sorted(unique_map.values(), key=lambda item: int(getattr(item, "time", 0) or 0))
     if not ordered:
         return []
 
@@ -200,12 +230,18 @@ def build_semantic_insight_job(*, bot_id: int, group_id: int, day: int) -> WorkJ
 
 
 async def _sweep_semantic_groups() -> None:
-    """低频扫描当天有新消息、尚未积累语义样本的群，入队 group.insight semantic job。"""
+    """低频扫描当天有新消息、尚未积累语义样本的群，入队 group.insight semantic job。
+
+    不再依赖「特定 bot 在线」：枚举所有本机 bot 近期有处理记录的群并集，每个群
+    单独解析出语义采集 bot（见 ``_resolve_semantic_bot``），避免多 bot 并发群里
+    主 bot 离线导致画像停更。
+    """
     store = build_work_job_store()
     repo = make_message_repository()
     now_ts = int(time.time())
     day = _day_key(now_ts)
-    cutoff = now_ts - 7 * 24 * 60 * 60
+    cutoff = now_ts - _SEMANTIC_LOOKBACK_DAYS * 24 * 60 * 60
+    seen_groups: set[int] = set()
     enqueued = 0
     for bot_id in await _local_bot_ids():
         try:
@@ -214,14 +250,52 @@ async def _sweep_semantic_groups() -> None:
             logger.warning("Group insight sweep could not list groups for bot [{}]: [{}]", bot_id, exc)
             continue
         for group_id in group_ids:
-            if not await _group_needs_semantic(bot_id=bot_id, group_id=group_id):
+            if group_id in seen_groups:
                 continue
-            await store.enqueue(build_semantic_insight_job(bot_id=bot_id, group_id=group_id, day=day))
+            seen_groups.add(group_id)
+            semantic_bot = await _resolve_semantic_bot(group_id)
+            if semantic_bot <= 0:
+                continue
+            if not await _group_needs_semantic(bot_id=semantic_bot, group_id=group_id):
+                continue
+            await store.enqueue(build_semantic_insight_job(bot_id=semantic_bot, group_id=group_id, day=day))
             enqueued += 1
             if enqueued >= _SWEEP_BATCH_SIZE:
                 return
         if enqueued >= _SWEEP_BATCH_SIZE:
             return
+
+
+async def _resolve_semantic_bot(group_id: int) -> int:
+    """解析某群承担语义学习、作为 profile 归属账号的 bot_id。
+
+    优先读群级配置指定的账号；未指定则回退到「该群最近有处理记录的本地部署 bot 中
+    bot_id 最小者」，保证多 bot 并发群里任一账号离线也能确定一个稳定归属。
+    """
+    if group_id <= 0:
+        return 0
+    from pallas.core.platform.multi_bot.fleet import get_catalog_bot_ids
+    from pallas.core.storage.store import GroupPluginStorage
+
+    try:
+        configured = await GroupPluginStorage(_SEMANTIC_BOT_PLUGIN, group_id).get(_SEMANTIC_BOT_KEY)
+        configured = int(configured) if configured else 0
+    except Exception:
+        configured = 0
+    if configured > 0:
+        return configured
+
+    repo = make_message_repository()
+    now_ts = int(time.time())
+    cutoff = now_ts - _SEMANTIC_LOOKBACK_DAYS * 24 * 60 * 60
+    try:
+        bot_ids = await repo.list_recent_bot_ids_for_group(group_id, since_time=cutoff, limit=128)
+    except Exception as exc:
+        logger.warning("Group insight could not list bots for group [{}]: [{}]", group_id, exc)
+        return 0
+    catalog = get_catalog_bot_ids()
+    local = sorted(int(b) for b in bot_ids if int(b) in catalog)
+    return local[0] if local else 0
 
 
 async def _group_needs_semantic(*, bot_id: int, group_id: int) -> bool:

@@ -75,6 +75,13 @@ __plugin_meta__ = PluginMetadata(
                 ),
             },
         ],
+        "plugin_storage": [
+            {
+                "key": "semantic_style_bot_id",
+                "scope": "group",
+                "label": "群语义学习账号（可选）",
+            },
+        ],
     },
 )
 

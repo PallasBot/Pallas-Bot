@@ -5,6 +5,8 @@ import pytest
 from pallas.product.llm.group_insight_processor import (
     GROUP_INSIGHT_KIND,
     _rebuild_pairs_from_messages,
+    _resolve_semantic_bot,
+    _sweep_semantic_groups,
     build_semantic_insight_job,
     handle_group_insight,
 )
@@ -116,3 +118,97 @@ def test_build_semantic_insight_job_uses_stable_idempotency_key() -> None:
     assert job.kind == GROUP_INSIGHT_KIND
     assert job.payload["task"] == "semantic"
     assert job.idempotency_key == "group.insight:semantic:100:42:20000"
+
+
+@pytest.mark.asyncio
+async def test_resolve_semantic_bot_prefers_configured_bot(monkeypatch) -> None:
+    from pallas.product.llm import group_insight_processor as mod
+
+    class _FakeStorage:
+        async def get(self, key):
+            assert key == "semantic_style_bot_id"
+            return "777"
+
+    async def fake_list(self, group_id, *, since_time, limit=32):
+        return []
+
+    repo = type("R", (), {"list_recent_bot_ids_for_group": fake_list})()
+    monkeypatch.setattr(mod, "make_message_repository", lambda: repo)
+    monkeypatch.setattr("pallas.core.storage.store.GroupPluginStorage", lambda plugin, gid: _FakeStorage())
+
+    assert await _resolve_semantic_bot(42) == 777
+
+
+@pytest.mark.asyncio
+async def test_resolve_semantic_bot_falls_back_to_min_catalog_bot(monkeypatch) -> None:
+    from pallas.product.llm import group_insight_processor as mod
+
+    class _FakeStorage:
+        async def get(self, key):
+            return None
+
+    async def fake_list(self, group_id, *, since_time, limit=32):
+        return [333, 100, 222]
+
+    repo = type("R", (), {"list_recent_bot_ids_for_group": fake_list})()
+    monkeypatch.setattr(mod, "make_message_repository", lambda: repo)
+    monkeypatch.setattr("pallas.core.storage.store.GroupPluginStorage", lambda plugin, gid: _FakeStorage())
+    monkeypatch.setattr("pallas.core.platform.multi_bot.fleet.get_catalog_bot_ids", lambda: {222, 333, 999})
+
+    assert await _resolve_semantic_bot(42) == 222
+
+
+@pytest.mark.asyncio
+async def test_resolve_semantic_bot_returns_zero_without_catalog_bot(monkeypatch) -> None:
+    from pallas.product.llm import group_insight_processor as mod
+
+    class _FakeStorage:
+        async def get(self, key):
+            return None
+
+    async def fake_list(self, group_id, *, since_time, limit=32):
+        return [333, 100]
+
+    repo = type("R", (), {"list_recent_bot_ids_for_group": fake_list})()
+    monkeypatch.setattr(mod, "make_message_repository", lambda: repo)
+    monkeypatch.setattr("pallas.core.storage.store.GroupPluginStorage", lambda plugin, gid: _FakeStorage())
+    monkeypatch.setattr("pallas.core.platform.multi_bot.fleet.get_catalog_bot_ids", lambda: {999})
+
+    assert await _resolve_semantic_bot(42) == 0
+
+
+@pytest.mark.asyncio
+async def test_sweep_semantic_groups_dedups_groups_and_skips_needed_check(monkeypatch) -> None:
+    from pallas.product.llm import group_insight_processor as mod
+
+    enqueued = []
+
+    class _FakeStore:
+        async def enqueue(self, job):
+            enqueued.append(job)
+
+    async def fake_list_group_ids(self, bot_id, *, since_time, limit=32):
+        return [42, 7] if bot_id == 100 else [7, 8]
+
+    repo = type("R", (), {"list_recent_group_ids_for_bot": fake_list_group_ids})()
+    monkeypatch.setattr(mod, "make_message_repository", lambda: repo)
+
+    async def fake_local_bot_ids():
+        return {100, 200}
+
+    monkeypatch.setattr(mod, "_local_bot_ids", fake_local_bot_ids)
+
+    async def fake_resolve(group_id):
+        return {42: 100, 7: 200, 8: 300}.get(group_id, 0)
+
+    async def fake_needs(bot_id, group_id):
+        return group_id in (42, 7, 8) and bot_id > 0
+
+    monkeypatch.setattr(mod, "_resolve_semantic_bot", fake_resolve)
+    monkeypatch.setattr(mod, "_group_needs_semantic", fake_needs)
+    monkeypatch.setattr(mod, "build_work_job_store", lambda: _FakeStore())
+
+    await _sweep_semantic_groups()
+
+    assert len(enqueued) == 3
+    assert {b.payload["group_id"] for b in enqueued} == {42, 7, 8}
