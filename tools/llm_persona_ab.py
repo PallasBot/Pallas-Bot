@@ -186,6 +186,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--user-id", default="30003", help="event 模式发送者 QQ")
     parser.add_argument("--message-id", default="1", help="event 模式消息 id")
     parser.add_argument("--sender-nickname", default="测试用户", help="event 模式发送者昵称")
+    parser.add_argument("--timeout", type=float, default=90.0, help="event 模式单个用例超时（秒）")
     parser.add_argument("--fixture", type=Path, help="event 模式 JSONL fixture；优先于单用例参数")
     parser.add_argument("--out", type=Path, default=REPO_ROOT / "data" / "llm" / "persona_ab_out.jsonl")
     return parser
@@ -210,23 +211,42 @@ async def _run_direct(complete, bases: dict[str, str], cases: list[dict], args) 
 
 
 async def _run_event(bases: dict[str, str], cases: list[dict], args) -> list[dict]:
-    from tools.llm_event_harness import EventFixture, build_group_message_payload, load_event_fixtures, run_event_case
+    from pallas.core.foundation.config.repo_settings import apply_repo_settings_to_environ
+    from pallas.core.foundation.db import init_db
+    from tools.llm_event_harness import (
+        EventFixture,
+        LocalImageServer,
+        build_group_message_payload,
+        load_event_fixtures,
+        run_event_case,
+    )
+
+    apply_repo_settings_to_environ()
+    await init_db()
 
     if args.fixture:
         fixtures = load_event_fixtures(args.fixture)
     else:
-        payload = build_group_message_payload(
-            text=args.text,
-            images=args.image or [],
-            to_me=args.to_me,
-            bot_id=args.bot_id,
-            group_id=args.group_id,
-            user_id=args.user_id,
-            message_id=args.message_id,
-            sender_nickname=args.sender_nickname,
-            sender_role=args.sender_role,
-        )
-        fixtures = [EventFixture(name="cli", event=payload)]
+        def _as_local(path: str) -> Path | None:
+            candidate = Path(path).expanduser().resolve()
+            return candidate if candidate.is_file() else None
+
+        local_paths = [p for p in (_as_local(x) for x in (args.image or [])) if p is not None]
+        remote_images = [x for x in (args.image or []) if _as_local(x) is None]
+        with LocalImageServer(local_paths) as image_server:
+            served_images = [image_server.url_for(path) for path in local_paths]
+            payload = build_group_message_payload(
+                text=args.text,
+                images=[*served_images, *remote_images],
+                to_me=args.to_me,
+                bot_id=args.bot_id,
+                group_id=args.group_id,
+                user_id=args.user_id,
+                message_id=args.message_id,
+                sender_nickname=args.sender_nickname,
+                sender_role=args.sender_role,
+            )
+            fixtures = [EventFixture(name="cli", event=payload)]
     if args.case:
         wanted = set(args.case)
         fixtures = [f for f in fixtures if f.name in wanted]
@@ -240,6 +260,7 @@ async def _run_event(bases: dict[str, str], cases: list[dict], args) -> list[dic
                 provider=args.provider,
                 model=args.model,
                 temperature=args.temp,
+                timeout=args.timeout,
                 variant=label,
             )
             row = {**result.as_dict(), "variant": label, "case": fixture.name}
