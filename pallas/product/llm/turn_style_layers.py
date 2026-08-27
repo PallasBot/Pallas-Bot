@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from pallas.product.persona.occasion import OccasionTag
 from pallas.product.persona.prompt_guard import sanitize_prompt_literal
 
 _WS_RE = re.compile(r"\s+")
@@ -59,6 +60,24 @@ def build_same_utterance_redup_hint(*, user_text: str, previous_reply: str) -> s
     trigger = sanitize_prompt_literal(str(user_text or "").strip(), max_len=40)
     prefix = f"用户又提了类似「{trigger}」。" if trigger else "用户又提了类似内容。"
     return f"【同句重回】{prefix}你上次回过：「{prev}」。这次换说法，不要复述上一句，也不要用同一套起手。"
+
+
+_SCENE_TONE_HINTS: dict[str, str] = {
+    OccasionTag.GREETING.value: "这轮是日常问候，保持温柔平和，不要太跳脱。",
+    OccasionTag.WARM_REPLY.value: "对方在示好/夸奖，认真接住这份好意，语气真诚一点。",
+    OccasionTag.AGREEMENT.value: "对方在附和，自然顺着应一声就好，别反驳也别调侃。",
+}
+
+
+def build_scene_tone_hint(text: str, *, stance: str) -> str | None:
+    """对温和场景生成一轮软语气提示；尖锐/中性闲聊返回 None。"""
+    from pallas.product.persona.expression_learn import infer_expression_occasion
+
+    occasion = str(infer_expression_occasion(text, stance) or "").strip()
+    hint = _SCENE_TONE_HINTS.get(occasion)
+    if not hint:
+        return None
+    return f"【本轮场景】{hint}"
 
 
 def build_turn_behavior_block(*parts: str) -> str:

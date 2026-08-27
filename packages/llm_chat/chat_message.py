@@ -100,10 +100,12 @@ from pallas.product.llm.tools.time_now import current_time_text
 from pallas.product.llm.turn_policy import resolve_turn_policy
 from pallas.product.llm.turn_style_layers import (
     build_same_utterance_redup_hint,
+    build_scene_tone_hint,
     find_previous_reply_for_utterance,
 )
 from pallas.product.llm.turn_telemetry import new_turn_id, record_turn_event
 from pallas.product.llm.vision_content import user_message_has_vision_content, vision_payload_from_segments
+from pallas.product.persona.corpus_expression_habits import infer_expression_affect_stance
 from pallas.product.persona.peer_bots_prompt import save_peer_alias_from_teach
 from pallas.product.persona.prompt_guard import sanitize_prompt_literal
 from pallas.product.persona.self_identity import (
@@ -1402,6 +1404,12 @@ async def prepare_and_submit_llm_chat_turn(
             )
             if same_utterance_hint:
                 style_user_hints.append(same_utterance_hint)
+        scene_tone_hint = build_scene_tone_hint(
+            llm_user_text,
+            stance=infer_expression_affect_stance(llm_user_text),
+        )
+        if scene_tone_hint:
+            style_user_hints.append(scene_tone_hint)
         result = await submit_chat_task(
             ChatSubmitRequest(
                 request_id=request_id,

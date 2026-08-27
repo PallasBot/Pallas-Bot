@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from pallas.product.llm.models import ChatCompletionMessage
 from pallas.product.llm.turn_style_layers import (
     build_same_utterance_redup_hint,
+    build_scene_tone_hint,
     build_turn_behavior_block,
     build_turn_wording_user_hints,
     find_previous_reply_for_utterance,
@@ -48,6 +49,23 @@ def test_same_utterance_redup_hint() -> None:
     assert "同句重回" in hint
     assert "漂亮牛说想咬我" in hint
     assert "换说法" in hint
+
+
+def test_scene_tone_hint_warms_greeting_and_praise() -> None:
+    greet = build_scene_tone_hint("早上好", stance="neutral")
+    assert greet is not None
+    assert "温柔" in greet or "平和" in greet or "客气" in greet
+    praise = build_scene_tone_hint("你真棒", stance="warm")
+    assert praise is not None
+    assert "接住" in praise or "真诚" in praise or "开心" in praise
+
+
+def test_scene_tone_hint_none_on_provocation() -> None:
+    assert build_scene_tone_hint("打死你", stance="complain") is None
+
+
+def test_scene_tone_hint_none_on_neutral_chitchat() -> None:
+    assert build_scene_tone_hint("今天吃啥", stance="neutral") is None
 
 
 def test_behavior_and_wording_split() -> None:
