@@ -58,8 +58,34 @@ async def test_rebuild_pairs_picks_quoted_pair_and_human_adjacent(monkeypatch) -
 
     quoted = [p for p in pairs if p[2] == "quoted"]
     adjacent = [p for p in pairs if p[2] == "adjacent"]
-    assert quoted == [("今天好热", "热死我了", "quoted", 11, 11, 2, 1010)]
-    assert adjacent == [("真的吗", "我也这么觉得", "adjacent", 22, 22, 5, 1040)]
+    assert quoted == [("今天好热", "热死我了", "quoted", 11, 11, 2, 1010, False)]
+    # bot 自我接话（peer_bot=99 回 real human 的 msg2）作为 self_reflection 候选，is_bot_reply=True。
+    assert ("热死我了", "bot插话", "adjacent", 11, 99, 3, 1020, True) in adjacent
+    assert ("真的吗", "我也这么觉得", "adjacent", 22, 22, 5, 1040, False) in adjacent
+
+
+@pytest.mark.asyncio
+async def test_rebuild_pairs_marks_bot_self_reply(monkeypatch) -> None:
+    from pallas.product.llm import group_insight_processor as mod
+
+    def fake_sender_kind(user_id, *, self_bot_id):
+        if user_id == self_bot_id:
+            return "self"
+        if user_id == 99 or user_id == 501:
+            return "peer_bot"
+        return "human"
+
+    monkeypatch.setattr(mod, "sender_kind", fake_sender_kind)
+    repo = _DummyMessageRepo([
+        _msg(1, 11, "今天好热", time=1000),  # human
+        _msg(2, 100, "是挺热的", time=1010),  # self bot 接话 (self_bot_id=100)
+    ])
+    monkeypatch.setattr(mod, "make_message_repository", lambda: repo)
+
+    pairs = await _rebuild_pairs_from_messages(bot_id=100, group_id=42)
+
+    adjacent = [p for p in pairs if p[2] == "adjacent"]
+    assert ("今天好热", "是挺热的", "adjacent", 11, 100, 2, 1010, True) in adjacent
 
 
 @pytest.mark.asyncio

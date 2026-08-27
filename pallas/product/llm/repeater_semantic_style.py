@@ -43,6 +43,8 @@ SEMANTIC_STYLE_REALTIME_MAX_PER_DAY = 1000
 SEMANTIC_STYLE_REALTIME_MAX_PER_SCOPE_PER_DAY = 40
 SEMANTIC_STYLE_REALTIME_SAMPLE_DIVISOR = 2
 SEMANTIC_STYLE_LABEL_MAX_RETRIES = 2
+_BATCH_LABEL_MAX = 8
+SEMANTIC_STYLE_LABEL_BATCH_MAX = _BATCH_LABEL_MAX
 _SEMANTIC_STYLE_BACKFILL_GROUP_LIMIT = 128
 _SEMANTIC_STYLE_BACKFILL_PAGE_SIZE = 32
 _SEMANTIC_STYLE_BACKFILL_START_DELAY_SEC = 30.0
@@ -901,6 +903,7 @@ def _build_profile(
     existing: SemanticStyleProfile | None,
     *,
     now: int | None = None,
+    is_bot_reply: bool = False,
 ) -> SemanticStyleProfile:
     label = example.label
     prior_actions = list(existing.interaction_actions) if existing else []
@@ -926,7 +929,7 @@ def _build_profile(
         bot_style_sample_count >= BOT_STYLE_PROMOTION_SAMPLE_COUNT
         and recent_bot_style_sample_count >= BOT_STYLE_PROMOTION_RECENT_SAMPLE_COUNT
     )
-    if example.source_kind == "human_pair" and reply_text:
+    if example.source_kind == "human_pair" and reply_text and not is_bot_reply:
         direct_examples = [item for item in direct_examples if item != reply_text]
         direct_examples.append(reply_text)
         pair = SemanticStyleDirectPair(
@@ -949,7 +952,7 @@ def _build_profile(
         strategy = example.behavior_strategy
         if not strategy.trigger:
             strategy = strategy.model_copy(update={"trigger": _short_text(example.trigger_text, _MAX_SEED_LEN)})
-        if example.bot_style_positive:
+        if example.bot_style_positive or is_bot_reply:
             strategy = strategy.model_copy(update={"learning_type": "self_reflection"})
         merged = False
         for index, prior in enumerate(strategies):
@@ -1206,15 +1209,25 @@ def _rebuild_profiles(
         if example.source_kind == "legacy_unknown":
             _apply_legacy_rhythm_statistics(profiles, example)
             continue
-        if example.source_kind != "human_pair" or not is_human_semantic_style_pair(
+        if example.source_kind != "human_pair":
+            continue
+        reply_is_bot = _example_reply_is_bot(example)
+        if not reply_is_bot and not is_human_semantic_style_pair(
             trigger_user_id=example.trigger_user_id,
             reply_user_id=example.reply_user_id,
             bot_id=example.bot_id,
         ):
             continue
         key = _profile_key(example.bot_id, example.group_id, example.scene)
-        profiles[key] = _build_profile(example, profiles.get(key), now=now)
+        profiles[key] = _build_profile(example, profiles.get(key), now=now, is_bot_reply=reply_is_bot)
     return profiles
+
+
+def _example_reply_is_bot(example: SemanticStyleExample) -> bool:
+    """判断某 example 的接话端是否为 bot（自身或协作 bot），用于 self_reflection 学习。"""
+    from pallas.product.llm.sender_identity import sender_kind
+
+    return sender_kind(example.reply_user_id, self_bot_id=example.bot_id) != "human"
 
 
 def prune_semantic_style_examples(*, now: int | None = None) -> int:
@@ -1710,6 +1723,98 @@ async def label_semantic_style_with_retry(
                 return None
             logger.debug("Repeater semantic style label retry [{}] failed: [{}]", retry_index + 1, exc)
     return None
+
+
+async def label_semantic_style_batch_with_llm(
+    pairs: list[tuple[str, str, Literal["quoted", "adjacent"]]],
+    *,
+    max_batch: int = SEMANTIC_STYLE_LABEL_BATCH_MAX,
+) -> list[tuple[SemanticStyleLabel, BehaviorStrategy | None]]:
+    """一次 LLM 提交批量标注多个「前句→接话」对，逐项返回标签。
+
+    参照 gsuid 后台管线的「一次输出 JSON 数组」范式，显著降低语义风格采集的
+    LLM 提交次数。每对单独失败则回退调用单对接口 ``label_semantic_style_with_retry``，
+    保证整体尽可能产出（避免批量解析失败丢掉全部）。
+    """
+    from pallas.product.llm.config import get_llm_config
+    from pallas.product.llm.provider_client import complete_chat_message
+
+    results: list[tuple[SemanticStyleLabel, BehaviorStrategy | None]] = []
+    remaining = list(pairs)
+    while remaining:
+        chunk = remaining[:max_batch]
+        remaining = remaining[max_batch:]
+        prompt_items = []
+        for index, (trigger_text, reply_text, pair_relation) in enumerate(chunk):
+            relation = "明确引用前句" if pair_relation == "quoted" else "仅时间相邻"
+            prompt_items.append(
+                f"[{index}] 关联：{relation}"
+                f"\n前句：{_short_text(trigger_text, 96)}\n接话：{_short_text(reply_text, 96)}"
+            )
+        cfg = get_llm_config()
+        prompt = _label_semantic_style_batch_prompt(len(chunk)) + "\n\n" + "\n\n".join(prompt_items)
+        try:
+            response = await complete_chat_message(
+                [{"role": "user", "content": prompt}],
+                model=str(cfg.llm_model or ""),
+                options={"temperature": 0, "max_tokens": 160 * len(chunk)},
+                cfg=cfg,
+                task="repeater.semantic_style",
+            )
+            parsed = _parse_label_batch_response(str(response.get("content") or ""), len(chunk))
+        except Exception as exc:
+            logger.warning("repeater semantic style batch label failed: {}", exc)
+            parsed = []
+        if len(parsed) == len(chunk):
+            results.extend(parsed)
+            continue
+        # 批量解析不完整（缺项或异常）时，对 chunk 内逐对回退进行单对标注，避免整批丢失。
+        logger.debug(
+            "Repeater semantic style batch incomplete ([{}]/[{}]); falling back per-pair", len(parsed), len(chunk)
+        )
+        for item in chunk:
+            fallback = await label_semantic_style_with_retry(
+                trigger_text=item[0], reply_text=item[1], pair_relation=item[2]
+            )
+            results.append(fallback if fallback is not None else (SemanticStyleLabel(), None))
+    return results
+
+
+def _label_semantic_style_batch_prompt(count: int) -> str:
+    return (
+        f"分析 {count} 组真实群聊的候选「前句→接话」，只输出一个严格 JSON 数组，长度等于 {count}，"
+        "每个元素含 is_reply_pair、transferable、interaction_actions、semantic_relations、intensity、"
+        "forms、behavior_strategy。各字段语义："
+        "is_reply_pair 仅当前句确实在回应前句时为 true；transferable 仅接话脱离当时人名、"
+        "多人局部梗或临时事实后仍可作为通用措辞参考时为 true。任一不成立都填 false。"
+        "intensity 只能 quiet/soft/neutral/sharp/strong；数组字段用受控英文词。"
+        "behavior_strategy 为 null 或 "
+        '{"scene":"可泛化场景","action":"实际接话动作","outcome":"可观察变化",'
+        '"learning_type":"observed"}。不抄原话，不带人名/临时梗，不做价值判断。'
+        "严格按 [0],[1],[2]… 的顺序输出，用数组下标对应每个输入组。"
+    )
+
+
+def _parse_label_batch_response(
+    content: str,
+    expected: int,
+) -> list[tuple[SemanticStyleLabel, BehaviorStrategy | None]]:
+    """解析批量标注响应为逐项 (label, strategy)；缺项或非法用空标签补齐到 len(响应)。"""
+    text = _JSON_FENCE_RE.sub("", str(content or "").strip()).strip()
+    try:
+        raw = json.loads(text)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(raw, list):
+        return []
+    results: list[tuple[SemanticStyleLabel, BehaviorStrategy | None]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            results.append((SemanticStyleLabel(), None))
+            continue
+        label, strategy = parse_semantic_style_label(item), parse_behavior_strategy(item.get("behavior_strategy"))
+        results.append((label, strategy))
+    return results[:expected]
 
 
 async def _refresh_loop() -> None:

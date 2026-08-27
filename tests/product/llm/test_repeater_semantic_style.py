@@ -1679,3 +1679,97 @@ def test_rebuild_profiles_merges_legacy_statistics_with_human_pair(tmp_path, mon
     assert profile.bubble_counts == [2, 1]
     assert profile.direct_examples == ["新样本"]
     assert profile.rewrite_seeds == []
+
+
+@pytest.mark.asyncio
+async def test_label_semantic_style_batch_returns_multiple_labels(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    complete = AsyncMock(
+        return_value={
+            "content": (
+                '[{"is_reply_pair": true, "transferable": true, "intensity": "soft", "forms": ["short"], '
+                '"interaction_actions": ["support"], "semantic_relations": [], '
+                '"behavior_strategy": {"scene": "倾诉", "action": "倾听", '
+                '"outcome": "对方愿多讲", "learning_type": "observed"}},'
+                '{"is_reply_pair": false, "transferable": false, "intensity": "neutral", "forms": [], '
+                '"interaction_actions": [], "semantic_relations": [], "behavior_strategy": null}]'
+            )
+        }
+    )
+    monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", complete)
+    monkeypatch.setattr(
+        "pallas.product.llm.config.get_llm_config",
+        lambda: SimpleNamespace(llm_model="test-model"),
+    )
+
+    pairs = [("好烦又要加班", "怎么了说说", "adjacent"), ("今天天气", "嗯", "adjacent")]
+    results = await mod.label_semantic_style_batch_with_llm(pairs, max_batch=2)
+
+    assert len(results) == 2
+    assert results[0][0].is_reply_pair is True
+    assert results[0][0].transferable is True
+    assert results[0][1].learning_type == "observed"
+    assert results[1][0].is_reply_pair is False
+    assert results[1][1] is None
+    assert complete.await_args.kwargs["options"]["max_tokens"] == 320
+
+
+@pytest.mark.asyncio
+async def test_label_semantic_style_batch_falls_back_per_pair_when_incomplete(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    calls: list[str] = []
+
+    async def fake_complete(messages, *, model=None, options=None, cfg=None, task=None):
+        content = str(messages[0]["content"])
+        if content.startswith("分析 2 组"):  # 批量请求
+            calls.append("batch")
+            # 只返回 1 项 → 触发逐项回退
+            return {"content": '[{"is_reply_pair": true}]'}
+        calls.append("single")
+        return {"content": '{"is_reply_pair": true, "transferable": true, "intensity": "soft"}'}
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", fake_complete)
+    monkeypatch.setattr(
+        "pallas.product.llm.config.get_llm_config",
+        lambda: SimpleNamespace(llm_model="test-model"),
+    )
+
+    pairs = [("前句1", "接话1", "adjacent"), ("前句2", "接话2", "adjacent")]
+    results = await mod.label_semantic_style_batch_with_llm(pairs, max_batch=2)
+
+    # 一次批量（不足 2 项）→ 每对回退单对，共 1 + 2 = 3 次 complete 调用。
+    assert calls == ["batch", "single", "single"]
+    assert len(results) == 2
+    assert results[0][0].is_reply_pair is True
+    assert results[1][0].is_reply_pair is True
+
+
+def test_merge_bot_reply_only_teaches_behavior_strategy(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    # bot 自我接话对：trigger 是真人(11)，reply 是本机 bot(100)。应进入 behavior_strategy(self_reflection)，
+    # 但不应写入 direct_pairs（避免污染「群表达指导」）。
+    example = mod.SemanticStyleExample(
+        example_id="42:7:100",
+        created_at=100,
+        bot_id=100,
+        group_id=42,
+        scene="group_chat",
+        trigger_text="好烦，又要加班",
+        reply_text="要不要歇口气",
+        label=mod.parse_semantic_style_label({"intensity": "soft"}),
+        behavior_strategy=mod.BehaviorStrategy(
+            scene="倾诉", action="问候", outcome="对方再说一句", learning_type="observed"
+        ),
+        source_kind="human_pair",
+        trigger_user_id=11,
+        reply_user_id=100,
+    )
+    profile = mod._build_profile(example, None, now=100, is_bot_reply=True)
+
+    assert profile.direct_pairs == []
+    assert profile.direct_examples == []
+    assert len(profile.behavior_strategies) == 1
+    assert profile.behavior_strategies[0].learning_type == "self_reflection"

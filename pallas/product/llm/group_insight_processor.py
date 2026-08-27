@@ -73,7 +73,7 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
     from pallas.product.llm.repeater_semantic_style import (
         SemanticStyleExample,
         is_human_semantic_style_pair,
-        label_semantic_style_with_retry,
+        label_semantic_style_batch_with_llm,
         persist_semantic_style_example,
         semantic_style_collection_enabled,
     )
@@ -85,23 +85,25 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
     if not pairs:
         return
 
+    # 一次 LLM 提交标注多个候选对，降低调用成本。
+    labeled = await label_semantic_style_batch_with_llm([
+        (trigger, reply, pair_relation) for trigger, reply, pair_relation, *_ in pairs
+    ])
+    if len(labeled) != len(pairs):
+        return
+
     persisted = 0
-    for trigger, reply, pair_relation, trigger_user_id, reply_user_id, message_id, created_at in pairs:
-        if not is_human_semantic_style_pair(
+    for (trigger, reply, pair_relation, trigger_user_id, reply_user_id, message_id, created_at, is_bot_reply), (
+        label,
+        strategy,
+    ) in zip(pairs, labeled, strict=True):
+        if not label.is_reply_pair or not label.transferable:
+            continue
+        if not is_bot_reply and not is_human_semantic_style_pair(
             trigger_user_id=trigger_user_id,
             reply_user_id=reply_user_id,
             bot_id=bot_id,
         ):
-            continue
-        label_result = await label_semantic_style_with_retry(
-            trigger_text=trigger,
-            reply_text=reply,
-            pair_relation=pair_relation,
-        )
-        if label_result is None:
-            continue
-        label, strategy = label_result
-        if not label.is_reply_pair or not label.transferable:
             continue
         example = SemanticStyleExample(
             example_id=f"{group_id}:{message_id}:{bot_id}",
@@ -118,6 +120,7 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
             pair_relation=pair_relation,
             annotation_source="llm_v2",
             behavior_strategy=strategy,
+            bot_style_positive=is_bot_reply,
         )
         persist_semantic_style_example(example)
         persisted += 1
@@ -129,12 +132,15 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
 
 async def _rebuild_pairs_from_messages(
     *, bot_id: int, group_id: int, limit: int = _MAX_PAIRS_PER_JOB
-) -> list[tuple[str, str, str, int, int, int, int]]:
-    """从 message 表重建成人「前句→接话」对，返回 (trigger, reply, relation, t_uid, r_uid, mid, created_at)。
+) -> list[tuple[str, str, str, int, int, int, int, bool]]:
+    """从 message 表重建「前句→接话」对，返回 (trigger, reply, relation, t_uid, r_uid, mid, created_at, is_bot_reply)。
 
     多 bot 并发旁路记录会让同一条真人消息以不同 ``bot_id`` 落多行（message_id 相同），
     若只取最近一窗口会被 bot 重复记录塞满。这里按 message_id 去重（保留任意一条，
     因为同 message_id 的 user_id/正文/时间一致），并分页回溯避免窗口过窄。
+
+    ``is_bot_reply`` 标记接话端是否为 bot（自身或协作 bot）：真人接话进入 direct_pairs，
+    bot 自我接话只沉淀 behavior_strategy（self_reflection），不污染群表达指导。
     """
     repo = make_message_repository()
     now_ts = int(time.time())
@@ -162,14 +168,15 @@ async def _rebuild_pairs_from_messages(
         return []
 
     by_message_id = {int(getattr(item, "message_id", 0) or 0): item for item in ordered}
-    pairs: list[tuple[str, str, str, int, int, int, int]] = []
+    pairs: list[tuple[str, str, str, int, int, int, int, bool]] = []
     seen: set[tuple[int, int]] = set()
 
     for index, reply_message in enumerate(ordered):
         reply_user_id = int(getattr(reply_message, "user_id", 0) or 0)
         reply_text = _text(getattr(reply_message, "plain_text", "") or getattr(reply_message, "raw_message", ""))
-        if not reply_text or sender_kind(reply_user_id, self_bot_id=bot_id) != "human":
+        if not reply_text:
             continue
+        reply_is_bot = sender_kind(reply_user_id, self_bot_id=bot_id) != "human"
         replied_message_id = int(getattr(reply_message, "reply_to_message_id", 0) or 0)
         if replied_message_id > 0:
             trigger = by_message_id.get(replied_message_id)
@@ -190,6 +197,7 @@ async def _rebuild_pairs_from_messages(
                         reply_user_id,
                         int(getattr(reply_message, "message_id", 0) or 0),
                         int(getattr(reply_message, "time", 0) or 0),
+                        reply_is_bot,
                     ))
                     continue
         if index == 0:
@@ -214,6 +222,7 @@ async def _rebuild_pairs_from_messages(
             reply_user_id,
             message_id,
             int(getattr(reply_message, "time", 0) or 0),
+            reply_is_bot,
         ))
         if len(pairs) >= limit:
             break
