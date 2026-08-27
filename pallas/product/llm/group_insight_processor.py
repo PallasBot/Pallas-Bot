@@ -75,7 +75,7 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
         SemanticStyleExample,
         is_human_semantic_style_pair,
         label_semantic_style_batch_with_llm,
-        persist_semantic_style_example,
+        persist_semantic_style_examples,
         semantic_style_collection_enabled,
     )
 
@@ -93,7 +93,8 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
     if len(labeled) != len(pairs):
         return
 
-    persisted = 0
+    accepted: list[SemanticStyleExample] = []
+    accepted_ids: set[str] = set()
     for (trigger, reply, pair_relation, trigger_user_id, reply_user_id, message_id, created_at, is_bot_reply), (
         label,
         strategy,
@@ -106,28 +107,36 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
             bot_id=bot_id,
         ):
             continue
-        example = SemanticStyleExample(
-            example_id=f"{group_id}:{message_id}:{bot_id}",
-            created_at=int(created_at),
-            bot_id=bot_id,
-            group_id=group_id,
-            scene=_SCENE,
-            trigger_text=trigger,
-            reply_text=reply,
-            label=label,
-            source_kind="human_pair",
-            trigger_user_id=int(trigger_user_id),
-            reply_user_id=int(reply_user_id),
-            pair_relation=pair_relation,
-            annotation_source="llm_v2",
-            behavior_strategy=strategy,
-            bot_style_positive=is_bot_reply,
+        example_id = f"{group_id}:{message_id}:{bot_id}"
+        if example_id in accepted_ids:
+            continue
+        accepted_ids.add(example_id)
+        accepted.append(
+            SemanticStyleExample(
+                example_id=example_id,
+                created_at=int(created_at),
+                bot_id=bot_id,
+                group_id=group_id,
+                scene=_SCENE,
+                trigger_text=trigger,
+                reply_text=reply,
+                label=label,
+                source_kind="human_pair",
+                trigger_user_id=int(trigger_user_id),
+                reply_user_id=int(reply_user_id),
+                pair_relation=pair_relation,
+                annotation_source="llm_v2",
+                behavior_strategy=strategy,
+                bot_style_positive=is_bot_reply,
+            )
         )
-        persist_semantic_style_example(example)
-        persisted += 1
-    if persisted:
+    if accepted:
+        persist_semantic_style_examples(accepted)
         logger.info(
-            "Group insight semantic produced [{}] examples for bot [{}] and group [{}]", persisted, bot_id, group_id
+            "Group insight semantic produced [{}] examples for bot [{}] and group [{}]",
+            len(accepted),
+            bot_id,
+            group_id,
         )
 
 
@@ -162,6 +171,9 @@ async def _rebuild_pairs_from_messages(
                 earliest = ts
         if earliest is None or earliest >= before_time:
             break
+        # 用批内最小 time 作为下一批边界；同秒多条消息时会因 time < before_time
+        # 严格小于而被跳过（可接受：此类刷屏群窗口去重后仍能覆盖主体，改为复合游标
+        # 需扩展 find_recent_in_group，收益低）。
         before_time = earliest
 
     ordered = sorted(unique_map.values(), key=lambda item: int(getattr(item, "time", 0) or 0))

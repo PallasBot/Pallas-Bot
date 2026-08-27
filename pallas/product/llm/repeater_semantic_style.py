@@ -992,6 +992,31 @@ def _build_profile(
     )
 
 
+def persist_semantic_style_examples(
+    new_examples: list[SemanticStyleExample],
+) -> dict[tuple[int, int, str], SemanticStyleProfile]:
+    """批量落盘语义风格样本：按 example_id 幂等去重，一次重建全部 profiles。
+
+    同一 job 重复处理（跨天 idempotency_key 变化、异常重放等）会带来重复 example_id；
+    这里按 example_id 去重，避免 profiles.json 的 sample_count 虚增与 direct_pairs 重复。
+    相比逐条 persist_semantic_style_example，只做一次文件读写与 profiles 重建。
+    """
+    with semantic_style_data_lock():
+        examples = load_examples_with_legacy_migration_locked()
+        existing_ids = {item.example_id for item in examples}
+        merged = {item.example_id: item for item in examples}
+        for example in new_examples:
+            if example.example_id in existing_ids:
+                continue
+            existing_ids.add(example.example_id)
+            merged[example.example_id] = example
+        updated = sorted(merged.values(), key=lambda item: (item.created_at, item.example_id))
+        _write_semantic_style_examples(semantic_style_examples_path(), updated)
+        profiles = _rebuild_profiles(updated, now=int(time.time()))
+        _write_profiles(profiles)
+        return profiles
+
+
 def persist_semantic_style_example(example: SemanticStyleExample) -> SemanticStyleProfile | None:
     with semantic_style_data_lock():
         examples = load_examples_with_legacy_migration_locked()
@@ -1765,12 +1790,15 @@ async def label_semantic_style_batch_with_llm(
         except Exception as exc:
             logger.warning("repeater semantic style batch label failed: {}", exc)
             parsed = []
-        if len(parsed) == len(chunk):
+        if len(parsed) == len(chunk) and _batch_label_reliable(parsed):
             results.extend(parsed)
             continue
-        # 批量解析不完整（缺项或异常）时，对 chunk 内逐对回退进行单对标注，避免整批丢失。
+        # 批量解析不完整（缺项/异常）或有效项过少（LLM 输出不可靠、顺序可能错位）时，
+        # 对 chunk 内逐对回退进行单对标注，避免整批丢失或张冠李戴。
         logger.debug(
-            "Repeater semantic style batch incomplete ([{}]/[{}]); falling back per-pair", len(parsed), len(chunk)
+            "Repeater semantic style batch unreliable ([{}]/[{}]); falling back per-pair",
+            sum(1 for item in parsed if _label_item_reliable(item)),
+            len(chunk),
         )
         for item in chunk:
             fallback = await label_semantic_style_with_retry(
@@ -1778,6 +1806,27 @@ async def label_semantic_style_batch_with_llm(
             )
             results.append(fallback if fallback is not None else (SemanticStyleLabel(), None))
     return results
+
+
+def _label_item_reliable(item: tuple[SemanticStyleLabel, BehaviorStrategy | None]) -> bool:
+    """判断某个批量标注项是否有效（非默认空标签），用于可靠性统计。"""
+    label, strategy = item
+    return bool(
+        label.is_reply_pair
+        or label.transferable
+        or label.interaction_actions
+        or label.forms
+        or label.semantic_relations
+        or (strategy is not None and (strategy.scene or strategy.action))
+    )
+
+
+def _batch_label_reliable(parsed: list[tuple[SemanticStyleLabel, BehaviorStrategy | None]]) -> bool:
+    """判断整批解析是否可靠：有效项占比需过半，否则按序对应可能错位。"""
+    if not parsed:
+        return False
+    reliable = sum(1 for item in parsed if _label_item_reliable(item))
+    return reliable >= max(1, (len(parsed) + 1) // 2)
 
 
 def _label_semantic_style_batch_prompt(count: int) -> str:
