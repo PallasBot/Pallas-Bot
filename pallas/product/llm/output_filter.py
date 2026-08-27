@@ -15,6 +15,7 @@ from pallas.core.platform.ai_callback.task_types import (
 )
 from pallas.product.llm import corpus_contamination as _corpus_contamination
 from pallas.product.llm.models import StructuredChatReply
+from pallas.product.llm.tools.select import is_recognition_question
 
 CHAT_HARD_BLOCK_PHRASES = _corpus_contamination.CHAT_HARD_BLOCK_PHRASES
 CHAT_SOFT_RETRY_PHRASES = _corpus_contamination.CHAT_SOFT_RETRY_PHRASES
@@ -270,6 +271,76 @@ def _press_reply_to_limit(text: str, *, max_len: int) -> str:
     return plain
 
 
+def _split_reply_to_fit(text: str, *, max_len: int, max_segments: int = 3) -> list[str] | None:
+    """把超限的单泡文本按句读断点切成「每段 ≤max_len」的多泡，尽量保住完整语义。
+
+    只在能干净拆分（每个切出的段都不超上限、且确有拆分）时返回分段列表；
+    单句内部找不到可断点、或段数超出限制（再 fold 会重新超限）则返回 None，
+    交由调用方走压短/回落/静默。
+    """
+    if not text or max_len <= 0 or len(text) <= max_len:
+        return None
+    plain = str(text or "").strip()
+    hard_tokens: list[str] = []
+    start = 0
+    for index, ch in enumerate(plain):
+        if ch not in "。！？!?；;":
+            continue
+        token = plain[start : index + 1].strip()
+        if token:
+            hard_tokens.append(token)
+        start = index + 1
+    tail = plain[start:].strip()
+    if tail:
+        hard_tokens.append(tail)
+    units: list[str] = []
+    for token in hard_tokens:
+        if len(token) <= max_len:
+            units.append(token)
+            continue
+        sub = _soft_split_unit(token, max_len=max_len)
+        if sub is None:
+            return None
+        units.extend(sub)
+    if not units:
+        return None
+    segments: list[str] = []
+    buffer = ""
+    for unit in units:
+        if buffer and len(buffer) + len(unit) > max_len:
+            segments.append(buffer)
+            buffer = unit
+        else:
+            buffer += unit
+    if buffer:
+        segments.append(buffer)
+    segments = [seg.strip() for seg in segments if seg.strip()]
+    if len(segments) < 2 or len(segments) > max_segments:
+        return None
+    return segments
+
+
+def _soft_split_unit(token: str, *, max_len: int) -> list[str] | None:
+    """单个句子超限时按中文逗号/空格软切到每段 ≤max_len，切不利落返回 None。"""
+    pieces: list[str] = []
+    remainder = token.strip()
+    while len(remainder) > max_len:
+        cut_at = remainder.rfind("，", 0, max_len)
+        if cut_at < 0:
+            for seps in ("、", " "):
+                candidate = remainder.rfind(seps, 0, max_len)
+                if candidate > 0:
+                    cut_at = candidate
+                    break
+        if cut_at < 1:
+            return None
+        pieces.append(remainder[:cut_at].strip())
+        remainder = remainder[cut_at + 1 :].strip()
+    if remainder:
+        pieces.append(remainder)
+    return [piece for piece in pieces if piece] or None
+
+
 def _enforce_max_length(text: str, *, task: dict, task_type: str) -> str:
     """行为/场景长度违约：超上限先断点压短，压不短才回落 fallback 或静默。"""
     try:
@@ -373,12 +444,34 @@ def resolve_output_filtered_chat_reply(task: dict, reply: StructuredChatReply) -
         )
         text = filtered.logical_text
     else:
-        enforced_text = _enforce_max_length(text, task=task, task_type=task_type)
-        if not enforced_text:
-            return StructuredChatReply()
-        if enforced_text != text:
-            filtered = replace(filtered, reply_segments=(enforced_text,))
-            text = enforced_text
+        enforced_text = text
+        split_done = False
+        # 超限单泡：仅当是识别问句（这是谁/这是什么/啥梗）时，优先按句读切成每段
+        # 都 ≤max_len 的多泡投递，保住被硬截断的答案；闲聊短句保持精简短泡不拆分。
+        is_recognition = is_recognition_question(str(task.get("user_text") or ""))
+        if is_recognition and max_len > 0 and len(filtered.reply_segments) == 1 and len(text) > max_len:
+            split = _split_reply_to_fit(text, max_len=max_len)
+            if split:
+                log_rate_limited(
+                    logger,
+                    "info",
+                    "llm.output_filter.pressed_split_multi_bubble",
+                    "LLM reply over length cap split into segments for task [{}], len [{}] max [{}], segments [{}]",
+                    task_type,
+                    len(text),
+                    max_len,
+                    len(split),
+                )
+                filtered = replace(filtered, reply_segments=tuple(split))
+                text = filtered.logical_text
+                split_done = True
+        if not split_done:
+            enforced_text = _enforce_max_length(text, task=task, task_type=task_type)
+            if not enforced_text:
+                return StructuredChatReply()
+            if enforced_text != text:
+                filtered = replace(filtered, reply_segments=(enforced_text,))
+                text = enforced_text
     if not filter_enabled:
         return filtered
     hit = match_output_filter(text, profile) or match_output_filter("".join(filtered.reply_segments), profile)
