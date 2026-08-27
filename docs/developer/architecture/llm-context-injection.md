@@ -63,7 +63,7 @@
 
 ### 语义风格参考
 
-语义风格（`repeater_semantic_style.py`）是「让 bot 越聊越像本群真人」的核心机制，按 **bot × 群** 分别学习。每次 `@` 对话把本群的历史真实接话参考注入 system prompt，示意如下（脱敏通用示例）：
+语义风格（`repeater_semantic_style.py`）是「让 bot 越聊越像本群真人」的核心机制，按 **bot × 群** 分别学习。成对样本由群洞察处理器（`group_insight_processor.py`）从 message 表重建（引用对 / 相邻对）+ LLM 标注。每次 `@` 对话把本群的历史真实接话参考注入 system prompt，示意如下（脱敏通用示例）：
 
 ```text
 【群表达指导】

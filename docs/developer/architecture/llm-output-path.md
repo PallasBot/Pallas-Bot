@@ -65,7 +65,7 @@ at-chat 系统提示词 `pallas/product/persona/at_chat_system_prompt.txt` 只�
 | 步骤 | 位置 |
 | --- | --- |
 | Repeater 候选与投递 | `packages/repeater/responder.py`、`packages/repeater/handlers/message.py` |
-| LLM 群级表达指导 | `pallas/product/llm/repeater_semantic_style.py` |
+| LLM 群级表达指导 | `pallas/product/llm/repeater_semantic_style.py`（注入消费）；`pallas/product/llm/group_insight_processor.py`（从 message 表重建成对样本，批量标注落盘） |
 | 表达库存取 / 学习 | `pallas/product/persona/expression_*.py` |
 | 进程内投递 | `pallas/product/llm/delivery.py`（`deliver_llm_chat_result`）；`kernel_runner.py` 调用 delivery |
 | 媒体 / HTTP callback 壳 | `pallas/core/platform/ai_callback/runner.py`（薄壳，复用 delivery） |
