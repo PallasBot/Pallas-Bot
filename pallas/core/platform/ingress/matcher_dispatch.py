@@ -418,13 +418,14 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                     if _reply_msg is not None:
                         reply_text = str(_reply_msg).strip()
                         if reply_text:
-                            reply_note += f"「{reply_text[:30]}」"
+                            reply_note += f"「{reply_text}」"
                 compact_log = compact_group_message_log(
                     bot_id=str(bot.self_id),
                     group_id=event.group_id,
                     user_id=event.user_id,
                     message_id=getattr(event, "message_id", None),
                     message=f"{reply_note}{str(event.get_message())}",
+                    max_len=500,
                 )
                 if resolve_repo_log_level() not in {"TRACE", "DEBUG"}:
                     log.bind(display_name="Message").info(nb_message.escape_tag(compact_log))

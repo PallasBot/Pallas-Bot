@@ -35,9 +35,11 @@ def compact_group_message_log(
     group_id: int,
     user_id: int,
     message: str,
+    message_id: int | None = None,
     max_len: int = 240,
 ) -> str:
-    prefix = f"Bot [{bot_id:>10}] 群 [{group_id:>10}] 用户 [{user_id:>10}]: "
+    mid = f"[msg={message_id:>11}]" if message_id is not None else ""
+    prefix = f"Bot [{bot_id:>10}] 群 [{group_id:>10}] 用户 [{user_id:>10}]{mid}: "
     content = compact_inbound_event_log(message, max_len=max(1, max_len - len(prefix)))
     return f"{prefix}{content}"
 
