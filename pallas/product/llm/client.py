@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from nonebot import logger
 
 from pallas.core.platform.observability import SlowPathTimer, slow_path_threshold_ms
@@ -14,6 +16,12 @@ from .models import ChatCompletionMessage, ChatSubmitRequest, ChatSubmitResult
 from .session_store import build_llm_chat_messages, is_llm_session_store_available
 from .submit_gate import assess_llm_submit_gate
 from .task_routing import resolve_submit_task_name, resolve_task_route_chain, serialize_task_route
+from .vision_content import (
+    VisionMessagePayload,
+    extract_vision_message_payload,
+    user_message_has_vision_content,
+    vision_payload_from_segments,
+)
 
 
 async def resolve_chat_messages(
@@ -49,7 +57,64 @@ async def resolve_chat_messages(
     return messages
 
 
-async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None = None) -> ChatSubmitResult:
+async def _resolve_referenced_vision_payload(
+    group_id: int,
+    reply_to_id: int,
+    *,
+    referenced_message: dict[str, Any] | None = None,
+    bot: Any | None = None,
+) -> VisionMessagePayload | None:
+    """按用户在群内引用(reply)的消息 id，解析出被引用消息里的图片与纯文字。
+
+    优先用调用方预提取的 referenced_message（来源 event.reply.message，NoneBot 收包已填充，
+    不依赖消息库回查或 get_msg）；未提供时查本地消息库，库中未命中再走 OneBot get_msg 兜底。
+    找不到图片时返回 None。
+    """
+    # 第一优先：调用方已从 event.reply.message 预提取的引用图信息。
+    pre_plain = ""
+    pre_urls = (
+        [u for u in (referenced_message or {}).get("image_urls") or [] if isinstance(u, str) and u.strip()]
+        if referenced_message
+        else []
+    )
+    if pre_urls:
+        pre_plain = str((referenced_message or {}).get("plain_text") or "").strip()
+        return VisionMessagePayload(has_image=True, image_urls=tuple(pre_urls), plain_text=pre_plain)
+
+    from pallas.core.foundation.db import make_message_repository
+
+    try:
+        repo = make_message_repository()
+        referenced = await repo.find_by_message_ids(int(group_id), [int(reply_to_id)])
+    except Exception:
+        referenced = []
+    for message in referenced:
+        payload = extract_vision_message_payload(str(getattr(message, "raw_message", "") or ""))
+        if payload is not None and payload.has_image:
+            return payload
+
+    if bot is not None and hasattr(bot, "call_api"):
+        try:
+            resp = await bot.call_api("get_msg", message_id=int(reply_to_id))
+        except Exception as exc:
+            logger.debug("get_msg fallback failed for message [{}] in group [{}]: {}", reply_to_id, group_id, exc)
+            return None
+        data = resp if isinstance(resp, dict) else {}
+        inner = data.get("data") if isinstance(data.get("data"), dict) else data
+        message_segments = inner.get("message") if isinstance(inner, dict) else None
+        payload = vision_payload_from_segments(message_segments)
+        if not payload.image_urls:
+            return None
+        return payload
+    return None
+
+
+async def submit_chat_task(
+    request: ChatSubmitRequest,
+    *,
+    cfg: LlmConfig | None = None,
+    bot: Any | None = None,
+) -> ChatSubmitResult:
     c = cfg or get_llm_config()
     if not c.llm_chat_enabled:
         return ChatSubmitResult(status="llm_chat_disabled", ok=False)
@@ -122,7 +187,6 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
     )
     if request.temperature is not None:
         metadata["temperature"] = float(request.temperature)
-    from pallas.product.llm.vision_content import extract_vision_message_payload, user_message_has_vision_content
 
     vision_payload = extract_vision_message_payload(user_text)
     metadata["has_image"] = user_message_has_vision_content(user_text)
@@ -133,20 +197,22 @@ async def submit_chat_task(request: ChatSubmitRequest, *, cfg: LlmConfig | None 
     # 引用(reply)带图消息时，被引用的图不在当前消息文本里，需按 reply_to_message_id
     # 查原消息并把其中的图片并入视觉上下文，否则「描述一下这张图」会落回历史图。
     reply_to_id = getattr(request, "reply_to_message_id", None)
-    if reply_to_id is not None and request.group_id is not None:
-        from pallas.core.foundation.db import make_message_repository
-
-        referenced = await make_message_repository().find_by_message_ids(int(request.group_id), [int(reply_to_id)])
-        for message in referenced:
-            referenced_payload = extract_vision_message_payload(str(message.raw_message or ""))
-            if referenced_payload.image_urls:
-                existing = list(metadata.get("vision_image_urls") or [])
-                merged = existing + [url for url in referenced_payload.image_urls if url not in existing]
+    referenced_message = getattr(request, "referenced_message", None) or None
+    if (reply_to_id is not None or referenced_message) and request.group_id is not None:
+        referenced = await _resolve_referenced_vision_payload(
+            int(request.group_id),
+            int(reply_to_id or 0),
+            referenced_message=referenced_message,
+            bot=bot,
+        )
+        if referenced is not None:
+            existing = list(metadata.get("vision_image_urls") or [])
+            merged = existing + [url for url in referenced.image_urls if url not in existing]
+            if merged:
                 metadata["vision_image_urls"] = merged
                 metadata["has_image"] = True
-                if referenced_payload.plain_text and "vision_plain_text" not in metadata:
-                    metadata["vision_plain_text"] = referenced_payload.plain_text
-                break
+            if referenced.plain_text and "vision_plain_text" not in metadata:
+                metadata["vision_plain_text"] = referenced.plain_text
     timeline_images = [
         {
             "speaker": str(item.get("speaker") or "").strip(),

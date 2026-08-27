@@ -95,7 +95,7 @@ from pallas.product.llm.task_metrics import record_bot_llm_task
 from pallas.product.llm.tools.time_now import current_time_text
 from pallas.product.llm.turn_policy import resolve_turn_policy
 from pallas.product.llm.turn_telemetry import new_turn_id, record_turn_event
-from pallas.product.llm.vision_content import user_message_has_vision_content
+from pallas.product.llm.vision_content import user_message_has_vision_content, vision_payload_from_segments
 from pallas.product.persona.peer_bots_prompt import save_peer_alias_from_teach
 from pallas.product.persona.prompt_guard import sanitize_prompt_literal
 from pallas.product.persona.self_identity import (
@@ -613,6 +613,21 @@ async def handle_llm_chat(
         name=f"llm_chat_prepare:{int(bot.self_id)}:{group_id or 0}:{user_id}",
     )
     record_bot_llm_task(LLM_CHAT_TASK_TYPE, "background_enqueued")
+
+
+def _referenced_vision_metadata(event: Event) -> dict[str, object] | None:
+    """从 event.reply.message 提取被引用消息的图片直链与文字（NoneBot 收包已填充 reply）。"""
+    reply = getattr(event, "reply", None)
+    message = getattr(reply, "message", None) if reply is not None else None
+    if message is None:
+        return None
+    try:
+        payload = vision_payload_from_segments(message)
+    except Exception:
+        return None
+    if not payload.image_urls:
+        return None
+    return {"image_urls": list(payload.image_urls), "plain_text": payload.plain_text}
 
 
 async def prepare_and_submit_llm_chat_turn(
@@ -1385,6 +1400,8 @@ async def prepare_and_submit_llm_chat_turn(
                 # 用户 reply 一张带图消息再问「这是谁」时，bot 可能以 PLAIN 回复，
                 # resolved_reply_message_id 会因此为 None；replied_message_id 才稳定携带用户引用目标。
                 reply_to_message_id=replied_message_id,
+                # 优先用 event.reply.message 预提取的引用图，避免消息库 id 匹配失败/未入库而丢图。
+                referenced_message=_referenced_vision_metadata(event),
                 llm_rewrite_metadata={
                     "task": "llm_chat",
                     "current_turn_action": current_turn_decision.action,
@@ -1405,6 +1422,7 @@ async def prepare_and_submit_llm_chat_turn(
                 tool_metadata=tool_meta,
             ),
             cfg=llm_cfg,
+            bot=bot,
         )
         pre_submit_stage_durations_ms["submit"] = int((time.perf_counter() - submit_started) * 1000)
         if not result.ok:

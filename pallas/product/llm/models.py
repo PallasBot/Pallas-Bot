@@ -63,6 +63,9 @@ class ChatSubmitRequest(BaseModel):
     prepared_messages: list[ChatCompletionMessage] | None = None
     # 被引用(回复)的消息 id：用于提取引用消息里的图片并送入视觉上下文
     reply_to_message_id: int | None = None
+    # 被引用消息的图片与文字的预提取结果（来自 event.reply.message，NoneBot 收包已填充）：
+    # {"image_urls": [...], "plain_text": "..."}。优先于 reply_to_message_id 兜底回查。
+    referenced_message: dict[str, Any] | None = None
     # 措辞相关临时提示（口癖/换风格/同句重回），插在最后一条 user 之前
     style_user_hints: list[str] = Field(default_factory=list)
 

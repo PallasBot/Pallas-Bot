@@ -156,7 +156,8 @@ async def handle_drunk_chat(bot: Bot, event: GroupMessageEvent):
                 task="drunk",
                 token_count=prompt_ctx.token_count or 50,
                 temperature=prompt_ctx.temperature,
-            )
+            ),
+            bot=bot,
         )
     elif is_legacy_rwkv_drunk_chat_enabled():
         task_id, ok = await submit_rwkv_drunk_chat(

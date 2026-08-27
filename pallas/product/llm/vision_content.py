@@ -93,3 +93,61 @@ def extract_vision_message_payload(text: str, *, max_images: int = 3) -> VisionM
         image_urls=tuple(urls),
         plain_text=plain,
     )
+
+
+def _segment_type_and_data(segment: object) -> tuple[str, dict[str, str]]:
+    """从单条消息段里取出类型与数据字典，兼容 NoneBot MessageSegment 对象与 dict。"""
+    import html
+
+    if isinstance(segment, dict):
+        seg_type = str(segment.get("type") or "")
+        data = segment.get("data") or {}
+        raw_data = dict(data) if isinstance(data, dict) else {}
+    else:
+        seg_type = str(getattr(segment, "type", None) or "")
+        raw_data = dict(getattr(segment, "data", None) or {})
+    data: dict[str, str] = {}
+    for key, value in raw_data.items():
+        if isinstance(value, str):
+            data[str(key)] = html.unescape(value)
+        else:
+            data[str(key)] = str(value)
+    return seg_type, data
+
+
+def vision_payload_from_segments(
+    segments: object | None,
+    *,
+    max_images: int = 3,
+) -> VisionMessagePayload:
+    """从已迭代的消息段(NoneBot Message/MessageSegment 或 get_msg 返回的 dict 列表)提取图片。
+
+    与 extract_vision_message_payload(作用于 CQ 字符串)不同，本函数作用于解析后的消息段，
+    用于 event.reply.message 等已被 OneBot 适配器拆分的结构。
+    """
+    if segments is None:
+        return VisionMessagePayload(has_image=False, image_urls=(), plain_text="")
+    limit = max(1, int(max_images))
+    seen: set[str] = set()
+    urls: list[str] = []
+    for segment in segments:
+        seg_type, data = _segment_type_and_data(segment)
+        if seg_type not in {"image", "mface"}:
+            continue
+        url = str(data.get("url") or "")
+        if not url.startswith(("http://", "https://")):
+            file_value = str(data.get("file") or "")
+            if file_value.startswith(("http://", "https://")):
+                url = file_value
+        url = url.strip()
+        if not url or url.casefold() in seen:
+            continue
+        seen.add(url.casefold())
+        urls.append(url)
+        if len(urls) >= limit:
+            break
+    return VisionMessagePayload(
+        has_image=bool(urls),
+        image_urls=tuple(urls),
+        plain_text="",
+    )
