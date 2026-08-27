@@ -1,5 +1,64 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+* feat(ingress): 旁路记录群消息到 message 表
+* feat(llm): 提取引用(reply)的原消息图片并入视觉上下文
+* feat(llm): 聊天看图复用配置的视觉模型，主模型不支持图片时用它描述图片
+* feat(llm): 会话历史图片用视觉模型描述供摘要识图，并对齐带图时间线测试
+* feat(llm): 注入当前时间并提供时间工具
+* feat(llm): 增加 turn telemetry 调用链观测
+* feat(tools): 新增事件级 LLM persona AB harness
+* feat(work_jobs): MemoryWorkJobStore 支持完成保留映射
+* feat(work_jobs): PostgresWorkJobStore 支持完成保留映射并对完成写入通知
+* feat(work_jobs): MongoWorkJobStore 支持完成保留映射
+* feat(work_jobs): 完成保留装配注入并事件驱动 delivery dispatcher
+* feat(webui): 后端首屏预热梯次化并用信号量限外部请求
+* feat(release): 按 Bot commit 选择兼容 WebUI
+* feat(greeting): 戳一戳回应增加时段次数上限
+
+### Fixed
+
+* fix(llm): 支持 Responses API 视觉内容
+* fix(llm): 图片拉取优先本地缓存避免每次先裸GET失败
+* fix(llm): 视觉图片拉取失败时回退到图片缓存
+* fix(llm): 图片拉取复用参考图下载层（curl_cffi指纹+Referer）
+* fix(llm): 图片进历史延迟识别，需摘要识图时才调视觉模型
+* fix(llm): 图片识别附群聊上下文，减少识图答错
+* fix(llm): 识别问句附加独立判断指示，避免识图被罗德岛背景带偏答成方舟干员
+* fix(llm): 引用图提取优先复用event.reply.message，避免消息库id匹配失败丢图
+* fix(llm): 引用图提取改绑用户实际reply目标而非bot的QUOTE决策
+* fix(llm): 引用图查询支持负数message_id，修复消息id对不上
+* fix(llm): 修复群聊图片视觉上下文
+* fix(llm): 完善群聊历史图片视觉链路
+* fix(llm-chat): 放行视觉消息并注入群聊图片时间线
+* fix(llm): 识别问句看图时跳过时间线历史图注入，聚焦当前图
+* fix(llm): 无图识别问句不再注入表情推荐工具域
+* fix(llm): 带图识图不再注入方舟/表情工具域
+* fix(llm): 识别问句超限回复拆多泡避免答案被截断
+* fix(llm): 识别问句多段超限回复按断点重切避免答案被截断
+* fix(llm): 多泡回复超长时按单泡保留而非整段静默
+* fix(llm): 识别提示约束认不出时诚实说明不硬编角色
+* fix(llm): base_url 识别任意版本段（/v1、/v4、/openai）不再误追加 /v1
+* fix(llm): 扩大群聊历史工具裁剪窗口
+* fix(llm): 支持按已登记模型配置能力与思考强度
+* fix(ai-callback): 修复 work 辅进程任务回调 404
+* fix(webui): 校验兼容版本后更新控制台
+* fix(ingress): 日志行右对齐且回复不截断
+* fix(ingress): info日志显示reply引用，便于排查用户是否引用消息
+* fix(help): MAA 远控插件二三级帮助显示对接地址
+
+### Changed
+
+* refactor(ingress): 群消息日志按级别分离
+* refactor(logging): debug 日志中文叙事改英文并补齐业务词表
+
+### Docs
+
+* docs(architecture): 补充引用图提取与图片延迟识别上下文链路
+
 ## [4.3.12] - 2026-08-25
 
 ### 更新公告
