@@ -101,6 +101,13 @@ def test_at_chat_prompt_keeps_mentions_and_ambient_chat_bounded() -> None:
     assert "只叫别名时可以回“？”或“干嘛”" not in prompt
 
 
+def test_at_chat_prompt_forbids_fabricating_reality() -> None:
+    prompt = load_at_chat_system_prompt()
+
+    assert "不编造现实动作、设备状态或线下行程" in prompt
+    assert "没说自己在" in prompt or "不要说自己" in prompt
+
+
 def test_build_bot_behavior_prompt_includes_tone_without_account_length() -> None:
     persona = ResolvedPersona(tone="dramatic", length_pref="short", chaos_bias=0.2)
     prompt = build_bot_behavior_prompt(persona)
