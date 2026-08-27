@@ -164,6 +164,28 @@ def looks_like_truncated_reply(text: str) -> bool:
     return False
 
 
+def looks_like_comma_tail_truncation(text: str) -> bool:
+    """普通中文/英文逗号结尾且停在未完成的状语/连词/把被上，像被截断。
+
+    只在 6~48 字窗口内、去掉尾逗号后出现确定未完成信号（'的/地/得' 结尾、
+    停连词、把/以+尾巴）时判定；名词/人称/短口语天然不命中，不误伤。"""
+    plain = str(text or "").strip()
+    if not plain.endswith(("，", ",")):
+        return False
+    if len(plain) < 6 or len(plain) > 48:
+        return False
+    core = plain[:-1].rstrip()
+    if not core:
+        return False
+    if _TRUNCATED_TAIL_RE.search(core):
+        return True
+    if _TRUNCATED_CONNECTOR_RE.search(core) and not core.endswith(("吧", "呢", "啊", "呀", "嘛", "咯")):
+        return True
+    if core.endswith(("的", "地", "得")):
+        return True
+    return False
+
+
 def match_output_filter(text: str, profile: OutputFilterProfile) -> OutputFilterHit | None:
     plain = str(text or "").strip()
     if not plain:
@@ -202,6 +224,16 @@ def _clean_and_guard_reply(text: str, *, task_type: str) -> str:
             len(cleaned),
         )
     if not cleaned:
+        return ""
+    if looks_like_comma_tail_truncation(cleaned):
+        log_rate_limited(
+            logger,
+            "info",
+            "llm.output_filter.comma_tail_truncated",
+            "LLM comma-tail truncated reply rejected for task [{}], len [{}]",
+            task_type,
+            len(cleaned),
+        )
         return ""
     staged = strip_stage_direction_parens(cleaned)
     if staged != cleaned:
