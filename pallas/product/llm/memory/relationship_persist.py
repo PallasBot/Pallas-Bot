@@ -17,6 +17,7 @@ from pallas.product.llm.memory.relationship_auto import (
 from pallas.product.llm.memory.relationship_store import upsert_relationship_profile
 
 _HARD_SPEAK_TRIGGERS = frozenset({"to_me", "mention", "followup"})
+_AMBIENT_TRIGGERS = frozenset({"ambient"})
 _affinity_llm_last_scored = WriteCooldown()
 _affinity_llm_daily_budget = DailyBudget()
 
@@ -38,43 +39,50 @@ async def maybe_persist_relationship_from_utterance(
     speak_trigger: str = "",
     cfg: LlmConfig | None = None,
 ) -> bool:
-    """硬触发路径静默写关系事实/态度；ambient 不写。"""
+    """硬触发路径静默写关系事实/态度；ambient 仅在开启时做规则好感度观察，不建事实、不跑 LLM。"""
     if not user_id:
         return False
     c = cfg or get_llm_config()
     if not c.llm_relationship_notes_enabled:
         return False
     trigger = str(speak_trigger or "").strip()
-    if trigger not in _HARD_SPEAK_TRIGGERS:
+    is_hard = trigger in _HARD_SPEAK_TRIGGERS
+    is_ambient = trigger in _AMBIENT_TRIGGERS
+    if not is_hard and not (is_ambient and c.llm_relationship_affinity_ambient_enabled):
         return False
 
     fact: str | None = None
     source = "auto"
-    if c.llm_relationship_observe_enabled:
-        fact = parse_relationship_observe(plain_text)
-        if fact:
-            source = "observe"
+    if is_hard:
+        if c.llm_relationship_observe_enabled:
+            fact = parse_relationship_observe(plain_text)
+            if fact:
+                source = "observe"
 
     warmth_add = 0.0
     assertiveness_add = 0.0
-    if c.llm_relationship_auto_persist_enabled:
+    if is_hard and c.llm_relationship_auto_persist_enabled:
         warmth_add, assertiveness_add = extract_relationship_attitude_delta(plain_text)
 
     affinity_add = 0.0
     affinity_source = "rules"
-    if c.llm_relationship_affinity_enabled:
+    use_llm = False
+    if c.llm_relationship_affinity_enabled and (is_hard or is_ambient):
         affinity_add = extract_relationship_affinity_delta(plain_text)
-        if affinity_add == 0.0:
-            key = (int(bot_id), int(group_id or 0), int(user_id))
-            cooldown = max(0, int(getattr(c, "llm_relationship_affinity_llm_cooldown_s", 60) or 60))
-            if _affinity_llm_last_scored.ok(key, cooldown):
-                _affinity_llm_last_scored.mark(key)
-                if _affinity_llm_daily_budget_ok(cfg=c):
-                    scored = await score_affinity_with_llm(plain_text, cfg=c)
-                    if scored is not None and scored.get("affinity_delta") is not None:
-                        affinity_add = float(scored["affinity_delta"])
-                        affinity_source = "llm"
-                        _bump_affinity_llm_daily_budget(cfg=c)
+        if affinity_add == 0.0 and is_hard:
+            use_llm = True
+
+    if use_llm:
+        key = (int(bot_id), int(group_id or 0), int(user_id))
+        cooldown = max(0, int(getattr(c, "llm_relationship_affinity_llm_cooldown_s", 24) or 24))
+        if _affinity_llm_last_scored.ok(key, cooldown):
+            _affinity_llm_last_scored.mark(key)
+            if _affinity_llm_daily_budget_ok(cfg=c):
+                scored = await score_affinity_with_llm(plain_text, cfg=c)
+                if scored is not None and scored.get("affinity_delta") is not None:
+                    affinity_add = float(scored["affinity_delta"])
+                    affinity_source = "llm"
+                    _bump_affinity_llm_daily_budget(cfg=c)
 
     if not fact and warmth_add == 0.0 and assertiveness_add == 0.0 and affinity_add == 0.0:
         return False

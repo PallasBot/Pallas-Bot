@@ -196,6 +196,7 @@ FIELD_LABELS: dict[str, str] = {
     "llm_knowledge_file_ingest_enabled": "文件知识自动摄入",
     "llm_relationship_notes_enabled": "关系备注",
     "llm_relationship_affinity_enabled": "好感度记录",
+    "llm_relationship_affinity_ambient_enabled": "普通群聊好感度观察",
     "llm_relationship_affinity_delta_max": "单次好感度变动上限",
     "llm_relationship_affinity_llm_cooldown_s": "好感度大模型判定冷却（秒）",
     "llm_relationship_affinity_llm_daily_limit": "好感度大模型判定每日上限",

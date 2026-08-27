@@ -52,6 +52,7 @@ MEMORY_FIELD_NAMES = (
     "llm_memory_hit_boost_sec",
     "llm_relationship_notes_enabled",
     "llm_relationship_affinity_enabled",
+    "llm_relationship_affinity_ambient_enabled",
     "llm_relationship_affinity_delta_max",
     "llm_relationship_affinity_llm_cooldown_s",
     "llm_relationship_affinity_llm_daily_limit",
@@ -101,12 +102,13 @@ class LlmMemoryOpsConfig(BaseModel):
     llm_memory_hit_boost_sec: int = Field(default=3600, ge=0, le=2592000)
     llm_relationship_notes_enabled: bool = True
     llm_relationship_affinity_enabled: bool = True
-    llm_relationship_affinity_delta_max: float = Field(default=0.15, ge=0.0, le=1.0)
-    llm_relationship_affinity_llm_cooldown_s: int = Field(default=60, ge=0, le=86400)
-    llm_relationship_affinity_llm_daily_limit: int = Field(default=300, ge=0, le=100000)
-    llm_relationship_affinity_daily_decay_step: float = Field(default=0.02, ge=0.0, le=1.0)
-    llm_relationship_affinity_silence_threshold: float = Field(default=-0.3, ge=-1.0, le=0.0)
-    llm_relationship_affinity_silence_max_penalty: int = Field(default=30, ge=0, le=200)
+    llm_relationship_affinity_ambient_enabled: bool = True
+    llm_relationship_affinity_delta_max: float = Field(default=0.20, ge=0.0, le=1.0)
+    llm_relationship_affinity_llm_cooldown_s: int = Field(default=24, ge=0, le=86400)
+    llm_relationship_affinity_llm_daily_limit: int = Field(default=1000, ge=0, le=100000)
+    llm_relationship_affinity_daily_decay_step: float = Field(default=0.005, ge=0.0, le=1.0)
+    llm_relationship_affinity_silence_threshold: float = Field(default=-0.45, ge=-1.0, le=0.0)
+    llm_relationship_affinity_silence_max_penalty: int = Field(default=40, ge=0, le=200)
 
 
 def get_llm_session_ops_config(cfg: LlmWebuiConfig | None = None) -> LlmSessionOpsConfig:
