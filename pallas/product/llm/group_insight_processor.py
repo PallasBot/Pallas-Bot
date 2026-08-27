@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from operator import itemgetter
 from typing import Any
 
 from nonebot import get_driver, logger
@@ -236,14 +237,19 @@ async def _sweep_semantic_groups() -> None:
     不再依赖「特定 bot 在线」：枚举所有本机 bot 近期有处理记录的群并集，每个群
     单独解析出语义采集 bot（见 ``_resolve_semantic_bot``），避免多 bot 并发群里
     主 bot 离线导致画像停更。
+
+    候选群按「需要程度」排序：无语义 profile 或 sample_count 最少的群优先入队，
+    避免固定取候选列表头部导致部分长期未采样的活跃群（如多 bot 并发测试群）被饿死。
     """
     store = build_work_job_store()
     repo = make_message_repository()
     now_ts = int(time.time())
     day = _day_key(now_ts)
     cutoff = now_ts - _SEMANTIC_LOOKBACK_DAYS * 24 * 60 * 60
+
+    from pallas.product.llm.repeater_semantic_style import cached_semantic_style_profile
+
     seen_groups: set[int] = set()
-    enqueued = 0
     _local = await _local_bot_ids()
     for bot_id in _local:
         try:
@@ -251,21 +257,27 @@ async def _sweep_semantic_groups() -> None:
         except Exception as exc:
             logger.warning("Group insight sweep could not list groups for bot [{}]: [{}]", bot_id, exc)
             continue
-        for group_id in group_ids:
-            if group_id in seen_groups:
-                continue
-            seen_groups.add(group_id)
-            semantic_bot = await _resolve_semantic_bot(group_id)
-            if semantic_bot <= 0:
-                continue
-            if not await _group_needs_semantic(bot_id=semantic_bot, group_id=group_id):
-                continue
+        seen_groups.update(group_ids)
+    if not seen_groups:
+        return
+
+    pending: list[tuple[int, int, int]] = []
+    for group_id in sorted(seen_groups):
+        semantic_bot = await _resolve_semantic_bot(group_id)
+        if semantic_bot <= 0:
+            continue
+        if not await _group_needs_semantic(bot_id=semantic_bot, group_id=group_id):
+            continue
+        profile = cached_semantic_style_profile(semantic_bot, group_id, _SCENE)
+        sample_count = int(profile.sample_count) if profile is not None else 0
+        pending.append((sample_count, semantic_bot, group_id))
+
+    pending.sort(key=itemgetter(0, 2))
+    for _sample_count, semantic_bot, group_id in pending[:_SWEEP_BATCH_SIZE]:
+        try:
             await store.enqueue(build_semantic_insight_job(bot_id=semantic_bot, group_id=group_id, day=day))
-            enqueued += 1
-            if enqueued >= _SWEEP_BATCH_SIZE:
-                return
-        if enqueued >= _SWEEP_BATCH_SIZE:
-            return
+        except Exception as exc:
+            logger.warning("Group insight sweep could not enqueue semantic job for group [{}]: [{}]", group_id, exc)
 
 
 async def _resolve_semantic_bot(group_id: int) -> int:

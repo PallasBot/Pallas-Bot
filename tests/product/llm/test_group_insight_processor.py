@@ -212,3 +212,50 @@ async def test_sweep_semantic_groups_dedups_groups_and_skips_needed_check(monkey
 
     assert len(enqueued) == 3
     assert {b.payload["group_id"] for b in enqueued} == {42, 7, 8}
+
+
+@pytest.mark.asyncio
+async def test_sweep_semantic_groups_prioritizes_low_sample_count(monkeypatch) -> None:
+    from pallas.product.llm import group_insight_processor as mod
+
+    enqueued = []
+
+    class _FakeStore:
+        async def enqueue(self, job):
+            enqueued.append(job)
+
+    async def fake_list_group_ids(self, bot_id, *, since_time, limit=32):
+        return [42, 7, 8] if bot_id == 100 else []
+
+    repo = type("R", (), {"list_recent_group_ids_for_bot": fake_list_group_ids})()
+    monkeypatch.setattr(mod, "make_message_repository", lambda: repo)
+
+    async def fake_local_bot_ids():
+        return {100}
+
+    monkeypatch.setattr(mod, "_local_bot_ids", fake_local_bot_ids)
+
+    async def fake_resolve(group_id):
+        return 1 if group_id > 0 else 0
+
+    async def fake_needs(bot_id, group_id):
+        return group_id in (42, 7, 8)
+
+    class _FakeProfile:
+        def __init__(self, sample_count):
+            self.sample_count = sample_count
+
+    def fake_cached_profile(bot_id, group_id, scene):
+        return {42: _FakeProfile(3), 7: _FakeProfile(9), 8: _FakeProfile(0)}.get(group_id)
+
+    monkeypatch.setattr(mod, "_resolve_semantic_bot", fake_resolve)
+    monkeypatch.setattr(mod, "_group_needs_semantic", fake_needs)
+    monkeypatch.setattr(mod, "build_work_job_store", lambda: _FakeStore())
+    monkeypatch.setattr(
+        "pallas.product.llm.repeater_semantic_style.cached_semantic_style_profile",
+        fake_cached_profile,
+    )
+
+    await _sweep_semantic_groups()
+
+    assert [b.payload["group_id"] for b in enqueued] == [8, 42, 7]
