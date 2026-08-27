@@ -155,6 +155,9 @@ class MessageRow(Base):
         Index("ix_message_time", "time"),
         Index("ix_message_group_time", "group_id", "time"),
         Index("ix_message_group_user_time", "group_id", "user_id", "time"),
+        # 消息幂等落库锚点：同 (group_id, bot_id, message_id) 只留一条。
+        # message_id 为 NULL 的行不参与冲突（PG 中 NULL <> NULL，互不冲突）。
+        Index("uq_message_group_bot_message_id", "group_id", "bot_id", "message_id", unique=True),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -792,6 +795,34 @@ def _ensure_pg_message_timeline_metadata(connection) -> None:
         connection.execute(text("ALTER TABLE message ADD COLUMN suppressed_by_rage BOOLEAN NOT NULL DEFAULT FALSE"))
 
 
+def _ensure_pg_message_unique_anchor(connection) -> None:
+    """message 表补 (group_id, bot_id, message_id) 唯一锚点，落库幂等。
+
+    历史数据在同锚点下可能已重复，先删多余行（保留最小 id）再建唯一约束。
+    message_id 为 NULL 的行不参与冲突（PG 中 NULL <> NULL），不受影响。
+    """
+    insp = inspect(connection)
+    if not insp.has_table("message"):
+        return
+    connection.execute(
+        text(
+            "DELETE FROM message a USING message b "
+            "WHERE a.message_id IS NOT NULL "
+            "AND b.message_id IS NOT NULL "
+            "AND a.group_id = b.group_id "
+            "AND a.bot_id = b.bot_id "
+            "AND a.message_id = b.message_id "
+            "AND a.id > b.id"
+        )
+    )
+    connection.execute(
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_message_group_bot_message_id "
+            "ON message (group_id, bot_id, message_id)"
+        )
+    )
+
+
 def _ensure_pg_context_answer_reply_index(connection) -> None:
     """context_answer 表补 context_id+count+time 索引。"""
     insp = inspect(connection)
@@ -948,6 +979,7 @@ PG_SCHEMA_ENSURE_STEPS: list[tuple[str, Any]] = [
     ("ddl.message_group_time_index", _ensure_pg_message_group_time_index),
     ("ddl.message_group_user_time_index", _ensure_pg_message_group_user_time_index),
     ("ddl.message_timeline_metadata", _ensure_pg_message_timeline_metadata),
+    ("ddl.message_unique_anchor", _ensure_pg_message_unique_anchor),
     ("ddl.context_answer_reply_index", _ensure_pg_context_answer_reply_index),
     ("ddl.context_answer_message_reply_index", _ensure_pg_context_answer_message_reply_index),
     ("ddl.background_job_delivery_claim_index", _ensure_pg_background_job_delivery_claim_index),
@@ -1939,8 +1971,11 @@ class PgMessageRepository:
                     }
                     for m in batch
                 ]
+                # 幂等落库：同 (group_id, bot_id, message_id) 已存在则跳过。
+                # message_id 为 NULL 的行不参与冲突判定（PG 中 NULL <> NULL）。
+                stmt = pg_insert(MessageRow).on_conflict_do_nothing(index_elements=["group_id", "bot_id", "message_id"])
                 # 走 Core executemany，避免 ORM 构造开销
-                await session.execute(insert(MessageRow), values)
+                await session.execute(stmt, values)
             await session.commit()
 
 

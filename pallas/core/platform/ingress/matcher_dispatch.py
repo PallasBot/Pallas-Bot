@@ -363,6 +363,10 @@ def reset_pre_schedule_ingress_group_message_gate(token) -> None:
 
 
 async def patched_handle_event(bot: Bot, event: Event) -> None:
+    if isinstance(event, GroupMessageEvent):
+        from pallas.core.platform.ingress.message_recorder import capture_group_message
+
+        capture_group_message(event, bot)
     if isinstance(event, GroupMessageEvent) and conversation_scheduler_enabled():
         try:
             gate_token = await pre_schedule_ingress_group_message_gate(bot, event)

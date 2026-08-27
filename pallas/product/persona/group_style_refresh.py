@@ -10,6 +10,7 @@ from pallas.core.foundation.db import (
     make_local_context_repository,
     make_message_repository,
 )
+from pallas.product.llm.sender_identity import is_peer_bot
 from pallas.product.persona.group_profiler import DEFAULT_WINDOW_HOURS, build_group_style_profile_from_recent_repos
 from pallas.product.persona.loader import invalidate_persona_cache
 
@@ -129,6 +130,7 @@ async def refresh_group_style_profile(
                 for item in recent_messages
                 if str(getattr(item, "plain_text", "") or "").strip()
                 and int(getattr(item, "user_id", 0) or 0) != int(getattr(item, "bot_id", 0) or 0)
+                and not is_peer_bot(int(getattr(item, "user_id", 0) or 0))
             ]
             learn_expressions_from_group_messages(gid, texts, bot_id=bot_id)
     except Exception as exc:

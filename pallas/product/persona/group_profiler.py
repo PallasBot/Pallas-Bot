@@ -17,6 +17,7 @@ from .group_expression_profile import (
 if TYPE_CHECKING:
     from pallas.core.foundation.db.modules import Answer, Message
 
+from pallas.product.llm.sender_identity import is_peer_bot
 
 DEFAULT_WINDOW_HOURS = 168
 MIN_MESSAGE_COUNT = MIN_READY_MESSAGE_COUNT
@@ -67,6 +68,9 @@ def build_group_style_profile(
         plain = str(getattr(message, "plain_text", "") or "").strip()
         if plain and not is_profiler_sample_safe(plain):
             message_skipped_contamination += 1
+            continue
+        user_id = int(getattr(message, "user_id", 0) or 0)
+        if user_id and (user_id == int(getattr(message, "bot_id", 0) or 0) or is_peer_bot(user_id)):
             continue
         filtered_messages.append(message)
 

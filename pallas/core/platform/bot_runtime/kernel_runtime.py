@@ -20,10 +20,12 @@ def register_kernel_runtime() -> None:
     if not is_hub_role():
         from pallas.core.platform.bot_runtime.ingress_dispatch_runtime import register_ingress_dispatch_runtime
         from pallas.core.platform.ingress.gate import register_ingress_gate_runtime
+        from pallas.core.platform.ingress.message_recorder import bind_message_recorder_lifecycle
         from pallas.product.service_gateways.runtime import register_service_gateways_runtime
 
         register_bot_filter_runtime()
         register_ingress_gate_runtime()
+        bind_message_recorder_lifecycle()
         register_ingress_dispatch_runtime()
         register_service_gateways_runtime()
         register_duplicate_prefix_startup_check()
