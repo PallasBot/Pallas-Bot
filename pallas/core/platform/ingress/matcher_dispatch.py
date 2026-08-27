@@ -385,6 +385,7 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
         compact_group_message_log,
         compact_inbound_event_log,
         inbound_event_log_as_debug,
+        resolve_repo_log_level,
     )
 
     ingress_started = time.perf_counter()
@@ -413,13 +414,20 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                 reply_id = getattr(_reply, "message_id", None)
                 if reply_id is not None:
                     reply_note = f" ↩[reply:id={reply_id}]"
+                    _reply_msg = getattr(_reply, "message", None)
+                    if _reply_msg is not None:
+                        reply_text = str(_reply_msg).strip()
+                        if reply_text:
+                            reply_note += f"「{reply_text[:30]}」"
                 compact_log = compact_group_message_log(
                     bot_id=str(bot.self_id),
                     group_id=event.group_id,
                     user_id=event.user_id,
+                    message_id=getattr(event, "message_id", None),
                     message=f"{reply_note}{str(event.get_message())}",
                 )
-                log.bind(display_name="Message").info(nb_message.escape_tag(compact_log))
+                if resolve_repo_log_level() not in {"TRACE", "DEBUG"}:
+                    log.bind(display_name="Message").info(nb_message.escape_tag(compact_log))
             else:
                 log.success(nb_message.escape_tag(f" Bot {bot.self_id} | {event_log}"))
         elif inbound_event_log_as_debug(event_type):
