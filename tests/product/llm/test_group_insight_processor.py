@@ -207,6 +207,7 @@ async def test_sweep_semantic_groups_dedups_groups_and_skips_needed_check(monkey
     monkeypatch.setattr(mod, "_resolve_semantic_bot", fake_resolve)
     monkeypatch.setattr(mod, "_group_needs_semantic", fake_needs)
     monkeypatch.setattr(mod, "build_work_job_store", lambda: _FakeStore())
+    monkeypatch.setattr(mod, "_sweep_cursor", 0)
 
     await _sweep_semantic_groups()
 
@@ -255,7 +256,62 @@ async def test_sweep_semantic_groups_prioritizes_low_sample_count(monkeypatch) -
         "pallas.product.llm.repeater_semantic_style.cached_semantic_style_profile",
         fake_cached_profile,
     )
+    monkeypatch.setattr(mod, "_sweep_cursor", 0)
 
     await _sweep_semantic_groups()
 
     assert [b.payload["group_id"] for b in enqueued] == [8, 42, 7]
+
+
+@pytest.mark.asyncio
+async def test_sweep_semantic_groups_rotates_cursor_across_rounds(monkeypatch) -> None:
+    from pallas.product.llm import group_insight_processor as mod
+
+    enqueued = []
+
+    class _FakeStore:
+        async def enqueue(self, job):
+            enqueued.append(job)
+
+    async def fake_list_group_ids(self, bot_id, *, since_time, limit=32):
+        return [1, 2, 3, 4, 5, 6]
+
+    repo = type("R", (), {"list_recent_group_ids_for_bot": fake_list_group_ids})()
+    monkeypatch.setattr(mod, "make_message_repository", lambda: repo)
+
+    async def fake_local_bot_ids():
+        return {100}
+
+    monkeypatch.setattr(mod, "_local_bot_ids", fake_local_bot_ids)
+
+    async def fake_resolve(gid):
+        return 100
+
+    async def fake_needs(*, bot_id, group_id):
+        return True
+
+    monkeypatch.setattr(mod, "_resolve_semantic_bot", fake_resolve)
+    monkeypatch.setattr(mod, "_group_needs_semantic", fake_needs)
+    monkeypatch.setattr(mod, "build_work_job_store", lambda: _FakeStore())
+    monkeypatch.setattr(
+        "pallas.product.llm.repeater_semantic_style.cached_semantic_style_profile",
+        lambda bot_id, group_id, scene: None,
+    )
+    monkeypatch.setattr(mod, "_SWEEP_BATCH_SIZE", 2)
+    monkeypatch.setattr(mod, "_sweep_cursor", 0)
+
+    await _sweep_semantic_groups()
+    first_round = [b.payload["group_id"] for b in enqueued]
+    assert first_round == [1, 2]
+
+    enqueued.clear()
+    monkeypatch.setattr(mod, "_sweep_cursor", 2)
+    await _sweep_semantic_groups()
+    second_round = [b.payload["group_id"] for b in enqueued]
+    assert second_round == [3, 4]
+
+    enqueued.clear()
+    monkeypatch.setattr(mod, "_sweep_cursor", 6)
+    await _sweep_semantic_groups()
+    third_round = [b.payload["group_id"] for b in enqueued]
+    assert third_round == [1, 2]

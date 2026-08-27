@@ -25,7 +25,7 @@ GROUP_INSIGHT_KIND = "group.insight"
 _SCENE = "group_chat"
 _MAX_PAIRS_PER_JOB = 40
 _SWEEP_INTERVAL_SEC = 20 * 60
-_SWEEP_BATCH_SIZE = 8
+_SWEEP_BATCH_SIZE = 24
 _PAIR_PAGE_LIMIT = 6
 _SWEEP_STARTUP_POLL_SEC = 30
 
@@ -36,6 +36,11 @@ _SEMANTIC_BOT_PLUGIN = "repeater"
 _SEMANTIC_LOOKBACK_DAYS = 7
 
 _GROUP_INSIGHT_LIFECYCLE_BOUND = False
+
+# 候选群列表轮转游标：记录上次 `_sweep_semantic_groups` 处理到的偏移，
+# 下一轮从该位置继续，遇列表末尾回绕，保证所有候选群在多轮内都被覆盖，
+# 避免排序后固定取头部导致部分群（如多 bot 并发测试群）长期饿死。
+_sweep_cursor = 0
 
 
 async def handle_group_insight(payload: dict[str, Any]) -> None:
@@ -273,9 +278,20 @@ async def _sweep_semantic_groups() -> None:
         pending.append((sample_count, semantic_bot, group_id))
 
     pending.sort(key=itemgetter(0, 2))
-    for _sample_count, semantic_bot, group_id in pending[:_SWEEP_BATCH_SIZE]:
+    if not pending:
+        return
+
+    global _sweep_cursor
+    count = len(pending)
+    start = _sweep_cursor % count
+    # 从 start 开始跨越末尾续取 batch 个，保证轮转覆盖且不重复。
+    selected = (pending[start:] + pending[:start])[:_SWEEP_BATCH_SIZE]
+    _sweep_cursor = (start + len(selected)) % count
+
+    for _sample_count, semantic_bot, group_id in selected:
         try:
             await store.enqueue(build_semantic_insight_job(bot_id=semantic_bot, group_id=group_id, day=day))
+            logger.info("Group insight sweep enqueued semantic job for group [{}] bot [{}]", group_id, semantic_bot)
         except Exception as exc:
             logger.warning("Group insight sweep could not enqueue semantic job for group [{}]: [{}]", group_id, exc)
 
