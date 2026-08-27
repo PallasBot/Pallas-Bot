@@ -153,7 +153,7 @@ def test_semantic_style_manage_openapi_has_typed_actions() -> None:
 
     assert set(body_schema["properties"]["action"]["enum"]) == {
         "status",
-        "overrides",
+        "direct_enabled",
         "clear",
         "rebuild",
         "quality",

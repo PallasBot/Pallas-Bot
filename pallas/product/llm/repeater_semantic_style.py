@@ -217,29 +217,22 @@ class SemanticStyleResolution(BaseModel):
     style_profile: dict[str, Any] = Field(default_factory=dict)
 
 
-class SemanticStyleOverride(BaseModel):
-    aggressive: bool = True
-    nonsense: bool = True
-    direct: bool = True
-    image: bool = True
-
-
 class SemanticStyleSettings(BaseModel):
     collection_enabled: bool = True
     injection_enabled: bool = True
-    overrides: SemanticStyleOverride = Field(default_factory=SemanticStyleOverride)
+    direct_enabled: bool = True
 
     @model_validator(mode="before")
     @classmethod
     def _migrate_legacy_enabled(cls, data: Any) -> Any:
-        if (
-            isinstance(data, dict)
-            and "enabled" in data
-            and "collection_enabled" not in data
-            and "injection_enabled" not in data
-        ):
+        if not isinstance(data, dict):
+            return data
+        if "enabled" in data and "collection_enabled" not in data and "injection_enabled" not in data:
             legacy = bool(data["enabled"])
-            return {**data, "collection_enabled": legacy, "injection_enabled": legacy}
+            data = {**data, "collection_enabled": legacy, "injection_enabled": legacy}
+        legacy_overrides = data.get("overrides")
+        if isinstance(legacy_overrides, dict) and "direct_enabled" not in data:
+            data = {**data, "direct_enabled": bool(legacy_overrides.get("direct", True))}
         return data
 
     @property
@@ -717,7 +710,7 @@ def semantic_style_status(*, bot_id: int | None = None, group_id: int | None = N
         "enabled": settings.enabled,
         "collection_enabled": settings.collection_enabled,
         "injection_enabled": settings.injection_enabled,
-        "overrides": settings.overrides.model_dump(mode="json"),
+        "direct_enabled": settings.direct_enabled,
         "example_count": len(scoped_examples),
         "profile_count": len(scoped_profiles),
         "backfill_cursor": load_semantic_style_backfill_cursor(bot_id=bot_id, group_id=group_id).model_dump(
@@ -726,16 +719,13 @@ def semantic_style_status(*, bot_id: int | None = None, group_id: int | None = N
     }
 
 
-def update_semantic_style_overrides(
-    overrides: Mapping[str, object], *, bot_id: int | None = None, group_id: int | None = None
+def set_semantic_style_direct_enabled(
+    enabled: bool, *, bot_id: int | None = None, group_id: int | None = None
 ) -> dict[str, Any]:
-    settings = load_semantic_style_settings(bot_id=bot_id, group_id=group_id)
-    updated = settings.model_copy(
-        update={
-            "overrides": SemanticStyleOverride.model_validate({**settings.overrides.model_dump(), **dict(overrides)})
-        }
+    settings = load_semantic_style_settings(bot_id=bot_id, group_id=group_id).model_copy(
+        update={"direct_enabled": bool(enabled)}
     )
-    _save_semantic_style_settings(updated, bot_id=bot_id, group_id=group_id)
+    _save_semantic_style_settings(settings, bot_id=bot_id, group_id=group_id)
     return semantic_style_status(bot_id=bot_id, group_id=group_id)
 
 
@@ -1559,7 +1549,7 @@ def should_deliver_semantic_style_direct_candidate(
 ) -> bool:
     """按群维护最近 100 次内核任务的直投占比。"""
     settings = load_semantic_style_settings(bot_id=bot_id, group_id=group_id)
-    if not settings.injection_enabled or not settings.overrides.direct:
+    if not settings.injection_enabled or not settings.direct_enabled:
         return False
     key = (int(bot_id or 0), int(group_id or 0))
     text = _short_text(candidate, _MAX_SEED_LEN)

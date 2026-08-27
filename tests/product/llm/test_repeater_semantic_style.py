@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -137,6 +137,8 @@ def test_backfill_batch_advances_past_candidates_outside_the_history_window() ->
 
     assert batch.jobs == []
     assert batch.cursor.before_message_id == 1
+
+
 async def test_semantic_style_label_uses_deterministic_short_options(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
@@ -220,6 +222,8 @@ async def test_collect_backfill_candidates_uses_online_bot_groups_and_verified_r
     assert candidates[0]["group_id"] == 42
     assert candidates[0]["trigger_user_id"] == 11
     assert candidates[0]["reply_user_id"] == 11
+
+
 def test_parse_label_accepts_only_annotation_axes() -> None:
     label = parse_semantic_style_label({
         "interaction_actions": ["tease", "tease"],
@@ -270,13 +274,8 @@ def test_semantic_style_management_persists_controls_and_rebuilds_data(tmp_path,
     )
 
     assert mod.semantic_style_status()["enabled"] is True
-    assert mod.update_semantic_style_overrides({"direct": False})["overrides"]["direct"] is False
-    assert mod.update_semantic_style_overrides({"image": False})["overrides"] == {
-        "aggressive": True,
-        "nonsense": True,
-        "direct": False,
-        "image": False,
-    }
+    assert mod.set_semantic_style_direct_enabled(False)["direct_enabled"] is False
+    assert mod.set_semantic_style_direct_enabled(True)["direct_enabled"] is True
     assert mod.set_semantic_style_enabled(False)["enabled"] is False
     assert mod.rebuild_semantic_style_profiles()["profile_count"] == 1
     assert mod.semantic_style_quality()["example_count"] == 1
@@ -437,10 +436,8 @@ def test_semantic_style_management_isolated_by_bot_and_group_with_global_fallbac
             )
         )
 
-    assert (
-        mod.update_semantic_style_overrides({"direct": False}, bot_id=100, group_id=42)["overrides"]["direct"] is False
-    )
-    assert mod.semantic_style_status(bot_id=101, group_id=43)["overrides"]["direct"] is True
+    assert mod.set_semantic_style_direct_enabled(False, bot_id=100, group_id=42)["direct_enabled"] is False
+    assert mod.semantic_style_status(bot_id=101, group_id=43)["direct_enabled"] is True
     assert mod.set_semantic_style_enabled(False, bot_id=100, group_id=42)["enabled"] is False
     assert mod.semantic_style_injection_enabled("scope-disabled", bot_id=100, group_id=42) is False
     assert mod.semantic_style_status()["enabled"] is True
@@ -1149,6 +1146,8 @@ async def test_delivery_receipt_feedback_reply_promotes_exact_semantic_source(tm
         ),
     ]
     assert all(observe_quoted_semantic_style_feedback(event) is None for event in invalid_events)
+
+
 def test_rebuild_skips_human_pair_without_author_provenance(tmp_path, monkeypatch) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
@@ -1225,6 +1224,8 @@ def test_visual_circuit_can_disable_probe_and_recover_without_io() -> None:
 
     recovered = record_semantic_style_visual_circuit_success(state, now=160)
     assert semantic_style_visual_circuit_decision(recovered, enabled=True, now=161).mode == "allow"
+
+
 def test_parse_label_extracts_behavior_strategy() -> None:
     from pallas.product.llm.repeater_semantic_style import _parse_label_response
 
@@ -1568,7 +1569,7 @@ def test_semantic_style_settings_dump_keeps_split_bits_without_stale_enabled(tmp
     monkeypatch.setattr(mod, "semantic_style_settings_path", lambda **_: path)
     mod.set_semantic_style_governance(collection_enabled=False, injection_enabled=True, bot_id=100, group_id=42)
     dumped = json.loads(path.read_text(encoding="utf-8"))
-    assert set(dumped) == {"collection_enabled", "injection_enabled", "overrides"}
+    assert set(dumped) == {"collection_enabled", "injection_enabled", "direct_enabled"}
     assert dumped["collection_enabled"] is False
     assert dumped["injection_enabled"] is True
 

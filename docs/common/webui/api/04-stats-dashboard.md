@@ -26,9 +26,9 @@
 | GET | `/local-corpus-hot` | 同上 | 本机语料热度 |
 | GET | `/corpus-status` | | 语料联邦状态 |
 | GET | `/federation-onboarding` | | 联邦接入引导信息 |
-| GET | `/community-gallery` | `limit`, `mine` | 社区投稿列表（代理中心 `/v1/gallery/posts`） |
-| POST | `/community-gallery` | multipart | 提交投稿（正文 / 图片 / 可选 Bot） |
-| DELETE | `/community-gallery/{post_id}` | | 撤下本部署投稿 |
+| GET | `/community-gallery` | `limit`, `mine` | 社区投稿列表（默认代理中心 `/v1/gallery/posts`；offline 时回退本部署本地留底，`mine=true` 无远端时返回本地投稿） |
+| POST | `/community-gallery` | multipart | 提交投稿（正文 / 图片 / 可选 Bot；先写本地留底，再 best-effort 同步社区中心，offline 也保留本地副本） |
+| DELETE | `/community-gallery/{post_id}` | | 撤下本部署投稿（本地删除 + best-effort 远端删除） |
 
 ## 前端对应
 
