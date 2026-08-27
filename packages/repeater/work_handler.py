@@ -39,6 +39,7 @@ async def handle_repeater_message(payload: dict[str, Any]) -> None:
 
 def repeater_work_handlers():
     from pallas.core.shared.utils.media_cache import handle_image_cache_capture
+    from pallas.product.llm.group_insight_processor import handle_group_insight
     from pallas.product.llm.repeater_semantic_style import (
         handle_repeater_semantic_style,
         handle_repeater_semantic_style_backfill,
@@ -51,6 +52,7 @@ def repeater_work_handlers():
     return {
         "repeater.learn": handle_repeater_learn,
         "repeater.message": handle_repeater_message,
+        "group.insight": handle_group_insight,
         "repeater.semantic_style": handle_repeater_semantic_style,
         "repeater.semantic_style.backfill": handle_repeater_semantic_style_backfill,
         "repeater.semantic_style.backfill.scan": handle_repeater_semantic_style_backfill_scan,
