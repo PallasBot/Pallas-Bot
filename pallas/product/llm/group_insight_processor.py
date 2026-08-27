@@ -82,6 +82,12 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
     if not semantic_style_collection_enabled(bot_id=bot_id, group_id=group_id):
         return
 
+    from pallas.product.llm.repeater_semantic_style import semantic_label_budget_ok
+
+    if not semantic_label_budget_ok():
+        logger.info("今日语义标注已达上限，跳过本群 [{}]", group_id)
+        return
+
     pairs = await _rebuild_pairs_from_messages(bot_id=bot_id, group_id=group_id)
     if not pairs:
         return

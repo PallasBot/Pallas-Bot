@@ -776,6 +776,16 @@ class LlmWebuiConfig(BaseModel):
             "超限后当天不再实时标注，只保留回填路径",
         ),
     )
+    llm_semantic_style_realtime_daily_limit: int = Field(
+        default=2000,
+        ge=0,
+        le=20000,
+        description=field_help(
+            "语义风格标注每日预算",
+            "默认 2000。群洞察处理器从 message 表重建成对样本后调用 LLM 标注语料的每日上限；0 表示不限制",
+            "到达上限后当天不再消费新的语义标注任务，游标保留，次日恢复",
+        ),
+    )
     llm_reply_effect_eval_enabled: bool = Field(
         default=False,
         description=field_help(
@@ -1236,6 +1246,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_sticker_label_backfill_enabled=cfg.llm_sticker_label_backfill_enabled,
         llm_sticker_label_backfill_daily_limit=cfg.llm_sticker_label_backfill_daily_limit,
         llm_sticker_label_realtime_daily_limit=cfg.llm_sticker_label_realtime_daily_limit,
+        llm_semantic_style_realtime_daily_limit=cfg.llm_semantic_style_realtime_daily_limit,
         llm_reply_effect_eval_enabled=cfg.llm_reply_effect_eval_enabled,
         llm_memory_rag_enabled=cfg.llm_memory_rag_enabled,
         llm_expression_inject_enabled=cfg.llm_expression_inject_enabled,

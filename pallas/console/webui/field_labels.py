@@ -259,6 +259,7 @@ FIELD_LABELS: dict[str, str] = {
     "llm_sticker_vision_timeout_sec": "视觉选图超时（秒）",
     "llm_sticker_vision_max_per_hour": "视觉选图每小时上限",
     "llm_sticker_label_realtime_daily_limit": "标签实时标注每日预算",
+    "llm_semantic_style_realtime_daily_limit": "语义风格标注每日预算",
     "llm_reply_effect_eval_enabled": "记录回复效果评分",
     "llm_chat_system_prompt_path": "系统提示词文件",
     "llm_chat_min_priority": "LLM 对话指令优先级",

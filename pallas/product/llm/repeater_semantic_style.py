@@ -640,6 +640,56 @@ def semantic_style_data_lock_path() -> Path:
     return semantic_style_base_dir() / "semantic_style_data.lock"
 
 
+def semantic_style_label_budget_path() -> Path:
+    """语义风格每日 LLM 标注预算计数文件路径（按天记录已提交次数）。"""
+    return semantic_style_base_dir() / "semantic_style_label_budget.json"
+
+
+def _semantic_label_budget_state() -> dict[str, Any]:
+    try:
+        raw = json.loads(semantic_style_label_budget_path().read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else {}
+    except Exception:
+        return {}
+
+
+def semantic_label_budget_used_today(*, day_key: int | None = None) -> int:
+    """今日已提交的语义风格 LLM 标注次数（跨进程按天持久化计数）。"""
+    if day_key is None:
+        day_key = int(time.time() // 86400)
+    state = _semantic_label_budget_state()
+    return int(state.get(str(day_key)) or 0)
+
+
+def record_semantic_label_budget(n: int = 1) -> None:
+    """累加一次语义风格 LLM 标注提交计数（按天分桶，供预算闸消费侧判断）。"""
+    if n <= 0:
+        return
+    day_key = int(time.time() // 86400)
+    state = _semantic_label_budget_state()
+    state[str(day_key)] = int(state.get(str(day_key)) or 0) + n
+    try:
+        tmp = semantic_style_label_budget_path().with_suffix(".tmp")
+        tmp.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+        Path(tmp).replace(semantic_style_label_budget_path())
+    except Exception as exc:
+        logger.warning("记录语义标注预算失败：{}", exc)
+
+
+def semantic_label_budget_ok(*, day_key: int | None = None) -> bool:
+    """语义风格每日 LLM 标注预算闸：消费侧检查今日累计是否已达上限。
+
+    上限配置 ``llm_semantic_style_realtime_daily_limit``，默认 2000 次/天。
+    达到上限返回 False，由调用方跳过本次标注（软上限，不阻塞入队、不影响游标轮转）。
+    """
+    from pallas.product.llm.config import get_llm_config
+
+    limit = max(0, int(getattr(get_llm_config(), "llm_semantic_style_realtime_daily_limit", 0) or 0))
+    if limit <= 0:
+        return True
+    return semantic_label_budget_used_today(day_key=day_key) < limit
+
+
 def semantic_style_legacy_migration_marker_path() -> Path:
     return semantic_style_base_dir() / "legacy_profiles_migrated_v2.json"
 
@@ -1787,6 +1837,7 @@ async def label_semantic_style_batch_with_llm(
                 task="repeater.semantic_style",
             )
             parsed = _parse_label_batch_response(str(response.get("content") or ""), len(chunk))
+            record_semantic_label_budget(1)
         except Exception as exc:
             logger.warning("repeater semantic style batch label failed: {}", exc)
             parsed = []
@@ -1804,6 +1855,7 @@ async def label_semantic_style_batch_with_llm(
             fallback = await label_semantic_style_with_retry(
                 trigger_text=item[0], reply_text=item[1], pair_relation=item[2]
             )
+            record_semantic_label_budget(1)
             results.append(fallback if fallback is not None else (SemanticStyleLabel(), None))
     return results
 
