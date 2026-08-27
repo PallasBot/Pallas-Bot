@@ -39,6 +39,16 @@ description: >
 - 开 Bot 发版 PR 前：本地 `dev` **先快进 / 对齐** `origin/main`（避免 `dev` 落后于 `main` 的纯文档/合入提交漏在 PR 外或把无关 diff 搅进来），再叠本版功能与发版提交。
 - 本版尚未合入 `dev` 的功能（如 feature 分支）：先合入 / cherry-pick 到 `dev`，再做发版提交。
 
+## 普通 dev→main PR 的 CHANGELOG 约定
+
+`dev`→`main` 多为**不含** `chore(release)` 的普通功能 PR（把一批功能推进 `main`）。此类 PR 的 CHANGELOG 素材应**随批记录**，供后续发版引用：
+
+- 每个普通 dev→main PR，在它那批功能提交里写好 `## [Unreleased]`（只写 `### Added` / `### Fixed` / `### Changed` 明细，**不写** `### 更新公告`，也不改版本号），随 PR 一起合入 `main`。更新公告留到真正发版时再依据明细整理。
+- 该 `Unreleased` 记录独立提交或并入功能提交均可（维护者常 amend 进最新功能提交）；关键是**每次普通 PR 都带一次**，素材随批落到 `main`。
+- 发版时把 `main` 上累积的 `Unreleased` 段标题转正式段 `## [X.Y.Z]`，补充 `### 更新公告`，版本号在 `chore(release)` 里改。
+
+这样发版面对的是一份已分好类的素材，无需再从几十条 commit 重新归纳。
+
 ## `dev` 上的提交形态（必守）
 
 发版准备完成后，`origin/main..dev` 应满足：

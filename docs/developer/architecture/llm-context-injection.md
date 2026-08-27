@@ -115,6 +115,10 @@
 
 Provider 已显式声明 `image` 时，`vision_messages` 在请求前下载这些历史图片，使用内部 Chat 风格 `text` / `image_url` 内容块，作为一条 user 消息插入当前 user 消息之前；请求适配层再按 Provider 的请求方式转换为 Responses 的 `input_text` / `input_image` 或 Anthropic 的 `text` / `image` / `source` 块。文本 Provider 不下载、不调用视觉助手，只看到文字时间线和 `[图片]` 占位。`session_store` 的 `【群环境摘录】` 不在这条能力范围内。
 
+**当前/被引用的图片**有两处来源，都会并入 `vision_image_urls` 作为当前图处理：一是当前消息自带的 `[CQ:image]`；二是被引用的原消息图片（用户 reply 一条带图消息时，`chat_message.py` 从 `event.reply.message` 提取，经 `ChatSubmitRequest.referenced_message` 传给 `client.py` 并入 `vision_image_urls`）。引用图不依赖消息库回查，优先复用收包时已填充的 `event.reply`；消息库（`find_by_message_ids`）与 OneBot `get_msg` 仅作兜底。回查支持负数的 `message_id`（QQ 新版）。
+
+**识别问句聚焦当前图**：当当前消息含图且属于识别问句（「这是谁/这是什么/啥梗」等，见 `tools.select.is_recognition_question`）时，不注入历史时间线图，避免模型被「刚才群聊中的图片」带偏、把当前图答成历史图或方舟干员。非识别问句的带图消息仍会注入最近的历史时间线图作群聊上下文。
+
 ## messages 序列（走请求消息）
 
 `build_llm_chat_messages`（`session_store.py`）按顺序组装：
@@ -158,6 +162,8 @@ Provider 已显式声明 `image` 时，`vision_messages` 在请求前下载这�
 ### 长会话压缩
 
 会话太长时先压再注入（`session_summary.py`）：当该用户消息数 ≥ `llm_session_summary_threshold`（默认 24）且距上次压缩超过冷却期（默认 600s），用低成本模型把窗口外历史压成 ≤120 字中文，写入一条 `user` 记录的【此前对话摘要】，并只保留最近 `llm_session_summary_keep_messages`（默认 16）条。**读取时摘要始终保留在窗口内**——若摘要滑出当前窗口，会弹出它、保留最近 `N-1` 条、把摘要放回最前。压缩发生在投递成功后异步执行。
+
+**图片进历史的延迟识别**：含 `[CQ:image]` 的 user 消息进会话历史时，不立即调用视觉模型识别（避免每张图都产生一次 LLM 成本），而是存成 `[图片]:url=X` 占位符（`vision_content.placeholder_with_image_urls`），保留图片 URL。到会话摘要压缩需要理解历史图时，`session_summary._summary_messages` 才从占位符提取 URL、查图片缓存并对占位符段做一次视觉描述（`vision_messages.describe_placeholder_images`），占位符外的文字保留。开关 `llm_session_vision_describe_enabled` 控制此行为；关闭时直接退化为纯 `[图片]` 占位（丢 URL）。
 
 ### 字符预算
 

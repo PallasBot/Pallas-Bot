@@ -165,6 +165,7 @@ packages/<name>/
   - `chore:` 构建/工具链/依赖
   - `docs:` 文档
 - **自动化 Agent 创建 git commit 前**：先给出**提交信息草案**供维护者确认，**得到确认后再提交**。
+- **普通 dev→main PR 的 CHANGELOG**：WebUI 与 Bot 发版解耦、Bot 降频后，`dev`→`main` 多为不含 `chore(release)` 的功能 PR。此类 PR 应随批写好 `## [Unreleased]`（只写 `### Added` / `### Fixed` / `### Changed` 明细，不写更新公告、不改版本号），素材随批落到 `main`，供真正发版时整理公告。完整约定见 `docs/skills/pallas-release/SKILL.md` 的「普通 dev→main PR 的 CHANGELOG 约定」。
 
 ### Git 操作边界
 
