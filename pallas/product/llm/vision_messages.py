@@ -28,6 +28,10 @@ _VISION_MAX_BYTES = 8_000_000
 _VISION_MAX_IMAGES = 3
 _DEFAULT_VISION_PROMPT = "请看看这张图。"
 _VISION_FETCH_FAILED_NOTICE = "（用户发送了图片，但图片加载失败，无法查看。请如实告知用户你暂时看不到这张图。）"
+_VISION_RECOGNITION_HINT = (
+    "这是用户针对「当前这张图」的识别问题。请仅依据这张图的实际内容独立判断画面里的人物/事物，"
+    "如实描述；除非确认画面本身就是明日方舟角色，否则不要因为任何背景设定把图中角色套成明日方舟干员。"
+)
 
 
 def _is_recognition_ask(user_text: str) -> bool:
@@ -420,14 +424,22 @@ async def prepare_messages_for_provider_capabilities(
             plain = vision_user_plain_text(metadata, user_text)
             data_uris = await fetch_vision_data_uris(metadata)
             if data_uris:
-                content = openai_vision_user_content(plain, data_uris)
+                # 识别问句（这是谁/这是什么）时用户是针对「当前这张图」提问：
+                # 附加独立识别指示，避免模型被罗德岛/方舟背景带偏，把非方舟角色套成方舟干员。
+                recognition = _is_recognition_ask(user_text)
+                vision_plain = plain
+                if recognition:
+                    vision_plain = f"{plain}\n{_VISION_RECOGNITION_HINT}".strip() if plain else _VISION_RECOGNITION_HINT
+                content = openai_vision_user_content(vision_plain, data_uris)
                 logger.debug(
-                    format_business_event("视觉多模态请求", "已准备", images=len(data_uris), plain_len=len(plain))
+                    format_business_event(
+                        "视觉多模态请求", "已准备", images=len(data_uris), plain_len=len(vision_plain)
+                    )
                 )
                 working = replace_last_user_content(working, content)
-                # 识别问句（这是谁/这是什么）时用户是针对「当前这张图」提问，
-                # 别再注入「刚才群聊中的图片」，避免历史图抢占模型对当前图的注意力。
-                if not _is_recognition_ask(user_text):
+                # 识别问句（这是谁/这是什么）时别再注入「刚才群聊中的图片」，
+                # 避免历史图抢占模型对当前图的注意力。
+                if not recognition:
                     fetched_history = await fetch_group_timeline_data_uris(metadata)
                     if fetched_history:
                         working = insert_before_last_user_content(
@@ -449,6 +461,8 @@ async def prepare_messages_for_provider_capabilities(
     merged = plain
     if described:
         merged = f"{plain}\n{described}".strip() if plain else described
+    if _is_recognition_ask(user_text):
+        merged = f"{merged}\n{_VISION_RECOGNITION_HINT}".strip()
     logger.debug(format_business_event("视觉文本回退", "已准备", plain_len=len(plain), desc_len=len(described)))
     return replace_last_user_content(messages, merged or _DEFAULT_VISION_PROMPT)
 
