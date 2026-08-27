@@ -408,11 +408,16 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                 nb_message.escape_tag(event_log),
             )
             if all(hasattr(event, field) for field in ("group_id", "user_id", "get_message")):
+                reply_note = ""
+                _reply = getattr(event, "reply", None)
+                reply_id = getattr(_reply, "message_id", None)
+                if reply_id is not None:
+                    reply_note = f" ↩[reply:id={reply_id}]"
                 compact_log = compact_group_message_log(
                     bot_id=str(bot.self_id),
                     group_id=event.group_id,
                     user_id=event.user_id,
-                    message=str(event.get_message()),
+                    message=f"{reply_note}{str(event.get_message())}",
                 )
                 log.bind(display_name="Message").info(nb_message.escape_tag(compact_log))
             else:
