@@ -22,9 +22,8 @@ from pallas.core.foundation.db import make_local_context_repository, make_messag
 from pallas.core.foundation.fs_lock import atomic_write_text, interprocess_file_lock
 from pallas.core.foundation.logging import log_rate_limited
 from pallas.core.foundation.paths import plugin_data_dir
-from pallas.core.foundation.startup_report import register_startup_ready, register_startup_scheduled
+from pallas.core.foundation.startup_report import register_startup_ready
 from pallas.core.platform.work_jobs.models import WorkJob
-from pallas.core.platform.work_jobs.runtime import build_work_job_store
 from pallas.product.llm.inference_params import task_token_budget
 
 if TYPE_CHECKING:
@@ -597,68 +596,6 @@ async def collect_semantic_style_backfill_candidates(
     return sorted(candidates, key=lambda item: (int(item["created_at"]), int(item["message_id"])), reverse=True)
 
 
-async def run_semantic_style_backfill_round(*, now: int | None = None) -> int:
-    """历史数据没有作者来源，停止生成语义风格回填任务。"""
-    if not SEMANTIC_STYLE_BACKFILL_ENABLED:
-        return 0
-    current_time = int(time.time()) if now is None else int(now)
-    bot_ids: list[int] = []
-    for key, bot in get_bots().items():
-        value = getattr(bot, "self_id", key)
-        try:
-            bot_id = int(value)
-        except (TypeError, ValueError):
-            continue
-        if bot_id > 0 and bot_id not in bot_ids:
-            bot_ids.append(bot_id)
-    if not bot_ids:
-        return 0
-    day = current_time // (24 * 60 * 60)
-    job = WorkJob.create(
-        kind="repeater.semantic_style.backfill.scan",
-        payload={"bot_ids": sorted(bot_ids), "now": current_time},
-        idempotency_key=f"repeater.semantic_style.backfill.scan:{day}",
-    )
-    await build_work_job_store().enqueue(job)
-    return 1
-
-
-async def handle_repeater_semantic_style_backfill_scan(payload: dict[str, Any]) -> int:
-    """在 work aux 扫描历史消息，并持久化生成的语义标注任务。"""
-    if not SEMANTIC_STYLE_BACKFILL_ENABLED:
-        return 0
-    current_time = int(payload.get("now") or time.time())
-    raw_bot_ids = payload.get("bot_ids")
-    if not isinstance(raw_bot_ids, list):
-        return 0
-    bot_ids: list[int] = []
-    for item in raw_bot_ids:
-        try:
-            bot_id = int(item)
-        except (TypeError, ValueError):
-            continue
-        if bot_id > 0:
-            bot_ids.append(bot_id)
-    if not bot_ids:
-        return 0
-    cursor = load_semantic_style_backfill_cursor()
-    candidates = await collect_semantic_style_backfill_candidates(
-        now=current_time,
-        bot_ids=bot_ids,
-        cursor=cursor,
-    )
-    batch = build_semantic_style_backfill_batch(
-        candidates,
-        cursor=cursor,
-        now=current_time,
-    )
-    if not batch.jobs:
-        return 0
-    await build_work_job_store().enqueue_many(batch.jobs)
-    save_semantic_style_backfill_cursor(batch.cursor)
-    return len(batch.jobs)
-
-
 def parse_semantic_style_label(value: object) -> SemanticStyleLabel:
     raw = value if isinstance(value, dict) else {}
     intensity = str(raw.get("intensity") or "").strip().lower()
@@ -725,17 +662,6 @@ def semantic_style_backfill_cursor_path(*, bot_id: int | None = None, group_id: 
     return semantic_style_base_dir() / "backfill_cursors" / str(scope[0]) / f"{scope[1]}.json"
 
 
-def semantic_style_realtime_budget_path(*, bot_id: int | None = None, group_id: int | None = None) -> Path:
-    scope = _semantic_style_scope(bot_id, group_id)
-    if scope is None:
-        return semantic_style_base_dir() / "realtime_budget.json"
-    return semantic_style_base_dir() / "realtime_budgets" / str(scope[0]) / f"{scope[1]}.json"
-
-
-def semantic_style_realtime_budget_lock_path() -> Path:
-    return semantic_style_base_dir() / "realtime_budget.lock"
-
-
 def _semantic_style_scope(bot_id: int | None, group_id: int | None) -> tuple[int, int] | None:
     if bot_id is None and group_id is None:
         return None
@@ -759,77 +685,6 @@ def semantic_style_settings_path(*, bot_id: int | None = None, group_id: int | N
     if scope is None:
         return semantic_style_base_dir() / "settings.json"
     return semantic_style_base_dir() / "settings" / str(scope[0]) / f"{scope[1]}.json"
-
-
-def _semantic_style_day_started_at(now: int) -> int:
-    return int(now) - int(now) % (24 * 60 * 60)
-
-
-def _load_semantic_style_realtime_budget(path: Path, *, now: int) -> SemanticStyleRealtimeBudget:
-    try:
-        budget = SemanticStyleRealtimeBudget.model_validate(json.loads(path.read_text(encoding="utf-8")))
-    except (OSError, ValueError, TypeError, json.JSONDecodeError):
-        budget = SemanticStyleRealtimeBudget()
-    day_started_at = _semantic_style_day_started_at(now)
-    return (
-        budget
-        if budget.day_started_at == day_started_at
-        else SemanticStyleRealtimeBudget(day_started_at=day_started_at)
-    )
-
-
-def _save_semantic_style_realtime_budget(path: Path, budget: SemanticStyleRealtimeBudget) -> None:
-    atomic_write_text(path, budget.model_dump_json())
-
-
-def claim_semantic_style_realtime_admission(
-    *, bot_id: int, group_id: int, example_id: str, now: int | None = None
-) -> bool:
-    """稳定采样并原子占用实时语义标注预算。"""
-    current_time = int(time.time()) if now is None else int(now)
-    scope = _semantic_style_scope(bot_id, group_id)
-    assert scope is not None
-    global_path = semantic_style_realtime_budget_path()
-    scope_path = semantic_style_realtime_budget_path(bot_id=bot_id, group_id=group_id)
-    sampled = (
-        int.from_bytes(hashlib.blake2b(str(example_id).encode("utf-8"), digest_size=8).digest(), "big")
-        % (SEMANTIC_STYLE_REALTIME_SAMPLE_DIVISOR)
-        == 0
-    )
-    with interprocess_file_lock(semantic_style_realtime_budget_lock_path()):
-        global_budget = _load_semantic_style_realtime_budget(global_path, now=current_time)
-        if not sampled:
-            _save_semantic_style_realtime_budget(
-                global_path,
-                global_budget.model_copy(update={"sampled_out_today": global_budget.sampled_out_today + 1}),
-            )
-            return False
-        scope_budget = _load_semantic_style_realtime_budget(scope_path, now=current_time)
-        if global_budget.admitted_today >= SEMANTIC_STYLE_REALTIME_MAX_PER_DAY:
-            _save_semantic_style_realtime_budget(
-                global_path,
-                global_budget.model_copy(
-                    update={"global_budget_skipped_today": global_budget.global_budget_skipped_today + 1}
-                ),
-            )
-            return False
-        if scope_budget.admitted_today >= SEMANTIC_STYLE_REALTIME_MAX_PER_SCOPE_PER_DAY:
-            _save_semantic_style_realtime_budget(
-                scope_path,
-                scope_budget.model_copy(
-                    update={"scope_budget_skipped_today": scope_budget.scope_budget_skipped_today + 1}
-                ),
-            )
-            return False
-        _save_semantic_style_realtime_budget(
-            global_path,
-            global_budget.model_copy(update={"admitted_today": global_budget.admitted_today + 1}),
-        )
-        _save_semantic_style_realtime_budget(
-            scope_path,
-            scope_budget.model_copy(update={"admitted_today": scope_budget.admitted_today + 1}),
-        )
-    return True
 
 
 def load_semantic_style_settings(*, bot_id: int | None = None, group_id: int | None = None) -> SemanticStyleSettings:
@@ -1867,105 +1722,6 @@ async def label_semantic_style_with_retry(
     return None
 
 
-async def handle_repeater_semantic_style(payload: dict[str, Any]) -> None:
-    bot_id = int(payload.get("bot_id") or 0)
-    group_id = int(payload.get("group_id") or 0)
-    if not semantic_style_collection_enabled(bot_id=bot_id, group_id=group_id):
-        return
-    trigger = str(payload.get("trigger_text") or "").strip()
-    reply = str(payload.get("reply_text") or "").strip()
-    if not trigger or not reply:
-        return
-    if payload.get("source_kind") != "human_pair" or not is_human_semantic_style_pair(
-        trigger_user_id=payload.get("trigger_user_id"),
-        reply_user_id=payload.get("reply_user_id"),
-        bot_id=bot_id,
-    ):
-        return
-    if not payload.get("realtime_admitted") and not claim_semantic_style_realtime_admission(
-        bot_id=bot_id,
-        group_id=group_id,
-        example_id=str(payload.get("example_id") or f"{group_id}:{payload.get('message_id')}:{bot_id}"),
-    ):
-        return
-    pair_relation = "quoted" if payload.get("pair_relation") == "quoted" else "adjacent"
-    label, behavior_strategy = await label_semantic_style_with_llm(
-        trigger_text=trigger,
-        reply_text=reply,
-        pair_relation=pair_relation,
-    )
-    if not label.is_reply_pair or not label.transferable:
-        return
-    visual = await maybe_label_semantic_style_visual(payload)
-    if visual is not None:
-        label = label.model_copy(update={"visual": visual})
-    example = SemanticStyleExample(
-        example_id=str(payload.get("example_id") or f"{payload.get('group_id')}:{payload.get('message_id')}"),
-        created_at=int(payload.get("created_at") or time.time()),
-        bot_id=int(payload["bot_id"]),
-        group_id=int(payload["group_id"]),
-        scene=str(payload.get("scene") or "default"),
-        trigger_text=_short_text(trigger, 240),
-        reply_text=_short_text(reply, 240),
-        label=label,
-        source_kind="human_pair",
-        trigger_user_id=int(payload["trigger_user_id"]),
-        reply_user_id=int(payload["reply_user_id"]),
-        pair_relation=pair_relation,
-        behavior_strategy=behavior_strategy,
-    )
-    persist_semantic_style_example(example)
-
-
-async def handle_repeater_semantic_style_visual(payload: dict[str, Any]) -> None:
-    """兼容独立视觉 work job；语义关系仍由同一实时处理器持久化。"""
-    await handle_repeater_semantic_style(payload)
-
-
-async def handle_repeater_semantic_style_backfill(payload: dict[str, Any], *, now: int | None = None) -> None:
-    """历史样本没有可靠作者来源，禁止作为真人接话参考。"""
-    if not SEMANTIC_STYLE_BACKFILL_ENABLED:
-        return
-    if not semantic_style_collection_enabled(
-        bot_id=int(payload.get("bot_id") or 0), group_id=int(payload.get("group_id") or 0)
-    ):
-        return
-    current_time = int(time.time()) if now is None else int(now)
-    if int(payload.get("expires_at") or 0) <= current_time:
-        return
-    trigger = str(payload.get("trigger_text") or "").strip()
-    reply = str(payload.get("reply_text") or "").strip()
-    if not trigger or not reply:
-        return
-    label_result = await label_semantic_style_with_retry(trigger_text=trigger, reply_text=reply)
-    if label_result is None:
-        return
-    label, behavior_strategy = label_result
-    trigger_user_id = int(payload.get("trigger_user_id") or 0)
-    reply_user_id = int(payload.get("reply_user_id") or 0)
-    bot_id = int(payload.get("bot_id") or 0)
-    is_human_pair = is_human_semantic_style_pair(
-        trigger_user_id=trigger_user_id,
-        reply_user_id=reply_user_id,
-        bot_id=bot_id,
-    )
-    example = SemanticStyleExample(
-        example_id=str(payload.get("example_id") or f"{payload.get('group_id')}:{payload.get('message_id')}"),
-        created_at=int(payload.get("created_at") or current_time),
-        bot_id=bot_id,
-        group_id=int(payload["group_id"]),
-        scene=str(payload.get("scene") or "default"),
-        trigger_text=_short_text(trigger, 240),
-        reply_text=_short_text(reply, 240),
-        label=label,
-        behavior_strategy=behavior_strategy,
-        source_kind="human_pair" if is_human_pair else "legacy_unknown",
-        trigger_user_id=trigger_user_id,
-        reply_user_id=reply_user_id,
-    )
-    persist_semantic_style_example(example)
-
-
 async def _refresh_loop() -> None:
     while True:
         await asyncio.sleep(_PROFILE_REFRESH_SEC)
@@ -1976,7 +1732,7 @@ async def _refresh_loop() -> None:
 
 
 def register_semantic_style_cache_startup_hook() -> None:
-    global _startup_bound, _reload_task, _backfill_task
+    global _startup_bound, _reload_task
     if _startup_bound:
         return
     _startup_bound = True
@@ -1984,39 +1740,15 @@ def register_semantic_style_cache_startup_hook() -> None:
 
     @driver.on_startup
     async def _on_startup() -> None:
-        global _reload_task, _backfill_task
+        global _reload_task
         refresh_semantic_style_cache(force=True)
         _reload_task = asyncio.create_task(_refresh_loop(), name="repeater_semantic_style_cache")
         register_startup_ready("语义风格缓存")
 
-        if SEMANTIC_STYLE_BACKFILL_ENABLED:
-
-            async def _backfill_loop() -> None:
-                await asyncio.sleep(_SEMANTIC_STYLE_BACKFILL_START_DELAY_SEC)
-                while True:
-                    try:
-                        await run_semantic_style_backfill_round()
-                    except Exception as exc:
-                        logger.warning("repeater semantic style backfill round failed: {}", exc)
-                    await asyncio.sleep(_SEMANTIC_STYLE_BACKFILL_INTERVAL_SEC)
-
-            _backfill_task = asyncio.create_task(_backfill_loop(), name="repeater_semantic_style_backfill")
-            register_startup_scheduled(
-                "语义风格回填",
-                (
-                    f"首轮延迟 [{_SEMANTIC_STYLE_BACKFILL_START_DELAY_SEC}s] | "
-                    f"间隔 [{_SEMANTIC_STYLE_BACKFILL_INTERVAL_SEC}s]"
-                ),
-            )
-
     @driver.on_shutdown
     async def _on_shutdown() -> None:
-        global _reload_task, _backfill_task
+        global _reload_task
         if _reload_task is not None:
             _reload_task.cancel()
             await asyncio.gather(_reload_task, return_exceptions=True)
             _reload_task = None
-        if _backfill_task is not None:
-            _backfill_task.cancel()
-            await asyncio.gather(_backfill_task, return_exceptions=True)
-            _backfill_task = None
