@@ -77,18 +77,6 @@ Provider 输出 / direct_candidate 直投
 - 基线：`offline_quality_history.py` 落 `pb_webui/plugin_data_dir()/pallas_llm/quality_baselines.jsonl`；`record_quality_baseline` / `summarize_quality_baseline`（按 persona/scene/rule_id 聚合）/ `compare_quality_baselines`（分数回退 + 新增 rule_id）。
 - 评测入口透传默认 provider；未按 provider/model 分档。
 
-## 平台化待办
-
-与全架构调研（2026-08-20）的 P1 里程碑「LLM 输出护栏与离线评测平台化」对应：
-
-| 待办 | 方案 |
-| --- | --- |
-| 护栏拦截统计 | `task_metrics._EVENTS` 增补 `output_hard_block / output_soft_retry / output_fallback / output_silenced / persona_firewall_retry / persona_firewall_fallback / persona_firewall_silent`，在 `resolve_output_filtered_chat_reply` 与 kernel decision 处埋点 → 复用日汇总 + task-stats 面板 |
-| 评测 CLI | `pallas console eval` 包装 `tools/run_llm_quality_eval.py` |
-| 评测 WebUI | 控制台挂 `GET/POST /pallas/api/common-config/llm/quality-eval`（放 `llm_ops_api.py` 或独立 `quality_eval_api.py`），复用 offline_quality_eval + history；面板入「AI 配置 → 输出」 |
-| 评测按 provider | `run_configured_offline_quality_eval` 增加 provider 参数走 `providers_store` 解析，支持 A/B 对比 |
-| 默认值闭环 | 人设防火墙默认 `off`；如需随新装即生效，需评估默认开并配套误伤率观测 |
-
 ## 后续阅读
 
 - [LLM 输出路径](llm-output-path.md) · [Agent 生命周期](agent-lifecycle.md)
