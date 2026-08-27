@@ -1217,12 +1217,12 @@ async def prepare_and_submit_llm_chat_turn(
         from pallas.product.llm.reply_shape import resolve_reply_hard_cap
         from pallas.product.llm.scene_style import scene_length_cap
 
-        reply_shape_hint = getattr(group_expression_profile, "reply_shape", None)
+        _style_profile = getattr(semantic_style, "style_profile", None) or {}
         reply_max_length = resolve_reply_hard_cap(
             scene_length_cap(behavior_scene),
             preferred_bubbles=reply_shape.preferred_bubbles,
-            bubble_count_p50=int(getattr(reply_shape_hint, "bubble_count_p50", 0) or 0),
-            segment_char_length_p50=int(getattr(reply_shape_hint, "segment_char_length_p50", 0) or 0),
+            bubble_count_p50=int(_style_profile.get("bubble_count_p50") or 0),
+            segment_char_length_p50=int(_style_profile.get("segment_char_length_p50") or 0),
         )
         semantic_example_sources = list(getattr(semantic_style, "matched_example_sources", []) or [])
         semantic_examples: list[tuple[str, str]] = []

@@ -119,6 +119,10 @@ class GroupExpressionProfile(BaseModel):
             if isinstance(semantic_profile, BaseModel)
             else dict(semantic_profile)
         )
+        bubble_counts = sorted(int(item) for item in data.get("bubble_counts", []) if int(item) > 0)
+        segment_lengths = sorted(int(item) for item in data.get("segment_char_lengths", []) if int(item) > 0)
+        rhythm_counts = {str(key): max(0, int(value)) for key, value in dict(data.get("rhythm_counts") or {}).items()}
+        rhythm_total = sum(rhythm_counts.values())
         semantic_updated_at = data.get("updated_at")
         if isinstance(semantic_updated_at, (int, float)):
             semantic_updated_at = datetime.fromtimestamp(semantic_updated_at, tz=UTC)
@@ -135,10 +139,19 @@ class GroupExpressionProfile(BaseModel):
             form_counts={str(key): int(value) for key, value in dict(data.get("form_counts") or {}).items()},
             updated_at=semantic_updated_at,
         )
-        # reply_shape 只由群消息（group_profiler）计算，不再被语义 profile 覆写；
-        # 语义层仅贡献 examples_summary 这类信息展示字段。
+        shape = self.reply_shape.model_copy(
+            update={
+                "bubble_count_p50": quantile(bubble_counts, 0.5),
+                "bubble_count_p90": quantile(bubble_counts, 0.9),
+                "segment_char_length_p50": quantile(segment_lengths, 0.5),
+                "segment_char_length_p90": quantile(segment_lengths, 0.9),
+                "rhythm_distribution": {key: round(value / rhythm_total, 4) for key, value in rhythm_counts.items()}
+                if rhythm_total
+                else {},
+            }
+        )
         updated_at = max(self.updated_at, semantic_updated_at) if semantic_updated_at else self.updated_at
-        return self.model_copy(update={"examples_summary": summary, "updated_at": updated_at})
+        return self.model_copy(update={"examples_summary": summary, "reply_shape": shape, "updated_at": updated_at})
 
 
 def group_expression_profile_ready(profile: GroupExpressionProfile) -> bool:
@@ -146,6 +159,12 @@ def group_expression_profile_ready(profile: GroupExpressionProfile) -> bool:
         profile.aggregate.message_count >= MIN_READY_MESSAGE_COUNT
         and profile.aggregate.answer_count >= MIN_READY_ANSWER_COUNT
     )
+
+
+def quantile(values: list[int], fraction: float) -> int:
+    if not values:
+        return 0
+    return int(values[round((len(values) - 1) * fraction)])
 
 
 def resolve_group_expression_profile(
