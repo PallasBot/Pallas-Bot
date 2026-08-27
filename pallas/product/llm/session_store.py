@@ -85,7 +85,11 @@ async def append_llm_message(
         try:
             from pallas.product.llm.vision_messages import describe_vision_content_for_history
 
-            raw_content = await describe_vision_content_for_history(content)
+            raw_content = await describe_vision_content_for_history(
+                content,
+                group_id=group_id,
+                bot_id=bot_id,
+            )
         except Exception as exc:
             logger.warning("会话历史图片描述失败，已回退原文: [{}]", type(exc).__name__)
     safe_content = sanitize_stored_content(role_key, raw_content, max_len=cfg.llm_session_max_content_len)

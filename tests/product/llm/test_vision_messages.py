@@ -466,7 +466,7 @@ async def test_describe_vision_content_for_history_injects_description(
 ) -> None:
     from pallas.product.llm.vision_messages import describe_vision_content_for_history
 
-    async def fake_describe(_metadata: dict) -> str:
+    async def fake_describe(_metadata: dict, **kwargs) -> str:
         return "[图片理解]\n一头萨摩耶犬"
 
     monkeypatch.setattr("pallas.product.llm.vision_messages.describe_images_as_text", fake_describe)
@@ -501,3 +501,49 @@ async def test_describe_vision_content_for_history_describe_failure_keeps_raw(
     raw = "[CQ:image,file=a.jpg,url=https://example.com/a.png] 这是谁"
     out = await describe_vision_content_for_history(raw)
     assert out == raw
+
+
+@pytest.mark.asyncio
+async def test_describe_vision_content_for_history_passes_group_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm.vision_messages import describe_vision_content_for_history
+
+    captured: dict[str, str] = {}
+
+    async def fake_describe(_metadata: dict, **kwargs) -> str:
+        captured["context"] = kwargs.get("context_text") or ""
+        return "[图片理解]\n一头萨摩耶犬"
+
+    async def fake_context(_group_id, **kwargs) -> str:
+        return "兔兔：看这只狗\n我是：这是谁"
+
+    monkeypatch.setattr("pallas.product.llm.vision_messages.describe_images_as_text", fake_describe)
+    monkeypatch.setattr("pallas.product.llm.vision_messages.build_vision_context_text", fake_context)
+
+    raw = "[CQ:image,file=a.jpg,url=https://example.com/a.png] 这是谁"
+    out = await describe_vision_content_for_history(raw, group_id=626266902, bot_id=2927116873)
+    assert "萨摩耶" in out
+    assert "兔兔：看这只狗" in captured["context"]
+
+
+@pytest.mark.asyncio
+async def test_build_vision_context_text_formats_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from pallas.product.llm.vision_messages import build_vision_context_text
+
+    class FakeRepo:
+        async def find_recent_in_group(self, group_id: int, *, before_time=None, limit=8):
+            return [
+                SimpleNamespace(sender_name="兔兔", plain_text="看这只狗"),
+                SimpleNamespace(sender_name="我是", plain_text="这是谁"),
+            ]
+
+    def fake_repo_factory():
+        return FakeRepo()
+
+    monkeypatch.setattr("pallas.core.foundation.db.make_message_repository", fake_repo_factory)
+    text = await build_vision_context_text(626266902)
+    assert "兔兔：看这只狗" in text
+    assert "我是：这是谁" in text

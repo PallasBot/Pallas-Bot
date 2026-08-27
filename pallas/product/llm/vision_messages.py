@@ -26,6 +26,8 @@ from pallas.product.llm.vision_content import (
 _VISION_FETCH_TIMEOUT_SEC = 15.0
 _VISION_MAX_BYTES = 8_000_000
 _VISION_MAX_IMAGES = 3
+_CONTEXT_MAX_CHARS = 600
+_CONTEXT_WINDOW_MESSAGES = 8
 _DEFAULT_VISION_PROMPT = "请看看这张图。"
 _VISION_FETCH_FAILED_NOTICE = "（用户发送了图片，但图片加载失败，无法查看。请如实告知用户你暂时看不到这张图。）"
 _VISION_RECOGNITION_HINT = (
@@ -42,6 +44,16 @@ def _is_recognition_ask(user_text: str) -> bool:
 
 
 _DESCRIBE_SYSTEM = "你是图片理解助手。用一两句中文描述图片主要内容，不要寒暄。"
+
+
+def _vision_describe_prompt(plain: str, *, context_text: str = "") -> str:
+    """组织图片描述 prompt：可附上图片前后的群聊上下文，帮助模型理解图在聊什么。"""
+    body = f"请简要描述这些图片。用户说：{plain}" if plain else "请简要描述这些图片。"
+    context = str(context_text or "").strip()
+    if not context:
+        return body
+    preview = context[:_CONTEXT_MAX_CHARS]
+    return f"以下是这张图片前后的一段群聊对话，仅作理解背景：\n<context>\n{preview}\n</context>\n\n{body}"
 
 
 def image_bytes_to_data_uri(data: bytes) -> str | None:
@@ -324,10 +336,50 @@ async def _run_vision_description(
     return f"[用户发送了 {urls_count} 张图片：理解失败，已省略]"
 
 
+async def build_vision_context_text(
+    group_id: int | None,
+    *,
+    bot_id: int | None = None,
+    before_time: int | None = None,
+) -> str:
+    """从消息库取该群最近一段有文字的聊天，作为图片识别的上下文背景。
+
+    只取 plain_text 非空的消息，按时间升序拼接为「发送人：内容」行；
+    取不到（无群、未入库、非群聊）或失败时返回空串。
+    """
+    if group_id is None:
+        return ""
+    try:
+        from pallas.core.foundation.db import make_message_repository
+
+        repo = make_message_repository()
+        rows = await repo.find_recent_in_group(
+            int(group_id),
+            before_time=int(before_time) if before_time else None,
+            limit=_CONTEXT_WINDOW_MESSAGES,
+        )
+    except Exception as exc:
+        logger.debug("build_vision_context_text failed for group [{}]: {}", group_id, type(exc).__name__)
+        return ""
+    lines: list[str] = []
+    consumed = 0
+    for row in rows:
+        text = str(getattr(row, "plain_text", "") or "").strip()
+        if not text:
+            continue
+        name = str(getattr(row, "sender_name", "") or "").strip() or "群友"
+        lines.append(f"{name}：{text}")
+        consumed += len(text)
+        if consumed >= _CONTEXT_MAX_CHARS:
+            break
+    return "\n".join(lines)
+
+
 async def describe_images_as_text(
     metadata: dict[str, Any] | None,
     *,
     exclude_provider_id: str = "",
+    context_text: str = "",
 ) -> str:
     urls = vision_urls_from_metadata(metadata)
     if not urls:
@@ -338,7 +390,8 @@ async def describe_images_as_text(
         return f"[用户发送了 {len(urls)} 张图片：拉取失败，已省略]"
 
     plain = vision_user_plain_text(metadata)
-    content = openai_vision_user_content(f"请简要描述这些图片。用户说：{plain}", data_uris)
+    prompt = _vision_describe_prompt(plain, context_text=context_text)
+    content = openai_vision_user_content(prompt, data_uris)
 
     # 优先复用用户配置的视觉模型（sticker_vision 任务端点），无则回退自动探测
     endpoint = resolve_endpoint_for_task("sticker_vision")
@@ -372,9 +425,15 @@ async def describe_images_as_text(
     )
 
 
-async def describe_vision_content_for_history(text: str) -> str:
+async def describe_vision_content_for_history(
+    text: str,
+    *,
+    group_id: int | None = None,
+    bot_id: int | None = None,
+) -> str:
     """把会话历史消息里的 [CQ:image] 用视觉模型描述后以文本形式保留，供摘要识图。
 
+    group_id/bot_id 可选：提供时取该群图片前的聊天上下文，帮助模型理解图片背景。
     无图或无可用看图模型时原样返回（保持既有剥离为 [图片] 的行为）。耗时调用在
     `llm_session_vision_describe_enabled` 开启时才会发生；任何失败都回退为不描述。
     """
@@ -387,8 +446,9 @@ async def describe_vision_content_for_history(text: str) -> str:
         "vision_plain_text": payload.plain_text,
         "has_image": True,
     }
+    context_text = await build_vision_context_text(group_id, bot_id=bot_id)
     try:
-        described = await describe_images_as_text(metadata)
+        described = await describe_images_as_text(metadata, context_text=context_text)
     except Exception as exc:
         logger.warning(format_business_event("历史图片描述", "已跳过", error=type(exc).__name__))
         return raw
