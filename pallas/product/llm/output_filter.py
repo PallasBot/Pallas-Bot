@@ -284,7 +284,7 @@ def _split_reply_to_fit(text: str, *, max_len: int, max_segments: int = 3) -> li
     hard_tokens: list[str] = []
     start = 0
     for index, ch in enumerate(plain):
-        if ch not in "。！？!?；;":
+        if ch not in "。！？!?；;\n":
             continue
         token = plain[start : index + 1].strip()
         if token:
@@ -446,10 +446,12 @@ def resolve_output_filtered_chat_reply(task: dict, reply: StructuredChatReply) -
     else:
         enforced_text = text
         split_done = False
-        # 超限单泡：仅当是识别问句（这是谁/这是什么/啥梗）时，优先按句读切成每段
+        # 超限时：仅当是识别问句（这是谁/这是什么/啥梗）时，优先按句读切成每段
         # 都 ≤max_len 的多泡投递，保住被硬截断的答案；闲聊短句保持精简短泡不拆分。
+        # 不限制单泡：识别问句模型常输出长描述或结构化多段（join 后含换行），
+        # 均可能整体超限，需按断点重切而非一刀切压短。
         is_recognition = is_recognition_question(str(task.get("user_text") or ""))
-        if is_recognition and max_len > 0 and len(filtered.reply_segments) == 1 and len(text) > max_len:
+        if is_recognition and max_len > 0 and len(text) > max_len:
             split = _split_reply_to_fit(text, max_len=max_len)
             if split:
                 log_rate_limited(

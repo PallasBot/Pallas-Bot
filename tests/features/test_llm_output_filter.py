@@ -175,6 +175,21 @@ def test_resolve_output_filtered_reply_splits_recognition_answer_when_over_cap()
         assert len(segment) <= 24
 
 
+def test_resolve_output_filtered_reply_splits_recognition_multi_segment_over_cap() -> None:
+    """识别问句多段（join 后含换行）整体超限，仍应按断点重切保住答案而非压短。"""
+    task = {
+        "task_type": LLM_CHAT_TASK_TYPE,
+        "reply_max_length": 26,
+        "user_text": "这是谁",
+    }
+    reply = "这个看着像是个cosplay的妹子，黑长发、白衬衫、黑色短裤，但我不太确定具体是谁，感觉有点像宫子。\n这个是"
+    filtered = resolve_output_filtered_reply(task, reply)
+    assert "宫子" in filtered
+    assert filtered.split("\n")
+    for segment in filtered.split("\n"):
+        assert len(segment) <= 26
+
+
 def test_resolve_output_filtered_reply_does_not_split_non_recognition_over_cap() -> None:
     """非识别问句的超限单泡仍走压短/静默，不拆成多泡。"""
     task = {"task_type": LLM_CHAT_TASK_TYPE, "reply_max_length": 12}
