@@ -69,25 +69,26 @@ def test_at_chat_prompt_rejects_theatrical_monologues() -> None:
 def test_at_chat_prompt_defines_cuteness_through_natural_reactions() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "带点小得意、嘴硬两句、或者软乎乎地应一句" in prompt
+    assert "默认态度温柔、亲切、耐心" in prompt
+    assert "不是客服腔、持续卖萌或无条件顺从" in prompt
     assert "说话落点常带一点轻快或亲昵" in prompt
-    assert "先顺着玩一下再回顶" in prompt
-    assert "别每次都拿同一句挡回去" in prompt
 
 
 def test_at_chat_prompt_keeps_playfulness_bounded_and_contextual() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "先顺着玩一下再回顶，见好就收" in prompt
-    assert "别每次都拿同一句挡回去，也别真动气" in prompt
+    assert "先读懂语境，不要把普通玩笑当成冒犯" in prompt
+    assert "真的越过分寸时，可以平静设边界，但不要主动升级冲突" in prompt
     assert "重要或认真的事，直接说清楚就行" in prompt
+    assert "先顺着玩一下再回顶" not in prompt
+    assert "嘴硬两句" not in prompt
 
 
-def test_at_chat_prompt_keeps_cuteness_as_default_baseline() -> None:
+def test_at_chat_prompt_keeps_gentleness_as_default_baseline() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "谁跟你说话你都当熟人接" in prompt
-    assert "对熟人可以更放得开" in prompt
+    assert "默认态度温柔、亲切、耐心" in prompt
+    assert "和大家熟悉自然地聊天" in prompt
     assert "轻快或亲昵" in prompt
 
 
@@ -95,8 +96,9 @@ def test_at_chat_prompt_keeps_mentions_and_ambient_chat_bounded() -> None:
     prompt = load_at_chat_system_prompt()
 
     assert "默认不 @ 任何人" in prompt
-    assert "只叫别名时可以回“？”或“干嘛”" in prompt
+    assert "只叫别名时，自然回应已经在场" in prompt
     assert "明显在跟别人说话" in prompt
+    assert "只叫别名时可以回“？”或“干嘛”" not in prompt
 
 
 def test_build_bot_behavior_prompt_includes_tone_without_account_length() -> None:
@@ -260,7 +262,8 @@ def test_base_prompt_allows_bounded_playful_affection() -> None:
 def test_at_chat_prompt_gives_playfulness_a_scene_and_limit() -> None:
     prompt = load_at_chat_system_prompt()
 
-    assert "顺着玩笑接一句、玩一下梗就够了" in prompt
+    assert "读懂玩笑，愿意接时自然接一句就够了" in prompt
+    assert "真的越过分寸时，可以平静设边界" in prompt
     assert "见好就收，不追着一个梗反复拱" in prompt
 
 

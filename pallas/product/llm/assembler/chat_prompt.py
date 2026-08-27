@@ -196,7 +196,7 @@ class ChatPromptAssembler:
         if policy.total_length_band == "short":
             lines.extend([
                 "- 先发即时反应；有第二个独立意思才另起一行。",
-                "- 接梗/回顶可以分两到四行走走停停，不硬塞进一句里。",
+                "- 需要多段时按独立意思自然分行，不为凑段数硬拆一句话。",
             ])
         elif policy.total_length_band == "complete":
             lines.append("- 回答要清楚，但语气别收干：保持口语，可带一个轻快词，别写成书面语或客服腔。")

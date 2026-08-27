@@ -60,7 +60,8 @@ def test_chat_prompt_assembler_uses_fixed_order_without_aliases_or_duplicates() 
     assert "学习别名" not in prompt
     assert "不要输出 JSON、代码块、括号旁白或 Markdown" in prompt
     assert "先发即时反应" in prompt
-    assert "接梗/回顶可以分两到四行走走停停" in prompt
+    assert "需要多段时按独立意思自然分行" in prompt
+    assert "回顶" not in prompt
 
 
 def test_chat_prompt_assembler_renders_behavior_strategy_reference_and_baseline() -> None:
