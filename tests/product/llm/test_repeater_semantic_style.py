@@ -438,7 +438,7 @@ async def test_backfill_scan_handler_persists_jobs_before_advancing_cursor(
     monkeypatch.setattr(mod, "build_work_job_store", lambda: store)
     monkeypatch.setattr(mod, "save_semantic_style_backfill_cursor", saved)
 
-    assert await mod.handle_repeater_semantic_style_backfill_scan({"bot_ids": [100], "now": now}) == 0
+    assert await mod.handle_repeater_semantic_style_backfill_scan({"bot_ids": [100], "now": now}) is None
 
     mod.collect_semantic_style_backfill_candidates.assert_not_awaited()
     store.enqueue_many.assert_not_awaited()
@@ -472,7 +472,7 @@ async def test_backfill_scan_handler_keeps_cursor_when_enqueue_fails(monkeypatch
     monkeypatch.setattr(mod, "build_work_job_store", lambda: store)
     monkeypatch.setattr(mod, "save_semantic_style_backfill_cursor", saved)
 
-    assert await mod.handle_repeater_semantic_style_backfill_scan({"bot_ids": [100], "now": 2_000_000_000}) == 0
+    assert await mod.handle_repeater_semantic_style_backfill_scan({"bot_ids": [100], "now": 2_000_000_000}) is None
     store.enqueue_many.assert_not_awaited()
     saved.assert_not_called()
 
@@ -481,7 +481,7 @@ async def test_backfill_scan_handler_keeps_cursor_when_enqueue_fails(monkeypatch
 async def test_backfill_scan_handler_ignores_invalid_bot_ids() -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
-    assert await mod.handle_repeater_semantic_style_backfill_scan({"bot_ids": ["invalid", 0, -1]}) == 0
+    assert await mod.handle_repeater_semantic_style_backfill_scan({"bot_ids": ["invalid", 0, -1]}) is None
 
 
 def test_parse_label_accepts_only_annotation_axes() -> None:
@@ -534,13 +534,8 @@ def test_semantic_style_management_persists_controls_and_rebuilds_data(tmp_path,
     )
 
     assert mod.semantic_style_status()["enabled"] is True
-    assert mod.update_semantic_style_overrides({"direct": False})["overrides"]["direct"] is False
-    assert mod.update_semantic_style_overrides({"image": False})["overrides"] == {
-        "aggressive": True,
-        "nonsense": True,
-        "direct": False,
-        "image": False,
-    }
+    assert mod.set_semantic_style_direct_enabled(False)["direct_enabled"] is False
+    assert mod.set_semantic_style_direct_enabled(True)["direct_enabled"] is True
     assert mod.set_semantic_style_enabled(False)["enabled"] is False
     assert mod.rebuild_semantic_style_profiles()["profile_count"] == 1
     assert mod.semantic_style_quality()["example_count"] == 1
@@ -701,10 +696,8 @@ def test_semantic_style_management_isolated_by_bot_and_group_with_global_fallbac
             )
         )
 
-    assert (
-        mod.update_semantic_style_overrides({"direct": False}, bot_id=100, group_id=42)["overrides"]["direct"] is False
-    )
-    assert mod.semantic_style_status(bot_id=101, group_id=43)["overrides"]["direct"] is True
+    assert mod.set_semantic_style_direct_enabled(False, bot_id=100, group_id=42)["direct_enabled"] is False
+    assert mod.semantic_style_status(bot_id=101, group_id=43)["direct_enabled"] is True
     assert mod.set_semantic_style_enabled(False, bot_id=100, group_id=42)["enabled"] is False
     assert mod.semantic_style_injection_enabled("scope-disabled", bot_id=100, group_id=42) is False
     assert mod.semantic_style_status()["enabled"] is True
@@ -1947,7 +1940,7 @@ def test_semantic_style_settings_dump_keeps_split_bits_without_stale_enabled(tmp
     monkeypatch.setattr(mod, "semantic_style_settings_path", lambda **_: path)
     mod.set_semantic_style_governance(collection_enabled=False, injection_enabled=True, bot_id=100, group_id=42)
     dumped = json.loads(path.read_text(encoding="utf-8"))
-    assert set(dumped) == {"collection_enabled", "injection_enabled", "overrides"}
+    assert set(dumped) == {"collection_enabled", "injection_enabled", "direct_enabled"}
     assert dumped["collection_enabled"] is False
     assert dumped["injection_enabled"] is True
 

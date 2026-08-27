@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.3.11-17-gae03ba40-dirty",
+    "version": "v4.3.12-51-ga2a31717-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -37904,7 +37904,7 @@
             "type": "string",
             "enum": [
               "status",
-              "overrides",
+              "direct_enabled",
               "clear",
               "rebuild",
               "quality",
@@ -37942,15 +37942,16 @@
             "title": "Scene",
             "default": "group_chat"
           },
-          "overrides": {
+          "direct_enabled": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/_SemanticStyleOverridesPatch"
+                "type": "boolean"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Direct Enabled"
           },
           "collection_enabled": {
             "anyOf": [
@@ -37992,85 +37993,6 @@
           "action"
         ],
         "title": "_SemanticStyleManageBody"
-      },
-      "_SemanticStyleOverridesData": {
-        "properties": {
-          "aggressive": {
-            "type": "boolean",
-            "title": "Aggressive"
-          },
-          "nonsense": {
-            "type": "boolean",
-            "title": "Nonsense"
-          },
-          "direct": {
-            "type": "boolean",
-            "title": "Direct"
-          },
-          "image": {
-            "type": "boolean",
-            "title": "Image"
-          }
-        },
-        "type": "object",
-        "required": [
-          "aggressive",
-          "nonsense",
-          "direct",
-          "image"
-        ],
-        "title": "_SemanticStyleOverridesData"
-      },
-      "_SemanticStyleOverridesPatch": {
-        "properties": {
-          "aggressive": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Aggressive"
-          },
-          "nonsense": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Nonsense"
-          },
-          "direct": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Direct"
-          },
-          "image": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Image"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "_SemanticStyleOverridesPatch"
       },
       "_SemanticStyleProfileSummaryData": {
         "properties": {
@@ -38195,15 +38117,16 @@
             "title": "Injection Enabled",
             "default": true
           },
-          "overrides": {
+          "direct_enabled": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/_SemanticStyleOverridesData"
+                "type": "boolean"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Direct Enabled"
           },
           "example_count": {
             "type": "integer",

@@ -46,13 +46,10 @@ def _semantic_style():
     return repeater_semantic_style
 
 
-class _SemanticStyleOverridesPatch(BaseModel):
+class _SemanticStyleDirectEnabledPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    aggressive: bool | None = None
-    nonsense: bool | None = None
-    direct: bool | None = None
-    image: bool | None = None
+    direct_enabled: bool | None = None
 
 
 class InjectionGovernanceManageRequest(BaseModel):
@@ -85,19 +82,12 @@ def _injection_governance_scope(*, bot_id: str, group_id: str) -> tuple[int, int
     return parsed_bot_id, parsed_group_id
 
 
-class _SemanticStyleOverridesData(BaseModel):
-    aggressive: bool
-    nonsense: bool
-    direct: bool
-    image: bool
-
-
 class _SemanticStyleManageBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     action: Literal[
         "status",
-        "overrides",
+        "direct_enabled",
         "clear",
         "rebuild",
         "quality",
@@ -109,7 +99,7 @@ class _SemanticStyleManageBody(BaseModel):
     bot_id: int | None = None
     group_id: int | None = None
     scene: str = "group_chat"
-    overrides: _SemanticStyleOverridesPatch | None = None
+    direct_enabled: bool | None = None
     collection_enabled: bool | None = None
     injection_enabled: bool | None = None
     continue_learning: bool | None = None
@@ -136,7 +126,7 @@ class _SemanticStyleStatusData(BaseModel):
     enabled: bool = True
     collection_enabled: bool = True
     injection_enabled: bool = True
-    overrides: _SemanticStyleOverridesData | None = None
+    direct_enabled: bool | None = None
     example_count: int = 0
     profile_count: int = 0
     backfill_cursor: dict[str, Any] = Field(default_factory=dict)
@@ -255,15 +245,13 @@ def register_llm_product_router(
                 data = (
                     semantic_style.semantic_style_status(**scope) if scope else semantic_style.semantic_style_status()
                 )
-            elif action == "overrides":
-                overrides = body.overrides
-                if overrides is None:
-                    raise HTTPException(status_code=400, detail="overrides 必须为对象")
-                override_patch = overrides.model_dump(exclude_unset=True, exclude_none=True)
+            elif action == "direct_enabled":
+                if body.direct_enabled is None:
+                    raise HTTPException(status_code=400, detail="direct_enabled 必须为布尔值")
                 data = (
-                    semantic_style.update_semantic_style_overrides(override_patch, **scope)
+                    semantic_style.set_semantic_style_direct_enabled(body.direct_enabled, **scope)
                     if scope
-                    else semantic_style.update_semantic_style_overrides(override_patch)
+                    else semantic_style.set_semantic_style_direct_enabled(body.direct_enabled)
                 )
             elif action == "clear":
                 clear_kwargs: dict[str, object] = {}
