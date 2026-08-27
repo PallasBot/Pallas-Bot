@@ -82,16 +82,11 @@ async def append_llm_message(
     role_key = normalize_enum(role, ALLOWED_ROLES, "user")
     raw_content = content
     if role_key == "user" and cfg.llm_session_vision_describe_enabled:
-        try:
-            from pallas.product.llm.vision_messages import describe_vision_content_for_history
+        # 延迟识别：进历史时不调视觉模型，只把 [CQ:image,url=...] 换成保留 url 的占位符。
+        # 摘要识图需要时再从占位符取 url → 查图片缓存 → 视觉模型描述。
+        from pallas.product.llm.vision_content import placeholder_with_image_urls
 
-            raw_content = await describe_vision_content_for_history(
-                content,
-                group_id=group_id,
-                bot_id=bot_id,
-            )
-        except Exception as exc:
-            logger.warning("会话历史图片描述失败，已回退原文: [{}]", type(exc).__name__)
+        raw_content = placeholder_with_image_urls(content)
     safe_content = sanitize_stored_content(role_key, raw_content, max_len=cfg.llm_session_max_content_len)
     if not safe_content:
         return False

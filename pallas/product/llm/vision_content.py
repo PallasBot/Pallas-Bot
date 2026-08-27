@@ -24,6 +24,39 @@ def user_message_has_vision_content(text: str) -> bool:
     return bool(_CQ_VISION_RE.search(text or ""))
 
 
+def placeholder_with_image_urls(text: str, *, placeholder: str = _VISION_HISTORY_PLACEHOLDER) -> str:
+    """把含图的 [CQ:image,url=...] 替换为保留 url 的占位符，不调视觉模型。
+
+    供「延迟识别」使用：进历史时只记下图片 url（零 LLM 成本），等摘要识图需要时
+    再从占位符取 url → 查图片缓存 → 视觉模型描述。
+    """
+    raw = str(text or "")
+    if not user_message_has_vision_content(raw):
+        return raw
+
+    def _replace(match: re.Match[str]) -> str:
+        url = extract_url_from_cq_segment(match.group(0))
+        if not url:
+            return (placeholder or _VISION_HISTORY_PLACEHOLDER).strip() or _VISION_HISTORY_PLACEHOLDER
+        return f"{placeholder}:url={url}"
+
+    replaced = _CQ_VISION_SEGMENT_RE.sub(_replace, raw)
+    return re.sub(r"\s+", " ", replaced).strip()
+
+
+def image_urls_from_placeholder(text: str) -> list[str]:
+    """从带 url 的图片占位符（[图片:url=X]）中提取 url 列表。"""
+    raw = str(text or "")
+    mark = re.escape(_VISION_HISTORY_PLACEHOLDER)
+    pattern = re.compile(mark + r":url=([^\s\]]+)")
+    urls: list[str] = []
+    for match in pattern.finditer(raw):
+        url = unescape(unquote(match.group(1).strip()))
+        if url and url not in urls:
+            urls.append(url)
+    return urls
+
+
 def strip_vision_segments_for_history(text: str, *, placeholder: str = _VISION_HISTORY_PLACEHOLDER) -> str:
     raw = str(text or "")
     if not user_message_has_vision_content(raw):

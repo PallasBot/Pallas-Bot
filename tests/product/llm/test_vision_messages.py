@@ -547,3 +547,45 @@ async def test_build_vision_context_text_formats_rows(monkeypatch: pytest.Monkey
     text = await build_vision_context_text(626266902)
     assert "兔兔：看这只狗" in text
     assert "我是：这是谁" in text
+
+
+@pytest.mark.asyncio
+async def test_describe_placeholder_images_injects_description(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm.vision_messages import describe_placeholder_images
+
+    async def fake_describe(_metadata: dict, **kwargs) -> str:
+        return "[图片理解]\n一头萨摩耶犬"
+
+    monkeypatch.setattr("pallas.product.llm.vision_messages.describe_images_as_text", fake_describe)
+
+    raw = "[图片]:url=https://example.com/a.png 这是谁"
+    out = await describe_placeholder_images(raw)
+    assert "萨摩耶" in out
+    assert "这是谁" in out
+
+
+@pytest.mark.asyncio
+async def test_describe_placeholder_images_no_urls_is_unchanged() -> None:
+    from pallas.product.llm.vision_messages import describe_placeholder_images
+
+    raw = "纯文本，没有图片占位符"
+    out = await describe_placeholder_images(raw)
+    assert out == raw
+
+
+@pytest.mark.asyncio
+async def test_describe_placeholder_images_describe_failure_keeps_raw(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm.vision_messages import describe_placeholder_images
+
+    async def fake_describe(_metadata: dict) -> str:
+        raise RuntimeError("provider down")
+
+    monkeypatch.setattr("pallas.product.llm.vision_messages.describe_images_as_text", fake_describe)
+
+    raw = "[图片]:url=https://example.com/a.png 这是谁"
+    out = await describe_placeholder_images(raw)
+    assert out == raw

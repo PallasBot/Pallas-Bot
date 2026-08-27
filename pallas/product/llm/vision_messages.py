@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import re
 from io import BytesIO
 from typing import Any
 
@@ -458,6 +459,44 @@ async def describe_vision_content_for_history(
     if stripped:
         return f"{_VISION_HISTORY_PLACEHOLDER}({described}) {stripped}".strip()
     return f"{_VISION_HISTORY_PLACEHOLDER}({described})"
+
+
+async def describe_placeholder_images(
+    text: str,
+    *,
+    group_id: int | None = None,
+    bot_id: int | None = None,
+) -> str:
+    """「延迟识别」：从带 url 的图片占位符（[图片]:url=X）里取 url，用视觉模型描述后回写。
+
+    进历史时只存了 url 占位符（零 LLM 成本），本函数在「需要时」（如会话摘要压缩）才真正请
+    视觉模型看图，把描述补进文本。无 url 占位符、无可用看图模型或识别失败时原样返回。
+    """
+
+    from pallas.product.llm.vision_content import image_urls_from_placeholder
+
+    raw = str(text or "")
+    urls = image_urls_from_placeholder(raw)
+    if not urls:
+        return raw
+    metadata: dict[str, Any] = {
+        "vision_image_urls": urls,
+        "vision_plain_text": "",
+        "has_image": True,
+    }
+    context_text = await build_vision_context_text(group_id, bot_id=bot_id)
+    try:
+        described = await describe_images_as_text(metadata, context_text=context_text)
+    except Exception as exc:
+        logger.warning(format_business_event("延迟图片识别", "已跳过", error=type(exc).__name__))
+        return raw
+    if not described:
+        return raw
+    # 只替换占位符段，保留占位符外的用户文字（如「这是谁」）。
+    mark = re.escape(_VISION_HISTORY_PLACEHOLDER)
+    pattern = re.compile(mark + r":url=[^\s\]]+")
+    replaced = pattern.sub(lambda _m: f"{_VISION_HISTORY_PLACEHOLDER}({described})", raw)
+    return replaced.strip()
 
 
 async def prepare_messages_for_provider_capabilities(

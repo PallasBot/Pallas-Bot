@@ -34,13 +34,24 @@ _SESSION_SUMMARY_SYSTEM = """你是群聊对话摘要助手。把用户与机器
 - 只输出摘要正文，不要标题、列表或解释。"""
 
 
-def _summary_messages(history: list[Any]) -> str:
+async def _summary_messages(history: list[Any], *, group_id: int | None = None, bot_id: int | None = None) -> str:
+    from pallas.product.llm.vision_content import image_urls_from_placeholder
+
     lines: list[str] = []
     for turn in history:
         role = str(getattr(turn, "role", "") or "").strip()
         content = str(getattr(turn, "content", "") or "").strip()
         if not content or _summary_mark in content:
             continue
+        # 延迟识别：历史里只存了 [图片]:url=X 占位符（进历史零 LLM 成本），
+        # 摘要在「需要时」才请视觉模型看图描述，避免每张图进历史都调一次视觉模型。
+        if image_urls_from_placeholder(content):
+            from pallas.product.llm.vision_messages import describe_placeholder_images
+
+            try:
+                content = await describe_placeholder_images(content, group_id=group_id, bot_id=bot_id)
+            except Exception:
+                pass
         label = "你" if role == "assistant" else "对方"
         lines.append(f"{label}：{content[:240]}")
     return "\n".join(lines)
@@ -84,7 +95,7 @@ async def maybe_compact_session_history(
         return False
     _in_flight.add(key)
     try:
-        transcript = _summary_messages(history)
+        transcript = await _summary_messages(history, group_id=gid, bot_id=bid)
         if not transcript:
             return False
         try:
