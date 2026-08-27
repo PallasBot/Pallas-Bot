@@ -52,7 +52,7 @@ async def handle_group_insight(payload: dict[str, Any]) -> None:
     elif task == "style_profile":
         await _compute_group_style_profile(payload)
     else:
-        logger.warning("Group insight ignored unknown task [{}]", task)
+        logger.warning("群洞察忽略未知任务 [{}]", task)
 
 
 async def _compute_group_style_profile(payload: dict[str, Any]) -> None:
@@ -133,10 +133,10 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
     if accepted:
         persist_semantic_style_examples(accepted)
         logger.info(
-            "Group insight semantic produced [{}] examples for bot [{}] and group [{}]",
+            "群洞察已产出 [{}] 条语义样本，群 [{}]、账号 [{}]",
             len(accepted),
-            bot_id,
             group_id,
+            bot_id,
         )
 
 
@@ -296,7 +296,7 @@ async def _sweep_semantic_groups() -> None:
         try:
             group_ids = await repo.list_recent_group_ids_for_bot(bot_id, since_time=cutoff, limit=128)
         except Exception as exc:
-            logger.warning("Group insight sweep could not list groups for bot [{}]: [{}]", bot_id, exc)
+            logger.warning("群洞察扫描无法列出账号 [{}] 的活跃群：{}", bot_id, exc)
             continue
         seen_groups.update(group_ids)
     if not seen_groups:
@@ -327,9 +327,9 @@ async def _sweep_semantic_groups() -> None:
     for _sample_count, semantic_bot, group_id in selected:
         try:
             await store.enqueue(build_semantic_insight_job(bot_id=semantic_bot, group_id=group_id, day=day))
-            logger.info("Group insight sweep enqueued semantic job for group [{}] bot [{}]", group_id, semantic_bot)
+            logger.info("群洞察已入队语义任务，群 [{}]、帐号 [{}]", group_id, semantic_bot)
         except Exception as exc:
-            logger.warning("Group insight sweep could not enqueue semantic job for group [{}]: [{}]", group_id, exc)
+            logger.warning("群洞察扫描入队语义任务失败，群 [{}]：{}", group_id, exc)
 
 
 async def _resolve_semantic_bot(group_id: int) -> int:
@@ -357,7 +357,7 @@ async def _resolve_semantic_bot(group_id: int) -> int:
     try:
         bot_ids = await repo.list_recent_bot_ids_for_group(group_id, since_time=cutoff, limit=128)
     except Exception as exc:
-        logger.warning("Group insight could not list bots for group [{}]: [{}]", group_id, exc)
+        logger.warning("群洞察无法列出群 [{}] 的帐号：{}", group_id, exc)
         return 0
     catalog = get_catalog_bot_ids()
     local = sorted(int(b) for b in bot_ids if int(b) in catalog)
@@ -398,13 +398,13 @@ async def _sweep_loop() -> None:
     while True:
         _local = await _local_bot_ids()
         if not _local:
-            logger.info("Group insight sweep waiting for bots to connect")
+            logger.info("群洞察扫描等待牛牛连接")
             await asyncio.sleep(_SWEEP_STARTUP_POLL_SEC)
             continue
         try:
             await _sweep_semantic_groups()
         except Exception as exc:
-            logger.warning("Group insight semantic sweep failed: {}", exc)
+            logger.warning("群洞察语义扫描失败：{}", exc)
         await asyncio.sleep(_SWEEP_INTERVAL_SEC)
 
 
@@ -417,7 +417,7 @@ def register_group_insight_startup_hook() -> None:
 
     @driver.on_startup
     async def _start_group_insight_sweep() -> None:
-        register_startup_scheduled("group.insight sweep")
+        register_startup_scheduled("群洞察扫描")
         task = asyncio.create_task(_sweep_loop(), name="group_insight_sweep_worker")
         driver._pallas_group_insight_sweep_task = task
 
