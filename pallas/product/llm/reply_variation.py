@@ -33,6 +33,17 @@ _KAOMOJI_SUFFIX_RE = re.compile(r"\(\*[^)]{1,16}\*\)\s*$")
 _CJK_RUN_RE = re.compile(r"[\u4e00-\u9fff]+")
 _ECHO_QUESTION_RE = re.compile(r"^[\u4e00-\u9fffA-Za-z0-9]{1,8}[？?]")
 
+_ATTITUDE_SKELETON_PATTERNS = (
+    ("想得美", re.compile(r"想得美")),
+    ("少来", re.compile(r"少来(?:这套|这个)")),
+    ("别吵/别哭/别闹", re.compile(r"别(?:吵|哭|闹|催|乱叫|烦我)")),
+    ("自己…去", re.compile(r"自己.{0,4}去")),
+    ("欠收拾", re.compile(r"欠收拾")),
+    ("嘴欠/欠", re.compile(r"嘴欠|欠")),
+)
+_ATTITUDE_SKELETON_MIN_OCCURRENCES = 2
+_ATTITUDE_SKELETON_WINDOW = 6
+
 _USER_WAIT_SUFFIXES = ("?", "？", "...", "…", "、")
 _USER_WAIT_TOKENS = ("等等", "等下", "先别", "我补一句", "还有", "然后")
 _STRUCTURE_MARKERS = ("先", "别", "可以", "不用", "慢慢", "一下", "这事", "你先")
@@ -218,6 +229,21 @@ def normalize_generic_prefix(text: str) -> str:
     return prefix
 
 
+def repeated_attitude_skeletons(texts: list[str]) -> list[str]:
+    """从近窗回复里统计反复出现的「嘴硬/拒绝」态度动作模板，避免回顶句式粘样。"""
+    recent = [str(item or "").strip() for item in texts[-_ATTITUDE_SKELETON_WINDOW:] if str(item or "").strip()]
+    if len(recent) < _ATTITUDE_SKELETON_MIN_OCCURRENCES:
+        return []
+
+    counts: Counter[str] = Counter()
+    for text in recent:
+        for label, pattern in _ATTITUDE_SKELETON_PATTERNS:
+            if pattern.search(text):
+                counts[label] += 1
+    picked = [label for label, count in counts.items() if count >= _ATTITUDE_SKELETON_MIN_OCCURRENCES]
+    return picked
+
+
 def recent_assistant_endings(turns: list[LlmChatTurn], *, limit: int = 3) -> list[str]:
     seen: list[str] = []
     for turn in reversed(turns):
@@ -259,6 +285,9 @@ def build_recent_reply_variation_hint(turns: list[LlmChatTurn]) -> str:
     motifs = extract_recent_motifs(assistant_texts)
     if motifs:
         hints.append("最近几轮别老围着这些短窗母题打转：" + "、".join(motifs) + "；换隐喻或直接短怼")
+    attitude_skeletons = repeated_attitude_skeletons(assistant_texts)
+    if attitude_skeletons:
+        hints.append("最近回顶/拒绝句式用太多，换个温和的说法：" + "、".join(attitude_skeletons))
     openers = repeated_assistant_openers(turns)
     if openers:
         hints.append("最近几轮别再用这些开头：" + "、".join(openers))
