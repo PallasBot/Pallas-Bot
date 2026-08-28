@@ -296,9 +296,10 @@ def test_labeled_semantic_style_reply_ids_indexes_exported_reply_ids(tmp_path, m
     assert mod.labeled_semantic_style_reply_ids(100, 99) == set()
 
 
-def test_semantic_style_group_cursor_advances_monotonically_but_not_backwards() -> None:
+def test_semantic_style_group_cursor_advances_monotonically_but_not_backwards(tmp_path, monkeypatch) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     mod._semantic_style_seen_cursors.clear()
     assert mod.get_semantic_style_group_cursor(100, 42) == 0
     mod.mark_semantic_style_group_processed(100, 42, 1000)
@@ -307,6 +308,42 @@ def test_semantic_style_group_cursor_advances_monotonically_but_not_backwards() 
     mod.mark_semantic_style_group_processed(100, 42, 900)
     assert mod.get_semantic_style_group_cursor(100, 42) == 1000
     mod._semantic_style_seen_cursors.clear()
+
+
+def test_semantic_style_group_cursor_survives_cache_reset(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod._semantic_style_seen_cursors.clear()
+    mod.mark_semantic_style_group_processed(100, 42, 1234)
+    mod._semantic_style_seen_cursors.clear()
+
+    assert mod.get_semantic_style_group_cursor(100, 42) == 1234
+
+
+def test_semantic_style_group_cursor_does_not_regress_after_older_write(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod._semantic_style_seen_cursors.clear()
+    mod.mark_semantic_style_group_processed(100, 42, 1234)
+    mod.mark_semantic_style_group_processed(100, 42, 1200)
+
+    assert mod.get_semantic_style_group_cursor(100, 42) == 1234
+
+
+def test_semantic_label_budget_claim_is_atomic_and_bounded(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        "pallas.product.llm.config.get_llm_config",
+        lambda: SimpleNamespace(llm_semantic_style_realtime_daily_limit=3),
+    )
+
+    assert mod.claim_semantic_label_budget(2) is True
+    assert mod.claim_semantic_label_budget(2) is False
+    assert mod.semantic_label_budget_used_today() == 2
 
 
 def test_semantic_style_management_persists_controls_and_rebuilds_data(tmp_path, monkeypatch) -> None:
@@ -1759,6 +1796,7 @@ async def test_label_semantic_style_batch_returns_multiple_labels(monkeypatch: p
         "pallas.product.llm.config.get_llm_config",
         lambda: SimpleNamespace(llm_model="test-model"),
     )
+    monkeypatch.setattr(mod, "claim_semantic_label_budget", lambda n=1: True)
 
     pairs = [("好烦又要加班", "怎么了说说", "adjacent"), ("今天天气", "嗯", "adjacent")]
     results = await mod.label_semantic_style_batch_with_llm(pairs, max_batch=2)
@@ -1769,7 +1807,7 @@ async def test_label_semantic_style_batch_returns_multiple_labels(monkeypatch: p
     assert results[0][1].learning_type == "observed"
     assert results[1][0].is_reply_pair is False
     assert results[1][1] is None
-    assert complete.await_args.kwargs["options"]["max_tokens"] == 320
+    assert complete.await_args.kwargs["options"]["max_tokens"] == 256
 
 
 @pytest.mark.asyncio
@@ -1780,7 +1818,7 @@ async def test_label_semantic_style_batch_falls_back_per_pair_when_incomplete(mo
 
     async def fake_complete(messages, *, model=None, options=None, cfg=None, task=None):
         content = str(messages[0]["content"])
-        if content.startswith("分析 2 组"):  # 批量请求
+        if content.startswith("判断 2 组"):  # 批量请求
             calls.append("batch")
             # 只返回 1 项 → 触发逐项回退
             return {"content": '[{"is_reply_pair": true}]'}
@@ -1792,6 +1830,7 @@ async def test_label_semantic_style_batch_falls_back_per_pair_when_incomplete(mo
         "pallas.product.llm.config.get_llm_config",
         lambda: SimpleNamespace(llm_model="test-model"),
     )
+    monkeypatch.setattr(mod, "claim_semantic_label_budget", lambda n=1: True)
 
     pairs = [("前句1", "接话1", "adjacent"), ("前句2", "接话2", "adjacent")]
     results = await mod.label_semantic_style_batch_with_llm(pairs, max_batch=2)
@@ -1804,6 +1843,35 @@ async def test_label_semantic_style_batch_falls_back_per_pair_when_incomplete(mo
 
 
 @pytest.mark.asyncio
+async def test_label_semantic_style_batch_keeps_failed_fallbacks_unprocessed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    async def fake_complete(messages, *, model=None, options=None, cfg=None, task=None):
+        return {"content": "not json"}
+
+    async def fake_retry(*, trigger_text, reply_text, pair_relation):
+        return None
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", fake_complete)
+    monkeypatch.setattr(
+        "pallas.product.llm.config.get_llm_config",
+        lambda: SimpleNamespace(llm_model="test-model"),
+    )
+    monkeypatch.setattr(mod, "claim_semantic_label_budget", lambda n=1: True)
+    monkeypatch.setattr(mod, "label_semantic_style_with_retry", fake_retry)
+    monkeypatch.setattr(mod, "record_semantic_label_budget", lambda n=1: None)
+
+    results = await mod.label_semantic_style_batch_with_llm(
+        [("前句一", "接话一", "adjacent"), ("前句二", "接话二", "adjacent")],
+        max_batch=2,
+    )
+
+    assert results == [None, None]
+
+
+@pytest.mark.asyncio
 async def test_label_semantic_style_batch_accepts_incomplete_labels_when_len_matches(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1813,7 +1881,7 @@ async def test_label_semantic_style_batch_accepts_incomplete_labels_when_len_mat
 
     async def fake_complete(messages, *, model=None, options=None, cfg=None, task=None):
         content = str(messages[0]["content"])
-        if content.startswith("分析 2 组"):
+        if content.startswith("判断 2 组"):
             calls.append("batch")
             # 长度正确，但标签全空：按契约逐项接受，靠落库过滤，不整批回退。
             return {
@@ -1828,6 +1896,7 @@ async def test_label_semantic_style_batch_accepts_incomplete_labels_when_len_mat
         "pallas.product.llm.config.get_llm_config",
         lambda: SimpleNamespace(llm_model="test-model"),
     )
+    monkeypatch.setattr(mod, "claim_semantic_label_budget", lambda n=1: True)
 
     pairs = [("前句1", "接话1", "adjacent"), ("前句2", "接话2", "adjacent")]
     results = await mod.label_semantic_style_batch_with_llm(pairs, max_batch=2)

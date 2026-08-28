@@ -90,6 +90,26 @@ async def test_rebuild_pairs_marks_bot_self_reply(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_rebuild_pairs_keeps_candidates_after_persistent_cursor(monkeypatch) -> None:
+    from pallas.product.llm import group_insight_processor as mod
+
+    monkeypatch.setattr(mod, "sender_kind", lambda user_id, *, self_bot_id: "human")
+    monkeypatch.setattr(
+        mod,
+        "make_message_repository",
+        lambda: _DummyMessageRepo([
+            _msg(1, 11, "旧前句", time=1000),
+            _msg(2, 12, "旧接话", time=1010),
+            _msg(3, 13, "新接话", time=1020),
+        ]),
+    )
+
+    pairs = await _rebuild_pairs_from_messages(bot_id=100, group_id=42, after_time=1010)
+
+    assert [pair[5] for pair in pairs] == [3]
+
+
+@pytest.mark.asyncio
 async def test_handle_group_insight_dispatches_semantic_task(monkeypatch) -> None:
     from pallas.product.llm import group_insight_processor as mod
 
@@ -269,25 +289,14 @@ async def test_sweep_semantic_groups_prioritizes_low_sample_count(monkeypatch) -
     async def fake_needs(bot_id, group_id):
         return group_id in (42, 7, 8)
 
-    class _FakeProfile:
-        def __init__(self, sample_count):
-            self.sample_count = sample_count
-
-    def fake_cached_profile(bot_id, group_id, scene):
-        return {42: _FakeProfile(3), 7: _FakeProfile(9), 8: _FakeProfile(0)}.get(group_id)
-
     monkeypatch.setattr(mod, "_resolve_semantic_bot", fake_resolve)
     monkeypatch.setattr(mod, "_group_needs_semantic", fake_needs)
     monkeypatch.setattr(mod, "build_work_job_store", lambda: _FakeStore())
-    monkeypatch.setattr(
-        "pallas.product.llm.repeater_semantic_style.cached_semantic_style_profile",
-        fake_cached_profile,
-    )
     monkeypatch.setattr(mod, "_sweep_cursor", 0)
 
     await _sweep_semantic_groups()
 
-    assert [b.payload["group_id"] for b in enqueued] == [8, 42, 7]
+    assert [b.payload["group_id"] for b in enqueued] == [7, 8, 42]
 
 
 @pytest.mark.asyncio
