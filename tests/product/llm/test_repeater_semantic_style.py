@@ -10,6 +10,7 @@ from pallas.product.llm.repeater_semantic_style import (
     build_cached_semantic_style_block,
     clear_semantic_style_cache_for_tests,
     is_positive_bot_style_outcome,
+    list_semantic_style_examples,
     parse_semantic_style_label,
     persist_semantic_style_example,
     prompt_safe_expression_sample,
@@ -40,6 +41,43 @@ def test_prompt_safe_expression_sample_rejects_identifiers_and_instructions(samp
 def test_prompt_safe_expression_sample_keeps_short_chinese_reply() -> None:
     assert prompt_safe_expression_sample("这就来啦") == "这就来啦"
     assert prompt_safe_expression_sample("roleplay 一下也行") == "roleplay 一下也行"
+
+
+def test_list_semantic_style_examples_filters_scope_and_limits_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    def example(example_id: str, *, created_at: int, group_id: int = 42, source_kind: str = "human_pair"):
+        return SemanticStyleExample(
+            example_id=example_id,
+            created_at=created_at,
+            bot_id=7,
+            group_id=group_id,
+            scene="group_chat",
+            trigger_text="前句",
+            reply_text="接话",
+            label=mod.SemanticStyleLabel(is_reply_pair=True, transferable=True),
+            source_kind=source_kind,
+        )
+
+    monkeypatch.setattr(
+        mod,
+        "_load_semantic_style_examples",
+        lambda _path: [
+            example("old", created_at=100),
+            example("new", created_at=200),
+            example("other-group", created_at=300, group_id=99),
+            example("legacy", created_at=400, source_kind="legacy_unknown"),
+        ],
+    )
+    monkeypatch.setattr(
+        mod,
+        "load_examples_with_legacy_migration_locked",
+        lambda: pytest.fail("listing examples must not trigger legacy migration"),
+    )
+
+    results = list_semantic_style_examples(bot_id=7, group_id=42, scene="group_chat", limit=1)
+
+    assert [item.example_id for item in results] == ["new"]
 
 
 def test_backfill_batch_bounds_history_window_and_advances_cursor() -> None:
