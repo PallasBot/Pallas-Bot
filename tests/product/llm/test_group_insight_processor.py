@@ -7,6 +7,7 @@ from pallas.product.llm.group_insight_processor import (
     _rebuild_pairs_from_messages,
     _resolve_semantic_bot,
     _sweep_semantic_groups,
+    _text,
     build_semantic_insight_job,
     handle_group_insight,
 )
@@ -341,3 +342,12 @@ async def test_sweep_semantic_groups_rotates_cursor_across_rounds(monkeypatch) -
     await _sweep_semantic_groups()
     third_round = [b.payload["group_id"] for b in enqueued]
     assert third_round == [1, 2]
+
+
+def test_text_replaces_cq_media_with_placeholder() -> None:
+    # 图 → [图片]，表情 → [表情]，其它媒体 → [媒体]，并折叠空白、截断到 240。
+    assert _text("看看这个  啊 [CQ:image,file=abc.jpg]") == "看看这个 啊 [图片]"
+    assert _text("哈哈 [CQ:face,id=6]") == "哈哈 [表情]"
+    assert _text("[CQ:flash,id=1] 来了") == "[媒体] 来了"
+    assert _text("  多  个   空格  ") == "多 个 空格"
+    assert _text("x" * 500) == "x" * 240

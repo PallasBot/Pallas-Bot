@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from bisect import bisect_left
 from operator import itemgetter
@@ -29,6 +30,21 @@ _SWEEP_INTERVAL_SEC = 20 * 60
 _SWEEP_BATCH_SIZE = 24
 _PAIR_PAGE_LIMIT = 12
 _SWEEP_STARTUP_POLL_SEC = 30
+
+# 群表达指导只看「前句→接话」的回复关系，不关心媒体细节：把 CQ 媒体码替换成
+# 通用占位符（图 → [图片]、表情 → [表情]、其它 → [媒体]），避免 LLM 读到不可读的原始码。
+_CQ_SEGMENT_RE = re.compile(r"\[CQ:([a-z]+)[^\]]*\]", re.IGNORECASE)
+_CQ_PLACEHOLDER_MAP = {
+    "image": "[图片]",
+    "mface": "[图片]",
+    "record": "[图片]",
+    "face": "[表情]",
+}
+
+
+def _cq_placeholder(match: re.Match[str]) -> str:
+    return _CQ_PLACEHOLDER_MAP.get(match.group(1).lower(), "[媒体]")
+
 
 # 群级「语义采集 bot 指定」配置键：群维度指定一个稳定账号承担该群语义学习，
 # 避免多 bot 并发群里任一台离线就停更。未指定时回退到「该群有处理记录的本地 bot 中最小者」。
@@ -263,7 +279,14 @@ async def _rebuild_pairs_from_messages(
 
 
 def _text(value: object) -> str:
-    return " ".join(str(value or "").strip().split())[:240]
+    """清洗文本：折叠空白并截断，同时把 CQ 媒体码替换成占位符。
+
+    群表达指导只关心「前句→接话」的回复关系，不需要图片细节；用占位符让
+    LLM 理解此处有媒体（图/表情），而非暴露不可读的原始 CQ 码。
+    """
+    raw = str(value or "")
+    raw = _CQ_SEGMENT_RE.sub(_cq_placeholder, raw)
+    return " ".join(raw.strip().split())[:240]
 
 
 def build_semantic_insight_job(*, bot_id: int, group_id: int, day: int) -> WorkJob:
