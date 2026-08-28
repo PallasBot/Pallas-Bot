@@ -138,7 +138,7 @@ Provider 已显式声明 `image` 时，`vision_messages` 在请求前下载这�
 
 `build_llm_chat_messages`（`session_store.py`）按顺序组装：
 
-1. **群环境摘录**【群环境摘录】：读整群最近 `llm_chat_message`（窗宽 `llm_session_group_window`，默认 8 条），剔除当前用户自己的发言，再过负反馈黑名单（`injection_feedback.py`：含被拒短语的条目不注入）；`assistant` 行标「帕拉斯」、其它标「群友」，逐条截断到预算。整块作为一条 `user` 消息，带 `source_token`（用于注入快照溯源）。仅在**群聊 + 非短社交**时注入。
+1. **群环境摘录**【群环境摘录】：读整群最近 `llm_chat_message`（窗宽 `llm_session_group_window`，默认 8 条），剔除当前用户自己的发言，再过负反馈黑名单（`injection_feedback.py`：含被拒短语的条目不注入）；`assistant` 行标「帕拉斯」、其它标「群友」，逐条截断到预算。整块作为一条 `user` 消息，带 `source_token`（用于注入快照溯源）。仅在**群聊 + 非短社交**时注入；**群时间线在场时跳过**（同轮不再注入两份同源的最近群聊，注入快照改由时间线消息产出，见下文「注入快照」）。
 2. **当前用户历史**：读该用户最近 `llm_session_user_window`（默认 18）条会话，assistant 直接入列、user 套格式。
 3. **当前用户消息**：本条触发内容收尾。
 
@@ -182,7 +182,7 @@ Provider 已显式声明 `image` 时，`vision_messages` 在请求前下载这�
 
 ### 字符预算
 
-`trim_prepared_messages_for_snapshot` 在发送前按 `llm_chat_char_budget`（默认 12000，含 system prompt 与消息）修剪消息；群环境摘录的 `source_token` 若因此被裁掉，注入快照不会带对应条目。
+`trim_prepared_messages_for_snapshot` 在发送前按 `llm_chat_char_budget`（默认 12000，含 system prompt 与消息）修剪消息；群环境摘录的 `source_token` 若因此被裁掉，注入快照不会带对应条目。**群时间线在场时**跳过群环境摘录（二者是同一批近期群消息的两种渲染，不必同轮双份注入）：消息侧只剩历史与当前消息，注入快照改由时间线消息产出（`group_timeline.ambient_snapshot_from_timeline`，`turn_id` 沿用 `ambient:` 前缀）；时间线在 system prompt 内不受消息裁剪，快照始终与实际注入一致。措辞提示（开头/收尾/同句重回/场景语气）也在预算裁剪前并入 messages，不再逃逸预算。
 
 ## 运行态不可用时的退化
 

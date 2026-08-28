@@ -1003,6 +1003,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
                         url="https://example.com/a.png",
                     ),
                 ),
+                snapshot_sources=((30004, 123456, "还是笨蛋欸"),),
             )
         ),
         raising=False,
@@ -1158,6 +1159,10 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     assert submit_request.include_session_history is True
     assert submit_request.session_history_limit is None
     assert submit_request.include_group_ambient_history is False
+    # 时间线在场时跳过群环境摘录，注入快照改由时间线消息产出。
+    assert all("群环境摘录" not in str(item.content or "") for item in (submit_request.prepared_messages or []))
+    timeline_ambient = added["payload"]["injection_snapshot"]["ambient_turns"]
+    assert [item["user_id"] for item in timeline_ambient] == [30004]
     assert submit_request.hybrid_retrieval_trace["sources"] == ["memory"]
 
 

@@ -56,7 +56,12 @@ from pallas.product.llm.current_turn_decision import (
 from pallas.product.llm.event_observation import record_event_stage
 from pallas.product.llm.followup_window import in_followup_window, note_hard_speak_trigger
 from pallas.product.llm.governance import check_llm_chat_gate, refresh_llm_chat_cooldown
-from pallas.product.llm.group_timeline import build_recent_group_timeline_context, should_include_group_timeline
+from pallas.product.llm.group_timeline import (
+    GroupTimelineContext,
+    ambient_snapshot_from_timeline,
+    build_recent_group_timeline_context,
+    should_include_group_timeline,
+)
 from pallas.product.llm.kernel import (
     ConversationContext,
     behavior_scene_to_conversation_scene,
@@ -1105,6 +1110,7 @@ async def prepare_and_submit_llm_chat_turn(
         direct_context_started = time.perf_counter()
         group_timeline = ""
         group_timeline_images: list[dict[str, str]] = []
+        timeline_context: GroupTimelineContext | None = None
         if group_id is not None and should_include_group_timeline(
             is_to_me=is_to_me,
             speak_trigger=speak_trigger,
@@ -1123,6 +1129,7 @@ async def prepare_and_submit_llm_chat_turn(
                 ]
             except Exception:
                 logger.debug("group timeline context skipped for group [{}]", group_id)
+                timeline_context = None
         replied_message_id = extract_reply_id_from_raw_message(str(getattr(event, "raw_message", "") or ""))
         replied_text = lookup_bot_reply_context(
             group_id=group_id or 0,
@@ -1133,6 +1140,19 @@ async def prepare_and_submit_llm_chat_turn(
             reply_context = sanitize_prompt_literal(replied_text, max_len=500)
             if reply_context:
                 group_timeline = "\n".join(part for part in (group_timeline, "【牛牛刚才说】", reply_context) if part)
+        # 时间线已覆盖最近群聊渲染时跳过群环境摘录，避免同轮注入两份同源
+        # 上下文；注入快照改由时间线消息产出（时间线在 system prompt 内，
+        # 不受消息裁剪影响，快照始终与实际注入一致）。
+        timeline_snapshot = (
+            ambient_snapshot_from_timeline(
+                timeline_context,
+                bot_id=int(bot.self_id),
+                group_id=group_id,
+                self_bot_id=int(bot.self_id),
+            )
+            if timeline_context is not None and timeline_context.text
+            else []
+        )
         assembled_context = await assemble_direct_chat_context(
             bot_id=int(bot.self_id),
             group_id=group_id,
@@ -1322,6 +1342,7 @@ async def prepare_and_submit_llm_chat_turn(
             style_user_hints.append(scene_tone_hint)
         ambient_turns: list[dict[str, object]] = []
         ambient_message_tokens: list[str] = []
+        include_group_ambient = not include_recent_pair and not timeline_snapshot
         prepared_messages = await build_llm_chat_messages(
             int(bot.self_id),
             group_id,
@@ -1330,19 +1351,27 @@ async def prepare_and_submit_llm_chat_turn(
             cfg=llm_cfg,
             include_history=include_persistent_history or include_recent_pair,
             history_limit=None,
-            include_group_ambient=not include_recent_pair,
+            include_group_ambient=include_group_ambient,
             ambient_turns_out=ambient_turns,
             ambient_message_token_out=ambient_message_tokens,
         )
         if style_user_hints:
             prepared_messages = merge_style_hints_before_last_user(prepared_messages, style_user_hints)
-        prepared_messages, ambient_turns = trim_prepared_messages_for_snapshot(
-            prepared_messages,
-            ambient_turns=ambient_turns,
-            ambient_message_token=ambient_message_tokens[0] if ambient_message_tokens else "",
-            system_prompt=system_prompt,
-            budget_chars=int(getattr(llm_cfg, "llm_chat_char_budget", 0) or 0),
-        )
+        if timeline_snapshot:
+            prepared_messages = trim_messages_to_char_budget(
+                prepared_messages,
+                system_prompt=system_prompt,
+                budget_chars=int(getattr(llm_cfg, "llm_chat_char_budget", 0) or 0),
+            )
+            ambient_turns = timeline_snapshot
+        else:
+            prepared_messages, ambient_turns = trim_prepared_messages_for_snapshot(
+                prepared_messages,
+                ambient_turns=ambient_turns,
+                ambient_message_token=ambient_message_tokens[0] if ambient_message_tokens else "",
+                system_prompt=system_prompt,
+                budget_chars=int(getattr(llm_cfg, "llm_chat_char_budget", 0) or 0),
+            )
         injection_snapshot = build_injection_snapshot(
             ambient_turns=ambient_turns,
             semantic_examples=semantic_examples,
@@ -1423,7 +1452,7 @@ async def prepare_and_submit_llm_chat_turn(
                 hybrid_retrieval_trace=hybrid_retrieval_trace,
                 include_session_history=include_persistent_history or include_recent_pair,
                 session_history_limit=None,
-                include_group_ambient_history=not include_recent_pair,
+                include_group_ambient_history=include_group_ambient,
                 prepared_messages=prepared_messages,
                 group_timeline_images=group_timeline_images,
                 # 用用户实际引用(reply)的目标消息 id，而非 bot 的 QUOTE 决策 id。
