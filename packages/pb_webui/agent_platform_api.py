@@ -24,10 +24,10 @@ def register_agent_platform_router(
         bot_id: int | None = Query(default=None, ge=1),
         group_id: int | None = Query(default=None, ge=0),
     ) -> JSONResponse:
-        from pallas.product.llm.memory.observation import observation_queue_size
+        from pallas.product.persona.catchphrase_bank import list_catchphrases
+
         from pallas.product.llm.orchestration.task_store import list_tasks
         from pallas.product.llm.tools.registry import build_tools_catalog_ui, ensure_tools_loaded
-        from pallas.product.persona.catchphrase_bank import list_catchphrases
 
         ensure_tools_loaded()
         catalog = build_tools_catalog_ui()
@@ -37,7 +37,6 @@ def register_agent_platform_router(
         return JSONResponse({
             "ok": True,
             "data": {
-                "observation_queue_size": observation_queue_size(),
                 "tool_count": len(tools) if isinstance(tools, list) else int(catalog.get("count") or 0),
                 "task_count": len(tasks),
                 "open_tasks": sum(1 for item in tasks if item.status not in {"done", "cancelled"}),
@@ -127,31 +126,6 @@ def register_agent_platform_router(
             scopes=list(body.get("scopes") or ["stable_preferences"]),
         )
         return JSONResponse({"ok": True, "data": item.model_dump()})
-
-    @router.get(f"{x}/llm/agent-platform/observations", include_in_schema=True)
-    async def observations_list(
-        bot_id: int | None = Query(default=None, ge=1),
-        group_id: int | None = Query(default=None, ge=0),
-        status: str | None = Query(default=None),
-        limit: int = Query(default=50, ge=1, le=200),
-    ) -> JSONResponse:
-        from pallas.product.llm.memory.observation import list_observations, observation_queue_size
-
-        status_filter = None if status in (None, "", "all") else status
-        items = list_observations(
-            bot_id=bot_id,
-            group_id=group_id,
-            status=status_filter,  # type: ignore[arg-type]
-            limit=limit,
-        )
-        return JSONResponse({
-            "ok": True,
-            "data": {
-                "items": [item.model_dump() for item in items],
-                "count": len(items),
-                "queue_size": observation_queue_size(),
-            },
-        })
 
     @router.get(f"{x}/llm/agent-platform/tasks", include_in_schema=True)
     async def tasks_list(
