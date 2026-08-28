@@ -187,8 +187,7 @@ async def list_entities_mongo(
     if kind:
         filt["kind"] = str(kind)
     docs = (
-        await LlmMemoryEntity
-        .find(filt)
+        await LlmMemoryEntity.find(filt)
         .sort([("updated_at", SortDirection.DESCENDING), ("entity_id", SortDirection.DESCENDING)])
         .limit(max_limit * 3)
         .to_list()
@@ -340,8 +339,7 @@ async def list_edges_mongo(
     if not include_invalid:
         filt["invalid_at"] = None
     docs = (
-        await LlmMemoryEdge
-        .find(filt)
+        await LlmMemoryEdge.find(filt)
         .sort([("updated_at", SortDirection.DESCENDING), ("edge_id", SortDirection.DESCENDING)])
         .limit(max_limit)
         .to_list()
@@ -449,8 +447,7 @@ async def list_categories_mongo(
     if layer is not None:
         filt["layer"] = int(layer)
     docs = (
-        await LlmMemoryCategory
-        .find(filt)
+        await LlmMemoryCategory.find(filt)
         .sort([
             ("layer", SortDirection.ASCENDING),
             ("updated_at", SortDirection.DESCENDING),

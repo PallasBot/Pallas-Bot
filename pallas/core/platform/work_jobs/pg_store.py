@@ -434,8 +434,7 @@ class PostgresWorkJobStore:
                     select(
                         func.count().filter(pending, BackgroundJobRow.finished_at.is_(None)).label("pending"),
                         func.count().filter(active_lease, BackgroundJobRow.finished_at.is_(None)).label("leased"),
-                        func
-                        .min(BackgroundJobRow.created_at)
+                        func.min(BackgroundJobRow.created_at)
                         .filter(pending, BackgroundJobRow.finished_at.is_(None))
                         .label("oldest_pending"),
                         func.max(BackgroundJobRow.attempts).label("max_attempts"),
