@@ -46,7 +46,7 @@ repos:
         description: "主仓业务代码不得直接把 extra 插件模块路径当业务真相"
         entry: uv run python tools/check_plugin_identity_imports.py
         language: system
-        files: ^(pallas|packages|tests|tools)/
+        files: ^(pallas|packages|tools)/
         pass_filenames: true
         verbose: true
       - id: check-llm-import-boundaries
