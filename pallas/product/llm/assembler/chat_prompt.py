@@ -180,8 +180,8 @@ class ChatPromptAssembler:
         if observed:
             lines.extend([
                 "【真人接话参考】",
-                "- 以下来自本群真人互动的节奏与接话结构，只借鉴什么时候说短/长、怎么接，不要复刻原话或语气。",
-                "- 语气态度保持你自己的底色，不要学对方的口气。",
+                "- 以下来自本群真人互动的节奏与接话结构，只借鉴什么时候说短/长、怎么接，"
+                "不要复刻原话或语气；语气态度保持你自己的底色。",
             ])
             for strategy in observed[:3]:
                 scene = sanitize_prompt_block(strategy.scene, max_len=80)
@@ -192,7 +192,7 @@ class ChatPromptAssembler:
         if reflection:
             lines.extend([
                 "【接话复盘】",
-                "- 以下是你之前自己接话的例子，只参考每次接得怎么样，别照搬原话，也别复刻当时的用词。",
+                "- 以下是你之前自己接话的例子，只参考每次接得怎么样，别照搬原话或当时的用词。",
             ])
             for strategy in reflection[:3]:
                 scene = sanitize_prompt_block(strategy.scene, max_len=80)
