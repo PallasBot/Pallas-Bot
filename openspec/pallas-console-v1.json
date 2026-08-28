@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.3.12-87-g08874b51-dirty",
+    "version": "v4.3.12-95-gc395c07a-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -15334,7 +15334,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/_PluginConfigRawBody"
+                "$ref": "#/components/schemas/packages__pb_webui__common_config_api___PluginConfigRawBody"
               }
             }
           }
@@ -15883,7 +15883,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/_PluginConfigRawBody"
+                "$ref": "#/components/schemas/packages__pb_webui__common_config_api___PluginConfigRawBody"
               }
             }
           }
@@ -31372,7 +31372,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "contentMediaType": "application/octet-stream"
+                "format": "binary"
               },
               {
                 "type": "null"
@@ -31388,7 +31388,7 @@
         "properties": {
           "file": {
             "type": "string",
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File"
           }
         },
@@ -33011,13 +33011,6 @@
           "type": {
             "type": "string",
             "title": "Error Type"
-          },
-          "input": {
-            "title": "Input"
-          },
-          "ctx": {
-            "type": "object",
-            "title": "Context"
           }
         },
         "type": "object",
@@ -36893,18 +36886,6 @@
         "type": "object",
         "title": "_PersonaObserveData"
       },
-      "_PluginConfigRawBody": {
-        "properties": {
-          "toml": {
-            "type": "string",
-            "title": "Toml",
-            "default": ""
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "_PluginConfigRawBody"
-      },
       "_PluginConfigUpdateBody": {
         "properties": {
           "values": {
@@ -38000,6 +37981,18 @@
         "additionalProperties": false,
         "type": "object",
         "title": "_UserConfigPatch"
+      },
+      "packages__pb_webui__common_config_api___PluginConfigRawBody": {
+        "properties": {
+          "toml": {
+            "type": "string",
+            "title": "Toml",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "_PluginConfigRawBody"
       }
     }
   },
