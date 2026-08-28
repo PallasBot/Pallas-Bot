@@ -740,6 +740,12 @@ async def test_handle_llm_chat_replied_recent_candidate_reaches_necessity_gate(
         "evaluate_llm_reply_gate_result",
         lambda *_args, **_kwargs: SimpleNamespace(decision="proceed", reason=""),
     )
+    # 好感度检索读真实关系库，会读到前序用例落库的状态并左右 gate 判定：
+    # 固定为 None，保证本用例对 necessity gate 的断言只取决于事件本身。
+    monkeypatch.setattr(
+        "pallas.product.llm.memory.relationship_store.retrieve_relationship_profile",
+        AsyncMock(return_value=None),
+    )
     gate_kwargs: dict[str, object] = {}
     real_gate = mod.evaluate_reply_necessity_gate
 
@@ -748,6 +754,12 @@ async def test_handle_llm_chat_replied_recent_candidate_reaches_necessity_gate(
         return real_gate(**kwargs)
 
     monkeypatch.setattr(mod, "evaluate_reply_necessity_gate", fake_gate)
+    # should_emit_quote 按群概率决定是否走 QUOTE 回复：固定为 False，
+    # 保证用例稳定落在 PASS → necessity gate → 低活跃度路径上。
+    monkeypatch.setattr(
+        "pallas.product.llm.reply_target_candidates.should_emit_quote",
+        lambda group_id: False,
+    )
     monkeypatch.setattr(mod, "check_llm_chat_gate", AsyncMock(return_value=None))
     monkeypatch.setattr(mod, "list_user_llm_messages", AsyncMock(return_value=[]))
     monkeypatch.setattr(mod, "latest_llm_assistant_reply", AsyncMock(return_value=""))
