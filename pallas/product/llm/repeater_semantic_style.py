@@ -274,6 +274,61 @@ _profiles_revision: tuple[int, int] | None = None
 _reload_task: asyncio.Task[None] | None = None
 _backfill_task: asyncio.Task[None] | None = None
 _startup_bound = False
+_labeled_ids_index_built_at = 0.0
+_labeled_ids_index: dict[tuple[int, int], set[int]] = {}
+_LABELED_IDS_INDEX_TTL_SEC = 5.0
+_semantic_style_seen_cursors: dict[tuple[int, int], int] = {}
+
+
+def labeled_semantic_style_reply_ids(bot_id: int, group_id: int) -> set[int]:
+    """已落库语义样本的接话 message_id 集合（TTL 内存索引），供入 LLM 前去重过滤。
+
+    example_id 格式为 ``{group_id}:{message_id}:{bot_id}``，message_id 可能为负
+    （新版本 QQ），取中间段解析。重读 examples.jsonl 后重建，避免漏掉并发落库的样本。
+    """
+    now = time.time()
+    global _labeled_ids_index_built_at
+    with _semantic_data_thread_lock:
+        if now - _labeled_ids_index_built_at > _LABELED_IDS_INDEX_TTL_SEC:
+            index: dict[tuple[int, int], set[int]] = {}
+            for example in _load_semantic_style_examples(semantic_style_examples_path()):
+                if example.annotation_source != "llm_v2":
+                    continue
+                parts = example.example_id.rsplit(":", 2)
+                if len(parts) != 3:
+                    continue
+                try:
+                    message_id = int(parts[1])
+                except ValueError:
+                    continue
+                index.setdefault((example.bot_id, example.group_id), set()).add(message_id)
+            _labeled_ids_index.clear()
+            _labeled_ids_index.update(index)
+            _labeled_ids_index_built_at = now
+    return _labeled_ids_index.get((int(bot_id), int(group_id)), set())
+
+
+def get_semantic_style_group_cursor(bot_id: int, group_id: int) -> int:
+    """本进程已处理过的语义采样消息时间上限，用于增量处理跳过旧窗口。"""
+    with _profiles_lock:
+        key = (int(bot_id), int(group_id))
+        return int(_semantic_style_seen_cursors.get(key) or 0)
+
+
+def mark_semantic_style_group_processed(bot_id: int, group_id: int, processed_at: int) -> None:
+    """记录某群语义采样已推进到的时间点，下一轮只处理游标之后的新样本。
+
+    未通过落库过滤（LLM 判定非回复对/不可迁移）的配对同样计入游标，避免同一批
+    被拒消息每轮重复送 LLM。仅进程内生效，重启后重新采样最近窗口，可接受。
+    """
+    if processed_at <= 0:
+        return
+    key = (int(bot_id), int(group_id))
+    with _profiles_lock:
+        if processed_at > int(_semantic_style_seen_cursors.get(key) or 0):
+            _semantic_style_seen_cursors[key] = int(processed_at)
+
+
 _direct_quota_windows: dict[tuple[int, int], deque[bool]] = {}
 _semantic_style_visual_circuit = SemanticStyleVisualCircuitState()
 _DIRECT_QUOTA_WINDOW = 100
@@ -1841,14 +1896,13 @@ async def label_semantic_style_batch_with_llm(
         except Exception as exc:
             logger.warning("repeater semantic style batch label failed: {}", exc)
             parsed = []
-        if len(parsed) == len(chunk) and _batch_label_reliable(parsed):
+        if len(parsed) == len(chunk):
             results.extend(parsed)
             continue
-        # 批量解析不完整（缺项/异常）或有效项过少（LLM 输出不可靠、顺序可能错位）时，
-        # 对 chunk 内逐对回退进行单对标注，避免整批丢失或张冠李戴。
+        # 批量解析不完整（缺项/异常）时，对 chunk 内逐对回退进行单对标注，避免整批丢失。
         logger.debug(
-            "Repeater semantic style batch unreliable ([{}]/[{}]); falling back per-pair",
-            sum(1 for item in parsed if _label_item_reliable(item)),
+            "Repeater semantic style batch incomplete ([{}]/[{}]); falling back per-pair",
+            len(parsed),
             len(chunk),
         )
         for item in chunk:
@@ -1858,27 +1912,6 @@ async def label_semantic_style_batch_with_llm(
             record_semantic_label_budget(1)
             results.append(fallback if fallback is not None else (SemanticStyleLabel(), None))
     return results
-
-
-def _label_item_reliable(item: tuple[SemanticStyleLabel, BehaviorStrategy | None]) -> bool:
-    """判断某个批量标注项是否有效（非默认空标签），用于可靠性统计。"""
-    label, strategy = item
-    return bool(
-        label.is_reply_pair
-        or label.transferable
-        or label.interaction_actions
-        or label.forms
-        or label.semantic_relations
-        or (strategy is not None and (strategy.scene or strategy.action))
-    )
-
-
-def _batch_label_reliable(parsed: list[tuple[SemanticStyleLabel, BehaviorStrategy | None]]) -> bool:
-    """判断整批解析是否可靠：有效项占比需过半，否则按序对应可能错位。"""
-    if not parsed:
-        return False
-    reliable = sum(1 for item in parsed if _label_item_reliable(item))
-    return reliable >= max(1, (len(parsed) + 1) // 2)
 
 
 def _label_semantic_style_batch_prompt(count: int) -> str:

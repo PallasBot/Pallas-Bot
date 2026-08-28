@@ -252,6 +252,63 @@ def test_parse_label_accepts_only_annotation_axes() -> None:
     }
 
 
+def test_labeled_semantic_style_reply_ids_indexes_exported_reply_ids(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod.clear_semantic_style_cache_for_tests()
+    mod.persist_semantic_style_example(
+        mod.SemanticStyleExample(
+            example_id="42:101:100",
+            created_at=100,
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            trigger_text="前句1",
+            reply_text="接话1",
+            label=mod.parse_semantic_style_label({"reuse": "direct"}),
+            source_kind="human_pair",
+            trigger_user_id=11,
+            reply_user_id=12,
+            annotation_source="llm_v2",
+        )
+    )
+    mod.persist_semantic_style_example(
+        mod.SemanticStyleExample(
+            example_id="42:-5:100",
+            created_at=200,
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            trigger_text="前句2",
+            reply_text="接话2",
+            label=mod.parse_semantic_style_label({"reuse": "direct"}),
+            source_kind="human_pair",
+            trigger_user_id=11,
+            reply_user_id=12,
+            annotation_source="llm_v2",
+        )
+    )
+    # force index rebuild despite 5s TTL
+    mod._labeled_ids_index_built_at = 0.0
+
+    assert mod.labeled_semantic_style_reply_ids(100, 42) == {101, -5}
+    assert mod.labeled_semantic_style_reply_ids(100, 99) == set()
+
+
+def test_semantic_style_group_cursor_advances_monotonically_but_not_backwards() -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    mod._semantic_style_seen_cursors.clear()
+    assert mod.get_semantic_style_group_cursor(100, 42) == 0
+    mod.mark_semantic_style_group_processed(100, 42, 1000)
+    assert mod.get_semantic_style_group_cursor(100, 42) == 1000
+    # older ts should not regress
+    mod.mark_semantic_style_group_processed(100, 42, 900)
+    assert mod.get_semantic_style_group_cursor(100, 42) == 1000
+    mod._semantic_style_seen_cursors.clear()
+
+
 def test_semantic_style_management_persists_controls_and_rebuilds_data(tmp_path, monkeypatch) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
@@ -1747,7 +1804,7 @@ async def test_label_semantic_style_batch_falls_back_per_pair_when_incomplete(mo
 
 
 @pytest.mark.asyncio
-async def test_label_semantic_style_batch_falls_back_when_reliable_ratio_low(
+async def test_label_semantic_style_batch_accepts_incomplete_labels_when_len_matches(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
@@ -1758,7 +1815,7 @@ async def test_label_semantic_style_batch_falls_back_when_reliable_ratio_low(
         content = str(messages[0]["content"])
         if content.startswith("分析 2 组"):
             calls.append("batch")
-            # 返回长度正确但全部是空/不可靠标签 → 有效占比过低，应整批回退
+            # 长度正确，但标签全空：按契约逐项接受，靠落库过滤，不整批回退。
             return {
                 "content": '[{"is_reply_pair": false, "transferable": false},'
                 ' {"is_reply_pair": false, "transferable": false}]'
@@ -1775,11 +1832,11 @@ async def test_label_semantic_style_batch_falls_back_when_reliable_ratio_low(
     pairs = [("前句1", "接话1", "adjacent"), ("前句2", "接话2", "adjacent")]
     results = await mod.label_semantic_style_batch_with_llm(pairs, max_batch=2)
 
-    # 批量长度正确但全空 → 可靠性不足触发整批回退：1 次 batch + 2 次 single。
-    assert calls == ["batch", "single", "single"]
+    # 批量长度正确即接受（空标签合法），不再触发整批回退：仅 1 次 batch。
+    assert calls == ["batch"]
     assert len(results) == 2
-    assert results[0][0].is_reply_pair is True
-    assert results[1][0].is_reply_pair is True
+    assert results[0][0].is_reply_pair is False
+    assert results[1][0].is_reply_pair is False
 
 
 def test_merge_bot_reply_only_teaches_behavior_strategy(tmp_path, monkeypatch) -> None:

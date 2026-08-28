@@ -30,6 +30,9 @@ _SWEEP_INTERVAL_SEC = 20 * 60
 _SWEEP_BATCH_SIZE = 24
 _PAIR_PAGE_LIMIT = 12
 _SWEEP_STARTUP_POLL_SEC = 30
+# 增量处理窗口：游标之后的新消息回溯上限。上一轮已处理到的消息时间记为游标，
+# 本窗口内新消息才送 LLM 标注，避免长时段静默群每轮把历史窗口整体重扫。
+_SEMANTIC_WINDOW_SEC = 2 * 60 * 60
 
 # 群表达指导只看「前句→接话」的回复关系，不关心媒体细节：把 CQ 媒体码替换成
 # 通用占位符（图 → [图片]、表情 → [表情]、其它 → [媒体]），避免 LLM 读到不可读的原始码。
@@ -89,8 +92,11 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
         return
     from pallas.product.llm.repeater_semantic_style import (
         SemanticStyleExample,
+        get_semantic_style_group_cursor,
         is_human_semantic_style_pair,
         label_semantic_style_batch_with_llm,
+        labeled_semantic_style_reply_ids,
+        mark_semantic_style_group_processed,
         persist_semantic_style_examples,
         semantic_style_collection_enabled,
     )
@@ -108,6 +114,18 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
     if not pairs:
         return
 
+    # 跳过已落库样本的接话、已处理过的旧窗口，避免同一批消息反复送 LLM 标注。
+    now_ts = int(time.time())
+    labeled_ids = labeled_semantic_style_reply_ids(bot_id=bot_id, group_id=group_id)
+    cursor = get_semantic_style_group_cursor(bot_id=bot_id, group_id=group_id)
+    pairs = [
+        pair
+        for pair in pairs
+        if pair[5] not in labeled_ids and (cursor <= 0 or pair[6] > cursor) and pair[6] >= now_ts - _SEMANTIC_WINDOW_SEC
+    ]
+    if not pairs:
+        return
+
     # 一次 LLM 提交标注多个候选对，降低调用成本。
     labeled = await label_semantic_style_batch_with_llm([
         (trigger, reply, pair_relation) for trigger, reply, pair_relation, *_ in pairs
@@ -117,10 +135,12 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
 
     accepted: list[SemanticStyleExample] = []
     accepted_ids: set[str] = set()
+    max_processed_ts = 0
     for (trigger, reply, pair_relation, trigger_user_id, reply_user_id, message_id, created_at, is_bot_reply), (
         label,
         strategy,
     ) in zip(pairs, labeled, strict=True):
+        max_processed_ts = max(max_processed_ts, int(created_at))
         if not label.is_reply_pair or not label.transferable:
             continue
         if not is_bot_reply and not is_human_semantic_style_pair(
@@ -160,6 +180,7 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
             group_id,
             bot_id,
         )
+    mark_semantic_style_group_processed(bot_id=bot_id, group_id=group_id, processed_at=max_processed_ts)
 
 
 async def _rebuild_pairs_from_messages(
