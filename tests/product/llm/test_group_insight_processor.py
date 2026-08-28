@@ -411,3 +411,81 @@ def test_text_replaces_cq_media_with_placeholder() -> None:
     assert _text("[CQ:flash,id=1] 来了") == "[媒体] 来了"
     assert _text("  多  个   空格  ") == "多 个 空格"
     assert _text("x" * 500) == "x" * 240
+
+
+@pytest.mark.asyncio
+async def test_produce_semantic_profile_partial_failure_persists_and_advances(monkeypatch) -> None:
+    from pallas.product.llm import group_insight_processor as mod
+    from pallas.product.llm import repeater_semantic_style as sem
+
+    pairs = [
+        ("前句1", "接话1", "adjacent", 11, 12, 101, 1000, False),
+        ("前句2", "接话2", "adjacent", 13, 14, 102, 1100, False),
+        ("前句3", "接话3", "adjacent", 15, 16, 103, 1200, False),
+    ]
+    good_label = sem.SemanticStyleLabel(is_reply_pair=True, transferable=True)
+    persisted: list[sem.SemanticStyleExample] = []
+    marked: list[tuple[int, int, int, int]] = []
+
+    async def fake_rebuild(**kwargs):
+        return pairs
+
+    monkeypatch.setattr(mod, "_rebuild_pairs_from_messages", fake_rebuild)
+    monkeypatch.setattr(sem, "semantic_style_collection_enabled", lambda *, bot_id, group_id: True)
+    monkeypatch.setattr(sem, "semantic_label_budget_ok", lambda: True)
+    monkeypatch.setattr(sem, "get_semantic_style_group_cursor", lambda *, bot_id, group_id: (0, 0))
+    monkeypatch.setattr(sem, "labeled_semantic_style_reply_ids", lambda bot_id, group_id: set())
+
+    async def fake_batch(items):
+        return [(good_label, None), None, (good_label, None)]
+
+    monkeypatch.setattr(sem, "label_semantic_style_batch_with_llm", fake_batch)
+    monkeypatch.setattr(sem, "is_human_semantic_style_pair", lambda **kwargs: True)
+    monkeypatch.setattr(sem, "persist_semantic_style_examples", persisted.extend)
+
+    def fake_mark(*, bot_id, group_id, processed_at, processed_message_id=0):
+        marked.append((bot_id, group_id, processed_at, processed_message_id))
+
+    monkeypatch.setattr(sem, "mark_semantic_style_group_processed", fake_mark)
+
+    await mod._produce_semantic_profile({"bot_id": 1, "group_id": 7})
+
+    # 部分失败（第 2 对失败）也落盘成功子集，并把游标推进过全部已尝试对；
+    # 全部失败才保留游标待下轮，避免个别失败对卡住整窗反复重发。
+    assert [item.example_id for item in persisted] == ["7:101:1", "7:103:1"]
+    assert marked == [(1, 7, 1200, 103)]
+
+
+@pytest.mark.asyncio
+async def test_produce_semantic_profile_all_failed_keeps_cursor(monkeypatch) -> None:
+    from pallas.product.llm import group_insight_processor as mod
+    from pallas.product.llm import repeater_semantic_style as sem
+
+    pairs = [("前句1", "接话1", "adjacent", 11, 12, 101, 1000, False)]
+    persisted: list[sem.SemanticStyleExample] = []
+    marked: list[tuple[int, int, int, int]] = []
+
+    async def fake_rebuild(**kwargs):
+        return pairs
+
+    monkeypatch.setattr(mod, "_rebuild_pairs_from_messages", fake_rebuild)
+    monkeypatch.setattr(sem, "semantic_style_collection_enabled", lambda *, bot_id, group_id: True)
+    monkeypatch.setattr(sem, "semantic_label_budget_ok", lambda: True)
+    monkeypatch.setattr(sem, "get_semantic_style_group_cursor", lambda *, bot_id, group_id: (0, 0))
+    monkeypatch.setattr(sem, "labeled_semantic_style_reply_ids", lambda bot_id, group_id: set())
+
+    async def fake_batch(items):
+        return [None]
+
+    monkeypatch.setattr(sem, "label_semantic_style_batch_with_llm", fake_batch)
+    monkeypatch.setattr(sem, "persist_semantic_style_examples", persisted.extend)
+
+    def fake_mark(*, bot_id, group_id, processed_at, processed_message_id=0):
+        marked.append((bot_id, group_id, processed_at, processed_message_id))
+
+    monkeypatch.setattr(sem, "mark_semantic_style_group_processed", fake_mark)
+
+    await mod._produce_semantic_profile({"bot_id": 1, "group_id": 7})
+
+    assert persisted == []
+    assert marked == []
