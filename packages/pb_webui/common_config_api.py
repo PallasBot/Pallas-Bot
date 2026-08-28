@@ -916,9 +916,7 @@ def register_common_config_router(
             iter_usage_csv_lines(start_day=start_day, end_day=end_day),
             media_type="text/csv; charset=utf-8",
             headers={
-                "Content-Disposition": (
-                    f'attachment; filename="pallas-ai-usage-detail_{start_day}_{end_day}.csv"'
-                ),
+                "Content-Disposition": (f'attachment; filename="pallas-ai-usage-detail_{start_day}_{end_day}.csv"'),
                 "X-Usage-Rows": str(count_ledger_rows(start_day, end_day)),
             },
         )
