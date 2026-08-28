@@ -30,20 +30,24 @@ CHAT_COOLDOWN_KEY = "chat"
 # 与历史扩展仓 chat 一致：优先于清醒 @（llm_chat 默认 ~51）
 DRUNK_CHAT_PRIORITY = 13
 
+# 旧版 ai-media 聊天扩展的插件 id；其模块名按 `pallas_plugin_<id>` 约定推导。
+_LEGACY_CHAT_PLUGIN_ID = "chat"
+_LEGACY_CHAT_PLUGIN_MODULE = f"pallas_plugin_{_LEGACY_CHAT_PLUGIN_ID}"
+
 
 def extension_drunk_chat_loaded() -> bool:
-    """旧版 ai-media `pallas_plugin_chat` 仍加载时，由扩展仓接管酒后对话。"""
+    """旧版 ai-media 聊天扩展仍加载时，由扩展仓接管酒后对话。"""
     try:
         from nonebot import get_loaded_plugins
     except Exception:
         return False
     for plugin in get_loaded_plugins():
         name = str(getattr(plugin, "name", "") or "").strip()
-        if name in {"chat", "pallas_plugin_chat"}:
+        if name in {_LEGACY_CHAT_PLUGIN_ID, _LEGACY_CHAT_PLUGIN_MODULE}:
             return True
         module = getattr(plugin, "module", None)
         mod_name = str(getattr(module, "__name__", "") or "")
-        if mod_name == "pallas_plugin_chat" or mod_name.startswith("pallas_plugin_chat."):
+        if mod_name == _LEGACY_CHAT_PLUGIN_MODULE or mod_name.startswith(f"{_LEGACY_CHAT_PLUGIN_MODULE}."):
             return True
     return False
 
