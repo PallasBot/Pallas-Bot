@@ -310,7 +310,7 @@ class LlmConfig(BaseModel):
     llm_memory_auto_ip_cooldown_sec: int = Field(default=1800, ge=0, le=86400)
     llm_memory_auto_ip_daily_budget: int = Field(default=100, ge=0, le=100000)
     llm_memory_graph_extract_enabled: bool = Field(default=True)
-    llm_memory_graph_extract_on_write: bool = Field(default=False)
+    llm_memory_graph_extract_on_write: bool = Field(default=True)
     llm_memory_hiergraph_max_layers: int = Field(default=3, ge=1, le=6)
     llm_memory_decay_half_life_days: float = Field(default=30.0, ge=0.0, le=3650.0)
     llm_memory_decay_min_importance: float = Field(default=0.6, ge=0.0, le=1.0)
@@ -566,7 +566,7 @@ def get_llm_config() -> LlmConfig:
             llm_memory_auto_ip_cooldown_sec=_env_int("LLM_MEMORY_AUTO_IP_COOLDOWN_SEC", 1800),
             llm_memory_auto_ip_daily_budget=_env_int("LLM_MEMORY_AUTO_IP_DAILY_BUDGET", 100),
             llm_memory_graph_extract_enabled=_env_bool("LLM_MEMORY_GRAPH_EXTRACT_ENABLED", True),
-            llm_memory_graph_extract_on_write=_env_bool("LLM_MEMORY_GRAPH_EXTRACT_ON_WRITE", False),
+            llm_memory_graph_extract_on_write=_env_bool("LLM_MEMORY_GRAPH_EXTRACT_ON_WRITE", True),
             llm_memory_hiergraph_max_layers=_env_int("LLM_MEMORY_HIERGRAPH_MAX_LAYERS", 3),
             llm_memory_decay_half_life_days=_env_float("LLM_MEMORY_DECAY_HALF_LIFE_DAYS", 30.0),
             llm_memory_decay_min_importance=_env_float("LLM_MEMORY_DECAY_MIN_IMPORTANCE", 0.6),
