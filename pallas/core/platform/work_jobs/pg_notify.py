@@ -65,8 +65,8 @@ async def listen_delivery_ready(on_notify: Callable[[], Awaitable[None]] | None 
 
     # raw_connection 不经 SQLAlchemy 事务；driver_connection 即原生 asyncpg 连接。
     raw = await engine.raw_connection()
+    asyncpg_conn = raw.driver_connection
     try:
-        asyncpg_conn = raw.driver_connection
         await asyncpg_conn.add_listener(DELIVERY_READY_CHANNEL, wrapper)
         try:
             await asyncio.Event().wait()
@@ -74,5 +74,11 @@ async def listen_delivery_ready(on_notify: Callable[[], Awaitable[None]] | None 
             with contextlib.suppress(Exception):
                 await asyncpg_conn.remove_listener(DELIVERY_READY_CHANNEL, wrapper)
     finally:
+        # 监听连接长期占用，归池时若池内空闲位已满（优雅退出时必然如此）会走
+        # overflow 硬关闭路径，在无 greenlet 上下文处 await asyncpg close，
+        # 抛 MissingGreenlet 且连接不会被真正关闭。detach 只是池侧登记（无 IO），
+        # 随后用原生 asyncpg close 真正异步关闭。
         with contextlib.suppress(Exception):
-            raw.close()
+            raw.detach()
+        with contextlib.suppress(Exception):
+            await asyncpg_conn.close()
