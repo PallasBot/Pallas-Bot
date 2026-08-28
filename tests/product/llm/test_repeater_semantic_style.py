@@ -1834,7 +1834,9 @@ async def test_label_semantic_style_batch_returns_multiple_labels(monkeypatch: p
 
 
 @pytest.mark.asyncio
-async def test_label_semantic_style_batch_falls_back_per_pair_when_incomplete(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_label_semantic_style_batch_falls_back_for_missing_when_incomplete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
     calls: list[str] = []
@@ -1843,7 +1845,7 @@ async def test_label_semantic_style_batch_falls_back_per_pair_when_incomplete(mo
         content = str(messages[0]["content"])
         if content.startswith("判断 2 组"):  # 批量请求
             calls.append("batch")
-            # 只返回 1 项 → 触发逐项回退
+            # 只返回 1 项 → 仅缺失下标回退单对
             return {"content": '[{"is_reply_pair": true}]'}
         calls.append("single")
         return {"content": '{"is_reply_pair": true, "transferable": true, "intensity": "soft"}'}
@@ -1858,8 +1860,8 @@ async def test_label_semantic_style_batch_falls_back_per_pair_when_incomplete(mo
     pairs = [("前句1", "接话1", "adjacent"), ("前句2", "接话2", "adjacent")]
     results = await mod.label_semantic_style_batch_with_llm(pairs, max_batch=2)
 
-    # 一次批量（不足 2 项）→ 每对回退单对，共 1 + 2 = 3 次 complete 调用。
-    assert calls == ["batch", "single", "single"]
+    # 一次批量（1/2 项）→ 已解析项保留，仅缺失 1 项回退单对，共 1 + 1 = 2 次调用。
+    assert calls == ["batch", "single"]
     assert len(results) == 2
     assert results[0][0].is_reply_pair is True
     assert results[1][0].is_reply_pair is True

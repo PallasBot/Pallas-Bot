@@ -1960,8 +1960,8 @@ async def label_semantic_style_batch_with_llm(
     """一次 LLM 提交批量标注多个「前句→接话」对，逐项返回标签。
 
     参照 gsuid 后台管线的「一次输出 JSON 数组」范式，显著降低语义风格采集的
-    LLM 提交次数。每对单独失败则回退调用单对接口 ``label_semantic_style_with_retry``，
-    保证整体尽可能产出（避免批量解析失败丢掉全部）。
+    LLM 提交次数。批量解析缺项时仅对缺失下标回退单对接口
+    ``label_semantic_style_with_retry``，已解析项按位置保留。
     """
     from pallas.product.llm.config import get_llm_config
     from pallas.product.llm.provider_client import complete_chat_message
@@ -1996,13 +1996,15 @@ async def label_semantic_style_batch_with_llm(
         if len(parsed) == len(chunk):
             results.extend(parsed)
             continue
-        # 批量解析不完整（缺项/异常）时，对 chunk 内逐对回退进行单对标注，避免整批丢失。
+        # 批量解析不完整（缺项/异常）时，仅对缺失下标逐对回退单对标注；
+        # 已解析出的项按位置直接保留，避免整批重标放大调用量。
         logger.debug(
-            "Repeater semantic style batch incomplete ([{}]/[{}]); falling back per-pair",
+            "Repeater semantic style batch incomplete ([{}]/[{}]); falling back for missing",
             len(parsed),
             len(chunk),
         )
-        for item in chunk:
+        results.extend(parsed)
+        for item in chunk[len(parsed) :]:
             fallback = await label_semantic_style_with_retry(
                 trigger_text=item[0], reply_text=item[1], pair_relation=item[2]
             )
