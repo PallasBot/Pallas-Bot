@@ -529,7 +529,6 @@ async def test_failed_bubble_does_not_write_incomplete_logical_turn(monkeypatch:
     )
     append = AsyncMock(return_value=True)
     behavior = AsyncMock()
-    expression = AsyncMock()
     feedback = AsyncMock()
     monkeypatch.setattr(
         "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
@@ -539,7 +538,6 @@ async def test_failed_bubble_does_not_write_incomplete_logical_turn(monkeypatch:
     monkeypatch.setattr(llm_delivery, "append_behavior_run", behavior)
     monkeypatch.setattr(llm_delivery, "should_append_llm_session", lambda _task: True)
     monkeypatch.setattr(llm_delivery, "get_llm_config", lambda: LlmConfig(llm_repeater_feedback_enabled=True))
-    monkeypatch.setattr("pallas.product.persona.expression_learn.note_expression_from_utterance", expression)
     monkeypatch.setattr("pallas.product.llm.repeater_feedback.append_feedback_entry", feedback)
 
     _reply, text_delivered, delivered = await llm_delivery.deliver_llm_callback_success(
@@ -568,5 +566,4 @@ async def test_failed_bubble_does_not_write_incomplete_logical_turn(monkeypatch:
     assert sender.await_count == 2
     append.assert_not_awaited()
     behavior.assert_not_called()
-    expression.assert_not_awaited()
     feedback.assert_not_called()

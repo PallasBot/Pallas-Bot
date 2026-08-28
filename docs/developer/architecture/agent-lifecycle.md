@@ -67,12 +67,11 @@ WebUI 可覆盖单工具的描述、hints 与可见性（**AI 配置 → 接话 
 | --- | --- | --- |
 | 观察队列 | 待整理的候选片段，供后续沉淀 | AI 观测 → 人物 |
 | 人物事实 | 群内稳定偏好；跨群复用需同意 | AI 观测 → 人物 |
-| 账号口癖 | 成功回复抽短语气习惯；审批后注入人设 | AI 观测 → 人物 |
 | 关系便签与好感度 | 对用户的稳定关系备注；好感度分档注入对话、低好感度提高静默概率 | AI 观测 → 人物 |
 | 怒气与静默 | 按 `(bot, group, user)` 短期累积攻击压力；达到阈值后在统一 ingress 静默，但仍保留时间线消息 | AI 观测 → 人物 |
 | 任务编排 | 提醒、周期与异步调研；结果只回群 | AI 观测 → 任务 |
 
-HTTP 契约见 [Agent Platform API](/common/webui/api/09-agent-platform)。主要代码：`pallas/product/llm/memory/`、`orchestration/`、`persona/catchphrase_bank.py`。
+HTTP 契约见 [Agent Platform API](/common/webui/api/09-agent-platform)。主要代码：`pallas/product/llm/memory/`、`orchestration/`、`persona/`。
 
 怒气、好感和自动牛格是三个并行状态：怒气是可衰减的短期惩罚，好感是长期关系，自动牛格是账号级表达指纹。攻击事件可以按确定性规则降低好感，但不会修改牛格；好感也不会反向增加怒气。静默区分“收消息、记录消息、处理消息、回复消息”：静默消息仍写入会话和群时间线并标记 `suppressed_by_rage`，但不执行命令、工具、LLM、Repeater 或其它回复副作用。
 

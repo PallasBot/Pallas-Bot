@@ -37,7 +37,7 @@
 | 短气泡兜底拆分 | `reply_postprocess.py` `split_short_reply_segments` | short 取向但只有单段时，按句末标点 / 换行拆成多气泡 |
 | 轻量后处理 | `apply_reply_postprocess` | 错别字、句尾句号 |
 | 多气泡投递 | `delivery.py` `deliver_llm_callback_success` | 逐条发送，气泡间按上句长度叠加随机抖动（0.5~3.5s，模拟真人节奏） |
-| 学习回写 | 会话 / `behavior_store` / `expression_learn` / `repeater_feedback` / `auto_episode` | 投递成功后写历史、行为与表达 |
+| 学习回写 | 会话 / `behavior_store` / `repeater_feedback` / `auto_episode` | 投递成功后写历史、行为与表达 |
 
 ## LLM turn telemetry
 

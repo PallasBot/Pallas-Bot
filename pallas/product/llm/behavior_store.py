@@ -213,22 +213,6 @@ def settle_behavior_run_outcome(
                 changed = True
             if changed:
                 save_behavior_patterns(patterns)
-        if updated.score_delta:
-            from pallas.product.persona.catchphrase_bank import record_catchphrase_outcome
-            from pallas.product.persona.expression_bank import record_expression_outcome
-
-            record_expression_outcome(
-                updated.selected_expression_ids,
-                scene=str(updated.scene),
-                score_delta=updated.score_delta,
-                outcome_id=updated.request_id,
-            )
-            record_catchphrase_outcome(
-                updated.selected_catchphrase_ids,
-                scene=str(updated.scene),
-                score_delta=updated.score_delta,
-                outcome_id=updated.request_id,
-            )
         updated.effects_applied = True
         rows = list_behavior_runs(limit=10_000)
         for index, item in enumerate(rows):

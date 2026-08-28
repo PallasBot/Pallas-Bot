@@ -26,7 +26,6 @@ _MAX_BLACKLIST_PHRASES_PER_OUTCOME = 32
 
 _SOURCE_SCORES = {
     "ambient": -1.0,
-    "expression": -3.0,
     "semantic": -2.0,
     "memory": -1.0,
     "knowledge": 0.0,
@@ -122,7 +121,6 @@ class InjectionSnapshot(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="ignore")
 
     ambient_turns: list[dict[str, Any]] = Field(default_factory=list)
-    expression_entries: list[dict[str, Any]] = Field(default_factory=list)
     semantic_examples: list[dict[str, Any]] = Field(default_factory=list)
     memory_entries: list[dict[str, Any]] = Field(default_factory=list)
     knowledge_chunks: list[dict[str, Any]] = Field(default_factory=list)
@@ -254,12 +252,6 @@ def _snapshot_candidates(snapshot: InjectionSnapshot) -> list[tuple[str, str, st
         text = _preview(str(turn.get("text_preview") or ""))
         if source_id and text:
             candidates.append(("ambient", source_id, text, [text]))
-    for entry in snapshot.expression_entries[:_MAX_SNAPSHOT_ENTRIES_PER_TYPE]:
-        source_id = str(entry.get("entry_id") or "")
-        saying = _preview(str(entry.get("saying") or ""))
-        occasion = _preview(str(entry.get("occasion") or ""))
-        if source_id:
-            candidates.append(("expression", source_id, saying, [saying, occasion]))
     for example in snapshot.semantic_examples[:_MAX_SNAPSHOT_ENTRIES_PER_TYPE]:
         source_id = str(example.get("example_id") or "")
         trigger = _preview(str(example.get("trigger") or ""))
@@ -340,12 +332,6 @@ def _outcome_has_effect(row: dict[str, Any], kind: str) -> bool:
     for item in row.get("decisions") or []:
         if not isinstance(item, dict) or str(item.get("kind") or "").strip() != target_kind:
             continue
-        if target_kind == "expression" and item.get("source_id"):
-            try:
-                if float(item.get("score") or 0) < 0:
-                    return True
-            except (TypeError, ValueError):
-                continue
         if target_kind == "self_alias" and bool(item.get("remove_alias")) and item.get("source_id"):
             return True
     return False

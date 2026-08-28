@@ -60,7 +60,7 @@ uv run ruff format --check pallas/ packages/
 | 控制台鉴权 | `data/pallas_console/`：`auth_state.json`（密钥哈希）、`session_secret.bin`、`api_keys.json`（长期 API Key 哈希） |
 | WebUI 前端产物 | `data/pb_webui/public-react/`（挂载基址 `/pallas/`） |
 | 知识源 | `data/pallas_knowledge/` |
-| 表达/口头禅库 | `data/pb_webui/expression_bank/`（`pending/|merged/` 分片，append+定期合并） |
+| 表达/口头禅库 | `data/pb_webui/expression_bank/`（历史遗留数据，系统已退役） |
 | LLM 反馈/行为 | `data/pb_webui/llm_repeater_feedback/`、`llm_behavior/` |
 | 数据库 | PostgreSQL 容器（db `PallasBot`，user `togetsudo`） |
 

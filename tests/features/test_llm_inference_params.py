@@ -54,7 +54,6 @@ def test_derive_llm_inference_params_drunk_skips_temperature() -> None:
         ("vision_messages", False, 256),
         ("memory_graph_extract", False, 1200),
         ("memory_graph_hiergraph", False, 1500),
-        ("catchphrase_extract", False, 200),
         ("offline_quality_eval", False, 96),
     ],
 )
@@ -132,7 +131,6 @@ def test_unknown_submit_task_does_not_hide_behind_explicit_budget() -> None:
         "pallas/product/llm/memory/auto_episode.py",
         "pallas/product/llm/memory/graph/extract.py",
         "pallas/product/llm/memory/graph/hiergraph.py",
-        "pallas/product/persona/catchphrase_extract.py",
         "pallas/product/persona/affect_refine_client.py",
         "pallas/product/llm/offline_quality_eval.py",
         "pallas/product/llm/current_turn_decision.py",

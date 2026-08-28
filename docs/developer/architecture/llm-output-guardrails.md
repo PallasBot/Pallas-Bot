@@ -24,7 +24,7 @@ Provider 输出 / direct_candidate 直投
   │  ⑩ apply_reply_postprocess（错别字/句尾句号，llm_reply_postprocess_enabled 默认 off）
   │  ⑪ replace_mention_tokens（未授权提及 token → 静默）
   ▼ 多气泡逐条投递（气泡间 0.5~3.5s 随机抖动）
-  落群成功后：会话回写 / auto_episode / expression_learn / repeater_feedback / reply_effect 评分
+  落群成功后：会话回写 / auto_episode / repeater_feedback / reply_effect 评分
 ```
 
 > 和人设防火墙不同，输出过滤命中后**只降级不重试**（fallback 文案 → 静默）；只有 ① 有重生成回路。

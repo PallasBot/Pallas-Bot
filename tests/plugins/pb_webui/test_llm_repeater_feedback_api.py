@@ -6,7 +6,6 @@ from fastapi.testclient import TestClient
 from packages.pb_webui import extended_api as mod
 from packages.pb_webui.config import Config
 from pallas.product.llm.repeater_feedback import LlmRepeaterFeedbackEntry
-from pallas.product.persona.expression_bank import ExpressionEntry
 
 
 def _build_client(monkeypatch) -> TestClient:
@@ -274,22 +273,6 @@ def test_llm_repeater_feedback_manage_correct_api(monkeypatch) -> None:
     assert payload["data"]["corrected_reply_text"] == "别闹"
 
 
-def _expression_entry(*, entry_id: str = "expr-123-abc") -> ExpressionEntry:
-    return ExpressionEntry(
-        entry_id=entry_id,
-        group_id=123,
-        occasion="调侃",
-        saying="少来。",
-        source="llm_success",
-        channel="group",
-        scene_tier="strong",
-        status="rejected",
-        affect_hint="playful",
-        created_at=1718700001,
-        updated_at=1718700002,
-    )
-
-
 def test_injection_governance_get_returns_requested_scope(monkeypatch) -> None:
     thread_calls: list[str] = []
 
@@ -370,7 +353,6 @@ def test_injection_governance_manage_requires_action_specific_id(monkeypatch) ->
     for action, key in (
         ("undo_outcome", "outcome_id"),
         ("restore_semantic", "outcome_id"),
-        ("restore_expression", "entry_id"),
     ):
         response = client.post(
             "/pallas/api/llm/repeater-feedback/governance/manage",
@@ -505,46 +487,6 @@ def test_injection_governance_restore_semantic_accepts_matching_source_example(m
     assert undo_calls == [("outcome-1", 10001, 123)]
 
 
-def test_injection_governance_manage_restore_expression_checks_group_before_restore(monkeypatch) -> None:
-    calls: list[tuple[str, str]] = []
-
-    def fake_get_group_expression(*, group_id: int, entry_id: str):
-        return _expression_entry() if entry_id == "expr-123-abc" and group_id == 123 else None
-
-    def fake_resolve_expression(entry_id: str, *, action: str, reason: str = ""):
-        calls.append((entry_id, action))
-        return _expression_entry().model_copy(update={"status": "shadow", "rejected_reason": ""})
-
-    monkeypatch.setattr(
-        "packages.pb_webui.llm_product_api.get_group_expression",
-        fake_get_group_expression,
-    )
-    monkeypatch.setattr(
-        "packages.pb_webui.llm_product_api.resolve_expression",
-        fake_resolve_expression,
-    )
-    client = _build_client(monkeypatch)
-
-    foreign = client.post(
-        "/pallas/api/llm/repeater-feedback/governance/manage",
-        json={"action": "restore_expression", "entry_id": "expr-999-foreign", "bot_id": "10001", "group_id": "123"},
-    )
-    missing = client.post(
-        "/pallas/api/llm/repeater-feedback/governance/manage",
-        json={"action": "restore_expression", "entry_id": "expr-123-missing", "bot_id": "10001", "group_id": "123"},
-    )
-    restored = client.post(
-        "/pallas/api/llm/repeater-feedback/governance/manage",
-        json={"action": "restore_expression", "entry_id": "expr-123-abc", "bot_id": "10001", "group_id": "123"},
-    )
-
-    assert foreign.status_code == 404
-    assert missing.status_code == 404
-    assert restored.status_code == 200, restored.text
-    assert restored.json()["data"] == {"entry_id": "expr-123-abc", "status": "shadow"}
-    assert calls == [("expr-123-abc", "restore")]
-
-
 def test_injection_governance_manage_returns_500_for_ledger_storage_failure(monkeypatch) -> None:
     monkeypatch.setattr(
         "packages.pb_webui.llm_product_api.undo_negative_outcome_status",
@@ -557,28 +499,6 @@ def test_injection_governance_manage_returns_500_for_ledger_storage_failure(monk
     )
 
     assert response.status_code == 500
-
-
-def test_expression_bank_resolve_api_accepts_restore(monkeypatch) -> None:
-    calls: list[tuple[str, str]] = []
-
-    def fake_resolve_expression(entry_id: str, *, action: str, reason: str = ""):
-        calls.append((entry_id, action))
-        return _expression_entry().model_copy(update={"status": "shadow", "rejected_reason": ""})
-
-    monkeypatch.setattr(
-        "packages.pb_webui.llm_product_api.resolve_expression",
-        fake_resolve_expression,
-    )
-
-    response = _build_client(monkeypatch).post(
-        "/pallas/api/llm/expression-bank/resolve",
-        json={"entry_id": "expr-123-abc", "action": "restore"},
-    )
-
-    assert response.status_code == 200, response.text
-    assert response.json()["data"]["status"] == "shadow"
-    assert calls == [("expr-123-abc", "restore")]
 
 
 def test_injection_governance_manage_checks_write_token(monkeypatch) -> None:

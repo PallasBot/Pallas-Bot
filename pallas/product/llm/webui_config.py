@@ -802,40 +802,6 @@ class LlmWebuiConfig(BaseModel):
             "关闭后下方记忆条数、自动沉淀等细项基本不再参与对话注入",
         ),
     )
-    llm_expression_inject_enabled: bool = Field(
-        default=True,
-        description=field_help(
-            "回复时要不要参考本群常用说法来调口气",
-            "开=注入群表达（更像本群）；关=不用表达库。想统一官方腔可关",
-            "与「学习群表达」独立：关注入仍可能在后台学习，只是当轮不用",
-        ),
-    )
-    llm_expression_learn_enabled: bool = Field(
-        default=True,
-        description=field_help(
-            "要不要从群消息里慢慢学本群口头禅/说法",
-            "开=持续沉淀候选表达（推荐）；关=不再学习新说法",
-            "学到的内容是否自动启用，看「自动晋升」开关",
-        ),
-    )
-    llm_expression_auto_promote_enabled: bool = Field(
-        default=True,
-        description=field_help(
-            "学到的群表达要不要自动变成正式可用",
-            "开=达标后自动启用；关=只留在候选，需人工晋升。怕学坏梗可先关",
-            "依赖学习开关；关闭后注入侧只能用已晋升的表达",
-        ),
-    )
-    llm_expression_retrieve_limit: int = Field(
-        default=5,
-        ge=1,
-        le=8,
-        description=field_help(
-            "每次回复最多带几条群表达进上下文",
-            "默认 5。想更贴群可到 6～8；想省预算降到 3～4",
-            "条数越大越占字符预算；须开启「注入群表达」才有体感",
-        ),
-    )
     llm_vector_retrieve: VectorRetrieveMode = Field(
         default="hybrid",
         description=field_help(
@@ -1249,10 +1215,6 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_semantic_style_realtime_daily_limit=cfg.llm_semantic_style_realtime_daily_limit,
         llm_reply_effect_eval_enabled=cfg.llm_reply_effect_eval_enabled,
         llm_memory_rag_enabled=cfg.llm_memory_rag_enabled,
-        llm_expression_inject_enabled=cfg.llm_expression_inject_enabled,
-        llm_expression_learn_enabled=cfg.llm_expression_learn_enabled,
-        llm_expression_auto_promote_enabled=cfg.llm_expression_auto_promote_enabled,
-        llm_expression_retrieve_limit=cfg.llm_expression_retrieve_limit,
         llm_vector_retrieve=cfg.llm_vector_retrieve,
         llm_embedding_model=cfg.llm_embedding_model,
         llm_embedding_provider=_embedding_provider_choice(cfg.llm_embedding_provider),

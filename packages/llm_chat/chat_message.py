@@ -182,7 +182,6 @@ def emit_turn_telemetry(
 def build_injection_snapshot(
     *,
     ambient_turns: list[dict[str, object]],
-    expression_entries: list[object],
     semantic_style: object | None = None,
     semantic_examples: list[tuple[str, str]] | None = None,
     semantic_example_sources: list[object] | None = None,
@@ -223,15 +222,6 @@ def build_injection_snapshot(
     chunks = knowledge_retrieval_trace.get("chunks", []) if isinstance(knowledge_retrieval_trace, dict) else []
     return {
         "ambient_turns": [dict(item) for item in ambient_turns if isinstance(item, dict)],
-        "expression_entries": [
-            {
-                "entry_id": str(getattr(item, "entry_id", "") or ""),
-                "saying": str(getattr(item, "saying", "") or "")[:120],
-                "occasion": str(getattr(item, "occasion", "") or "")[:120],
-            }
-            for item in expression_entries
-            if str(getattr(item, "entry_id", "") or "").strip()
-        ],
         "semantic_examples": snapshot_semantic_examples,
         "memory_entries": [dict(item) for item in memory_entries if isinstance(item, dict)],
         "knowledge_chunks": [dict(item) for item in chunks if isinstance(item, dict)],
@@ -1325,7 +1315,6 @@ async def prepare_and_submit_llm_chat_turn(
         )
         injection_snapshot = build_injection_snapshot(
             ambient_turns=ambient_turns,
-            expression_entries=[],
             semantic_examples=semantic_examples,
             semantic_example_sources=injected_semantic_sources,
             hybrid_retrieval_trace=hybrid_retrieval_trace,

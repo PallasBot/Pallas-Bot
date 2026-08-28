@@ -100,7 +100,6 @@ def test_build_injection_snapshot_uses_only_selected_json_safe_sources() -> None
                 "text_preview": "群友说的话",
             }
         ],
-        expression_entries=[SimpleNamespace(entry_id="expr-1", saying="太难了", occasion="venting")],
         semantic_style=SemanticStyleResolution(
             matched_examples=[("触发", "回复")],
             matched_example_sources=[
@@ -127,7 +126,6 @@ def test_build_injection_snapshot_uses_only_selected_json_safe_sources() -> None
 
     assert snapshot == {
         "ambient_turns": [{"turn_id": "ambient:1", "user_id": 2, "text_hash": "hash", "text_preview": "群友说的话"}],
-        "expression_entries": [{"entry_id": "expr-1", "saying": "太难了", "occasion": "venting"}],
         "semantic_examples": [{"example_id": "semantic-1", "trigger": "触发", "reply": "回复"}],
         "memory_entries": [
             {
@@ -151,7 +149,6 @@ def test_build_injection_snapshot_keeps_only_prompted_semantic_pairs_with_stable
 
     snapshot = build_injection_snapshot(
         ambient_turns=[],
-        expression_entries=[],
         semantic_examples=[("第一句", "第一回"), ("第二句", "第二回")],
         semantic_example_sources=[
             SemanticStyleDirectPair(trigger_text="第一句", reply_text="第一回", source_example_id="native-1"),
@@ -189,7 +186,6 @@ def test_semantic_snapshot_fallback_id_matches_feedback_filter(tmp_path, monkeyp
     pair = SemanticStyleDirectPair(trigger_text="触发", reply_text="回复")
     snapshot = build_injection_snapshot(
         ambient_turns=[],
-        expression_entries=[],
         semantic_examples=[("触发", "回复")],
         semantic_example_sources=[pair],
         hybrid_retrieval_trace={},

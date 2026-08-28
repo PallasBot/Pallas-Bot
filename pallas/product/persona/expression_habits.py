@@ -1,13 +1,6 @@
 from __future__ import annotations
 
-import asyncio
 from typing import Any
-
-from pallas.product.llm.config import get_llm_config
-from pallas.product.persona.expression_retrieve import (
-    build_expression_reference_block,
-    retrieve_expressions_for_message,
-)
 
 from .prompt_guard import sanitize_prompt_literal
 
@@ -45,59 +38,3 @@ def build_expression_habits_suffix(style_profile: dict[str, Any] | None) -> str:
     if not lines:
         return ""
     return "\n【表达习惯参考】" + "；".join(lines) + "。"
-
-
-async def build_expression_context_suffix(
-    group_id: int | None,
-    plain_text: str,
-    *,
-    bot_id: int = 0,
-    scene: str = "",
-    style_profile: dict[str, Any] | None = None,
-    blocked_openers: list[str] | None = None,
-    blocked_motifs: list[str] | None = None,
-) -> str:
-    reference, _entries = await build_expression_context_with_entries(
-        group_id,
-        plain_text,
-        bot_id=bot_id,
-        scene=scene,
-        style_profile=style_profile,
-        blocked_openers=blocked_openers,
-        blocked_motifs=blocked_motifs,
-    )
-    return reference
-
-
-async def build_expression_context_with_entries(
-    group_id: int | None,
-    plain_text: str,
-    *,
-    bot_id: int = 0,
-    scene: str = "",
-    style_profile: dict[str, Any] | None = None,
-    blocked_openers: list[str] | None = None,
-    blocked_motifs: list[str] | None = None,
-) -> tuple[str, list]:
-    """Return the exact entries used to build the expression reference."""
-    """Prefer matched expression-bank references, then retain profile habits."""
-    cfg = get_llm_config()
-    if cfg.llm_expression_inject_enabled and group_id is not None and str(plain_text or "").strip():
-        kwargs = {
-            "limit": cfg.llm_expression_retrieve_limit,
-            "bot_id": bot_id,
-            "blocked_openers": blocked_openers or (),
-        }
-        if blocked_motifs:
-            kwargs["blocked_motifs"] = tuple(blocked_motifs)
-        if scene:
-            kwargs["scene"] = scene
-        entries = await asyncio.to_thread(retrieve_expressions_for_message, int(group_id), plain_text, **kwargs)
-        reference = build_expression_reference_block(
-            entries,
-            limit=cfg.llm_expression_retrieve_limit,
-            blocked_motifs=blocked_motifs,
-        )
-        if reference:
-            return reference, entries
-    return build_expression_habits_suffix(style_profile), []

@@ -50,3 +50,21 @@ def normalize_occasion_tag(value: str | OccasionTag) -> str:
     if plain.startswith("安抚"):
         return OccasionTag.VENTING
     return _OCCASION_ALIASES.get(plain, plain).value if plain in _OCCASION_ALIASES else plain
+
+
+def infer_expression_occasion(text: str, stance: str) -> str:
+    """轻量场景标签推断：被 turn_style_layers 的场景语气提示复用。"""
+    plain = str(text or "").strip()
+    if any(cue in plain for cue in ("打死", "撞死", "杀掉", "滚出来", "滚", "蠢东西", "笨蛋", "废物", "去死")):
+        return OccasionTag.PROVOCATION
+    if stance == "complain":
+        return OccasionTag.VENTING
+    if any(cue in plain for cue in ("哈哈", "笑死", "草", "整活", "玩梗")):
+        return OccasionTag.BANTER
+    if stance == "warm":
+        return OccasionTag.WARM_REPLY
+    if stance == "echo":
+        return OccasionTag.AGREEMENT
+    if any(cue in plain for cue in ("早", "晚安", "晚")):
+        return OccasionTag.GREETING
+    return OccasionTag.SMALLTALK

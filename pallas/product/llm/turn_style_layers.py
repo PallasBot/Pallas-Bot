@@ -71,7 +71,7 @@ _SCENE_TONE_HINTS: dict[str, str] = {
 
 def build_scene_tone_hint(text: str, *, stance: str) -> str | None:
     """对温和场景生成一轮软语气提示；尖锐/中性闲聊返回 None。"""
-    from pallas.product.persona.expression_learn import infer_expression_occasion
+    from pallas.product.persona.occasion import infer_expression_occasion
 
     occasion = str(infer_expression_occasion(text, stance) or "").strip()
     hint = _SCENE_TONE_HINTS.get(occasion)

@@ -271,8 +271,6 @@ from pallas.product.llm.repeater_feedback import (  # noqa: F401
     set_feedback_entry_correction,
     set_feedback_entry_eligibility,
 )
-from pallas.product.persona.expression_bank import list_group_expressions  # noqa: F401
-from pallas.product.persona.expression_promote import resolve_expression  # noqa: F401
 
 from .ai_extension_api import _load_ai_extension_config, ai_extension_http_json  # noqa: F401
 from .console_read_cache import drop_read_cache  # noqa: F401
