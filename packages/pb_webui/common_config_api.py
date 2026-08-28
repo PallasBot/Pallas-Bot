@@ -1,10 +1,11 @@
 """Pallas-Bot WebUI console API: common-config routes."""
 
 import asyncio
+from datetime import date as _date
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Body, Header, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, StrictInt
 
 from packages.pb_webui.console_openapi_models import (
@@ -429,6 +430,12 @@ class _LlmProviderModelsDiscoverBody(BaseModel):
     request_method: str = ""
 
 
+class _LlmProviderRenameBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    new_id: str = Field(min_length=1, max_length=200)
+
+
 class _LlmLocalRoutingModelsBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -476,6 +483,7 @@ LlmLocalRoutingConfigBody = _LlmLocalRoutingConfigBody
 LlmProvidersDocumentBody = _LlmProvidersDocumentBody
 LlmProviderRowBody = _LlmProviderRowBody
 LlmProviderModelsDiscoverBody = _LlmProviderModelsDiscoverBody
+LlmProviderRenameBody = _LlmProviderRenameBody
 
 
 def register_common_config_router(
@@ -789,6 +797,25 @@ def register_common_config_router(
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
+    @router.put(f"{x}/common-config/llm/providers/{{provider_id}}/rename", include_in_schema=True)
+    async def _llm_provider_rename_put(
+        provider_id: str,
+        body: LlmProviderRenameBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        """改提供方 ID：改行内 id 并同步 routing / 主配置引用。"""
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.llm.ops_api import rename_provider_config
+
+        try:
+            data = await rename_provider_config(provider_id, body.new_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
     @router.get(f"{x}/common-config/llm/providers/{{provider_id}}/models", include_in_schema=True)
     async def _llm_provider_models_get(provider_id: str) -> JSONResponse:
         from pallas.product.llm.ops_api import fetch_provider_models
@@ -866,6 +893,35 @@ def register_common_config_router(
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
+
+    @router.get(
+        f"{x}/common-config/llm/usage-ledger/export",
+        include_in_schema=True,
+    )
+    async def _llm_usage_ledger_export(
+        start: str = Query(description="YYYY-MM-DD，含当日"),
+        end: str = Query(description="YYYY-MM-DD，含当日"),
+    ) -> StreamingResponse:
+        """导出请求级 usage 账本明细 CSV（llm_usage JSONL 原始记录）。"""
+        from pallas.product.llm.usage_ledger import count_ledger_rows, iter_usage_csv_lines
+
+        try:
+            start_day = _date.fromisoformat(str(start).strip()[:10]).isoformat()
+            end_day = _date.fromisoformat(str(end).strip()[:10]).isoformat()
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="start/end 需为 YYYY-MM-DD") from e
+        if start_day > end_day:
+            start_day, end_day = end_day, start_day
+        return StreamingResponse(
+            iter_usage_csv_lines(start_day=start_day, end_day=end_day),
+            media_type="text/csv; charset=utf-8",
+            headers={
+                "Content-Disposition": (
+                    f'attachment; filename="pallas-ai-usage-detail_{start_day}_{end_day}.csv"'
+                ),
+                "X-Usage-Rows": str(count_ledger_rows(start_day, end_day)),
+            },
+        )
 
     @router.get(
         f"{x}/common-config/llm/media-assets/status",

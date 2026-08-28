@@ -626,6 +626,62 @@ def upsert_provider_row(provider: dict[str, Any]) -> dict[str, Any]:
     return export_providers_for_api(doc=doc)
 
 
+def rename_provider_row(old_id: str, new_id: str) -> dict[str, Any]:
+    """改提供方 ID：整行改 id，并把 routing 内引用同步到新 ID。
+
+    其余行与密钥原样保留；model 名（task_models / *_backup_models）不涉及提供方 ID，不动。
+    """
+    global _DOC_CACHE, _DOC_CACHE_REV
+    old = str(old_id or "").strip()
+    new = str(new_id or "").strip()
+    if not old or not new:
+        raise ValueError("provider id is required")
+    existing = load_providers_document(refresh=True)
+    rows = [row for row in (existing.get("providers") or []) if isinstance(row, dict)]
+    index_by_id = {str(row.get("id") or "").strip(): i for i, row in enumerate(rows)}
+    if old not in index_by_id:
+        raise ValueError(f"provider not found: {old}")
+    if new in index_by_id:
+        raise ValueError(f"provider id already exists: {new}")
+    idx = index_by_id[old]
+    row = json.loads(json.dumps(rows[idx]))
+    row["id"] = new
+    next_rows = [*rows[:idx], row, *rows[idx + 1 :]]
+    routing = existing.get("routing") if isinstance(existing.get("routing"), dict) else {}
+
+    def remap(mapping: Any) -> dict[str, Any]:
+        out: dict[str, Any] = {}
+        if isinstance(mapping, dict):
+            for key, value in mapping.items():
+                out[str(key)] = new if str(value or "").strip() == old else value
+        return out
+
+    doc = {
+        "providers": next_rows,
+        "routing": {
+            "chain_fallback": [
+                new if str(item or "").strip() == old else item
+                for item in (routing.get("chain_fallback") if isinstance(routing.get("chain_fallback"), list) else [])
+            ],
+            "tasks": remap(routing.get("tasks")),
+            "tier_backups": remap(routing.get("tier_backups")),
+            "tier_backup_models": dict(routing.get("tier_backup_models") or {}),
+            "task_backups": remap(routing.get("task_backups")),
+            "task_backup_models": dict(routing.get("task_backup_models") or {}),
+            "route_source": str(routing.get("route_source") or ""),
+            "cost_currency": str(routing.get("cost_currency") or ""),
+        },
+    }
+    path = providers_store_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(doc, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    with _LOCK:
+        _DOC_CACHE = json.loads(json.dumps(doc))
+        _DOC_CACHE_REV = providers_store_disk_revision()
+    logger.info("LLM provider [{}] was renamed to [{}] in file [{}]", old, new, path)
+    return export_providers_for_api(doc=doc)
+
+
 def export_providers_for_api(*, doc: dict[str, Any] | None = None) -> dict[str, Any]:
     payload = doc if isinstance(doc, dict) else load_providers_document()
     providers: list[dict[str, Any]] = []

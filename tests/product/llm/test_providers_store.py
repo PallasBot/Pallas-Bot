@@ -416,3 +416,121 @@ def test_providers_store_reloads_when_disk_revision_changes(tmp_path: Path, monk
     assert second is not None
     assert second.provider_id == "ds"
     assert second.base_url == "https://api.deepseek.com"
+
+
+def test_rename_provider_row_updates_row_and_routing_references(tmp_path: Path, monkeypatch) -> None:
+    import pytest
+
+    from pallas.product.llm.providers_store import rename_provider_row
+
+    store = tmp_path / "llm_providers.json"
+    monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
+    monkeypatch.setattr("pallas.product.llm.providers_store._read_ai_providers_toml", lambda: None)
+    clear_providers_store_cache()
+    save_providers_document({
+        "providers": [
+            {
+                "id": "ds",
+                "kind": "remote",
+                "base_url": "https://api.deepseek.com",
+                "api_key": "sk-ds-keep",
+                "default_model": "deepseek-chat",
+                "task_models": {"llm_chat": "deepseek-chat"},
+            },
+            {
+                "id": "ak",
+                "kind": "remote",
+                "base_url": "https://ak.example/v1",
+                "api_key": "sk-ak-keep",
+                "default_model": "gpt-x",
+            },
+        ],
+        "routing": {
+            "chain_fallback": ["ds", "ak"],
+            "tasks": {"llm_chat": "ds", "turn_decision": "ak"},
+            "tier_backups": {"high": "ds", "low": "ak"},
+            "tier_backup_models": {"high": "deepseek-chat"},
+            "task_backups": {"llm_chat": "ak"},
+            "task_backup_models": {"llm_chat": "gpt-x"},
+        },
+    })
+    clear_providers_store_cache()
+
+    exported = rename_provider_row("ds", "deepseek")
+
+    ids = [row["id"] for row in exported["providers"]]
+    assert ids == ["deepseek", "ak"]
+    by_id = {row["id"]: row for row in exported["providers"]}
+    # 密钥与模型配置整行保留
+    assert by_id["deepseek"]["api_key_set"] is True
+    assert by_id["deepseek"]["default_model"] == "deepseek-chat"
+    routing = exported["routing"]
+    assert routing["tasks"] == {"llm_chat": "deepseek", "turn_decision": "ak"}
+    assert routing["chain_fallback"] == ["deepseek", "ak"]
+    assert routing["tier_backups"] == {"high": "deepseek", "low": "ak"}
+    assert routing["task_backups"] == {"llm_chat": "ak"}
+    # 模型名引用不属于提供方 ID，原样保留
+    assert routing["tier_backup_models"] == {"high": "deepseek-chat"}
+    assert routing["task_backup_models"] == {"llm_chat": "gpt-x"}
+
+    clear_providers_store_cache()
+    doc = load_providers_document()
+    assert doc["routing"]["tasks"]["llm_chat"] == "deepseek"
+    endpoint = resolve_endpoint_for_task("llm_chat")
+    assert endpoint is not None
+    assert endpoint.provider_id == "deepseek"
+    assert endpoint.api_key == "sk-ds-keep"
+
+    # 旧名已不存在；改名到已有 ID 报冲突
+    with pytest.raises(ValueError, match="not found"):
+        rename_provider_row("ds", "other")
+    with pytest.raises(ValueError, match="already exists"):
+        rename_provider_row("deepseek", "ak")
+
+
+async def test_rename_provider_config_updates_embedding_provider_id(tmp_path: Path, monkeypatch) -> None:
+    from pallas.product.llm.model_admin import rename_provider_config
+
+    store = tmp_path / "llm_providers.json"
+    monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
+    monkeypatch.setattr("pallas.product.llm.providers_store._read_ai_providers_toml", lambda: None)
+    clear_providers_store_cache()
+    save_providers_document({
+        "providers": [
+            {
+                "id": "ds",
+                "kind": "remote",
+                "base_url": "https://api.deepseek.com",
+                "api_key": "sk-ds",
+                "default_model": "deepseek-chat",
+            }
+        ],
+        "routing": {"tasks": {"llm_chat": "ds"}},
+    })
+
+    patches: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        "pallas.core.foundation.config.repo_settings.repo_env_raw_value",
+        lambda key: "ds" if key == "LLM_EMBEDDING_PROVIDER_ID" else None,
+    )
+    monkeypatch.setattr(
+        "pallas.console.webui.env_sections.apply_webui_env_section_patch",
+        lambda section, patch: patches.append((section, dict(patch))),
+    )
+
+    await rename_provider_config("ds", "deepseek")
+
+    assert patches == [("llm", {"llm_embedding_provider_id": "deepseek"})]
+    clear_providers_store_cache()
+    doc = load_providers_document()
+    assert doc["providers"][0]["id"] == "deepseek"
+    assert doc["routing"]["tasks"]["llm_chat"] == "deepseek"
+
+    # Embedding 指向其他提供方时不应误改
+    patches.clear()
+    monkeypatch.setattr(
+        "pallas.core.foundation.config.repo_settings.repo_env_raw_value",
+        lambda key: "ak" if key == "LLM_EMBEDDING_PROVIDER_ID" else None,
+    )
+    await rename_provider_config("deepseek", "ds")
+    assert patches == []

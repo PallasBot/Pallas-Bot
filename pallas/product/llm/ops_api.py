@@ -98,6 +98,7 @@ from pallas.product.llm.model_admin import (
     get_runtime_model,
     probe_provider,
     reload_runtime_model,
+    rename_provider_config,
     save_local_routing_config,
     save_providers_config,
     set_runtime_num_gpu,
@@ -130,6 +131,7 @@ from pallas.product.llm.providers_store import (
     resolve_provider_api_key,
     resolve_provider_api_keys,
     resolve_provider_base_url,
+    rename_provider_row,
     upsert_provider_row,
 )
 from pallas.product.llm.repeater_feedback import (
@@ -264,6 +266,8 @@ __all__ = [
     "put_tts_translator",
     "rebuild_hiergraph",
     "reload_runtime_model",
+    "rename_provider_config",
+    "rename_provider_row",
     "resolve_endpoint_candidates_for_task",
     "resolve_endpoint_for_task",
     "resolve_provider_api_key",

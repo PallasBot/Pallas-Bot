@@ -110,3 +110,46 @@ def test_usage_ledger_preserves_pricing_rule_snapshot(tmp_path, monkeypatch) -> 
             "pricing_rule": {"rule_id": "sept", "kind": "token_tiered", "tier_index": 1},
         }
     ]
+
+
+def test_usage_csv_export_and_count(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm.usage_ledger import (
+        count_ledger_rows,
+        iter_usage_csv_lines,
+    )
+
+    monkeypatch.setattr("pallas.product.llm.usage_ledger.usage_ledger_dir", lambda: tmp_path)
+    # 2026-07-26 13:00:00 local
+    append_usage_record(
+        task="llm_chat",
+        provider="ds",
+        model="deepseek-v4-flash",
+        prompt_tokens=1000,
+        completion_tokens=100,
+        cache_read_tokens=500,
+        cache_write_tokens=2,
+        cost=0.0013,
+        currency="cny",
+        day_key="2026-07-26",
+        ts=1785042000.0,
+        pricing_rule={"rule_id": "rule-1", "kind": "token"},
+    )
+    (tmp_path / "2026-07-27.jsonl").write_text("not-json\n\n", encoding="utf-8")
+
+    lines = list(iter_usage_csv_lines(start_day="2026-07-26", end_day="2026-07-27"))
+    assert lines[0].startswith("﻿")
+    assert "时间,任务,Provider,模型,输入 Token,输出 Token,缓存读 Token,缓存写 Token,总 Token,费用,币种,定价规则\r\n" in lines[0]
+    data_rows = [line for line in lines[1:] if line.strip()]
+    assert len(data_rows) == 1
+    row_cells = data_rows[0].strip("\r\n").split(",")
+    assert row_cells[1] == "llm_chat"
+    assert row_cells[2] == "ds"
+    assert row_cells[3] == "deepseek-v4-flash"
+    assert row_cells[4:9] == ["1000", "100", "500", "2", "1100"]
+    assert row_cells[9] == "0.0013"
+    assert row_cells[10] == "CNY"
+    assert row_cells[11] == "rule-1"
+    # 区间外日期不参与
+    assert not list(iter_usage_csv_lines(start_day="2026-08-01", end_day="2026-08-02"))[1:]
+    assert count_ledger_rows("2026-07-26", "2026-07-27") == 2
+    assert count_ledger_rows("2026-08-01", "2026-08-02") == 0

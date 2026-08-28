@@ -50,6 +50,31 @@ flowchart TD
 `LLM_CHAT_ENABLED` 未开时，即使 AI 后端在线也不会触发多数LLM 对话能力。
 :::
 
+## 群洞察与语义风格
+
+群表达画像和普通 LLM 对话是两条不同的后台链路。消息先写入 `message` 表，主进程约每 6 小时扫描活跃群并向 `work aux` 投递 `group.insight` 任务；work aux 再批量标注新发现的真人接话，成功后更新语义样本和画像。因此，配置刚打开或群里刚产生新对话后，页面不会立即出现结果。
+
+| 项目 | 默认 / 位置 | 说明 |
+| --- | --- | --- |
+| 语义标注每日预算 | `LLM_SEMANTIC_STYLE_REALTIME_DAILY_LIMIT`，5000 次/天 | 按实际 LLM 请求计数；批量请求算 1 次，retry 另计 |
+| 语义样本 | `data/pb_webui/repeater_semantic_style/examples.jsonl` | 通过质量判断的前句→接话样本 |
+| 语义画像 | `data/pb_webui/repeater_semantic_style/profiles.json` | 按 Bot × 群 × 场景重建的注入数据 |
+| 增量游标 | `data/pb_webui/repeater_semantic_style/semantic_style_group_cursors.json` | 记录各 Bot/群已处理到的消息时间 |
+| 预算计数 | `data/pb_webui/repeater_semantic_style/semantic_style_label_budget.json` | 按天记录已占用的标注请求数 |
+
+### 群表达页面没有数据
+
+按下面顺序判断：
+
+1. 页面选择的 `bot` 和 `group` 是否是目标范围。语义画像按 Bot × 群隔离，同一群的另一只 Bot 可能还没有样本。
+2. 是否只等待了几分钟。语义扫描约 6 小时一轮，样本标注还要经过 work aux 消费；短时间没有新增属于正常情况。
+3. 用 `uv run pallas logs -f --all` 或查看 `data/pallas_work/logs/work.log`，确认主进程是否记录「群洞察扫描已入队」，以及 work aux 是否记录产出、预算跳过或失败；产出日志为 debug 级别时可能不会显示在默认日志级别中。
+4. 查看 `data/pb_webui/repeater_semantic_style/` 下的 `profiles.json`、`examples.jsonl` 和游标文件，区分“没有合格样本”和“任务未执行”。
+
+「回复形态」不读取语义样本画像，而是由 `group_style_refresh` 根据群消息统计独立刷新，通常约 20 分钟一轮。语义样例有数据但回复形态为空，或二者更新时间不同，不代表同一条链路故障。
+
+预算达到上限时，日志会记录软跳过；任务不会记为失败，也不会推进语义游标，下一天自动继续。LLM 请求失败或 retry 失败同样不会推进游标。
+
 ## 按现象检查
 
 ### `@` LLM 对话无响应
