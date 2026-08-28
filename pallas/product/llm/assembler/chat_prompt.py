@@ -34,23 +34,27 @@ class ToolPromptContext:
 
 
 class ChatPromptAssembler:
-    """Assemble chat-only prompt sections in their policy order."""
+    """Assemble chat-only prompt sections in their policy order.
+
+    段序按变化频率从低到高排布：静态人设在前、逐轮变化的契约/时间在后，
+    让支持前缀缓存的 Provider 能命中更长的稳定前缀。
+    """
 
     section_ids = (
         "injection_guard",
         "persona",
         "identity",
-        "reply_shape",
-        "turn_policy",
-        "current_time",
-        "group_timeline",
+        "group_expression",
+        "behavior_reference",
         "memory",
         "knowledge",
         "relationship",
         "person_facts",
         "mid_term",
-        "group_expression",
-        "behavior_reference",
+        "group_timeline",
+        "reply_shape",
+        "turn_policy",
+        "current_time",
         "tool_context",
     )
 
@@ -98,12 +102,12 @@ class ChatPromptAssembler:
             PROMPT_INJECTION_GUARD,
             core_persona,
             self_identity,
+            self._group_expression_block(group_expression),
+            self._group_behavior_reference_block(group_expression),
+            *context.blocks(),
             self.reply_shape_block(reply_shape),
             self._turn_policy_block(turn_policy),
             self.current_time_block(current_time),
-            *context.blocks(),
-            self._group_expression_block(group_expression),
-            self._group_behavior_reference_block(group_expression),
             self._tool_context_block(tool_context),
         ]
         return apply_prompt_section_overrides(self.section_ids, sections, section_overrides)
