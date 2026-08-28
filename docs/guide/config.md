@@ -52,7 +52,7 @@ db = "PallasBot"
 ```mermaid
 flowchart LR
     Toml[config/pallas.toml] --> Env[.env 遗留项]
-    Env --> Webui[webui.json<br>控制台落盘]
+    Env --> Webui[webui.json<br/>控制台落盘]
     Webui --> Final[最终运行值]
     style Final stroke-width:2px
 ```
