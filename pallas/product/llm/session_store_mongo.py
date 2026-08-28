@@ -69,7 +69,8 @@ class MongoLlmSessionMessageBackend:
         if ttl_sec > 0:
             query["created_at"] = {"$gte": int(time.time()) - ttl_sec}
         rows = (
-            await LlmChatMessage.find(query)
+            await LlmChatMessage
+            .find(query)
             .sort(
                 [("created_at", SortDirection.DESCENDING), ("_id", SortDirection.DESCENDING)],
             )
@@ -101,7 +102,8 @@ class MongoLlmSessionMessageBackend:
         if ttl_sec > 0:
             query["created_at"] = {"$gte": int(time.time()) - ttl_sec}
         rows = (
-            await LlmChatMessage.find(query)
+            await LlmChatMessage
+            .find(query)
             .sort(
                 [("created_at", SortDirection.DESCENDING), ("_id", SortDirection.DESCENDING)],
             )
@@ -163,7 +165,8 @@ class MongoLlmSessionMessageBackend:
             gid = int(key.get("group_id") or 0)
             uid = int(key.get("user_id") or 0)
             latest = (
-                await LlmChatMessage.find({
+                await LlmChatMessage
+                .find({
                     "bot_id": bid,
                     "group_id": gid,
                     "user_id": uid,
@@ -226,7 +229,8 @@ class MongoLlmSessionMessageBackend:
             "user_id": int(user_id),
         }
         rows = (
-            await LlmChatMessage.find(query)
+            await LlmChatMessage
+            .find(query)
             .sort(
                 [("created_at", SortDirection.ASCENDING), ("_id", SortDirection.ASCENDING)],
             )
@@ -304,7 +308,8 @@ class MongoLlmSessionMessageBackend:
         if overflow <= 0:
             return
         stale = (
-            await LlmChatMessage.find(query)
+            await LlmChatMessage
+            .find(query)
             .sort(
                 [("created_at", SortDirection.ASCENDING), ("_id", SortDirection.ASCENDING)],
             )

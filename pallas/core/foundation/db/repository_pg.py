@@ -1190,7 +1190,8 @@ def build_reply_context(
 
 def build_reply_message_query(answer_ids: list[int], msg_cap: int):
     rn = (
-        func.row_number()
+        func
+        .row_number()
         .over(
             partition_by=ContextAnswerMessageRow.answer_id,
             order_by=ContextAnswerMessageRow.id.desc(),

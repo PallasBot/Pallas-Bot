@@ -356,7 +356,8 @@ async def list_relationship_notes_mongo(
     if group_id is not None:
         filt["group_id"] = normalize_group_scope(group_id)
     rows = (
-        await LlmRelationshipNote.find(filt)
+        await LlmRelationshipNote
+        .find(filt)
         .sort([("updated_at", SortDirection.DESCENDING), ("note_id", SortDirection.DESCENDING)])
         .limit(max_limit * 4)
         .to_list()

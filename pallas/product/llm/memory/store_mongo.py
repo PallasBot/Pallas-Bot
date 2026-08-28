@@ -51,7 +51,8 @@ async def find_reusable_memory_entry_mongo(
         return exact
 
     rows = (
-        await LlmMemoryEntry.find({"bot_id": bot_id, "group_id": group_id})
+        await LlmMemoryEntry
+        .find({"bot_id": bot_id, "group_id": group_id})
         .sort([("updated_at", SortDirection.DESCENDING), ("entry_id", SortDirection.DESCENDING)])
         .limit(32)
         .to_list()
@@ -80,7 +81,8 @@ async def trim_group_memory_entries_mongo(
     if overflow <= 0:
         return
     stale = (
-        await LlmMemoryEntry.find(query)
+        await LlmMemoryEntry
+        .find(query)
         .sort([("updated_at", SortDirection.ASCENDING), ("entry_id", SortDirection.ASCENDING)])
         .limit(overflow)
         .to_list()
@@ -214,7 +216,8 @@ async def retrieve_memory_hits_mongo(
     scope_gid = normalize_group_scope(group_id)
     top_k = max(1, min(int(c.llm_memory_rag_top_k), 8))
     rows = (
-        await LlmMemoryEntry.find({
+        await LlmMemoryEntry
+        .find({
             "bot_id": int(bot_id),
             "group_id": {"$in": [scope_gid, 0]},
         })
@@ -305,7 +308,8 @@ async def list_memory_entries_mongo(
     if group_id is not None:
         filt["group_id"] = normalize_group_scope(group_id)
     rows = (
-        await LlmMemoryEntry.find(filt)
+        await LlmMemoryEntry
+        .find(filt)
         .sort([("updated_at", SortDirection.DESCENDING), ("entry_id", SortDirection.DESCENDING)])
         .limit(max_limit * 4)
         .to_list()
