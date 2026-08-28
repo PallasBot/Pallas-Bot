@@ -309,24 +309,29 @@ def labeled_semantic_style_reply_ids(bot_id: int, group_id: int) -> set[int]:
 
 
 def get_semantic_style_group_cursor(bot_id: int, group_id: int) -> int:
-    """本进程已处理过的语义采样消息时间上限，用于增量处理跳过旧窗口。"""
+    """读取某群已处理的语义采样消息时间上限。"""
+    scope_key = _semantic_style_group_cursor_key(bot_id, group_id)
+    with semantic_style_data_lock():
+        processed_at = _load_semantic_style_group_cursors().get(scope_key, 0)
     with _profiles_lock:
-        key = (int(bot_id), int(group_id))
-        return int(_semantic_style_seen_cursors.get(key) or 0)
+        _semantic_style_seen_cursors[(int(bot_id), int(group_id))] = int(processed_at)
+    return int(processed_at)
 
 
 def mark_semantic_style_group_processed(bot_id: int, group_id: int, processed_at: int) -> None:
-    """记录某群语义采样已推进到的时间点，下一轮只处理游标之后的新样本。
-
-    未通过落库过滤（LLM 判定非回复对/不可迁移）的配对同样计入游标，避免同一批
-    被拒消息每轮重复送 LLM。仅进程内生效，重启后重新采样最近窗口，可接受。
-    """
+    """原子持久化某群语义采样游标，只允许向前推进。"""
     if processed_at <= 0:
         return
-    key = (int(bot_id), int(group_id))
+    scope_key = _semantic_style_group_cursor_key(bot_id, group_id)
+    with semantic_style_data_lock():
+        cursors = _load_semantic_style_group_cursors()
+        current = int(cursors.get(scope_key) or 0)
+        if processed_at <= current:
+            return
+        cursors[scope_key] = int(processed_at)
+        _save_semantic_style_group_cursors(cursors)
     with _profiles_lock:
-        if processed_at > int(_semantic_style_seen_cursors.get(key) or 0):
-            _semantic_style_seen_cursors[key] = int(processed_at)
+        _semantic_style_seen_cursors[(int(bot_id), int(group_id))] = int(processed_at)
 
 
 _direct_quota_windows: dict[tuple[int, int], deque[bool]] = {}
@@ -695,6 +700,31 @@ def semantic_style_data_lock_path() -> Path:
     return semantic_style_base_dir() / "semantic_style_data.lock"
 
 
+def semantic_style_group_cursor_path() -> Path:
+    return semantic_style_base_dir() / "semantic_style_group_cursors.json"
+
+
+def _semantic_style_group_cursor_key(bot_id: int, group_id: int) -> str:
+    return f"{int(bot_id)}:{int(group_id)}"
+
+
+def _load_semantic_style_group_cursors() -> dict[str, int]:
+    try:
+        raw = json.loads(semantic_style_group_cursor_path().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    return {str(key): int(value) for key, value in raw.items() if isinstance(value, int | float) and int(value) > 0}
+
+
+def _save_semantic_style_group_cursors(cursors: dict[str, int]) -> None:
+    atomic_write_text(
+        semantic_style_group_cursor_path(),
+        json.dumps(cursors, ensure_ascii=False, separators=(",", ":")) + "\n",
+    )
+
+
 def semantic_style_label_budget_path() -> Path:
     """语义风格每日 LLM 标注预算计数文件路径（按天记录已提交次数）。"""
     return semantic_style_base_dir() / "semantic_style_label_budget.json"
@@ -731,10 +761,34 @@ def record_semantic_label_budget(n: int = 1) -> None:
         logger.warning("记录语义标注预算失败：{}", exc)
 
 
+def claim_semantic_label_budget(n: int = 1) -> bool:
+    """在发起语义标注请求前原子预占每日预算。"""
+    if n <= 0:
+        return True
+    from pallas.product.llm.config import get_llm_config
+
+    limit = max(0, int(getattr(get_llm_config(), "llm_semantic_style_realtime_daily_limit", 0) or 0))
+    day_key = str(int(time.time() // 86400))
+    with semantic_style_data_lock():
+        state = _semantic_label_budget_state()
+        used = int(state.get(day_key) or 0)
+        if limit > 0 and used + n > limit:
+            return False
+        state[day_key] = used + n
+        try:
+            tmp = semantic_style_label_budget_path().with_suffix(".tmp")
+            tmp.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+            Path(tmp).replace(semantic_style_label_budget_path())
+        except Exception as exc:
+            logger.warning("记录语义标注预算失败：{}", exc)
+            return False
+    return True
+
+
 def semantic_label_budget_ok(*, day_key: int | None = None) -> bool:
     """语义风格每日 LLM 标注预算闸：消费侧检查今日累计是否已达上限。
 
-    上限配置 ``llm_semantic_style_realtime_daily_limit``，默认 2000 次/天。
+    上限配置 ``llm_semantic_style_realtime_daily_limit``，默认 5000 次/天。
     达到上限返回 False，由调用方跳过本次标注（软上限，不阻塞入队、不影响游标轮转）。
     """
     from pallas.product.llm.config import get_llm_config
@@ -1778,6 +1832,8 @@ async def label_semantic_style_visual_with_cached_image(*, cq_code: str) -> Sema
     endpoint = resolve_endpoint_for_task("repeater_semantic_style")
     if endpoint is None or "image" not in endpoint.capabilities:
         return None
+    if not claim_semantic_label_budget():
+        return None
     import base64
 
     from pallas.product.llm.provider_client import complete_chat_message
@@ -1841,6 +1897,8 @@ async def label_semantic_style_with_retry(
     *, trigger_text: str, reply_text: str, pair_relation: Literal["quoted", "adjacent"] = "adjacent"
 ) -> tuple[SemanticStyleLabel, BehaviorStrategy | None] | None:
     for retry_index in range(SEMANTIC_STYLE_LABEL_MAX_RETRIES + 1):
+        if not claim_semantic_label_budget():
+            return None
         try:
             return await label_semantic_style_with_llm(
                 trigger_text=trigger_text,
@@ -1859,7 +1917,7 @@ async def label_semantic_style_batch_with_llm(
     pairs: list[tuple[str, str, Literal["quoted", "adjacent"]]],
     *,
     max_batch: int = SEMANTIC_STYLE_LABEL_BATCH_MAX,
-) -> list[tuple[SemanticStyleLabel, BehaviorStrategy | None]]:
+) -> list[tuple[SemanticStyleLabel, BehaviorStrategy | None] | None]:
     """一次 LLM 提交批量标注多个「前句→接话」对，逐项返回标签。
 
     参照 gsuid 后台管线的「一次输出 JSON 数组」范式，显著降低语义风格采集的
@@ -1869,7 +1927,7 @@ async def label_semantic_style_batch_with_llm(
     from pallas.product.llm.config import get_llm_config
     from pallas.product.llm.provider_client import complete_chat_message
 
-    results: list[tuple[SemanticStyleLabel, BehaviorStrategy | None]] = []
+    results: list[tuple[SemanticStyleLabel, BehaviorStrategy | None] | None] = []
     remaining = list(pairs)
     while remaining:
         chunk = remaining[:max_batch]
@@ -1878,21 +1936,21 @@ async def label_semantic_style_batch_with_llm(
         for index, (trigger_text, reply_text, pair_relation) in enumerate(chunk):
             relation = "明确引用前句" if pair_relation == "quoted" else "仅时间相邻"
             prompt_items.append(
-                f"[{index}] 关联：{relation}"
-                f"\n前句：{_short_text(trigger_text, 96)}\n接话：{_short_text(reply_text, 96)}"
+                f"[{index}] 关联：{relation}\n前：{_short_text(trigger_text, 72)}\n后：{_short_text(reply_text, 72)}"
             )
         cfg = get_llm_config()
         prompt = _label_semantic_style_batch_prompt(len(chunk)) + "\n\n" + "\n\n".join(prompt_items)
+        if not claim_semantic_label_budget():
+            return results
         try:
             response = await complete_chat_message(
                 [{"role": "user", "content": prompt}],
                 model=str(cfg.llm_model or ""),
-                options={"temperature": 0, "max_tokens": 160 * len(chunk)},
+                options={"temperature": 0, "max_tokens": 128 * len(chunk)},
                 cfg=cfg,
                 task="repeater.semantic_style",
             )
             parsed = _parse_label_batch_response(str(response.get("content") or ""), len(chunk))
-            record_semantic_label_budget(1)
         except Exception as exc:
             logger.warning("repeater semantic style batch label failed: {}", exc)
             parsed = []
@@ -1909,23 +1967,19 @@ async def label_semantic_style_batch_with_llm(
             fallback = await label_semantic_style_with_retry(
                 trigger_text=item[0], reply_text=item[1], pair_relation=item[2]
             )
-            record_semantic_label_budget(1)
-            results.append(fallback if fallback is not None else (SemanticStyleLabel(), None))
+            results.append(fallback)
     return results
 
 
 def _label_semantic_style_batch_prompt(count: int) -> str:
     return (
-        f"分析 {count} 组真实群聊的候选「前句→接话」，只输出一个严格 JSON 数组，长度等于 {count}，"
-        "每个元素含 is_reply_pair、transferable、interaction_actions、semantic_relations、intensity、"
-        "forms、behavior_strategy。各字段语义："
-        "is_reply_pair 仅当前句确实在回应前句时为 true；transferable 仅接话脱离当时人名、"
-        "多人局部梗或临时事实后仍可作为通用措辞参考时为 true。任一不成立都填 false。"
-        "intensity 只能 quiet/soft/neutral/sharp/strong；数组字段用受控英文词。"
+        f"判断 {count} 组群聊前后句，只输出长度为 {count} 的 JSON 数组。字段："
+        "is_reply_pair、transferable、interaction_actions、semantic_relations、intensity、forms、behavior_strategy。"
+        "确实回应前句才 is_reply_pair=true；脱离人名、局部梗、临时事实仍可复用才 transferable=true，"
+        "否则均为 false。intensity 只能 quiet/soft/neutral/sharp/strong，数组字段只能用受控英文词。"
         "behavior_strategy 为 null 或 "
         '{"scene":"可泛化场景","action":"实际接话动作","outcome":"可观察变化",'
-        '"learning_type":"observed"}。不抄原话，不带人名/临时梗，不做价值判断。'
-        "严格按 [0],[1],[2]… 的顺序输出，用数组下标对应每个输入组。"
+        '"learning_type":"observed"}。不抄原话，不带人名或临时梗。严格按输入顺序输出。'
     )
 
 

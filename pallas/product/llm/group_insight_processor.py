@@ -25,14 +25,11 @@ from pallas.product.llm.sender_identity import sender_kind
 GROUP_INSIGHT_KIND = "group.insight"
 
 _SCENE = "group_chat"
-_MAX_PAIRS_PER_JOB = 40
-_SWEEP_INTERVAL_SEC = 20 * 60
-_SWEEP_BATCH_SIZE = 24
-_PAIR_PAGE_LIMIT = 12
+_MAX_PAIRS_PER_JOB = 24
+_SWEEP_INTERVAL_SEC = 6 * 60 * 60
+_SWEEP_BATCH_SIZE = 1024
+_PAIR_PAGE_LIMIT = 96
 _SWEEP_STARTUP_POLL_SEC = 30
-# 增量处理窗口：游标之后的新消息回溯上限。上一轮已处理到的消息时间记为游标，
-# 本窗口内新消息才送 LLM 标注，避免长时段静默群每轮把历史窗口整体重扫。
-_SEMANTIC_WINDOW_SEC = 2 * 60 * 60
 
 # 群表达指导只看「前句→接话」的回复关系，不关心媒体细节：把 CQ 媒体码替换成
 # 通用占位符（图 → [图片]、表情 → [表情]、其它 → [媒体]），避免 LLM 读到不可读的原始码。
@@ -57,9 +54,8 @@ _SEMANTIC_LOOKBACK_DAYS = 7
 
 _GROUP_INSIGHT_LIFECYCLE_BOUND = False
 
-# 候选群列表轮转游标：记录上次 `_sweep_semantic_groups` 处理到的偏移，
-# 下一轮从该位置继续，遇列表末尾回绕，保证所有候选群在多轮内都被覆盖，
-# 避免排序后固定取头部导致部分群（如多 bot 并发测试群）长期饿死。
+# 候选群列表轮转游标：保留上限以防群数量异常增长，正常部署可在一个六小时周期
+# 内覆盖当前全部活跃群；超过上限时下一轮从上次位置继续，避免固定取头部饿死。
 _sweep_cursor = 0
 
 
@@ -110,19 +106,14 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
         logger.info("今日语义标注已达上限，跳过本群 [{}]", group_id)
         return
 
-    pairs = await _rebuild_pairs_from_messages(bot_id=bot_id, group_id=group_id)
+    cursor = get_semantic_style_group_cursor(bot_id=bot_id, group_id=group_id)
+    pairs = await _rebuild_pairs_from_messages(bot_id=bot_id, group_id=group_id, after_time=cursor)
     if not pairs:
         return
 
     # 跳过已落库样本的接话、已处理过的旧窗口，避免同一批消息反复送 LLM 标注。
-    now_ts = int(time.time())
     labeled_ids = labeled_semantic_style_reply_ids(bot_id=bot_id, group_id=group_id)
-    cursor = get_semantic_style_group_cursor(bot_id=bot_id, group_id=group_id)
-    pairs = [
-        pair
-        for pair in pairs
-        if pair[5] not in labeled_ids and (cursor <= 0 or pair[6] > cursor) and pair[6] >= now_ts - _SEMANTIC_WINDOW_SEC
-    ]
+    pairs = [pair for pair in pairs if pair[5] not in labeled_ids]
     if not pairs:
         return
 
@@ -130,16 +121,25 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
     labeled = await label_semantic_style_batch_with_llm([
         (trigger, reply, pair_relation) for trigger, reply, pair_relation, *_ in pairs
     ])
-    if len(labeled) != len(pairs):
+    if len(labeled) != len(pairs) or any(item is None for item in labeled):
         return
 
     accepted: list[SemanticStyleExample] = []
     accepted_ids: set[str] = set()
     max_processed_ts = 0
-    for (trigger, reply, pair_relation, trigger_user_id, reply_user_id, message_id, created_at, is_bot_reply), (
-        label,
-        strategy,
-    ) in zip(pairs, labeled, strict=True):
+    for (
+        trigger,
+        reply,
+        pair_relation,
+        trigger_user_id,
+        reply_user_id,
+        message_id,
+        created_at,
+        is_bot_reply,
+    ), labeled_item in zip(pairs, labeled, strict=True):
+        if labeled_item is None:
+            return
+        label, strategy = labeled_item
         max_processed_ts = max(max_processed_ts, int(created_at))
         if not label.is_reply_pair or not label.transferable:
             continue
@@ -174,7 +174,7 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
         )
     if accepted:
         persist_semantic_style_examples(accepted)
-        logger.info(
+        logger.debug(
             "群洞察已产出 [{}] 条语义样本，群 [{}]、账号 [{}]",
             len(accepted),
             group_id,
@@ -184,7 +184,7 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
 
 
 async def _rebuild_pairs_from_messages(
-    *, bot_id: int, group_id: int, limit: int = _MAX_PAIRS_PER_JOB
+    *, bot_id: int, group_id: int, limit: int = _MAX_PAIRS_PER_JOB, after_time: int = 0
 ) -> list[tuple[str, str, str, int, int, int, int, bool]]:
     """从 message 表重建「前句→接话」对，返回 (trigger, reply, relation, t_uid, r_uid, mid, created_at, is_bot_reply)。
 
@@ -213,6 +213,8 @@ async def _rebuild_pairs_from_messages(
             if earliest is None or ts < earliest:
                 earliest = ts
         if earliest is None or earliest >= before_time:
+            break
+        if after_time > 0 and earliest <= after_time:
             break
         # 用批内最小 time 作为下一批边界；同秒多条消息时会因 time < before_time
         # 严格小于而被跳过（可接受：此类刷屏群窗口去重后仍能覆盖主体，改为复合游标
@@ -248,6 +250,8 @@ async def _rebuild_pairs_from_messages(
         if reply_id <= 0:
             continue
         reply_time = int(getattr(reply_message, "time", 0) or 0)
+        if reply_time <= after_time:
+            continue
         replied_message_id = int(getattr(reply_message, "reply_to_message_id", 0) or 0)
         # 1) 引用对：reply 显式引用了一条已知真人消息。
         if replied_message_id > 0:
@@ -329,16 +333,14 @@ async def _sweep_semantic_groups() -> None:
     单独解析出语义采集 bot（见 ``_resolve_semantic_bot``），避免多 bot 并发群里
     主 bot 离线导致画像停更。
 
-    候选群按「需要程度」排序：无语义 profile 或 sample_count 最少的群优先入队，
-    避免固定取候选列表头部导致部分长期未采样的活跃群（如多 bot 并发测试群）被饿死。
+    候选群按群号稳定排序并配合游标轮转，避免固定取候选列表头部导致部分活跃群
+    长期未采样。是否实际调用 LLM 由 work 侧的持久化消息游标决定。
     """
     store = build_work_job_store()
     repo = make_message_repository()
     now_ts = int(time.time())
-    day = _day_key(now_ts)
+    day = _sweep_slot(now_ts)
     cutoff = now_ts - _SEMANTIC_LOOKBACK_DAYS * 24 * 60 * 60
-
-    from pallas.product.llm.repeater_semantic_style import cached_semantic_style_profile
 
     seen_groups: set[int] = set()
     _local = await _local_bot_ids()
@@ -359,9 +361,7 @@ async def _sweep_semantic_groups() -> None:
             continue
         if not await _group_needs_semantic(bot_id=semantic_bot, group_id=group_id):
             continue
-        profile = cached_semantic_style_profile(semantic_bot, group_id, _SCENE)
-        sample_count = int(profile.sample_count) if profile is not None else 0
-        pending.append((sample_count, semantic_bot, group_id))
+        pending.append((0, semantic_bot, group_id))
 
     pending.sort(key=itemgetter(0, 2))
     if not pending:
@@ -374,12 +374,15 @@ async def _sweep_semantic_groups() -> None:
     selected = (pending[start:] + pending[:start])[:_SWEEP_BATCH_SIZE]
     _sweep_cursor = (start + len(selected)) % count
 
+    enqueued = 0
     for _sample_count, semantic_bot, group_id in selected:
         try:
             await store.enqueue(build_semantic_insight_job(bot_id=semantic_bot, group_id=group_id, day=day))
-            logger.info("群洞察已入队语义任务，群 [{}]、帐号 [{}]", group_id, semantic_bot)
+            enqueued += 1
         except Exception as exc:
             logger.warning("群洞察扫描入队语义任务失败，群 [{}]：{}", group_id, exc)
+    if enqueued:
+        logger.info("群洞察扫描已入队 [{}] 个语义任务", enqueued)
 
 
 async def _resolve_semantic_bot(group_id: int) -> int:
@@ -416,16 +419,12 @@ async def _resolve_semantic_bot(group_id: int) -> int:
 
 async def _group_needs_semantic(*, bot_id: int, group_id: int) -> bool:
     from pallas.product.llm.repeater_semantic_style import (
-        cached_semantic_style_profile,
         semantic_style_collection_enabled,
     )
 
     if not semantic_style_collection_enabled(bot_id=bot_id, group_id=group_id):
         return False
-    profile = cached_semantic_style_profile(bot_id, group_id, _SCENE)
-    if profile is None:
-        return True
-    return int(profile.sample_count) < 10
+    return True
 
 
 async def _local_bot_ids() -> set[int]:
@@ -440,8 +439,8 @@ async def _local_bot_ids() -> set[int]:
     return ids
 
 
-def _day_key(ts: int) -> int:
-    return int(ts // 86400)
+def _sweep_slot(ts: int) -> int:
+    return int(ts // _SWEEP_INTERVAL_SEC)
 
 
 async def _sweep_loop() -> None:
