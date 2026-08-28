@@ -75,3 +75,17 @@ def test_fetch_embeddings_failure_uses_stub(monkeypatch) -> None:
     assert vectors is not None
     assert embedding_capability_trace(cfg)["embedding_fallback"] is True
     assert effective_vector_retrieve_mode(cfg) == "keyword"
+
+
+def test_fetch_embeddings_failure_skips_stub_when_opt_out(monkeypatch) -> None:
+    from pallas.product.llm.knowledge.embedding_provider import clear_embedding_provider_cache
+
+    clear_embedding_provider_cache()
+    cfg = LlmConfig(
+        llm_embedding_model="text-embedding-3-small",
+        llm_embedding_provider="openai",
+        llm_base_url="https://example.test",
+    )
+    monkeypatch.setattr("httpx.post", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("down")))
+
+    assert fetch_embeddings_sync(["hello"], cfg=cfg, fallback_stub=False) is None
