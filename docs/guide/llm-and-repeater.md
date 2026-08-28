@@ -55,6 +55,8 @@ AI **成功发出**之后，还可能：
 
 这些样本由群洞察处理器（`group_insight_processor.py`）从 message 表重建（引用对 / 相邻对）后批量标注沉淀（`profiles.json`），不再依赖实时 learn 链路；因此牛牛没在线期间的历史消息也能回补画像。抽象接话策略分观察他人（`observed`）与 Bot 自己接话复盘（`self_reflection`）两类，只有观察他人的会作为「真人接话参考」注入。
 
+语义风格不是逐条消息实时生效的学习：消息会先进入历史，后台再按较低频率整理，因此首次积累或新样本出现后可能需要等待几个小时。不是每条聊天都会成为样本，只有被判断为确实在接话且适合复用的内容才会进入参考。回复形态是另一条群画像链，按群消息统计独立刷新，和语义样例的更新时间不一定相同。
+
 因此偶发「说法变了 / 语料变多」往往是闭环在学，不一定是故障。相关开关在控制台 **AI 配置**（如收集反哺、表达注入 / 学习）。
 
 旧版 Repeater 的 LLM 选句、润色和无语料补写在线任务均已删除；日常接话始终直接投递真实语料。
@@ -71,4 +73,5 @@ AI **成功发出**之后，还可能：
 - [牛格与群味](/plugins/persona)
 - [AI 扩展](ai.md) · [LLM 对话、媒体与 AI Runtime](ai-runtime-choice.md)
 - 想了解模型看到了什么、回复被怎么拦：[牛牛的上下文与回复护栏](llm-context-and-guardrails.md)
+- 想了解群表达画像的后台整理与生效边界：[群洞察与语义风格指导器](/developer/architecture/group-insight-semantic-style)
 - 开发者：[LLM 输出路径](/developer/architecture/llm-output-path)
