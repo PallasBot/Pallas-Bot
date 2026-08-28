@@ -838,33 +838,38 @@ async def deliver_llm_callback_success(
                 logger.debug("reply effect eval skipped for task [{}]", task_id)
     behavior_scene = str(task.get("behavior_scene") or "").strip()
     if text_delivered and task_type == LLM_CHAT_TASK_TYPE and behavior_scene:
-        append_behavior_run(
-            BehaviorRun(
-                request_id=task_id,
-                bot_id=int(bot_id) if bot_id is not None else None,
-                group_id=int(group_id) if group_id is not None else None,
-                user_id=int(task.get("user_id") or 0) or None,
-                created_at=int(time.time()),
-                scene=BehaviorScene(behavior_scene),
-                user_text=str(task.get("user_text") or "").strip(),
-                reply_text=learned_reply_text,
-                bubble_count=len(delivery_segments),
-                bubble_rhythm="multi" if len(delivery_segments) > 1 else "single",
-                selected_pattern_ids=[
-                    str(item) for item in list(task.get("behavior_pattern_ids") or []) if str(item).strip()
-                ],
-                selected_actions=[
-                    BehaviorAction(str(item)) for item in list(task.get("behavior_actions") or []) if str(item).strip()
-                ],
-                behavior_hint_text=str(task.get("behavior_hint") or "").strip(),
-                auto_feedback_payload={
-                    **({"agent_trace": parsed_agent_trace} if parsed_agent_trace else {}),
-                    "bubble_count": len(delivery_segments),
-                    "bubble_rhythm": "multi" if len(delivery_segments) > 1 else "single",
-                    "rejection_tone": has_rejection_tone(learned_reply_text),
-                },
+        try:
+            append_behavior_run(
+                BehaviorRun(
+                    request_id=task_id,
+                    bot_id=int(bot_id) if bot_id is not None else None,
+                    group_id=int(group_id) if group_id is not None else None,
+                    user_id=int(task.get("user_id") or 0) or None,
+                    created_at=int(time.time()),
+                    scene=BehaviorScene(behavior_scene),
+                    user_text=str(task.get("user_text") or "").strip(),
+                    reply_text=learned_reply_text,
+                    bubble_count=len(delivery_segments),
+                    bubble_rhythm="multi" if len(delivery_segments) > 1 else "single",
+                    selected_pattern_ids=[
+                        str(item) for item in list(task.get("behavior_pattern_ids") or []) if str(item).strip()
+                    ],
+                    selected_actions=[
+                        BehaviorAction(str(item))
+                        for item in list(task.get("behavior_actions") or [])
+                        if str(item).strip()
+                    ],
+                    behavior_hint_text=str(task.get("behavior_hint") or "").strip(),
+                    auto_feedback_payload={
+                        **({"agent_trace": parsed_agent_trace} if parsed_agent_trace else {}),
+                        "bubble_count": len(delivery_segments),
+                        "bubble_rhythm": "multi" if len(delivery_segments) > 1 else "single",
+                        "rejection_tone": has_rejection_tone(learned_reply_text),
+                    },
+                )
             )
-        )
+        except Exception:
+            logger.warning("behavior run append failed for task [{}]", task_id)
     track_llm_callback(task, "callback_ok")
     if task_type == LLM_CHAT_TASK_TYPE and delivered and reply_text:
         logger.info(
