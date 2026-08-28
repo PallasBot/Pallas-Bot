@@ -111,10 +111,17 @@ class MessageRepository(Protocol):
         group_id: int,
         *,
         before_time: int | None = None,
+        before_message_id: int | None = None,
         user_id: int | None = None,
         limit: int = 8,
     ) -> list[Message]:
-        """群内近期消息，按 time 升序。"""
+        """群内近期消息，按 (time, message_id) 升序。
+
+        ``before_message_id`` 与 ``before_time`` 构成复合边界：
+        ``(time, message_id) < (before_time, before_message_id)``，
+        供秒级时间游标翻页时不漏同秒消息；仅传 ``before_time`` 时
+        保持 ``time < before_time`` 的历史语义。
+        """
         ...
 
     async def find_by_message_ids(self, group_id: int, message_ids: list[int]) -> list[Message]:

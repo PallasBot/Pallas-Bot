@@ -277,7 +277,10 @@ _startup_bound = False
 _labeled_ids_index_built_at = 0.0
 _labeled_ids_index: dict[tuple[int, int], set[int]] = {}
 _LABELED_IDS_INDEX_TTL_SEC = 5.0
-_semantic_style_seen_cursors: dict[tuple[int, int], int] = {}
+# 群语义采样游标 (time, message_id)：message_id 维度保证同秒内消息不被增量跳过。
+_semantic_style_seen_cursors: dict[tuple[int, int], tuple[int, int]] = {}
+# 旧版秒级游标（无 message_id）读入时的边界值：视为该秒已全部处理。
+_CURSOR_MID_SENTINEL = 2**63 - 1
 
 
 def labeled_semantic_style_reply_ids(bot_id: int, group_id: int) -> set[int]:
@@ -308,30 +311,41 @@ def labeled_semantic_style_reply_ids(bot_id: int, group_id: int) -> set[int]:
     return _labeled_ids_index.get((int(bot_id), int(group_id)), set())
 
 
-def get_semantic_style_group_cursor(bot_id: int, group_id: int) -> int:
-    """读取某群已处理的语义采样消息时间上限。"""
+def get_semantic_style_group_cursor(bot_id: int, group_id: int) -> tuple[int, int]:
+    """读取某群已处理的语义采样消息游标 ``(time, message_id)``。
+
+    旧版仅存秒级时间戳（正整数），读作 ``(time, _CURSOR_MID_SENTINEL)``，
+    即该秒视为已全部处理，与历史行为一致。
+    """
     scope_key = _semantic_style_group_cursor_key(bot_id, group_id)
     with semantic_style_data_lock():
-        processed_at = _load_semantic_style_group_cursors().get(scope_key, 0)
+        cursor = _load_semantic_style_group_cursors().get(scope_key, (0, 0))
     with _profiles_lock:
-        _semantic_style_seen_cursors[(int(bot_id), int(group_id))] = int(processed_at)
-    return int(processed_at)
+        _semantic_style_seen_cursors[(int(bot_id), int(group_id))] = cursor
+    return cursor
 
 
-def mark_semantic_style_group_processed(bot_id: int, group_id: int, processed_at: int) -> None:
-    """原子持久化某群语义采样游标，只允许向前推进。"""
+def mark_semantic_style_group_processed(
+    bot_id: int,
+    group_id: int,
+    *,
+    processed_at: int,
+    processed_message_id: int = 0,
+) -> None:
+    """原子持久化某群语义采样游标，按 (time, message_id) 只允许向前推进。"""
     if processed_at <= 0:
         return
+    next_cursor = (int(processed_at), int(processed_message_id))
     scope_key = _semantic_style_group_cursor_key(bot_id, group_id)
     with semantic_style_data_lock():
         cursors = _load_semantic_style_group_cursors()
-        current = int(cursors.get(scope_key) or 0)
-        if processed_at <= current:
+        current = cursors.get(scope_key, (0, 0))
+        if next_cursor <= current:
             return
-        cursors[scope_key] = int(processed_at)
+        cursors[scope_key] = next_cursor
         _save_semantic_style_group_cursors(cursors)
     with _profiles_lock:
-        _semantic_style_seen_cursors[(int(bot_id), int(group_id))] = int(processed_at)
+        _semantic_style_seen_cursors[(int(bot_id), int(group_id))] = next_cursor
 
 
 _direct_quota_windows: dict[tuple[int, int], deque[bool]] = {}
@@ -708,20 +722,45 @@ def _semantic_style_group_cursor_key(bot_id: int, group_id: int) -> str:
     return f"{int(bot_id)}:{int(group_id)}"
 
 
-def _load_semantic_style_group_cursors() -> dict[str, int]:
+def _parse_semantic_style_cursor(value: object) -> tuple[int, int] | None:
+    """游标值兼容两种形态：正整数（旧版秒级）与 ``[time, message_id]``。"""
+    if isinstance(value, int | float):
+        parsed_time = int(value)
+        if parsed_time <= 0:
+            return None
+        return (parsed_time, _CURSOR_MID_SENTINEL)
+    if isinstance(value, list) and len(value) == 2:
+        try:
+            parsed_time = int(value[0])
+            parsed_mid = int(value[1])
+        except (TypeError, ValueError):
+            return None
+        if parsed_time <= 0:
+            return None
+        return (parsed_time, parsed_mid)
+    return None
+
+
+def _load_semantic_style_group_cursors() -> dict[str, tuple[int, int]]:
     try:
         raw = json.loads(semantic_style_group_cursor_path().read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
     if not isinstance(raw, dict):
         return {}
-    return {str(key): int(value) for key, value in raw.items() if isinstance(value, int | float) and int(value) > 0}
+    cursors: dict[str, tuple[int, int]] = {}
+    for key, value in raw.items():
+        cursor = _parse_semantic_style_cursor(value)
+        if cursor is not None:
+            cursors[str(key)] = cursor
+    return cursors
 
 
-def _save_semantic_style_group_cursors(cursors: dict[str, int]) -> None:
+def _save_semantic_style_group_cursors(cursors: dict[str, tuple[int, int]]) -> None:
+    payload = {key: [cursor[0], cursor[1]] for key, cursor in cursors.items()}
     atomic_write_text(
         semantic_style_group_cursor_path(),
-        json.dumps(cursors, ensure_ascii=False, separators=(",", ":")) + "\n",
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n",
     )
 
 

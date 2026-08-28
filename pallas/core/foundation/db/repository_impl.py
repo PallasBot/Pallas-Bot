@@ -174,16 +174,23 @@ class MongoMessageRepository:
         group_id: int,
         *,
         before_time: int | None = None,
+        before_message_id: int | None = None,
         user_id: int | None = None,
         limit: int = 8,
     ) -> list[Message]:
         cap = max(1, min(int(limit), 32))
         query: dict = {"group_id": int(group_id)}
         if before_time is not None:
-            query["time"] = {"$lt": int(before_time)}
+            if before_message_id is not None:
+                query["$or"] = [
+                    {"time": {"$lt": int(before_time)}},
+                    {"time": int(before_time), "message_id": {"$lt": int(before_message_id)}},
+                ]
+            else:
+                query["time"] = {"$lt": int(before_time)}
         if user_id is not None:
             query["user_id"] = int(user_id)
-        docs = await Message.find(query).sort("-time").limit(cap).to_list()
+        docs = await Message.find(query).sort("-time", "-message_id").limit(cap).to_list()
         docs.reverse()
         return docs
 

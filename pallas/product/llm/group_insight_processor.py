@@ -106,8 +106,13 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
         logger.info("今日语义标注已达上限，跳过本群 [{}]", group_id)
         return
 
-    cursor = get_semantic_style_group_cursor(bot_id=bot_id, group_id=group_id)
-    pairs = await _rebuild_pairs_from_messages(bot_id=bot_id, group_id=group_id, after_time=cursor)
+    cursor_time, cursor_message_id = get_semantic_style_group_cursor(bot_id=bot_id, group_id=group_id)
+    pairs = await _rebuild_pairs_from_messages(
+        bot_id=bot_id,
+        group_id=group_id,
+        after_time=cursor_time,
+        after_message_id=cursor_message_id,
+    )
     if not pairs:
         return
 
@@ -126,7 +131,7 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
 
     accepted: list[SemanticStyleExample] = []
     accepted_ids: set[str] = set()
-    max_processed_ts = 0
+    max_processed_key = (0, 0)
     for (
         trigger,
         reply,
@@ -140,7 +145,7 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
         if labeled_item is None:
             return
         label, strategy = labeled_item
-        max_processed_ts = max(max_processed_ts, int(created_at))
+        max_processed_key = max(max_processed_key, (int(created_at), int(message_id)))
         if not label.is_reply_pair or not label.transferable:
             continue
         if not is_bot_reply and not is_human_semantic_style_pair(
@@ -180,11 +185,21 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
             group_id,
             bot_id,
         )
-    mark_semantic_style_group_processed(bot_id=bot_id, group_id=group_id, processed_at=max_processed_ts)
+    mark_semantic_style_group_processed(
+        bot_id=bot_id,
+        group_id=group_id,
+        processed_at=max_processed_key[0],
+        processed_message_id=max_processed_key[1],
+    )
 
 
 async def _rebuild_pairs_from_messages(
-    *, bot_id: int, group_id: int, limit: int = _MAX_PAIRS_PER_JOB, after_time: int = 0
+    *,
+    bot_id: int,
+    group_id: int,
+    limit: int = _MAX_PAIRS_PER_JOB,
+    after_time: int = 0,
+    after_message_id: int | None = None,
 ) -> list[tuple[str, str, str, int, int, int, int, bool]]:
     """从 message 表重建「前句→接话」对，返回 (trigger, reply, relation, t_uid, r_uid, mid, created_at, is_bot_reply)。
 
@@ -192,36 +207,50 @@ async def _rebuild_pairs_from_messages(
     若只取最近一窗口会被 bot 重复记录塞满。这里按 message_id 去重（保留任意一条，
     因为同 message_id 的 user_id/正文/时间一致），并分页回溯避免窗口过窄。
 
+    分页与 ``after_time``/``after_message_id`` 边界都按 ``(time, message_id)`` 复合
+    比较，同秒内消息不会被秒级游标跳过；仅传 ``after_time`` 时视为整秒已处理。
+
     ``is_bot_reply`` 标记接话端是否为 bot（自身或协作 bot）：真人接话进入 direct_pairs，
     bot 自我接话只沉淀 behavior_strategy（self_reflection），不污染群表达指导。
     """
     repo = make_message_repository()
     now_ts = int(time.time())
     before_time = now_ts + 1
+    before_message_id: int | None = None
+    if after_time > 0:
+        from pallas.product.llm.repeater_semantic_style import _CURSOR_MID_SENTINEL
+
+        after_key = (int(after_time), _CURSOR_MID_SENTINEL if after_message_id is None else int(after_message_id))
+    else:
+        after_key = None
     unique_map: dict[int, object] = {}
     for _ in range(_PAIR_PAGE_LIMIT):
-        batch = await repo.find_recent_in_group(group_id, before_time=before_time, limit=32)
+        batch = await repo.find_recent_in_group(
+            group_id, before_time=before_time, before_message_id=before_message_id, limit=32
+        )
         if not batch:
             break
-        earliest = None
+        earliest_key: tuple[int, int] | None = None
         for item in batch:
             mid = int(getattr(item, "message_id", 0) or 0)
             if mid <= 0:
                 continue
             unique_map.setdefault(mid, item)
-            ts = int(getattr(item, "time", 0) or 0)
-            if earliest is None or ts < earliest:
-                earliest = ts
-        if earliest is None or earliest >= before_time:
+            key = (int(getattr(item, "time", 0) or 0), mid)
+            if earliest_key is None or key < earliest_key:
+                earliest_key = key
+        if earliest_key is None:
             break
-        if after_time > 0 and earliest <= after_time:
+        if after_key is not None and earliest_key <= after_key:
             break
-        # 用批内最小 time 作为下一批边界；同秒多条消息时会因 time < before_time
-        # 严格小于而被跳过（可接受：此类刷屏群窗口去重后仍能覆盖主体，改为复合游标
-        # 需扩展 find_recent_in_group，收益低）。
-        before_time = earliest
+        # 用批内最小 (time, message_id) 作为下一批复合边界，同秒剩余消息由
+        # find_recent_in_group 的复合条件继续取出，不会因 time 相等被跳过。
+        before_time, before_message_id = earliest_key
 
-    ordered = sorted(unique_map.values(), key=lambda item: int(getattr(item, "time", 0) or 0))
+    ordered = sorted(
+        unique_map.values(),
+        key=lambda item: (int(getattr(item, "time", 0) or 0), int(getattr(item, "message_id", 0) or 0)),
+    )
     if not ordered:
         return []
 
@@ -236,7 +265,9 @@ async def _rebuild_pairs_from_messages(
         and sender_kind(int(getattr(item, "user_id", 0) or 0), self_bot_id=bot_id) == "human"
         and _text(getattr(item, "plain_text", "") or getattr(item, "raw_message", ""))
     ]
-    human_times = [int(getattr(item, "time", 0) or 0) for item in human_ordered]
+    human_keys = [
+        (int(getattr(item, "time", 0) or 0), int(getattr(item, "message_id", 0) or 0)) for item in human_ordered
+    ]
     pairs: list[tuple[str, str, str, int, int, int, int, bool]] = []
     seen: set[tuple[int, int]] = set()
 
@@ -250,7 +281,7 @@ async def _rebuild_pairs_from_messages(
         if reply_id <= 0:
             continue
         reply_time = int(getattr(reply_message, "time", 0) or 0)
-        if reply_time <= after_time:
+        if after_key is not None and (reply_time, reply_id) <= after_key:
             continue
         replied_message_id = int(getattr(reply_message, "reply_to_message_id", 0) or 0)
         # 1) 引用对：reply 显式引用了一条已知真人消息。
@@ -277,7 +308,7 @@ async def _rebuild_pairs_from_messages(
                     ))
                     continue
         # 2) 相邻对：取 reply 之前「最近的一条真人消息」作 trigger，跳过中间 bot/状态消息。
-        pos = bisect_left(human_times, reply_time)
+        pos = bisect_left(human_keys, (reply_time, reply_id))
         if pos == 0:
             continue
         predecessor = human_ordered[pos - 1]

@@ -1880,16 +1880,25 @@ class PgMessageRepository:
         group_id: int,
         *,
         before_time: int | None = None,
+        before_message_id: int | None = None,
         user_id: int | None = None,
         limit: int = 8,
     ) -> list[Message]:
         cap = max(1, min(int(limit), 32))
         stmt = select(MessageRow).where(MessageRow.group_id == int(group_id))
         if before_time is not None:
-            stmt = stmt.where(MessageRow.time < int(before_time))
+            if before_message_id is not None:
+                stmt = stmt.where(
+                    or_(
+                        MessageRow.time < int(before_time),
+                        and_(MessageRow.time == int(before_time), MessageRow.message_id < int(before_message_id)),
+                    )
+                )
+            else:
+                stmt = stmt.where(MessageRow.time < int(before_time))
         if user_id is not None:
             stmt = stmt.where(MessageRow.user_id == int(user_id))
-        stmt = stmt.order_by(MessageRow.time.desc()).limit(cap)
+        stmt = stmt.order_by(MessageRow.time.desc(), MessageRow.message_id.desc()).limit(cap)
         async with get_session(read_only=True) as session:
             result = await session.execute(stmt)
             rows = list(result.scalars().all())

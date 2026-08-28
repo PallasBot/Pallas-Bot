@@ -29,8 +29,23 @@ class _DummyMessageRepo:
     def __init__(self, messages):
         self._messages = messages
 
-    async def find_recent_in_group(self, group_id, *, before_time=None, user_id=None, limit=8):
-        return list(self._messages)
+    async def find_recent_in_group(self, group_id, *, before_time=None, before_message_id=None, user_id=None, limit=8):
+        # 模拟真实契约：(time, message_id) 复合边界 + 复合排序 + 单页上限 32。
+        items = []
+        for message in self._messages:
+            if before_time is None:
+                keep = True
+            elif int(message.time) < int(before_time):
+                keep = True
+            elif before_message_id is not None and int(message.time) == int(before_time):
+                keep = int(message.message_id) < int(before_message_id)
+            else:
+                keep = False
+            if keep:
+                items.append(message)
+        items.sort(key=lambda m: (int(m.time), int(m.message_id)), reverse=True)
+        cap = max(1, min(int(limit), 32))
+        return list(reversed(items[:cap]))
 
 
 @pytest.mark.asyncio
@@ -107,6 +122,42 @@ async def test_rebuild_pairs_keeps_candidates_after_persistent_cursor(monkeypatc
     pairs = await _rebuild_pairs_from_messages(bot_id=100, group_id=42, after_time=1010)
 
     assert [pair[5] for pair in pairs] == [3]
+
+
+@pytest.mark.asyncio
+async def test_rebuild_pairs_same_second_pagination_does_not_skip(monkeypatch) -> None:
+    """同秒超单页（40 条 > 32）：复合游标翻页应覆盖全部消息，不再漏同秒候选。"""
+    from pallas.product.llm import group_insight_processor as mod
+
+    monkeypatch.setattr(mod, "sender_kind", lambda user_id, *, self_bot_id: "human")
+    messages = [_msg(mid, 11, f"消息{mid}", time=1000) for mid in range(1, 41)]
+    monkeypatch.setattr(mod, "make_message_repository", lambda: _DummyMessageRepo(messages))
+
+    pairs = await _rebuild_pairs_from_messages(bot_id=100, group_id=42, limit=64)
+
+    assert {pair[5] for pair in pairs} == set(range(2, 41))
+
+
+@pytest.mark.asyncio
+async def test_rebuild_pairs_same_second_cursor_only_skips_processed_prefix(monkeypatch) -> None:
+    """增量游标带 message_id：同秒内已处理前缀之后的候选仍可进入重建。"""
+    from pallas.product.llm import group_insight_processor as mod
+
+    monkeypatch.setattr(mod, "sender_kind", lambda user_id, *, self_bot_id: "human")
+    monkeypatch.setattr(
+        mod,
+        "make_message_repository",
+        lambda: _DummyMessageRepo([
+            _msg(1, 11, "前句", time=1000),
+            _msg(2, 12, "接话甲", time=1010),
+            _msg(3, 12, "接话乙", time=1010),
+            _msg(4, 12, "接话丙", time=1010),
+        ]),
+    )
+
+    pairs = await _rebuild_pairs_from_messages(bot_id=100, group_id=42, after_time=1010, after_message_id=2)
+
+    assert [pair[5] for pair in pairs] == [3, 4]
 
 
 @pytest.mark.asyncio

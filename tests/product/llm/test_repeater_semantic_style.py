@@ -301,12 +301,18 @@ def test_semantic_style_group_cursor_advances_monotonically_but_not_backwards(tm
 
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     mod._semantic_style_seen_cursors.clear()
-    assert mod.get_semantic_style_group_cursor(100, 42) == 0
-    mod.mark_semantic_style_group_processed(100, 42, 1000)
-    assert mod.get_semantic_style_group_cursor(100, 42) == 1000
-    # older ts should not regress
-    mod.mark_semantic_style_group_processed(100, 42, 900)
-    assert mod.get_semantic_style_group_cursor(100, 42) == 1000
+    assert mod.get_semantic_style_group_cursor(100, 42) == (0, 0)
+    mod.mark_semantic_style_group_processed(100, 42, processed_at=1000, processed_message_id=7)
+    assert mod.get_semantic_style_group_cursor(100, 42) == (1000, 7)
+    # 同秒内更小的 message_id 不应回退
+    mod.mark_semantic_style_group_processed(100, 42, processed_at=1000, processed_message_id=3)
+    assert mod.get_semantic_style_group_cursor(100, 42) == (1000, 7)
+    # 旧秒级时间回退同样无效
+    mod.mark_semantic_style_group_processed(100, 42, processed_at=900)
+    assert mod.get_semantic_style_group_cursor(100, 42) == (1000, 7)
+    # 同秒更大的 message_id 允许推进
+    mod.mark_semantic_style_group_processed(100, 42, processed_at=1000, processed_message_id=9)
+    assert mod.get_semantic_style_group_cursor(100, 42) == (1000, 9)
     mod._semantic_style_seen_cursors.clear()
 
 
@@ -315,10 +321,10 @@ def test_semantic_style_group_cursor_survives_cache_reset(tmp_path, monkeypatch)
 
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     mod._semantic_style_seen_cursors.clear()
-    mod.mark_semantic_style_group_processed(100, 42, 1234)
+    mod.mark_semantic_style_group_processed(100, 42, processed_at=1234)
     mod._semantic_style_seen_cursors.clear()
 
-    assert mod.get_semantic_style_group_cursor(100, 42) == 1234
+    assert mod.get_semantic_style_group_cursor(100, 42) == (1234, 0)
 
 
 def test_semantic_style_group_cursor_does_not_regress_after_older_write(tmp_path, monkeypatch) -> None:
@@ -326,10 +332,27 @@ def test_semantic_style_group_cursor_does_not_regress_after_older_write(tmp_path
 
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     mod._semantic_style_seen_cursors.clear()
-    mod.mark_semantic_style_group_processed(100, 42, 1234)
-    mod.mark_semantic_style_group_processed(100, 42, 1200)
+    mod.mark_semantic_style_group_processed(100, 42, processed_at=1234)
+    mod.mark_semantic_style_group_processed(100, 42, processed_at=1200)
 
-    assert mod.get_semantic_style_group_cursor(100, 42) == 1234
+    assert mod.get_semantic_style_group_cursor(100, 42) == (1234, 0)
+
+
+def test_semantic_style_group_cursor_reads_legacy_second_only_value(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod._semantic_style_seen_cursors.clear()
+    # 旧版只存秒级正整数：读作 (time, 哨兵)，同秒视为已全部处理。
+    mod.semantic_style_group_cursor_path().write_text('{"100:42": 1234}', encoding="utf-8")
+    assert mod.get_semantic_style_group_cursor(100, 42) == (1234, mod._CURSOR_MID_SENTINEL)
+    # 旧游标语义下同秒更小 mid 属于回退，仅更新到更晚秒时才落到新格式
+    mod.mark_semantic_style_group_processed(100, 42, processed_at=1234, processed_message_id=5)
+    assert mod.get_semantic_style_group_cursor(100, 42) == (1234, mod._CURSOR_MID_SENTINEL)
+    mod.mark_semantic_style_group_processed(100, 42, processed_at=1240, processed_message_id=5)
+    assert mod.get_semantic_style_group_cursor(100, 42) == (1240, 5)
+    assert '"100:42":[1240,5]' in mod.semantic_style_group_cursor_path().read_text(encoding="utf-8").replace(" ", "")
+    mod._semantic_style_seen_cursors.clear()
 
 
 def test_semantic_label_budget_claim_is_atomic_and_bounded(tmp_path, monkeypatch) -> None:
