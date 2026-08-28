@@ -19,7 +19,7 @@ async def test_history_tool_reads_full_group_messages(monkeypatch: pytest.Monkey
     class Repo:
         async def find_recent_in_group(self, group_id: int, *, limit: int):
             assert group_id == 42
-            assert limit == 25
+            assert limit == 49  # 默认 48 条 + 1 预读
             return messages
 
     monkeypatch.setattr("pallas.core.foundation.db.make_message_repository", lambda: Repo())
@@ -55,7 +55,7 @@ async def test_recent_summary_uses_full_group_messages_and_caches(monkeypatch: p
     class Repo:
         async def find_recent_in_group(self, group_id: int, *, limit: int):
             assert group_id == 42
-            assert limit == 25
+            assert limit == 49  # 默认 48 条 + 1 预读
             return messages
 
     complete = AsyncMock(return_value={"content": "大家在讨论周五开黑的时间和分工。"})
