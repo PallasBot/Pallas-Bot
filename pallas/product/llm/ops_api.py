@@ -126,12 +126,12 @@ from pallas.product.llm.providers_store import (
     provider_supports_capability,
     provider_task_model,
     providers_store_path,
+    rename_provider_row,
     resolve_endpoint_candidates_for_task,
     resolve_endpoint_for_task,
     resolve_provider_api_key,
     resolve_provider_api_keys,
     resolve_provider_base_url,
-    rename_provider_row,
     upsert_provider_row,
 )
 from pallas.product.llm.repeater_feedback import (

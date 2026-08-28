@@ -8,10 +8,11 @@ import json
 import threading
 import time
 from datetime import date, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Iterator
+from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
 _LOCK = threading.Lock()
@@ -403,22 +404,20 @@ def iter_usage_csv_lines(*, start_day: str, end_day: str) -> Iterator[str]:
             ts = 0.0
         rule = row.get("pricing_rule")
         rule_id = str(rule.get("rule_id") or "") if isinstance(rule, dict) else ""
-        writer.writerow(
-            [
-                time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts)) if ts > 0 else "",
-                str(row.get("task") or ""),
-                str(row.get("provider") or ""),
-                str(row.get("model") or ""),
-                prompt,
-                completion,
-                cache_read,
-                cache_write,
-                prompt + completion,
-                cost,
-                str(row.get("currency") or ""),
-                rule_id,
-            ]
-        )
+        writer.writerow([
+            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts)) if ts > 0 else "",
+            str(row.get("task") or ""),
+            str(row.get("provider") or ""),
+            str(row.get("model") or ""),
+            prompt,
+            completion,
+            cache_read,
+            cache_write,
+            prompt + completion,
+            cost,
+            str(row.get("currency") or ""),
+            rule_id,
+        ])
         yield buffer.getvalue()
         buffer.seek(0)
         buffer.truncate(0)
