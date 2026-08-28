@@ -23,6 +23,10 @@ DEFAULT_WINDOW_HOURS = 168
 MIN_MESSAGE_COUNT = MIN_READY_MESSAGE_COUNT
 MIN_ANSWER_COUNT = MIN_READY_ANSWER_COUNT
 
+# 取数分页上限：每页 32 行（repo 内部 cap），多 bot 并发旁路记录会让同一消息
+# 以不同 bot_id 落多行，单窗口极易被牛牛状态消息占满，故分页回溯后按 message_id 去重。
+_PROFILE_PAGE_LIMIT = 12
+
 
 def _clamp(value: float, lower: float, upper: float) -> float:
     return max(lower, min(upper, value))
@@ -197,7 +201,7 @@ async def build_group_style_profile_from_recent_repos(
     now = int(now_ts or time.time())
     cutoff = now - int(window_hours) * 3600
 
-    messages = await message_repo.find_recent_in_group(int(group_id), before_time=now + 1, limit=32)
+    messages = await _load_recent_messages_deduped(message_repo, group_id, before_time=now + 1)
     list_answers = getattr(context_repo, "list_answers_for_group_since", None)
     if callable(list_answers):
         answers = await list_answers(int(group_id), int(cutoff))
@@ -212,3 +216,32 @@ async def build_group_style_profile_from_recent_repos(
         window_hours=window_hours,
         forced_teach_weight=forced_teach_weight,
     )
+
+
+async def _load_recent_messages_deduped(message_repo, group_id: int, *, before_time: int) -> list[Message]:
+    """分页回溯取最近消息并按 message_id 去重。
+
+    多 bot 并发旁路记录会让同一条消息以不同 ``bot_id`` 落多行（message_id 相同），
+    单窗口 32 行极易被这类重复行塞满，导致真人消息被挤出统计窗口。这里对齐
+    群洞察取数的方式：分页向前回溯，跨页按 message_id 去重。
+    """
+    unique_map: dict[int, Message] = {}
+    cursor = before_time
+    for _ in range(_PROFILE_PAGE_LIMIT):
+        batch = await message_repo.find_recent_in_group(int(group_id), before_time=cursor, limit=32)
+        if not batch:
+            break
+        earliest = None
+        for item in batch:
+            mid = int(getattr(item, "message_id", 0) or 0)
+            if mid <= 0:
+                continue
+            unique_map.setdefault(mid, item)
+            ts = int(getattr(item, "time", 0) or 0)
+            if earliest is None or ts < earliest:
+                earliest = ts
+        if earliest is None or earliest >= cursor:
+            break
+        # 同秒多条消息会因 time < cursor 严格小于被跳过（与群洞察取数同口径，可接受）。
+        cursor = earliest
+    return list(unique_map.values())
