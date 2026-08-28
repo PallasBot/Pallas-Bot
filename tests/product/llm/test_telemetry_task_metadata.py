@@ -25,6 +25,13 @@ async def test_submit_chat_task_keeps_behavior_metadata_but_exposes_safe_telemet
     submit_kernel = AsyncMock(return_value=ChatSubmitResult(task_id="task-1", status="processing", ok=True))
     monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_llm_chat_task", submit_kernel)
     monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: False)
+    # submit gate 读全局配置，与用例 cfg 无关：放行以聚焦遥测元数据断言。
+    from pallas.product.llm.submit_gate import LlmSubmitGateResult
+
+    async def allow_gate() -> LlmSubmitGateResult:
+        return LlmSubmitGateResult(allowed=True)
+
+    monkeypatch.setattr("pallas.product.llm.client.assess_llm_submit_gate", allow_gate)
     monkeypatch.setattr(
         "pallas.product.llm.assembler.assemble_tool_bundle",
         lambda **_kwargs: {"tools_enabled": False, "tool_schemas": []},
@@ -44,7 +51,14 @@ async def test_submit_chat_task_keeps_behavior_metadata_but_exposes_safe_telemet
                 "reply_target": "fact",
             },
         ),
-        cfg=LlmConfig(llm_chat_enabled=True, llm_governance_enabled=False),
+        # submit gate 现要求 provider 已配置；补最小 base_url + model 让用例
+        # 聚焦遥测元数据断言（kernel 提交本身已被 mock）。
+        cfg=LlmConfig(
+            llm_chat_enabled=True,
+            llm_governance_enabled=False,
+            llm_base_url="http://127.0.0.1:9/v1",
+            llm_model="test-model",
+        ),
     )
 
     assert result.ok is True

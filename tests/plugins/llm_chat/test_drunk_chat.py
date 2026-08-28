@@ -30,7 +30,7 @@ async def test_drunk_chat_uses_unified_submit(monkeypatch: pytest.MonkeyPatch) -
     async def fake_remove_task(task_id: str) -> None:
         removed.append(task_id)
 
-    async def fake_submit_chat_task(request, *, cfg=None):
+    async def fake_submit_chat_task(request, *, cfg=None, bot=None):
         captured["request_id"] = request.request_id
         captured["session_id"] = request.session_id
         captured["user_text"] = request.user_text
