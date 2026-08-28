@@ -5,8 +5,8 @@
 ```mermaid
 flowchart LR
     Msg[群消息] --> Gate{明确 @ 牛牛?}
-    Gate -->|否| Rep[复读 / 接话<br>Repeater 检索本机语料]
-    Gate -->|是| LLM[LLM 对话<br>Bot Provider 多轮]
+    Gate -->|否| Rep[复读 / 接话<br/>Repeater 检索本机语料]
+    Gate -->|是| LLM[LLM 对话<br/>Bot Provider 多轮]
     Rep --> Out[发出回复]
     LLM --> Out
     Rep -. 学到群内表达 .-> LLM
