@@ -74,6 +74,7 @@ from pallas.product.llm.memory import (
 )
 from pallas.product.llm.memory.auto_episode import maybe_auto_save_episode
 from pallas.product.llm.memory.auto_ip_knowledge import schedule_auto_save_ip_knowledge
+from pallas.product.llm.memory.auto_person_facts import schedule_auto_save_person_facts
 from pallas.product.llm.message_guard import normalize_llm_chat_user_text
 from pallas.product.llm.models import ChatCompletionMessage
 from pallas.product.llm.persona_context import (
@@ -1529,6 +1530,15 @@ async def prepare_and_submit_llm_chat_turn(
                 )
             except Exception as exc:
                 logger.debug("llm chat auto_ip_knowledge schedule skipped: {}", exc)
+            try:
+                schedule_auto_save_person_facts(
+                    bot_id=int(bot.self_id),
+                    group_id=int(group_id),
+                    user_id=user_id,
+                    cfg=llm_cfg,
+                )
+            except Exception as exc:
+                logger.debug("llm chat auto_person_facts schedule skipped: {}", exc)
             try:
                 schedule_session_summary(
                     bot_id=int(bot.self_id),
