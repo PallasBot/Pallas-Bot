@@ -194,6 +194,46 @@ class MongoMessageRepository:
         docs.reverse()
         return docs
 
+    async def find_recent_distinct_in_group(
+        self,
+        group_id: int,
+        *,
+        before_time: int | None = None,
+        before_message_id: int | None = None,
+        since_time: int | None = None,
+        user_id: int | None = None,
+        limit: int = 128,
+    ) -> list[Message]:
+        cap = max(1, min(int(limit), 256))
+        query: dict = {"group_id": int(group_id)}
+        if before_time is not None:
+            if before_message_id is not None:
+                query["$or"] = [
+                    {"time": {"$lt": int(before_time)}},
+                    {"time": int(before_time), "message_id": {"$lt": int(before_message_id)}},
+                ]
+            else:
+                query["time"] = {"$lt": int(before_time)}
+        if since_time is not None:
+            query.setdefault("time", {})["$gte"] = int(since_time)
+        if user_id is not None:
+            query["user_id"] = int(user_id)
+        pipeline = [
+            {"$match": query},
+            {"$sort": {"time": -1, "message_id": -1, "_id": -1}},
+            {
+                "$group": {
+                    "_id": {"$ifNull": ["$message_id", "$_id"]},
+                    "document": {"$first": "$$ROOT"},
+                }
+            },
+            {"$replaceRoot": {"newRoot": "$document"}},
+            {"$sort": {"time": -1, "message_id": -1, "_id": -1}},
+            {"$limit": cap},
+        ]
+        docs = await Message.aggregate(pipeline).to_list()
+        return [Message.model_validate(doc) for doc in reversed(docs)]
+
     async def find_by_message_ids(self, group_id: int, message_ids: list[int]) -> list[Message]:
         # 注意 QQ 新版 message_id 可能是负数，isdigit() 不认负号会误过滤，导致引用图查不到。
         ids = {int(item) for item in message_ids if str(item or "").strip().lstrip("-").isdigit() and item is not None}

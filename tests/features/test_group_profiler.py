@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from pallas.core.foundation.db.modules import Answer, Message
 
 
@@ -136,3 +138,70 @@ def test_build_group_style_profile_does_not_write_account_persona_fields() -> No
     assert "warmth" not in str(profile)
     assert "assertiveness" not in str(profile)
     assert "chaos" not in str(profile)
+
+
+@pytest.mark.asyncio
+async def test_recent_profile_uses_distinct_message_repository_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.persona import group_profiler
+
+    messages = [
+        _msg(group_id=500, plain_text="短消息", ts=1_700_000_000 - index, user_id=index + 1) for index in range(30)
+    ]
+    answers = [
+        _answer(group_id=500, keywords=f"k{index}", message="回复", count=1, ts=1_700_000_000 - index)
+        for index in range(5)
+    ]
+    calls: list[tuple[int, int, int]] = []
+
+    class Repo:
+        async def find_recent_distinct_in_group(
+            self,
+            group_id: int,
+            *,
+            before_time: int,
+            since_time: int,
+            limit: int,
+        ):
+            calls.append((group_id, limit, since_time))
+            return messages
+
+        async def find_recent_in_group(self, *_args, **_kwargs):
+            raise AssertionError("should use the distinct repository query")
+
+    class ContextRepo:
+        async def list_answers_for_group_since(self, group_id: int, cutoff_time: int):
+            return answers
+
+    monkeypatch.setattr(group_profiler, "is_peer_bot", lambda _user_id: False)
+    profile = await group_profiler.build_group_style_profile_from_recent_repos(
+        group_id=500,
+        message_repo=Repo(),
+        context_repo=ContextRepo(),
+        now_ts=1_700_000_000,
+    )
+
+    assert calls == [(500, 256, 1_700_000_000 - 168 * 3600)]
+    assert profile["aggregate"]["message_count"] == 30
+    assert profile["reply_shape"]["length_pref"] == "short"
+
+
+def test_reply_shape_quantiles_sort_bubble_counts() -> None:
+    from pallas.product.persona.group_profiler import build_group_style_profile
+
+    now = 1_700_000_000
+    messages = [
+        _msg(group_id=600, plain_text="第一段\n第二段", ts=now - index, user_id=index + 1) for index in range(15)
+    ] + [_msg(group_id=600, plain_text="单段", ts=now - index - 15, user_id=index + 16) for index in range(15)]
+    answers = [
+        _answer(group_id=600, keywords=f"k{index}", message="回复", count=1, ts=now - index) for index in range(5)
+    ]
+
+    profile = build_group_style_profile(
+        group_id=600,
+        messages=messages,
+        answers=answers,
+        now_ts=now,
+    )
+
+    assert profile["reply_shape"]["bubble_count_p50"] == 1
+    assert profile["reply_shape"]["bubble_count_p90"] == 2

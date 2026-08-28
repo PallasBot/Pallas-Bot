@@ -26,6 +26,7 @@ MIN_ANSWER_COUNT = MIN_READY_ANSWER_COUNT
 # 取数分页上限：每页 32 行（repo 内部 cap），多 bot 并发旁路记录会让同一消息
 # 以不同 bot_id 落多行，单窗口极易被牛牛状态消息占满，故分页回溯后按 message_id 去重。
 _PROFILE_PAGE_LIMIT = 12
+_PROFILE_DISTINCT_LIMIT = 256
 
 
 def _clamp(value: float, lower: float, upper: float) -> float:
@@ -123,6 +124,7 @@ def build_group_style_profile(
         "single": sum(1 for count in bubble_counts if count == 1),
         "multi": sum(1 for count in bubble_counts if count > 1),
     }
+    bubble_counts.sort()
 
     hour_buckets: dict[int, int] = defaultdict(int)
     for message in recent_messages:
@@ -201,7 +203,16 @@ async def build_group_style_profile_from_recent_repos(
     now = int(now_ts or time.time())
     cutoff = now - int(window_hours) * 3600
 
-    messages = await _load_recent_messages_deduped(message_repo, group_id, before_time=now + 1)
+    distinct_loader = getattr(message_repo, "find_recent_distinct_in_group", None)
+    if callable(distinct_loader):
+        messages = await distinct_loader(
+            int(group_id),
+            before_time=now + 1,
+            since_time=cutoff,
+            limit=_PROFILE_DISTINCT_LIMIT,
+        )
+    else:
+        messages = await _load_recent_messages_deduped(message_repo, group_id, before_time=now + 1)
     list_answers = getattr(context_repo, "list_answers_for_group_since", None)
     if callable(list_answers):
         answers = await list_answers(int(group_id), int(cutoff))
