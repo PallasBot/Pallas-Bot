@@ -83,3 +83,40 @@ def test_take_pending_chat_one_returns_single_entry_in_order() -> None:
 def test_stash_pending_chat_defaults_message_id_to_zero() -> None:
     stash_pending_chat(10001, 20002, 30003, "没带 id")
     assert take_pending_chat_one(10001, 20002, 30003) == ("没带 id", 0)
+
+
+def test_stash_pending_chat_caps_entries_per_session() -> None:
+    for idx in range(12):
+        stash_pending_chat(10001, 20002, 30003, f"第{idx}句")
+    merged = take_pending_chat(10001, 20002, 30003)
+    lines = merged.split("\n")
+    assert len(lines) == 8
+    assert lines[0] == "第4句"
+    assert lines[-1] == "第11句"
+
+
+def test_take_pending_chat_drops_expired_entries(monkeypatch) -> None:
+    import pallas.product.llm.chat_queue as chat_queue
+
+    stash_pending_chat(10001, 20002, 30003, "过期句", message_id=1)
+    stash_pending_chat(10001, 20002, 30003, "新鲜句", message_id=2)
+    key = chat_queue.chat_queue_key(10001, 20002, 30003)
+    stale = list(chat_queue._QUEUE[key])
+    chat_queue._QUEUE[key] = [
+        (text, mid, ts - chat_queue._PENDING_TTL_SEC - 1) if idx == 0 else (text, mid, ts)
+        for idx, (text, mid, ts) in enumerate(stale)
+    ]
+    assert chat_queue.take_pending_chat_one(10001, 20002, 30003) == ("新鲜句", 2)
+    assert chat_queue.take_pending_chat_one(10001, 20002, 30003) == ("", 0)
+
+
+def test_take_pending_chat_all_expired_returns_empty(monkeypatch) -> None:
+    import pallas.product.llm.chat_queue as chat_queue
+
+    stash_pending_chat(10001, 20002, 30003, "旧句")
+    key = chat_queue.chat_queue_key(10001, 20002, 30003)
+    chat_queue._QUEUE[key] = [
+        (text, mid, ts - chat_queue._PENDING_TTL_SEC - 1) for text, mid, ts in chat_queue._QUEUE[key]
+    ]
+    assert chat_queue.take_pending_chat(10001, 20002, 30003) == ""
+    assert chat_queue.queue_size_for_tests() == 0

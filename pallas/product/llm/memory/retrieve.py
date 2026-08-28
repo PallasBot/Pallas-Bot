@@ -206,7 +206,7 @@ def rank_memory_candidates(
         embed_inputs.append(text)
         pending.append((idx, len(embed_inputs) - 1))
 
-    vectors = fetch_embeddings_sync(embed_inputs, timeout_sec=EMBEDDING_QUERY_TIMEOUT_SEC)
+    vectors = fetch_embeddings_sync(embed_inputs, timeout_sec=EMBEDDING_QUERY_TIMEOUT_SEC, fallback_stub=False)
     if vectors is None or len(vectors) != len(embed_inputs):
         scored.sort(key=_candidate_sort_key, reverse=True)
         return [item for item in scored if int(item.get("score") or 0) > 0]
