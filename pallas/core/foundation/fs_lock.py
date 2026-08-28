@@ -19,14 +19,16 @@ def _acquire_win32_lock(fd: int) -> None:
 
     if os.fstat(fd).st_size < 1:
         os.write(fd, b"\0")
+    # LK_LOCK 阻塞式等待是每秒轮询一次（最长 ~10s 后抛错）：锁释放后
+    # 等待者仍要等满一个轮询周期才拿到锁。改用非阻塞 LK_NBLCK 短轮询，
+    # 锁持有段都是毫秒级临界区，等待延迟随之降到毫秒级。
     while True:
         try:
             os.lseek(fd, 0, os.SEEK_SET)
-            # LK_LOCK 最多重试约 10 次后抛 OSError，循环直到拿到锁
-            msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+            msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
             return
         except OSError:
-            time.sleep(0.05)
+            time.sleep(0.01)
 
 
 def _release_win32_lock(fd: int) -> None:
