@@ -158,7 +158,7 @@ packages/<name>/
 
 - **一个 PR 只解决一类问题**（功能/修复/重构/文档不要混杂）。
 - **推荐提交说明格式**（与日常中文习惯一致）：`feat(scope): 简要中文说明`；`fix` / `refactor` / `chore` / `docs` 等同理加 scope 与中文说明。
-- **标题行**：一条提交只做一件事，`type(scope): 中文短句`，避免「修复/新增」等冗余动词开头与主题堆叠；太长时把细节下沉到 body。
+- **标题行**：一条提交只做一件事，`type(scope): 中文短句`，避免「修复/新增」等冗余动词开头与主题堆叠；太长时把细节下沉到 body——标题只说「改了什么」，不说「怎么改的」（如 `语义样本批量落盘去重`、`兼容多平台检查钩子` 一类粒度）。
 - **正文（body，可选）**：与标题空一行；用现在时/祈使句解释**为什么**而非复述 diff；要点可用 `-` 列表；每行 ≤72 字符、段间空行。注意 `git commit` 默认 `cleanup=strip` 会剥掉列表缩进，需保留时用 `--cleanup=verbatim` 或设 `commit.cleanup verbatim`。
 - **分支命名**：`feat/xxx`、`fix/xxx`、`refactor/xxx`，scope 用一件具体事；从 dev 拉出，单线开发。侧枝之间**可以互相 merge**（保留早期「主题分支先交叉再合主线」的复杂度感），但每个侧枝最终须能干净合回 dev 主线。
 - **merge 标题：统一用 git 自动生成，不手写**。走 PR 则保留 GitHub 自动标题 `Merge pull request #N from ...`；本地直合则保留 `git merge` 自动标题 `Merge branch '...' into ...`。不再使用 `merge: 中文说明` / `merge(scope):` 前缀。
