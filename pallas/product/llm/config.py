@@ -42,25 +42,11 @@ def resolve_legacy_rwkv_drunk_chat_enabled() -> bool:
     """遗留酒后 RWKV（Bot 侧开关，推理仍打 AI 仓 POST /api/chat）。
 
     与 ``LLM_CHAT_ENABLED`` 独立：两者可同时开；醉酒提交时 LLM 优先，否则走 RWKV。
-    开关来源：``CHAT_ENABLE``；兼容旧扩展插件 ``chat_enable``（若仍安装）。
+    开关来源：``CHAT_ENABLE``；旧扩展插件的配置回退读取已随该插件退役移除。
     """
-    import importlib
-
     env_legacy = _env_bool_first_optional(("CHAT_ENABLE",))
     if env_legacy is not None:
         return env_legacy
-    for import_path in (
-        "pallas_plugin_chat.config",
-        "packages.chat.config",
-    ):
-        try:
-            mod = importlib.import_module(import_path)
-            getter = getattr(mod, "get_chat_config", None)
-            if getter is None:
-                continue
-            return bool(getter().chat_enable)
-        except Exception:
-            continue
     return False
 
 
