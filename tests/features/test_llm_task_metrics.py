@@ -182,3 +182,19 @@ def test_cluster_llm_task_metrics_snapshot_from_workers(tmp_path, monkeypatch) -
     snap = cluster_llm_task_metrics_snapshot()
     assert snap["by_task"]["llm_chat"]["submit_ok"] == 5
     clear_llm_task_metrics_for_tests()
+
+
+def test_record_bot_llm_task_guardrail_events() -> None:
+    clear_llm_task_metrics_for_tests()
+    record_bot_llm_task("llm_chat", "persona_firewall_hit")
+    record_bot_llm_task("llm_chat", "persona_firewall_retry")
+    record_bot_llm_task("llm_chat", "output_filter_block")
+    record_bot_llm_task("llm_chat", "reply_silenced")
+    snap = llm_task_metrics_snapshot()
+    chat_stats = snap["by_task"]["llm_chat"]
+    assert chat_stats["persona_firewall_hit"] == 1
+    assert chat_stats["persona_firewall_retry"] == 1
+    assert chat_stats["output_filter_block"] == 1
+    assert chat_stats["reply_silenced"] == 1
+    assert snap["totals"]["output_filter_block"] == 1
+    clear_llm_task_metrics_for_tests()

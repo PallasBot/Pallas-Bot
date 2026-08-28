@@ -59,6 +59,10 @@ _EVENTS = frozenset({
     "tool_call_fail",
     "tool_session_called",
     "tool_session_no_call",
+    "persona_firewall_hit",
+    "persona_firewall_retry",
+    "output_filter_block",
+    "reply_silenced",
 })
 _ROUTE_BUCKETS = frozenset({
     "plain_llm_chat",

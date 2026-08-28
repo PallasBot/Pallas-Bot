@@ -36,6 +36,7 @@ async def run_kernel_chat_job(
     execution_slot: LlmExecutionSlot | None = None,
 ) -> None:
     started = time.monotonic()
+    task = str(metadata.get("task") or "llm_chat").strip() or "llm_chat"
     try:
         from pallas.product.llm.repeater_semantic_style import should_deliver_semantic_style_direct_candidate
 
@@ -91,6 +92,10 @@ async def run_kernel_chat_job(
             reply_target=reply_target,
         )
         initial_quality = decision.trace.get("chat_quality")
+        if int(decision.trace.get("rule_count") or 0) > 0 and decision.action != "allow":
+            from pallas.product.llm.task_metrics import record_bot_llm_task
+
+            record_bot_llm_task(task, "persona_firewall_hit")
         initial_agent_trace = assistant_message.get("_agent_trace")
         tool_loop_ran = (
             isinstance(initial_agent_trace, dict) and int(initial_agent_trace.get("tool_call_count") or 0) > 0
@@ -107,6 +112,9 @@ async def run_kernel_chat_job(
                 reply_target=reply_target,
             )
         elif decision.action == "retry":
+            from pallas.product.llm.task_metrics import record_bot_llm_task
+
+            record_bot_llm_task(task, "persona_firewall_retry")
             retry_instruction = persona_output_retry_instruction(list((initial_quality or {}).get("rule_ids") or []))
             retry_messages = [
                 *messages,
@@ -179,6 +187,9 @@ async def run_kernel_chat_job(
         append_runtime_trace(request_id=request_id, trace=trace)
         delivery_kwargs = {"status": "success", "text": content, "agent_trace": agent_trace}
         if decision.action == "silent":
+            from pallas.product.llm.task_metrics import record_bot_llm_task
+
+            record_bot_llm_task(task, "reply_silenced")
             delivery_kwargs["suppress_empty_fallback"] = True
         await deliver_llm_chat_result(request_id, **delivery_kwargs)
     except Exception as exc:

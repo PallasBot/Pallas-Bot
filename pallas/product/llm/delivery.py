@@ -648,6 +648,8 @@ async def deliver_llm_callback_success(
         output_decision = "silent"
         output_action = "silent"
         output_reason = "empty_after_filter" if had_reply_before_filter else "empty_output"
+        if had_reply_before_filter:
+            record_bot_llm_task(task_type, "output_filter_block")
     elif fallback_used:
         output_decision = "success"
         output_action = "fallback"
