@@ -1322,6 +1322,26 @@ def _load_semantic_style_examples(path: Path) -> list[SemanticStyleExample]:
     return examples
 
 
+def list_semantic_style_examples(
+    *, bot_id: int, group_id: int, scene: str, limit: int = 20
+) -> list[SemanticStyleExample]:
+    cap = max(1, min(int(limit), 50))
+    target_bot_id = int(bot_id)
+    target_group_id = int(group_id)
+    target_scene = str(scene)
+    with semantic_style_data_lock():
+        examples = _load_semantic_style_examples(semantic_style_examples_path())
+        scoped = [
+            example
+            for example in examples
+            if example.source_kind == "human_pair"
+            and example.bot_id == target_bot_id
+            and example.group_id == target_group_id
+            and example.scene == target_scene
+        ]
+    return sorted(scoped, key=lambda item: (item.created_at, item.example_id), reverse=True)[:cap]
+
+
 def migrate_legacy_profiles_to_examples(
     examples: list[SemanticStyleExample],
     profiles: dict[tuple[int, int, str], SemanticStyleProfile],
