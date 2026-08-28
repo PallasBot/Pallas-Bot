@@ -103,6 +103,7 @@ from pallas.product.llm.turn_style_layers import (
     build_same_utterance_redup_hint,
     build_scene_tone_hint,
     find_previous_reply_for_utterance,
+    merge_style_hints_before_last_user,
 )
 from pallas.product.llm.turn_telemetry import new_turn_id, record_turn_event
 from pallas.product.llm.vision_content import user_message_has_vision_content, vision_payload_from_segments
@@ -1292,6 +1293,33 @@ async def prepare_and_submit_llm_chat_turn(
             or focus_text.strip()
         )
         learned_self_aliases = extract_raw_learned_self_aliases(persona_dict)
+        # 措辞提示在预算裁剪前并入 prepared_messages：原先经 request.style_user_hints
+        # 在 client 侧 trim 之后才 merge，逃逸字符预算，且内容与历史里的
+        # assistant 轮本身重复。
+        style_user_hints: list[str] = []
+        if recent_turns:
+            variation_hint = build_recent_reply_variation_hint(recent_turns)
+            ending_hint = build_recent_reply_ending_hint(recent_turns)
+            if variation_hint:
+                style_user_hints.append(variation_hint)
+            if ending_hint:
+                style_user_hints.append(ending_hint)
+            previous_reply = find_previous_reply_for_utterance(
+                llm_user_text,
+                recent_turns=recent_turns,
+            )
+            same_utterance_hint = build_same_utterance_redup_hint(
+                user_text=llm_user_text,
+                previous_reply=previous_reply,
+            )
+            if same_utterance_hint:
+                style_user_hints.append(same_utterance_hint)
+        scene_tone_hint = build_scene_tone_hint(
+            llm_user_text,
+            stance=infer_expression_affect_stance(llm_user_text),
+        )
+        if scene_tone_hint:
+            style_user_hints.append(scene_tone_hint)
         ambient_turns: list[dict[str, object]] = []
         ambient_message_tokens: list[str] = []
         prepared_messages = await build_llm_chat_messages(
@@ -1306,6 +1334,8 @@ async def prepare_and_submit_llm_chat_turn(
             ambient_turns_out=ambient_turns,
             ambient_message_token_out=ambient_message_tokens,
         )
+        if style_user_hints:
+            prepared_messages = merge_style_hints_before_last_user(prepared_messages, style_user_hints)
         prepared_messages, ambient_turns = trim_prepared_messages_for_snapshot(
             prepared_messages,
             ambient_turns=ambient_turns,
@@ -1376,30 +1406,6 @@ async def prepare_and_submit_llm_chat_turn(
         )
 
         submit_started = time.perf_counter()
-        style_user_hints: list[str] = []
-        if recent_turns:
-            variation_hint = build_recent_reply_variation_hint(recent_turns)
-            ending_hint = build_recent_reply_ending_hint(recent_turns)
-            if variation_hint:
-                style_user_hints.append(variation_hint)
-            if ending_hint:
-                style_user_hints.append(ending_hint)
-            previous_reply = find_previous_reply_for_utterance(
-                llm_user_text,
-                recent_turns=recent_turns,
-            )
-            same_utterance_hint = build_same_utterance_redup_hint(
-                user_text=llm_user_text,
-                previous_reply=previous_reply,
-            )
-            if same_utterance_hint:
-                style_user_hints.append(same_utterance_hint)
-        scene_tone_hint = build_scene_tone_hint(
-            llm_user_text,
-            stance=infer_expression_affect_stance(llm_user_text),
-        )
-        if scene_tone_hint:
-            style_user_hints.append(scene_tone_hint)
         result = await submit_chat_task(
             ChatSubmitRequest(
                 request_id=request_id,
@@ -1420,7 +1426,6 @@ async def prepare_and_submit_llm_chat_turn(
                 include_group_ambient_history=not include_recent_pair,
                 prepared_messages=prepared_messages,
                 group_timeline_images=group_timeline_images,
-                style_user_hints=style_user_hints,
                 # 用用户实际引用(reply)的目标消息 id，而非 bot 的 QUOTE 决策 id。
                 # 用户 reply 一张带图消息再问「这是谁」时，bot 可能以 PLAIN 回复，
                 # resolved_reply_message_id 会因此为 None；replied_message_id 才稳定携带用户引用目标。

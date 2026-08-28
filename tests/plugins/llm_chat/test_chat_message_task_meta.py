@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from pallas.product.llm.behavior import BehaviorAction, BehaviorPattern, BehaviorScene
+from pallas.product.llm.models import ChatCompletionMessage
 from pallas.product.llm.reply_variation import build_recent_reply_variation_hint
 from pallas.product.llm.session_store import LlmChatTurn
 
@@ -931,7 +932,12 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
             llm_speak_perception_enabled=False,
         ),
     )
-    monkeypatch.setattr(mod, "build_llm_chat_messages", AsyncMock(return_value=[]))
+    # 措辞提示并入 prepared_messages：至少返回当前用户轮，模拟真实最小消息集。
+    monkeypatch.setattr(
+        mod,
+        "build_llm_chat_messages",
+        AsyncMock(return_value=[ChatCompletionMessage(role="user", content="你还在吗")]),
+    )
     monkeypatch.setattr(
         mod,
         "build_persona_llm_context",
@@ -1133,10 +1139,12 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     assert "引用只决定回复哪条消息" in submit_request.system_prompt
     assert "不要因引用把话一次说完" in submit_request.system_prompt
     assert "「行啊」「好呀」" in submit_request.system_prompt
-    style_hints = "\n".join(submit_request.style_user_hints)
+    # 措辞提示并入 prepared_messages 参与预算裁剪，不再经 request.style_user_hints。
+    style_hints = "\n".join(str(item.content or "") for item in (submit_request.prepared_messages or []))
     assert "【本轮表达去重】" in style_hints
     assert "其实" in style_hints
     assert "【收尾变化参考】" in style_hints
+    assert submit_request.style_user_hints == []
     assert "persona_shaping_active" not in submit_request.llm_rewrite_metadata
     assert "variation_hint" not in submit_request.llm_rewrite_metadata
     assert "same_utterance_redup" not in submit_request.llm_rewrite_metadata
