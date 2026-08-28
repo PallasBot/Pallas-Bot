@@ -143,8 +143,7 @@ async def fetch_sticker_label_job_stats(*, recent_limit: int = 8, aggregate_limi
         from pallas.core.foundation.db.modules import BackgroundJob
 
         rows = await (
-            BackgroundJob
-            .get_pymongo_collection()
+            BackgroundJob.get_pymongo_collection()
             .find({"kind": STICKER_LABEL_JOB_KIND}, {"job_id": 1, "created_at": 1, "payload": 1, "last_error": 1})
             .sort("created_at", -1)
             .limit(max(1, int(aggregate_limit)))

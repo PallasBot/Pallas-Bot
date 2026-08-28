@@ -200,8 +200,7 @@ class MongoMessageRepository:
         if not ids:
             return []
         docs = (
-            await Message
-            .find({"group_id": int(group_id), "message_id": {"$in": list(ids)}})
+            await Message.find({"group_id": int(group_id), "message_id": {"$in": list(ids)}})
             .sort("-time")
             .limit(len(ids))
             .to_list()
@@ -545,8 +544,7 @@ class MongoStickerLabelRepository:
         from pallas.product.llm.sticker_labels import StickerSemanticLabel
 
         rows = await (
-            StickerLabel
-            .get_pymongo_collection()
+            StickerLabel.get_pymongo_collection()
             .find({}, {"label_json": 1})
             .sort([("labeled_at", -1), ("content_hash", 1)])
             .skip(max(0, offset))
@@ -557,8 +555,7 @@ class MongoStickerLabelRepository:
 
     async def stats(self, *, min_confidence: float = 0.6, current_prompt_version: int | None = None) -> dict[str, int]:
         rows = (
-            await StickerLabel
-            .get_pymongo_collection()
+            await StickerLabel.get_pymongo_collection()
             .find({}, {"is_sticker": 1, "confidence": 1, "prompt_version": 1})
             .to_list(None)
         )
@@ -580,8 +577,7 @@ class MongoStickerLabelRepository:
         from pallas.product.llm.sticker_labels import StickerSemanticLabel
 
         rows = await (
-            StickerLabel
-            .get_pymongo_collection()
+            StickerLabel.get_pymongo_collection()
             .find(
                 {"$or": [{"confidence": {"$lt": min_confidence}}, {"prompt_version": {"$lt": current_prompt_version}}]},
                 {"label_json": 1},

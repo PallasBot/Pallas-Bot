@@ -17,6 +17,27 @@ FORBIDDEN_MODULE_RE = re.compile(
     r")\b"
 )
 
+# 豁免文件（相对仓库根）：旧模块路径在其中是受认可的数据而非业务真相——
+# 插件注册表本体，以及以旧模块名为探测条件的存量业务文件（可选插件共存
+# 探测 / 可用性判定）。这些文件迁移到注册表驱动后应从清单移除；
+# 新增业务代码不得进入本清单。
+ALLOWLISTED_FILES: frozenset[str] = frozenset({
+    "pallas/core/platform/bot_runtime/plugin_matrix.py",
+    "pallas/core/platform/multi_bot/group_fleet_probe.py",
+    "pallas/core/platform/protocol_paths.py",
+    "pallas/core/platform/shard/registry/sync_protocol_ports.py",
+    "pallas/core/plugin_coord/dream.py",
+    "pallas/core/plugin_coord/duel.py",
+    "pallas/core/plugin_coord/maa.py",
+    "pallas/core/shared/utils/mail.py",
+    "pallas/core/storage/schema.py",
+    "pallas/product/llm/drunk_tts.py",
+    "pallas/product/llm/model_admin.py",
+    "pallas/product/service_gateways/media_probe.py",
+    "packages/help/plugin_availability.py",
+    "packages/pb_webui/console_metrics_runtime.py",
+})
+
 
 def find_forbidden_plugin_imports(paths: list[Path]) -> list[tuple[Path, int, str]]:
     hits: list[tuple[Path, int, str]] = []
@@ -42,17 +63,22 @@ def iter_python_files(base: Path) -> list[Path]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="检查 plugin identity 迁移中的禁用模块路径")
-    parser.add_argument("paths", nargs="*", type=Path, help="待检查文件或目录；默认检查 pallas、packages、tests、tools")
+    parser.add_argument("paths", nargs="*", type=Path, help="待检查文件或目录；默认检查 pallas、packages、tools")
     args = parser.parse_args()
 
-    targets = args.paths or [ROOT / "pallas", ROOT / "packages", ROOT / "tests", ROOT / "tools"]
+    # tests 树不扫描：测试以旧模块名为夹具验证别名机制，属于合法引用。
+    targets = args.paths or [ROOT / "pallas", ROOT / "packages", ROOT / "tools"]
     files: list[Path] = []
     seen: set[Path] = set()
     for target in targets:
         for path in iter_python_files(target):
-            if path not in seen:
-                seen.add(path)
-                files.append(path)
+            if path in seen:
+                continue
+            seen.add(path)
+            rel = path.relative_to(ROOT).as_posix() if path.is_absolute() else path.as_posix()
+            if rel in ALLOWLISTED_FILES:
+                continue
+            files.append(path)
 
     hits = find_forbidden_plugin_imports(files)
     if hits:

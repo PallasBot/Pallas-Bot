@@ -145,8 +145,7 @@ async def fetch_sticker_vision_stats(*, recent_limit: int = 8, aggregate_limit: 
         from pallas.core.foundation.db.modules import BackgroundJob
 
         cursor = (
-            BackgroundJob
-            .get_pymongo_collection()
+            BackgroundJob.get_pymongo_collection()
             .find({"kind": "sticker_vision.select", "created_at": {"$gte": day_start}})
             .sort("created_at", -1)
             .limit(max(1, int(aggregate_limit)))

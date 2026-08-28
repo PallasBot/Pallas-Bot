@@ -58,7 +58,7 @@ Telemetry 是 best-effort 的旁路观测：写 key、序列化、目录或文�
 
 ## Prompt 组装
 
-at-chat 系统提示词 `pallas/product/persona/at_chat_system_prompt.txt` 只承载背景 / 输出边界 / 群聊边界等不变原则，不再内嵌具体对话示范；接话的差异化由语义风格按 **bot × 群** 注入（见上表「群表达指导」「真人接话参考」）。`ChatPromptAssembler`（`pallas/product/llm/assembler/chat_prompt.py`）依次组装：persona 核心 → reply_shape（回复形状与输出契约）→ turn policy → 近期上下文 → 群表达指导 / 真人接话参考（随 profile 有数据才注入）。
+at-chat 系统提示词 `pallas/product/persona/at_chat_system_prompt.txt` 只承载背景 / 输出边界 / 群聊边界等不变原则，不再内嵌具体对话示范；接话的差异化由语义风格按 **bot × 群** 注入（见上表「群表达指导」「真人接话参考」）。`ChatPromptAssembler`（`pallas/product/llm/assembler/chat_prompt.py`）按变化频率从低到高依次组装：persona 核心 → 群表达指导 / 真人接话参考（随 profile 有数据才注入）→ 近期上下文（检索块 → 群时间线）→ reply_shape（回复形状与输出契约）→ turn policy → 当前时间 → 工具上下文，使支持前缀缓存的 Provider 可命中更长的稳定前缀。
 
 ## 关键锚点
 

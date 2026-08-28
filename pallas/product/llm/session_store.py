@@ -414,7 +414,7 @@ async def build_llm_chat_messages(
     if include_history:
         history = await list_user_llm_messages(bot_id, group_id, user_id, limit=history_limit, cfg=c)
         for turn in history:
-            item = turn_to_completion_message(turn, max_len=c.user_message_max_len)
+            item = turn_to_completion_message(turn, max_len=c.llm_history_turn_max_len)
             if item is not None:
                 messages.append(item)
 

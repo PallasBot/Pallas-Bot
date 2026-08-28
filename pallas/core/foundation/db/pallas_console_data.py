@@ -541,22 +541,25 @@ def pallas_protocol_snapshot() -> dict[str, Any] | None:
     """
     pallas_protocol 插件已 **由 NoneBot 加载** 时返回元数据 + 账号列表；未加载为 None。
     不直接 import 插件包，避免在未加载时执行其 __init__ 重复挂路由。
+    合法模块名取自插件注册表，contract 子模块按已加载模块名动态导入。
     """
+    import importlib
+
     from nonebot import get_loaded_plugins
+
+    from pallas.core.platform.bot_runtime.plugin_matrix import PROTOCOL_MODULE_NAMES
 
     for p in get_loaded_plugins():
         mod = getattr(p, "module", None)
         mname = getattr(mod, "__name__", "")
-        if mname not in ("packages.pb_protocol", "pallas_plugin_protocol"):
+        if mname not in PROTOCOL_MODULE_NAMES:
             continue
         cfg = getattr(mod, "plugin_config", None)
         mgr = getattr(mod, "manager", None)
         if cfg is None or mgr is None:
             return None
-        if mname == "pallas_plugin_protocol":
-            from pallas_plugin_protocol.contract import resolve_public_mount_path
-        else:
-            from packages.pb_protocol.contract import resolve_public_mount_path
+        contract = importlib.import_module(f"{mname}.contract")
+        resolve_public_mount_path = contract.resolve_public_mount_path
 
         path = resolve_public_mount_path(
             path_override=str(getattr(cfg, "pallas_protocol_webui_path", "") or ""),

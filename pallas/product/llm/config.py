@@ -42,25 +42,11 @@ def resolve_legacy_rwkv_drunk_chat_enabled() -> bool:
     """遗留酒后 RWKV（Bot 侧开关，推理仍打 AI 仓 POST /api/chat）。
 
     与 ``LLM_CHAT_ENABLED`` 独立：两者可同时开；醉酒提交时 LLM 优先，否则走 RWKV。
-    开关来源：``CHAT_ENABLE``；兼容旧扩展插件 ``chat_enable``（若仍安装）。
+    开关来源：``CHAT_ENABLE``；旧扩展插件的配置回退读取已随该插件退役移除。
     """
-    import importlib
-
     env_legacy = _env_bool_first_optional(("CHAT_ENABLE",))
     if env_legacy is not None:
         return env_legacy
-    for import_path in (
-        "pallas_plugin_chat.config",
-        "packages.chat.config",
-    ):
-        try:
-            mod = importlib.import_module(import_path)
-            getter = getattr(mod, "get_chat_config", None)
-            if getter is None:
-                continue
-            return bool(getter().chat_enable)
-        except Exception:
-            continue
     return False
 
 
@@ -225,6 +211,9 @@ class LlmConfig(BaseModel):
     llm_session_user_ttl_sec: int = Field(default=0, ge=0, le=2592000)
     llm_session_private_ttl_sec: int = Field(default=259200, ge=0, le=2592000)
     llm_session_max_content_len: int = Field(default=4000, ge=64, le=16000)
+    # 历史轮独立截断：当前消息仍用 user_message_max_len，历史里一条长文不该吃掉
+    # 大半字符预算。
+    llm_history_turn_max_len: int = Field(default=800, ge=64, le=16000)
     llm_session_strip_vision_enabled: bool = Field(default=True)
     llm_session_vision_describe_enabled: bool = Field(default=True)
     llm_governance_enabled: bool = Field(default=True)
@@ -468,6 +457,7 @@ def get_llm_config() -> LlmConfig:
             llm_session_user_ttl_sec=_env_int("LLM_SESSION_USER_TTL_SEC", 0),
             llm_session_private_ttl_sec=_env_int("LLM_SESSION_PRIVATE_TTL_SEC", 259200),
             llm_session_max_content_len=_env_int("LLM_SESSION_MAX_CONTENT_LEN", 4000),
+            llm_history_turn_max_len=_env_int("LLM_HISTORY_TURN_MAX_LEN", 800),
             llm_session_strip_vision_enabled=_env_bool("LLM_SESSION_STRIP_VISION_ENABLED", True),
             llm_session_vision_describe_enabled=_env_bool("LLM_SESSION_VISION_DESCRIBE_ENABLED", True),
             llm_governance_enabled=_env_bool("LLM_GOVERNANCE_ENABLED", True),

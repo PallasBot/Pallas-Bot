@@ -122,12 +122,16 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
     if not pairs:
         return
 
-    # 一次 LLM 提交标注多个候选对，降低调用成本。
+    # 一次 LLM 提交标注多个候选对，降低调用成本；预算中途耗尽时返回长度
+    # 可能短于 pairs，按前缀对齐只处理已尝试部分。
     labeled = await label_semantic_style_batch_with_llm([
         (trigger, reply, pair_relation) for trigger, reply, pair_relation, *_ in pairs
     ])
-    if len(labeled) != len(pairs) or any(item is None for item in labeled):
+    if not labeled or len(labeled) > len(pairs):
         return
+    if all(item is None for item in labeled):
+        return
+    attempted = pairs[: len(labeled)]
 
     accepted: list[SemanticStyleExample] = []
     accepted_ids: set[str] = set()
@@ -141,11 +145,13 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
         message_id,
         created_at,
         is_bot_reply,
-    ), labeled_item in zip(pairs, labeled, strict=True):
-        if labeled_item is None:
-            return
-        label, strategy = labeled_item
+    ), labeled_item in zip(attempted, labeled, strict=True):
+        # 失败对也计入游标推进：单对回退路径已内置重试，滞留旧窗只会让
+        # 下一轮 sweep 对同一窗口原样重发；全部失败时才保留游标待下轮。
         max_processed_key = max(max_processed_key, (int(created_at), int(message_id)))
+        if labeled_item is None:
+            continue
+        label, strategy = labeled_item
         if not label.is_reply_pair or not label.transferable:
             continue
         if not is_bot_reply and not is_human_semantic_style_pair(

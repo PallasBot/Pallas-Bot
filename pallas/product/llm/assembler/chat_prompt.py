@@ -34,23 +34,27 @@ class ToolPromptContext:
 
 
 class ChatPromptAssembler:
-    """Assemble chat-only prompt sections in their policy order."""
+    """Assemble chat-only prompt sections in their policy order.
+
+    段序按变化频率从低到高排布：静态人设在前、逐轮变化的契约/时间在后，
+    让支持前缀缓存的 Provider 能命中更长的稳定前缀。
+    """
 
     section_ids = (
         "injection_guard",
         "persona",
         "identity",
-        "reply_shape",
-        "turn_policy",
-        "current_time",
-        "group_timeline",
+        "group_expression",
+        "behavior_reference",
         "memory",
         "knowledge",
         "relationship",
         "person_facts",
         "mid_term",
-        "group_expression",
-        "behavior_reference",
+        "group_timeline",
+        "reply_shape",
+        "turn_policy",
+        "current_time",
         "tool_context",
     )
 
@@ -98,12 +102,12 @@ class ChatPromptAssembler:
             PROMPT_INJECTION_GUARD,
             core_persona,
             self_identity,
+            self._group_expression_block(group_expression),
+            self._group_behavior_reference_block(group_expression),
+            *context.blocks(),
             self.reply_shape_block(reply_shape),
             self._turn_policy_block(turn_policy),
             self.current_time_block(current_time),
-            *context.blocks(),
-            self._group_expression_block(group_expression),
-            self._group_behavior_reference_block(group_expression),
             self._tool_context_block(tool_context),
         ]
         return apply_prompt_section_overrides(self.section_ids, sections, section_overrides)
@@ -176,8 +180,8 @@ class ChatPromptAssembler:
         if observed:
             lines.extend([
                 "【真人接话参考】",
-                "- 以下来自本群真人互动的节奏与接话结构，只借鉴什么时候说短/长、怎么接，不要复刻原话或语气。",
-                "- 语气态度保持你自己的底色，不要学对方的口气。",
+                "- 以下来自本群真人互动的节奏与接话结构，只借鉴什么时候说短/长、怎么接，"
+                "不要复刻原话或语气；语气态度保持你自己的底色。",
             ])
             for strategy in observed[:3]:
                 scene = sanitize_prompt_block(strategy.scene, max_len=80)
@@ -188,7 +192,7 @@ class ChatPromptAssembler:
         if reflection:
             lines.extend([
                 "【接话复盘】",
-                "- 以下是你之前自己接话的例子，只参考每次接得怎么样，别照搬原话，也别复刻当时的用词。",
+                "- 以下是你之前自己接话的例子，只参考每次接得怎么样，别照搬原话或当时的用词。",
             ])
             for strategy in reflection[:3]:
                 scene = sanitize_prompt_block(strategy.scene, max_len=80)

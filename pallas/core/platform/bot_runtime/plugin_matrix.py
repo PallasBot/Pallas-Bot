@@ -132,7 +132,7 @@ OFFICIAL_EXTENSION_README_PATHS: dict[str, str] = {
     "pallas-plugin-bot-status": "docs/plugins/bot_status/README.md",
 }
 
-_PROTOCOL_MODULE_NAMES: frozenset[str] = frozenset({
+PROTOCOL_MODULE_NAMES: frozenset[str] = frozenset({
     "packages.pb_protocol",
     "pallas_plugin_protocol",
 })
@@ -405,7 +405,7 @@ def protocol_plugin_loaded() -> bool:
     for p in get_loaded_plugins():
         mod = getattr(p, "module", None)
         mname = getattr(mod, "__name__", "")
-        if mname in _PROTOCOL_MODULE_NAMES:
+        if mname in PROTOCOL_MODULE_NAMES:
             return True
     return False
 

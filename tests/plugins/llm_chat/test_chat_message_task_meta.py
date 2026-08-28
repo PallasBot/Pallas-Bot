@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from pallas.product.llm.behavior import BehaviorAction, BehaviorPattern, BehaviorScene
+from pallas.product.llm.models import ChatCompletionMessage
 from pallas.product.llm.reply_variation import build_recent_reply_variation_hint
 from pallas.product.llm.session_store import LlmChatTurn
 
@@ -739,6 +740,12 @@ async def test_handle_llm_chat_replied_recent_candidate_reaches_necessity_gate(
         "evaluate_llm_reply_gate_result",
         lambda *_args, **_kwargs: SimpleNamespace(decision="proceed", reason=""),
     )
+    # 好感度检索读真实关系库，会读到前序用例落库的状态并左右 gate 判定：
+    # 固定为 None，保证本用例对 necessity gate 的断言只取决于事件本身。
+    monkeypatch.setattr(
+        "pallas.product.llm.memory.relationship_store.retrieve_relationship_profile",
+        AsyncMock(return_value=None),
+    )
     gate_kwargs: dict[str, object] = {}
     real_gate = mod.evaluate_reply_necessity_gate
 
@@ -747,6 +754,12 @@ async def test_handle_llm_chat_replied_recent_candidate_reaches_necessity_gate(
         return real_gate(**kwargs)
 
     monkeypatch.setattr(mod, "evaluate_reply_necessity_gate", fake_gate)
+    # should_emit_quote 按群概率决定是否走 QUOTE 回复：固定为 False，
+    # 保证用例稳定落在 PASS → necessity gate → 低活跃度路径上。
+    monkeypatch.setattr(
+        "pallas.product.llm.reply_target_candidates.should_emit_quote",
+        lambda group_id: False,
+    )
     monkeypatch.setattr(mod, "check_llm_chat_gate", AsyncMock(return_value=None))
     monkeypatch.setattr(mod, "list_user_llm_messages", AsyncMock(return_value=[]))
     monkeypatch.setattr(mod, "latest_llm_assistant_reply", AsyncMock(return_value=""))
@@ -931,7 +944,12 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
             llm_speak_perception_enabled=False,
         ),
     )
-    monkeypatch.setattr(mod, "build_llm_chat_messages", AsyncMock(return_value=[]))
+    # 措辞提示并入 prepared_messages：至少返回当前用户轮，模拟真实最小消息集。
+    monkeypatch.setattr(
+        mod,
+        "build_llm_chat_messages",
+        AsyncMock(return_value=[ChatCompletionMessage(role="user", content="你还在吗")]),
+    )
     monkeypatch.setattr(
         mod,
         "build_persona_llm_context",
@@ -997,6 +1015,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
                         url="https://example.com/a.png",
                     ),
                 ),
+                snapshot_sources=((30004, 123456, "还是笨蛋欸"),),
             )
         ),
         raising=False,
@@ -1133,10 +1152,12 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     assert "引用只决定回复哪条消息" in submit_request.system_prompt
     assert "不要因引用把话一次说完" in submit_request.system_prompt
     assert "「行啊」「好呀」" in submit_request.system_prompt
-    style_hints = "\n".join(submit_request.style_user_hints)
+    # 措辞提示并入 prepared_messages 参与预算裁剪，不再经 request.style_user_hints。
+    style_hints = "\n".join(str(item.content or "") for item in (submit_request.prepared_messages or []))
     assert "【本轮表达去重】" in style_hints
     assert "其实" in style_hints
     assert "【收尾变化参考】" in style_hints
+    assert submit_request.style_user_hints == []
     assert "persona_shaping_active" not in submit_request.llm_rewrite_metadata
     assert "variation_hint" not in submit_request.llm_rewrite_metadata
     assert "same_utterance_redup" not in submit_request.llm_rewrite_metadata
@@ -1150,6 +1171,10 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     assert submit_request.include_session_history is True
     assert submit_request.session_history_limit is None
     assert submit_request.include_group_ambient_history is False
+    # 时间线在场时跳过群环境摘录，注入快照改由时间线消息产出。
+    assert all("群环境摘录" not in str(item.content or "") for item in (submit_request.prepared_messages or []))
+    timeline_ambient = added["payload"]["injection_snapshot"]["ambient_turns"]
+    assert [item["user_id"] for item in timeline_ambient] == [30004]
     assert submit_request.hybrid_retrieval_trace["sources"] == ["memory"]
 
 

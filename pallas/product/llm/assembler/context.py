@@ -31,7 +31,9 @@ class ChatContextBundle:
     stage_durations_ms: dict[str, int] = field(default_factory=dict)
 
     def blocks(self) -> list[str]:
-        return [self.group_timeline, self.memory, self.knowledge, self.relationship, self.person_facts, self.mid_term]
+        # 检索块在前、群时间线在后：时间线随群内新消息变化最频繁，
+        # 靠后可让前缀缓存命中更长的稳定段。
+        return [self.memory, self.knowledge, self.relationship, self.person_facts, self.mid_term, self.group_timeline]
 
 
 async def assemble_direct_chat_context(
