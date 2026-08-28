@@ -750,6 +750,33 @@ async def upsert_provider_config(
     return payload
 
 
+async def rename_provider_config(
+    old_id: str,
+    new_id: str,
+    *,
+    cfg: LlmConfig | None = None,
+    timeout_sec: float = 30.0,
+) -> dict[str, Any]:
+    """改提供方 ID，并同步 providers 文档内 routing 与主配置里的引用。"""
+    del cfg, timeout_sec
+    from pallas.core.foundation.config.repo_settings import repo_env_raw_value
+    from pallas.product.llm.config import clear_llm_config_cache
+    from pallas.product.llm.providers_store import rename_provider_row
+    from pallas.product.llm.task_routing import clear_task_route_cache
+
+    old = str(old_id or "").strip()
+    payload = rename_provider_row(old, new_id)
+    # 主配置 Embedding 走名册时存的是提供方 ID（LLM_EMBEDDING_PROVIDER_ID），一并改过去
+    embedding_pid = str(repo_env_raw_value("LLM_EMBEDDING_PROVIDER_ID") or "").strip()
+    if embedding_pid == old:
+        from pallas.console.webui.env_sections import apply_webui_env_section_patch
+
+        apply_webui_env_section_patch("llm", {"llm_embedding_provider_id": str(new_id or "").strip()})
+    clear_llm_config_cache()
+    clear_task_route_cache()
+    return payload
+
+
 def _resolve_local_ollama_base_url(base_url: str = "", *, cfg: LlmConfig | None = None) -> str:
     from pallas.core.foundation.config.repo_settings import repo_env_raw_value
 

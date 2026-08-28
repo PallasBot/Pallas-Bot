@@ -430,6 +430,12 @@ class _LlmProviderModelsDiscoverBody(BaseModel):
     request_method: str = ""
 
 
+class _LlmProviderRenameBody(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    new_id: str = Field(min_length=1, max_length=200)
+
+
 class _LlmLocalRoutingModelsBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -477,6 +483,7 @@ LlmLocalRoutingConfigBody = _LlmLocalRoutingConfigBody
 LlmProvidersDocumentBody = _LlmProvidersDocumentBody
 LlmProviderRowBody = _LlmProviderRowBody
 LlmProviderModelsDiscoverBody = _LlmProviderModelsDiscoverBody
+LlmProviderRenameBody = _LlmProviderRenameBody
 
 
 def register_common_config_router(
@@ -784,6 +791,25 @@ def register_common_config_router(
             raise HTTPException(status_code=400, detail="provider id is required")
         try:
             data = await upsert_provider_config(payload)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": data})
+
+    @router.put(f"{x}/common-config/llm/providers/{{provider_id}}/rename", include_in_schema=True)
+    async def _llm_provider_rename_put(
+        provider_id: str,
+        body: LlmProviderRenameBody,
+        token: str | None = Query(default=None),
+        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
+    ) -> JSONResponse:
+        """改提供方 ID：改行内 id 并同步 routing / 主配置引用。"""
+        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
+        from pallas.product.llm.ops_api import rename_provider_config
+
+        try:
+            data = await rename_provider_config(provider_id, body.new_id)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
