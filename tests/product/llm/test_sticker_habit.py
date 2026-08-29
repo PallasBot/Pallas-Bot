@@ -79,6 +79,7 @@ class _DummyStatRepo:
             if key[0] == int(group_id) and row["send_count"] >= int(min_count)
         ]
         hits.sort(key=lambda item: (-item[1]["send_count"], -item[1]["last_sent_at"]))
+        selected = hits if limit is None else hits[: max(1, min(int(limit), 100))]
         return [
             SimpleNamespace(
                 group_id=key[0],
@@ -87,8 +88,9 @@ class _DummyStatRepo:
                 send_count=row["send_count"],
                 last_sent_at=row["last_sent_at"],
             )
-            for key, row in hits[: max(1, min(int(limit), 100))]
+            for key, row in selected
         ]
+
 
 
 class _DummyImageRepo:
@@ -359,6 +361,45 @@ async def test_run_pass_projects_top_k_facts(habit_env, monkeypatch) -> None:
 
     facts_after = list_person_facts(bot_id=101, group_id=777, user_id=100)
     assert [(fact.source, fact.status) for fact in facts_after] == [("sticker_habit", "active")]
+
+
+@pytest.mark.asyncio
+async def test_project_group_habits_does_not_starve_other_users(habit_env, monkeypatch) -> None:
+    mod = habit_env.mod
+    now = int(time.time())
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: _cfg())
+    habit_env.tmp_path.joinpath("group_cursors.json").write_text(json.dumps({"777": [now - 1000, 0]}), encoding="utf-8")
+    messages = [
+        *[_msg(index + 1, 100, CAT_CQ, time_ts=now - 100 + index, bot_id=1) for index in range(20)],
+        *[_msg(100 + index, 200, DOG_CQ, time_ts=now - 50 + index, bot_id=1) for index in range(5)],
+    ]
+    habit_env.label_repo._labels[DOG_HASH] = SimpleNamespace(is_sticker=True, caption="一只吐舌的柴犬")
+    monkeypatch.setattr(mod, "make_message_repository", lambda: _DummyMessageRepo(messages))
+
+    totals = await mod.run_sticker_habit_pass()
+
+    assert totals["facts"] == 2
+    from pallas.product.llm.memory.person_facts import list_person_facts
+
+    assert list_person_facts(bot_id=101, group_id=777, user_id=200)[0].content == "常用表情包：一只吐舌的柴犬"
+
+
+@pytest.mark.asyncio
+async def test_run_pass_clears_habits_when_threshold_rises(habit_env, monkeypatch) -> None:
+    mod = habit_env.mod
+    now = int(time.time())
+    habit_env.tmp_path.joinpath("group_cursors.json").write_text(json.dumps({"777": [now - 1000, 0]}), encoding="utf-8")
+    messages = [_msg(index + 1, 100, CAT_CQ, time_ts=now - 100 + index, bot_id=1) for index in range(5)]
+    monkeypatch.setattr(mod, "make_message_repository", lambda: _DummyMessageRepo(messages))
+    await mod.run_sticker_habit_pass()
+
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: _cfg(llm_sticker_habit_min_count=10))
+    monkeypatch.setattr(mod, "make_message_repository", lambda: _DummyMessageRepo([]))
+    await mod.run_sticker_habit_pass()
+
+    from pallas.product.llm.memory.person_facts import list_person_facts
+
+    assert list_person_facts(bot_id=101, group_id=777, user_id=100) == []
 
 
 @pytest.mark.asyncio

@@ -100,23 +100,22 @@ class UserStickerStatRepository:
             ).scalar_one_or_none()
             return self._row_to_stat(row) if row is not None else None
 
-    async def list_group_candidates(self, *, group_id: int, min_count: int, limit: int = 5) -> list[UserStickerStat]:
+    async def list_group_candidates(
+        self, *, group_id: int, min_count: int, limit: int | None = 5
+    ) -> list[UserStickerStat]:
+        """列出群内达到阈值的统计；``limit=None`` 返回全部候选。"""
         async with self.session() as session:
-            rows = (
-                (
-                    await session.execute(
-                        select(UserStickerStatRow)
-                        .where(
-                            UserStickerStatRow.group_id == int(group_id),
-                            UserStickerStatRow.send_count >= int(min_count),
-                        )
-                        .order_by(UserStickerStatRow.send_count.desc(), UserStickerStatRow.last_sent_at.desc())
-                        .limit(max(1, min(int(limit), 100)))
-                    )
+            statement = (
+                select(UserStickerStatRow)
+                .where(
+                    UserStickerStatRow.group_id == int(group_id),
+                    UserStickerStatRow.send_count >= int(min_count),
                 )
-                .scalars()
-                .all()
+                .order_by(UserStickerStatRow.send_count.desc(), UserStickerStatRow.last_sent_at.desc())
             )
+            if limit is not None:
+                statement = statement.limit(max(1, min(int(limit), 100)))
+            rows = (await session.execute(statement)).scalars().all()
         return [self._row_to_stat(row) for row in rows]
 
     async def delete_cold(self, *, before_ts: int, max_count: int) -> int:

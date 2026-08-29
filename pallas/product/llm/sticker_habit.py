@@ -26,7 +26,9 @@ from pallas.core.foundation.db import (
 )
 from pallas.core.foundation.fs_lock import atomic_write_text
 from pallas.core.foundation.startup_report import register_startup_scheduled
+from pallas.core.platform.bot_runtime.roles import is_sharded_worker
 from pallas.product.llm.memory.person_facts import (
+    forget_group_person_facts_by_source,
     forget_person_facts_by_source,
     replace_person_fact_by_source,
 )
@@ -293,12 +295,17 @@ async def _project_group_habits(
         stat = await stat_repo.get(group_id=group_id, user_id=user_id, content_hash=content_hash)
         if stat is not None:
             _consider(user_id, content_hash, int(stat.send_count))
-    candidates = await stat_repo.list_group_candidates(
-        group_id=group_id, min_count=min_count, limit=_CANDIDATES_PER_GROUP * top_k
-    )
+    candidates = await stat_repo.list_group_candidates(group_id=group_id, min_count=min_count, limit=None)
     for row in candidates:
         _consider(int(row.user_id), str(row.content_hash), int(row.send_count))
     if not ranked:
+        bot_id = await _resolve_group_bot(group_id, bot_cache)
+        if bot_id > 0:
+            forget_group_person_facts_by_source(
+                bot_id=bot_id,
+                group_id=group_id,
+                sources=[_habit_fact_source(rank) for rank in range(1, _MAX_TOP_K + 1)],
+            )
         return 0, 0
 
     bot_id = await _resolve_group_bot(group_id, bot_cache)
@@ -368,6 +375,17 @@ async def run_sticker_habit_pass() -> dict[str, int]:
                 cursor = initial_cursor
             new_cursor, events, scanned = await _scan_group_messages(group_id=group_id, cursor=cursor, repo=repo)
             if scanned <= 0:
+                facts, label_queued = await _project_group_habits(
+                    group_id=group_id,
+                    delta_pairs=set(),
+                    stat_repo=stat_repo,
+                    cfg=cfg,
+                    bot_cache=bot_cache,
+                    label_quota=label_quota,
+                )
+                totals["facts"] += facts
+                totals["label_queued"] += label_queued
+                label_quota -= label_queued
                 continue
             totals["groups"] += 1
             totals["messages"] += scanned
@@ -450,6 +468,8 @@ def bind_sticker_habit_lifecycle() -> None:
 
     @driver.on_startup
     async def _start_sticker_habit_worker() -> None:
+        if is_sharded_worker():
+            return
         register_startup_scheduled("表情包习惯扫描")
 
         async def _run() -> None:

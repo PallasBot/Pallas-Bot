@@ -695,14 +695,15 @@ class MongoUserStickerStatRepository:
             "content_hash": content_hash,
         })
 
-    async def list_group_candidates(self, *, group_id: int, min_count: int, limit: int = 5) -> list[UserStickerStat]:
-        return (
-            await UserStickerStat
-            .find({"group_id": int(group_id), "send_count": {"$gte": int(min_count)}})
-            .sort("-send_count", "-last_sent_at")
-            .limit(max(1, min(int(limit), 100)))
-            .to_list()
+    async def list_group_candidates(
+        self, *, group_id: int, min_count: int, limit: int | None = 5
+    ) -> list[UserStickerStat]:
+        query = UserStickerStat.find({"group_id": int(group_id), "send_count": {"$gte": int(min_count)}}).sort(
+            "-send_count", "-last_sent_at"
         )
+        if limit is not None:
+            query = query.limit(max(1, min(int(limit), 100)))
+        return await query.to_list()
 
     async def delete_cold(self, *, before_ts: int, max_count: int) -> int:
         result = await UserStickerStat.get_pymongo_collection().delete_many({
