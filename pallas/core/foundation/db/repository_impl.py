@@ -704,6 +704,13 @@ class MongoUserStickerStatRepository:
             .to_list()
         )
 
+    async def delete_cold(self, *, before_ts: int, max_count: int) -> int:
+        result = await UserStickerStat.get_pymongo_collection().delete_many({
+            "send_count": {"$lt": int(max_count)},
+            "updated_at": {"$lt": int(before_ts)},
+        })
+        return int(result.deleted_count)
+
 
 class MongoAdminRepository:
     """MongoDB 版 AdminRepository。"""

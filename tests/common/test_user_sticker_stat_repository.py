@@ -99,6 +99,47 @@ async def test_mongo_repository_matches_increment_contract(beanie_fixture) -> No
     assert raw["send_count"] == 3
 
 
+@pytest.mark.asyncio
+async def test_sqlite_delete_cold_removes_only_old_low_count_rows(sqlite_repository) -> None:
+    from sqlalchemy import text
+
+    repository, engine = sqlite_repository
+    await repository.increment(group_id=1, user_id=10, content_hash="a" * 64, sent_at=100)
+    await repository.increment(group_id=1, user_id=11, content_hash="b" * 64, sent_at=100)
+    await repository.increment(group_id=1, user_id=12, content_hash="c" * 64, sent_at=100, count=5)
+    with Session(engine) as session:
+        session.execute(text("UPDATE user_sticker_stat SET updated_at = 1000 WHERE user_id = 10"))
+        session.execute(text("UPDATE user_sticker_stat SET updated_at = 999999 WHERE user_id = 11"))
+        session.commit()
+
+    deleted = await repository.delete_cold(before_ts=2000, max_count=2)
+
+    assert deleted == 1
+    assert await repository.get(group_id=1, user_id=10, content_hash="a" * 64) is None
+    assert await repository.get(group_id=1, user_id=11, content_hash="b" * 64) is not None
+    assert await repository.get(group_id=1, user_id=12, content_hash="c" * 64) is not None
+
+
+@pytest.mark.asyncio
+async def test_mongo_delete_cold_matches_contract(beanie_fixture) -> None:
+    from pallas.core.foundation.db.modules import UserStickerStat
+    from pallas.core.foundation.db.repository_impl import MongoUserStickerStatRepository
+
+    repository = MongoUserStickerStatRepository()
+    await repository.increment(group_id=1, user_id=10, content_hash="e" * 64, sent_at=100)
+    await repository.increment(group_id=1, user_id=11, content_hash="f" * 64, sent_at=100)
+
+    coll = UserStickerStat.get_pymongo_collection()
+    await coll.update_one({"user_id": 10}, {"$set": {"updated_at": 1000}})
+    await coll.update_one({"user_id": 11}, {"$set": {"updated_at": 999999}})
+
+    deleted = await repository.delete_cold(before_ts=2000, max_count=2)
+
+    assert deleted == 1
+    assert await repository.get(group_id=1, user_id=10, content_hash="e" * 64) is None
+    assert await repository.get(group_id=1, user_id=11, content_hash="f" * 64) is not None
+
+
 def test_user_sticker_stat_repository_factory_selects_mongo(monkeypatch: pytest.MonkeyPatch) -> None:
     import pallas.core.foundation.db as db
     from pallas.core.foundation.db.repository_impl import MongoUserStickerStatRepository

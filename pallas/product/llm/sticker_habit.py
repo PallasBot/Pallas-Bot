@@ -46,6 +46,8 @@ _LABEL_ENQUEUE_PER_GROUP = 20
 _LABEL_ENQUEUE_GLOBAL_PER_PASS = 50
 _MAX_FACT_LEN = 64
 _MAX_TOP_K = 3
+_PRUNE_MAX_COUNT = 2
+_PRUNE_AFTER_DAYS = 90
 
 _STICKER_HABIT_LIFECYCLE_BOUND = False
 
@@ -389,6 +391,7 @@ async def run_sticker_habit_pass() -> dict[str, int]:
             label_quota -= label_queued
         except Exception as exc:
             logger.warning("表情包习惯扫描群 [{}] 失败：{}", group_id, exc)
+    await _prune_sticker_habit_stats(now_ts=now_ts, stat_repo=stat_repo)
     if totals["messages"] > 0:
         logger.info(
             "表情包习惯扫描完成：群 [{}]、消息 [{}]、图片 [{}]、事实 [{}]、补标 [{}]",
@@ -399,6 +402,42 @@ async def run_sticker_habit_pass() -> dict[str, int]:
             totals["label_queued"],
         )
     return totals
+
+
+def _sticker_habit_prune_state_path() -> Path:
+    return _sticker_habit_base_dir() / "prune_state.json"
+
+
+def _should_run_sticker_habit_prune(now_ts: int) -> bool:
+    """自然日闸：清理每天最多跑一次。"""
+    try:
+        raw = json.loads(_sticker_habit_prune_state_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return True
+    last_day = int(raw.get("last_prune_day") or 0) if isinstance(raw, dict) else 0
+    return last_day != now_ts // 86400
+
+
+def _mark_sticker_habit_prune_done(now_ts: int) -> None:
+    atomic_write_text(
+        _sticker_habit_prune_state_path(),
+        json.dumps({"last_prune_day": now_ts // 86400}, ensure_ascii=False) + "\n",
+    )
+
+
+async def _prune_sticker_habit_stats(*, now_ts: int, stat_repo) -> int:
+    """每天清理一次冷数据：只发过一两次、且长期未再发送的统计行。"""
+    if not _should_run_sticker_habit_prune(now_ts):
+        return 0
+    try:
+        deleted = await stat_repo.delete_cold(before_ts=now_ts - _PRUNE_AFTER_DAYS * 86400, max_count=_PRUNE_MAX_COUNT)
+        _mark_sticker_habit_prune_done(now_ts)
+        if deleted > 0:
+            logger.info("表情包习惯统计清理完成，移除 [{}] 条冷数据", deleted)
+        return int(deleted)
+    except Exception as exc:
+        logger.warning("表情包习惯统计清理失败：{}", exc)
+        return 0
 
 
 def bind_sticker_habit_lifecycle() -> None:

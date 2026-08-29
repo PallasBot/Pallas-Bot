@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from typing import TYPE_CHECKING
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
@@ -118,3 +118,14 @@ class UserStickerStatRepository:
                 .all()
             )
         return [self._row_to_stat(row) for row in rows]
+
+    async def delete_cold(self, *, before_ts: int, max_count: int) -> int:
+        async with self.session() as session:
+            result = await session.execute(
+                delete(UserStickerStatRow).where(
+                    UserStickerStatRow.send_count < int(max_count),
+                    UserStickerStatRow.updated_at < int(before_ts),
+                )
+            )
+            await session.commit()
+        return int(result.rowcount or 0)

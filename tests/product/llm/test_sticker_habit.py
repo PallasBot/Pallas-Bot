@@ -48,6 +48,7 @@ class _DummyMessageRepo:
 class _DummyStatRepo:
     def __init__(self):
         self.rows: dict[tuple[int, int, str], dict] = {}
+        self.prune_calls: list[tuple[int, int]] = []
 
     async def increment(self, *, group_id, user_id, content_hash, sent_at, count=1):
         key = (int(group_id), int(user_id), content_hash)
@@ -55,6 +56,12 @@ class _DummyStatRepo:
         row["send_count"] += int(count)
         row["last_sent_at"] = max(row["last_sent_at"], int(sent_at))
 
+    async def delete_cold(self, *, before_ts, max_count):
+        self.prune_calls.append((int(before_ts), int(max_count)))
+        return 0
+
+    async def get(self, *, group_id, user_id, content_hash):
+        row = self.rows.get((int(group_id), int(user_id), content_hash))
         if row is None:
             return None
         return SimpleNamespace(
@@ -124,6 +131,7 @@ def habit_env(monkeypatch, tmp_path):
     monkeypatch.setattr(mod, "make_image_cache_repository", lambda: image_repo)
     monkeypatch.setattr(mod, "make_sticker_label_repository", lambda: label_repo)
     monkeypatch.setattr(mod, "_sticker_habit_cursor_path", lambda: tmp_path / "group_cursors.json")
+    monkeypatch.setattr(mod, "_sticker_habit_prune_state_path", lambda: tmp_path / "prune_state.json")
     monkeypatch.setattr("pallas.product.llm.memory.person_facts._store_path", lambda: tmp_path / "person_facts.json")
     monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: _cfg())
     monkeypatch.setattr("pallas.product.llm.group_insight_processor._resolve_semantic_bot", _resolve_bot_101)
@@ -351,6 +359,22 @@ async def test_run_pass_projects_top_k_facts(habit_env, monkeypatch) -> None:
 
     facts_after = list_person_facts(bot_id=101, group_id=777, user_id=100)
     assert [(fact.source, fact.status) for fact in facts_after] == [("sticker_habit", "active")]
+
+
+@pytest.mark.asyncio
+async def test_prune_cold_stats_runs_once_per_day(habit_env, monkeypatch) -> None:
+    mod = habit_env.mod
+    now = int(time.time())
+    habit_env.tmp_path.joinpath("group_cursors.json").write_text(json.dumps({"777": [now - 1000, 0]}), encoding="utf-8")
+    monkeypatch.setattr(mod, "make_message_repository", lambda: _DummyMessageRepo([]))
+
+    await mod.run_sticker_habit_pass()
+    await mod.run_sticker_habit_pass()
+
+    assert len(habit_env.stat_repo.prune_calls) == 1
+    before_ts, max_count = habit_env.stat_repo.prune_calls[0]
+    assert max_count == 2
+    assert now - before_ts == 90 * 86400
 
 
 @pytest.mark.asyncio
