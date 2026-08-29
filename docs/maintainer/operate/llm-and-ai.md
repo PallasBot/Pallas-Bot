@@ -56,7 +56,7 @@ flowchart TD
 
 | 项目 | 默认 / 位置 | 说明 |
 | --- | --- | --- |
-| 语义标注每日预算 | `LLM_SEMANTIC_STYLE_REALTIME_DAILY_LIMIT`，5000 次/天 | 按实际 LLM 请求计数；批量请求算 1 次，retry 另计 |
+| 语义标注每日预算 | `LLM_SEMANTIC_STYLE_REALTIME_DAILY_LIMIT`，600 次/天 | 按实际 LLM 请求计数；批量请求算 1 次，retry 另计 |
 | 语义样本 | `data/pb_webui/repeater_semantic_style/examples.jsonl` | 通过质量判断的前句→接话样本 |
 | 语义画像 | `data/pb_webui/repeater_semantic_style/profiles.json` | 按 Bot × 群 × 场景重建的注入数据 |
 | 增量游标 | `data/pb_webui/repeater_semantic_style/semantic_style_group_cursors.json` | 记录各 Bot/群已处理到的消息时间 |

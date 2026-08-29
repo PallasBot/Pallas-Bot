@@ -777,12 +777,12 @@ class LlmWebuiConfig(BaseModel):
         ),
     )
     llm_semantic_style_realtime_daily_limit: int = Field(
-        default=5000,
+        default=600,
         ge=0,
         le=50000,
         description=field_help(
             "语义风格标注每日预算",
-            "默认 5000。群洞察处理器从 message 表重建成对样本后调用 LLM 标注语料的每日上限；0 表示不限制",
+            "默认 600。群洞察处理器从 message 表重建成对样本后调用 LLM 标注语料的每日上限；0 表示不限制",
             "到达上限后当天不再消费新的语义标注任务，游标保留，次日恢复",
         ),
     )

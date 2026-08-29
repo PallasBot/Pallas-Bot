@@ -827,7 +827,7 @@ def claim_semantic_label_budget(n: int = 1) -> bool:
 def semantic_label_budget_ok(*, day_key: int | None = None) -> bool:
     """语义风格每日 LLM 标注预算闸：消费侧检查今日累计是否已达上限。
 
-    上限配置 ``llm_semantic_style_realtime_daily_limit``，默认 5000 次/天。
+    上限配置 ``llm_semantic_style_realtime_daily_limit``，默认 600 次/天。
     达到上限返回 False，由调用方跳过本次标注（软上限，不阻塞入队、不影响游标轮转）。
     """
     from pallas.product.llm.config import get_llm_config

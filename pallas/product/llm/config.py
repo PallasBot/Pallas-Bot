@@ -263,7 +263,7 @@ class LlmConfig(BaseModel):
     llm_sticker_label_backfill_enabled: bool = Field(default=True)
     llm_sticker_label_backfill_daily_limit: int = Field(default=200, ge=0, le=2000)
     llm_sticker_label_realtime_daily_limit: int = Field(default=300, ge=0, le=2000)
-    llm_semantic_style_realtime_daily_limit: int = Field(default=5000, ge=0, le=50000)
+    llm_semantic_style_realtime_daily_limit: int = Field(default=600, ge=0, le=50000)
     llm_reply_effect_eval_enabled: bool = Field(default=False)
     llm_corpus_learn_guard_enabled: bool = Field(default=True)
     llm_corpus_cleanup_scheduled_enabled: bool = Field(default=True)
@@ -513,7 +513,7 @@ def get_llm_config() -> LlmConfig:
             llm_sticker_label_backfill_enabled=_env_bool("LLM_STICKER_LABEL_BACKFILL_ENABLED", True),
             llm_sticker_label_backfill_daily_limit=_env_int("LLM_STICKER_LABEL_BACKFILL_DAILY_LIMIT", 200),
             llm_sticker_label_realtime_daily_limit=_env_int("LLM_STICKER_LABEL_REALTIME_DAILY_LIMIT", 300),
-            llm_semantic_style_realtime_daily_limit=_env_int("LLM_SEMANTIC_STYLE_REALTIME_DAILY_LIMIT", 5000),
+            llm_semantic_style_realtime_daily_limit=_env_int("LLM_SEMANTIC_STYLE_REALTIME_DAILY_LIMIT", 600),
             llm_reply_effect_eval_enabled=_env_bool("LLM_REPLY_EFFECT_EVAL_ENABLED", False),
             llm_corpus_learn_guard_enabled=_env_bool("LLM_CORPUS_LEARN_GUARD_ENABLED", True),
             llm_corpus_cleanup_scheduled_enabled=_env_bool("LLM_CORPUS_CLEANUP_SCHEDULED", True),
