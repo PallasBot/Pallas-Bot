@@ -7,6 +7,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from beanie.operators import Or
+from pymongo.errors import BulkWriteError
 
 from pallas.core.foundation.db.blob_store import (
     blob_sha256,
@@ -283,7 +284,20 @@ class MongoMessageRepository:
         return [int(row["_id"]) for row in rows]
 
     async def bulk_insert(self, messages: list[Message]) -> None:
-        await Message.insert_many(messages)
+        if not messages:
+            return
+        try:
+            await Message.insert_many(messages, ordered=False)
+        except BulkWriteError as exc:
+            # 唯一锚点 (group_id, bot_id, message_id) 冲突视为幂等重放，其余照常抛出
+            write_errors = exc.details.get("writeErrors", [])
+            dup_errors = [
+                e
+                for e in write_errors
+                if e.get("code") in (11000, 11001) or "duplicate key" in str(e.get("errmsg", ""))
+            ]
+            if not dup_errors or len(dup_errors) != len(write_errors):
+                raise
 
 
 class MongoBlackListRepository:

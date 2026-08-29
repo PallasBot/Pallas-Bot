@@ -119,7 +119,15 @@ class Message(Document):
     class Settings:
         name = "message"
         collection = "message"
-        indexes = [IndexModel([("time", pymongo.DESCENDING)], name="time_index")]
+        indexes = [
+            IndexModel([("time", pymongo.DESCENDING)], name="time_index"),
+            IndexModel(
+                [("group_id", 1), ("bot_id", 1), ("message_id", 1)],
+                name="uq_message_group_bot_message_id",
+                unique=True,
+                partialFilterExpression={"message_id": {"$type": "int"}},
+            ),
+        ]
 
 
 class BackgroundJob(Document):

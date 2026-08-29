@@ -131,6 +131,7 @@ async def test_message_repo_bulk_insert(beanie_fixture):
             is_plain_text=True,
             plain_text=f"msg_{i}",
             keywords=f"kw_{i}",
+            message_id=1000 + i,
             time=int(time.time()) + i,
         )
         for i in range(10)
@@ -141,6 +142,60 @@ async def test_message_repo_bulk_insert(beanie_fixture):
     # Verify all messages were inserted
     all_msgs = await Message.find_all().to_list()
     assert len(all_msgs) == 10
+
+
+@pytest.mark.asyncio
+async def test_message_repo_bulk_insert_tolerates_duplicate_anchor(beanie_fixture):
+    """Unique anchor (group_id, bot_id, message_id) 冲突按幂等重放处理，不抛错且不落重复行。"""
+    repo = MongoMessageRepository()
+    now = int(time.time())
+
+    first = Message(
+        group_id=123,
+        user_id=456,
+        bot_id=789,
+        raw_message="first",
+        is_plain_text=True,
+        plain_text="first",
+        keywords="first",
+        message_id=555,
+        time=now,
+    )
+    await repo.bulk_insert([first])
+
+    replay = Message(
+        group_id=123,
+        user_id=456,
+        bot_id=789,
+        raw_message="replay",
+        is_plain_text=True,
+        plain_text="replay",
+        keywords="replay",
+        message_id=555,
+        time=now + 1,
+    )
+    fresh = Message(
+        group_id=123,
+        user_id=456,
+        bot_id=789,
+        raw_message="fresh",
+        is_plain_text=True,
+        plain_text="fresh",
+        keywords="fresh",
+        message_id=556,
+        time=now + 2,
+    )
+
+    # 单独重放：静默忽略
+    await repo.bulk_insert([replay])
+    # 与新消息混批：新消息仍写入，重复行被忽略
+    await repo.bulk_insert([replay, fresh])
+
+    all_msgs = await Message.find_all().to_list()
+    mids = sorted(m.message_id for m in all_msgs)
+    assert [555, 556] == mids
+    assert sum(1 for m in all_msgs if m.message_id == 555) == 1
+    assert any(m.plain_text == "fresh" for m in all_msgs)
 
 
 @pytest.mark.asyncio
