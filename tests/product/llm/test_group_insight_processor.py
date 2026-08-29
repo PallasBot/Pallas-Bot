@@ -489,3 +489,19 @@ async def test_produce_semantic_profile_all_failed_keeps_cursor(monkeypatch) -> 
 
     assert persisted == []
     assert marked == []
+
+
+def test_sweep_wake_delay_aligns_to_next_slot_boundary(monkeypatch) -> None:
+    from pallas.product.llm import group_insight_processor as mod
+
+    interval = mod._SWEEP_INTERVAL_SEC
+    slot = 1787875200  # a UTC slot boundary (multiple of 21600)
+    assert slot % interval == 0
+
+    # 1h before the next slot boundary -> wake there. Since a UTC-day boundary is
+    # also a slot boundary (86400 % 21600 == 0), this covers the budget flip too.
+    now = slot + interval - 3600
+    assert mod._sweep_wake_delay(now) == 3600
+
+    # Exactly on a slot boundary -> full cadence to the next one.
+    assert mod._sweep_wake_delay(slot) == interval

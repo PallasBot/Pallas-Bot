@@ -26,6 +26,18 @@
 * feat(llm): 按 greeting/夸赞/附和等场景注入温和语气提示
 * feat(llm): 观测回复拒绝语气（想得美/少来/别吵等），并扩展离线质量场景覆盖暖性中性对话
 * feat(console): 控制台新增 usage 账本明细 CSV 导出端点
+* feat(llm): 重构好感度体系
+* feat(persona): 语义风格移除摆设开关，合并群风格与语义面板
+* feat(insight): sweep 按采样量优先入队并增加轮转游标
+* feat(insight): 语义标注批量提交并纳入 Bot 自我接话
+* feat(insight): 语义标注增加每日预算闸与增量游标
+* feat(llm): 新增回复态度骨架重复检测
+* feat(llm): 按 learning_type 分流真人接话参考与接话复盘
+* feat(memory): 开启记忆图谱写入后自动抽取
+* feat(memory): 自动沉淀群友稳定偏好
+* feat(llm): 提供方支持改名并级联同步引用
+* feat(llm): 历史消息独立长度上限
+* feat(llm): 提供语义样本只读接口
 
 ### Fixed
 
@@ -63,6 +75,13 @@
 * fix(llm): 拦截普通中文逗号尾半截句（如「这牛确实挺针对的，」）
 * fix(llm): 禁止编造现实动作、设备状态或线下行程
 * fix(llm): 拦截对白中 Markdown 与 URL 泄漏，避免占位/链接直接发出
+* fix(persona): 群风格画像取数分页去重，修复多牛群回复形态为空
+* fix(insight): 语义样本批量落盘去重
+* fix(llm): 会话积压队列加上限与 TTL
+* fix(llm): behavior 落盘加异常保护
+* fix(memory): embedding 失败不再以 stub 向量打分落盘
+* fix(core): Windows 跨进程锁改为非阻塞轮询获取
+* fix(insight): 语义扫描对齐 slot 边界唤醒，预算窗口翻转即恢复采样
 
 ### Changed
 

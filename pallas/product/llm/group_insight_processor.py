@@ -480,6 +480,15 @@ def _sweep_slot(ts: int) -> int:
     return int(ts // _SWEEP_INTERVAL_SEC)
 
 
+def _sweep_wake_delay(now_ts: int) -> int:
+    """距下一个 6h slot 边界的秒数。
+
+    UTC 日边界是 slot 边界（86400 % 21600 == 0），因此按 slot 对齐醒来即覆盖
+    预算窗口翻转（本地 08:00），避免「旧窗口跑满预算后新窗口要等一整轮 6h」的空转。
+    """
+    return _SWEEP_INTERVAL_SEC - (now_ts % _SWEEP_INTERVAL_SEC)
+
+
 async def _sweep_loop() -> None:
     while True:
         _local = await _local_bot_ids()
@@ -491,7 +500,7 @@ async def _sweep_loop() -> None:
             await _sweep_semantic_groups()
         except Exception as exc:
             logger.warning("群洞察语义扫描失败：{}", exc)
-        await asyncio.sleep(_SWEEP_INTERVAL_SEC)
+        await asyncio.sleep(_sweep_wake_delay(int(time.time())))
 
 
 def register_group_insight_startup_hook() -> None:
