@@ -67,11 +67,14 @@ WebUI 可覆盖单工具的描述、hints 与可见性（**AI 配置 → 接话 
 | --- | --- | --- |
 | 观察队列 | 待整理的候选片段，供后续沉淀 | AI 观测 → 人物 |
 | 人物事实 | 群内稳定偏好；跨群复用需同意 | AI 观测 → 人物 |
+| 表情包习惯 | 确定性统计群友发送的图片表情，跨阈值后沉淀为「常用表情包：caption」人物事实（`source="sticker_habit"`），随人物事实注入与展示 | AI 观测 → 人物 |
 | 关系便签与好感度 | 对用户的稳定关系备注；好感度分档注入对话、低好感度提高静默概率 | AI 观测 → 人物 |
 | 怒气与静默 | 按 `(bot, group, user)` 短期累积攻击压力；达到阈值后在统一 ingress 静默，但仍保留时间线消息 | AI 观测 → 人物 |
 | 任务编排 | 提醒、周期与异步调研；结果只回群 | AI 观测 → 任务 |
 
-HTTP 契约见 [Agent Platform API](/common/webui/api/09-agent-platform)。主要代码：`pallas/product/llm/memory/`、`orchestration/`、`persona/`。
+HTTP 契约见 [Agent Platform API](/common/webui/api/09-agent-platform)。主要代码：`pallas/product/llm/memory/`、`sticker_habit.py`、`orchestration/`、`persona/`。
+
+表情包习惯是独立于 LLM 归纳的确定性沉淀管线：bot 进程每 30 分钟增量扫描 `message` 表（按 `(time, message_id)` 复合游标），把消息里的 CQ:image 码（与采集同源截断）join `image_cache` 取 `content_hash`，累加进 `user_sticker_stat`（按 `(group_id, user_id, content_hash)` 唯一，不带 bot 维度）；跨过 `llm_sticker_habit_min_count` 的最爱图经 `sticker_label` 的 caption 投影为人物事实，归属每群解析出的语义采集 bot，未标注的图主动借用 realtime 标注预算补标。`send_count` 是「可归因发送次数下界」（图片采集限流、下载失败、缓存周期清理均造成漏计）；QQ 商城表情（mface）暂不计入。
 
 怒气、好感和自动牛格是三个并行状态：怒气是可衰减的短期惩罚，好感是长期关系，自动牛格是账号级表达指纹。攻击事件可以按确定性规则降低好感，但不会修改牛格；好感也不会反向增加怒气。静默区分“收消息、记录消息、处理消息、回复消息”：静默消息仍写入会话和群时间线并标记 `suppressed_by_rage`，但不执行命令、工具、LLM、Repeater 或其它回复副作用。
 

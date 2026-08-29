@@ -128,6 +128,21 @@ class MessageRepository(Protocol):
         """按群内 message_id 集合查消息（用于解析被引用/回复的消息内容）。"""
         ...
 
+    async def list_group_messages_after(
+        self,
+        group_id: int,
+        *,
+        after_time: int,
+        after_message_id: int | None = None,
+        limit: int = 2000,
+    ) -> list[Message]:
+        """群内 (time, message_id) 复合边界之后的消息，升序。
+
+        ``(time, message_id) > (after_time, after_message_id)``；仅传
+        ``after_time`` 时为 ``time > after_time``。供游标式增量扫描消费。
+        """
+        ...
+
     async def list_recent_group_ids_for_bot(
         self,
         bot_id: int,

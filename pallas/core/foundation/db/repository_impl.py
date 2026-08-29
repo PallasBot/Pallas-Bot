@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 from typing import TYPE_CHECKING, Any
 
 from beanie.operators import Or
-from pymongo.errors import BulkWriteError
+from pymongo.errors import BulkWriteError, DuplicateKeyError
 
 from pallas.core.foundation.db.blob_store import (
     blob_sha256,
@@ -27,6 +28,7 @@ from pallas.core.foundation.db.modules import (
     PallasACL,
     SchemaMigration,
     StickerLabel,
+    UserStickerStat,
 )
 from pallas.core.shared.utils.invalidate_cache import clear_model_cache
 
@@ -282,6 +284,25 @@ class MongoMessageRepository:
         ]
         rows = await Message.aggregate(pipeline).to_list()
         return [int(row["_id"]) for row in rows]
+
+    async def list_group_messages_after(
+        self,
+        group_id: int,
+        *,
+        after_time: int,
+        after_message_id: int | None = None,
+        limit: int = 2000,
+    ) -> list[Message]:
+        cap = max(1, min(int(limit), 4096))
+        query: dict = {"group_id": int(group_id)}
+        if after_message_id is None:
+            query["time"] = {"$gt": int(after_time)}
+        else:
+            query["$or"] = [
+                {"time": {"$gt": int(after_time)}},
+                {"time": int(after_time), "message_id": {"$gt": int(after_message_id)}},
+            ]
+        return await Message.find(query).sort("time", "message_id").limit(cap).to_list()
 
     async def bulk_insert(self, messages: list[Message]) -> None:
         if not messages:
@@ -649,6 +670,39 @@ class MongoStickerLabelRepository:
     async def delete(self, content_hash: str) -> bool:
         result = await StickerLabel.get_pymongo_collection().delete_one({"content_hash": content_hash})
         return bool(result.deleted_count)
+
+
+class MongoUserStickerStatRepository:
+    """MongoDB 版群成员图片发送统计仓储。"""
+
+    async def increment(self, *, group_id: int, user_id: int, content_hash: str, sent_at: int, count: int = 1) -> None:
+        coll = UserStickerStat.get_pymongo_collection()
+        query = {"group_id": int(group_id), "user_id": int(user_id), "content_hash": content_hash}
+        update = {
+            "$inc": {"send_count": int(count)},
+            "$set": {"last_sent_at": int(sent_at), "updated_at": int(time.time())},
+        }
+        try:
+            await coll.update_one(query, update, upsert=True)
+        except DuplicateKeyError:
+            # 并发 upsert 竞态：键已由他方创建，重放一次自增即可
+            await coll.update_one(query, update)
+
+    async def get(self, *, group_id: int, user_id: int, content_hash: str) -> UserStickerStat | None:
+        return await UserStickerStat.find_one({
+            "group_id": int(group_id),
+            "user_id": int(user_id),
+            "content_hash": content_hash,
+        })
+
+    async def list_group_candidates(self, *, group_id: int, min_count: int, limit: int = 5) -> list[UserStickerStat]:
+        return (
+            await UserStickerStat
+            .find({"group_id": int(group_id), "send_count": {"$gte": int(min_count)}})
+            .sort("-send_count", "-last_sent_at")
+            .limit(max(1, min(int(limit), 100)))
+            .to_list()
+        )
 
 
 class MongoAdminRepository:

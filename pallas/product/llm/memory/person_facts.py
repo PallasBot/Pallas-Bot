@@ -90,6 +90,58 @@ def save_person_fact(
     return fact
 
 
+def replace_person_fact_by_source(
+    *,
+    bot_id: int,
+    group_id: int,
+    user_id: int,
+    source: str,
+    content: str,
+    confidence: float = 0.5,
+) -> PersonFact | None:
+    """按 source 键控替换同一 (bot, group, user) 的画像事实。
+
+    同 source 且 casefold 同文的 active 事实已存在时 no-op；否则把该来源的
+    旧 active 事实置 forgotten 再追加新条，供确定性管线（如表情包习惯）反复
+    刷新同一条画像而不堆积。content 为空时不做任何改动。
+    """
+    normalized = content.strip()
+    if not normalized:
+        return None
+    facts = _read_facts()
+    same_source = [
+        fact
+        for fact in facts
+        if fact.bot_id == int(bot_id)
+        and fact.group_id == int(group_id)
+        and fact.user_id == int(user_id)
+        and fact.source == source
+        and fact.status == "active"
+    ]
+    if any(fact.content.casefold() == normalized.casefold() for fact in same_source):
+        return None
+    now = int(time.time())
+    forgotten_ids = {fact.fact_id for fact in same_source}
+    next_facts = [
+        fact.model_copy(update={"status": "forgotten", "updated_at": now}) if fact.fact_id in forgotten_ids else fact
+        for fact in facts
+    ]
+    fact = PersonFact(
+        bot_id=int(bot_id),
+        group_id=int(group_id),
+        user_id=int(user_id),
+        content=normalized,
+        source=source.strip() or "conversation",
+        confidence=max(0.0, min(1.0, confidence)),
+        scope="group",
+        created_at=now,
+        updated_at=now,
+    )
+    next_facts.append(fact)
+    _write_facts(next_facts)
+    return fact
+
+
 def list_person_facts(
     *,
     bot_id: int | None = None,

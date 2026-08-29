@@ -786,6 +786,33 @@ class LlmWebuiConfig(BaseModel):
             "到达上限后当天不再消费新的语义标注任务，游标保留，次日恢复",
         ),
     )
+    llm_sticker_habit_enabled: bool = Field(
+        default=True,
+        description=field_help(
+            "表情包习惯沉淀",
+            "统计群友发送的图片表情，跨过次数阈值后把「常用表情包」写进该群友的人物事实",
+            "只统计图片消息；QQ 商城表情（mface）暂不计入",
+        ),
+    )
+    llm_sticker_habit_min_count: int = Field(
+        default=5,
+        ge=1,
+        le=1000,
+        description=field_help(
+            "表情包习惯最少发送次数",
+            "同一群友发同一张图达到该次数才沉淀为习惯事实；计数受图片采集限流影响，是下界",
+        ),
+    )
+    llm_sticker_habit_backfill_days: int = Field(
+        default=7,
+        ge=0,
+        le=90,
+        description=field_help(
+            "表情包习惯回填天数",
+            "首次扫描从多少天前的消息开始统计；0 表示只从启动后开始",
+            "仅影响新群的初始游标，改大不会重扫已有游标的群",
+        ),
+    )
     llm_reply_effect_eval_enabled: bool = Field(
         default=False,
         description=field_help(
@@ -1213,6 +1240,9 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_sticker_label_backfill_daily_limit=cfg.llm_sticker_label_backfill_daily_limit,
         llm_sticker_label_realtime_daily_limit=cfg.llm_sticker_label_realtime_daily_limit,
         llm_semantic_style_realtime_daily_limit=cfg.llm_semantic_style_realtime_daily_limit,
+        llm_sticker_habit_enabled=cfg.llm_sticker_habit_enabled,
+        llm_sticker_habit_min_count=cfg.llm_sticker_habit_min_count,
+        llm_sticker_habit_backfill_days=cfg.llm_sticker_habit_backfill_days,
         llm_reply_effect_eval_enabled=cfg.llm_reply_effect_eval_enabled,
         llm_memory_rag_enabled=cfg.llm_memory_rag_enabled,
         llm_vector_retrieve=cfg.llm_vector_retrieve,
