@@ -803,6 +803,15 @@ class LlmWebuiConfig(BaseModel):
             "同一群友发同一张图达到该次数才沉淀为习惯事实；计数受图片采集限流影响，是下界",
         ),
     )
+    llm_sticker_habit_top_k: int = Field(
+        default=1,
+        ge=1,
+        le=3,
+        description=field_help(
+            "表情包习惯事实条数",
+            "每位群友最多沉淀几张最爱表情包；调小后多余的条目会在下轮扫描时自动清理",
+        ),
+    )
     llm_sticker_habit_backfill_days: int = Field(
         default=7,
         ge=0,
@@ -1242,6 +1251,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_semantic_style_realtime_daily_limit=cfg.llm_semantic_style_realtime_daily_limit,
         llm_sticker_habit_enabled=cfg.llm_sticker_habit_enabled,
         llm_sticker_habit_min_count=cfg.llm_sticker_habit_min_count,
+        llm_sticker_habit_top_k=cfg.llm_sticker_habit_top_k,
         llm_sticker_habit_backfill_days=cfg.llm_sticker_habit_backfill_days,
         llm_reply_effect_eval_enabled=cfg.llm_reply_effect_eval_enabled,
         llm_memory_rag_enabled=cfg.llm_memory_rag_enabled,

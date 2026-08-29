@@ -348,6 +348,7 @@ def _llm_section() -> WebuiEnvSection:
             "llm_semantic_style_realtime_daily_limit": "LLM_SEMANTIC_STYLE_REALTIME_DAILY_LIMIT",
             "llm_sticker_habit_enabled": "LLM_STICKER_HABIT_ENABLED",
             "llm_sticker_habit_min_count": "LLM_STICKER_HABIT_MIN_COUNT",
+            "llm_sticker_habit_top_k": "LLM_STICKER_HABIT_TOP_K",
             "llm_sticker_habit_backfill_days": "LLM_STICKER_HABIT_BACKFILL_DAYS",
             "llm_reply_effect_eval_enabled": "LLM_REPLY_EFFECT_EVAL_ENABLED",
             "llm_memory_rag_enabled": "LLM_MEMORY_RAG_ENABLED",

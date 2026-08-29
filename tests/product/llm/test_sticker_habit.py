@@ -55,8 +55,6 @@ class _DummyStatRepo:
         row["send_count"] += int(count)
         row["last_sent_at"] = max(row["last_sent_at"], int(sent_at))
 
-    async def get(self, *, group_id, user_id, content_hash):
-        row = self.rows.get((int(group_id), int(user_id), content_hash))
         if row is None:
             return None
         return SimpleNamespace(
@@ -107,6 +105,7 @@ def _cfg(**overrides):
     values = {
         "llm_sticker_habit_enabled": True,
         "llm_sticker_habit_min_count": 5,
+        "llm_sticker_habit_top_k": 1,
         "llm_sticker_habit_backfill_days": 7,
     }
     values.update(overrides)
@@ -153,9 +152,7 @@ def test_extract_image_cq_codes_matches_capture_normalization() -> None:
 async def test_scan_group_dedupes_multi_bot_rows_and_skips_bot_senders(habit_env, monkeypatch) -> None:
     mod = habit_env.mod
     # 测试环境无 bot catalog，直接指定身份判定
-    monkeypatch.setattr(
-        mod, "sender_kind", lambda user_id, *, self_bot_id: "peer_bot" if user_id == 101 else "human"
-    )
+    monkeypatch.setattr(mod, "sender_kind", lambda user_id, *, self_bot_id: "peer_bot" if user_id == 101 else "human")
     now = int(time.time())
     messages = [
         _msg(1, 100, CAT_CQ, time_ts=now - 50, bot_id=1),
@@ -320,6 +317,40 @@ async def test_run_pass_jumps_stale_cursor(habit_env, monkeypatch) -> None:
     stat = await habit_env.stat_repo.get(group_id=777, user_id=100, content_hash=CAT_HASH)
     assert stat is not None
     assert stat.send_count == 5
+
+
+@pytest.mark.asyncio
+async def test_run_pass_projects_top_k_facts(habit_env, monkeypatch) -> None:
+    mod = habit_env.mod
+    now = int(time.time())
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: _cfg(llm_sticker_habit_top_k=2))
+    habit_env.tmp_path.joinpath("group_cursors.json").write_text(json.dumps({"777": [now - 1000, 0]}), encoding="utf-8")
+    messages = [_msg(index + 1, 100, CAT_CQ, time_ts=now - 100 + index, bot_id=1) for index in range(5)] + [
+        _msg(10 + index, 100, DOG_CQ, time_ts=now - 50 + index, bot_id=1) for index in range(6)
+    ]
+    monkeypatch.setattr(mod, "make_message_repository", lambda: _DummyMessageRepo(messages))
+    habit_env.label_repo._labels[DOG_HASH] = SimpleNamespace(is_sticker=True, caption="一只吐舌的柴犬")
+
+    totals = await mod.run_sticker_habit_pass()
+
+    assert totals["facts"] == 2
+    from pallas.product.llm.memory.person_facts import list_person_facts
+
+    facts = list_person_facts(bot_id=101, group_id=777, user_id=100)
+    assert [(fact.source, fact.content) for fact in facts] == [
+        ("sticker_habit", "常用表情包：一只吐舌的柴犬"),
+        ("sticker_habit:2", "也常发表情包：一只歪头的橘猫"),
+    ]
+
+    # K 调回 1 且群有新消息时，多余的键控事实被清理
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: _cfg(llm_sticker_habit_top_k=1))
+    monkeypatch.setattr(
+        mod, "make_message_repository", lambda: _DummyMessageRepo([_msg(30, 100, DOG_CQ, time_ts=now + 50, bot_id=1)])
+    )
+    await mod.run_sticker_habit_pass()
+
+    facts_after = list_person_facts(bot_id=101, group_id=777, user_id=100)
+    assert [(fact.source, fact.status) for fact in facts_after] == [("sticker_habit", "active")]
 
 
 @pytest.mark.asyncio

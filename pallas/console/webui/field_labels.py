@@ -261,6 +261,7 @@ FIELD_LABELS: dict[str, str] = {
     "llm_semantic_style_realtime_daily_limit": "语义风格标注每日预算",
     "llm_sticker_habit_enabled": "表情包习惯沉淀",
     "llm_sticker_habit_min_count": "表情包习惯最少发送次数",
+    "llm_sticker_habit_top_k": "表情包习惯事实条数",
     "llm_sticker_habit_backfill_days": "表情包习惯回填天数",
     "llm_reply_effect_eval_enabled": "记录回复效果评分",
     "llm_chat_system_prompt_path": "系统提示词文件",

@@ -26,7 +26,10 @@ from pallas.core.foundation.db import (
 )
 from pallas.core.foundation.fs_lock import atomic_write_text
 from pallas.core.foundation.startup_report import register_startup_scheduled
-from pallas.product.llm.memory.person_facts import replace_person_fact_by_source
+from pallas.product.llm.memory.person_facts import (
+    forget_person_facts_by_source,
+    replace_person_fact_by_source,
+)
 from pallas.product.llm.sender_identity import sender_kind
 
 if TYPE_CHECKING:
@@ -42,6 +45,7 @@ _CANDIDATES_PER_GROUP = 5
 _LABEL_ENQUEUE_PER_GROUP = 20
 _LABEL_ENQUEUE_GLOBAL_PER_PASS = 50
 _MAX_FACT_LEN = 64
+_MAX_TOP_K = 3
 
 _STICKER_HABIT_LIFECYCLE_BOUND = False
 
@@ -250,6 +254,11 @@ async def _enqueue_sticker_label_for_hash(content_hash: str) -> bool:
     return bool(reactivated)
 
 
+def _habit_fact_source(rank: int) -> str:
+    """top-K 事实的键控 source：第 1 名沿用无后缀键，向后兼容 v1。"""
+    return STICKER_HABIT_FACT_SOURCE if rank <= 1 else f"{STICKER_HABIT_FACT_SOURCE}:{rank}"
+
+
 async def _project_group_habits(
     *,
     group_id: int,
@@ -259,57 +268,72 @@ async def _project_group_habits(
     bot_cache: dict[int, int],
     label_quota: int,
 ) -> tuple[int, int]:
-    """把跨阈值的最爱表情包投影为人物事实；返回 (写入事实数, 补标入队数)。
+    """把跨阈值的最爱表情包投影为人物事实（每人最多 top_k 条）；返回 (写入事实数, 补标入队数)。
 
     投影输入 = 本轮有增量的键 ∪ 群内跨阈值候选（按群查询），按 user 取
-    send_count 最高者；未标注的键主动借用 realtime 补标，下轮自愈。
+    send_count 前 top_k；未标注的键主动借用 realtime 补标，下轮自愈。
     """
     min_count = max(1, int(getattr(cfg, "llm_sticker_habit_min_count", 5) or 1))
+    top_k = max(1, min(int(getattr(cfg, "llm_sticker_habit_top_k", 1) or 1), _MAX_TOP_K))
     label_repo = make_sticker_label_repository()
 
-    best: dict[int, tuple[int, str]] = {}
+    ranked: dict[int, list[tuple[int, str]]] = {}
 
     def _consider(user_id: int, content_hash: str, count: int) -> None:
         if count < min_count:
             return
-        current = best.get(int(user_id))
-        if current is None or count > current[0]:
-            best[int(user_id)] = (int(count), content_hash)
+        bucket = ranked.setdefault(int(user_id), [])
+        if any(existing_hash == content_hash for _count, existing_hash in bucket):
+            return
+        bucket.append((int(count), content_hash))
 
     for user_id, content_hash in delta_pairs:
         stat = await stat_repo.get(group_id=group_id, user_id=user_id, content_hash=content_hash)
         if stat is not None:
             _consider(user_id, content_hash, int(stat.send_count))
     candidates = await stat_repo.list_group_candidates(
-        group_id=group_id, min_count=min_count, limit=_CANDIDATES_PER_GROUP
+        group_id=group_id, min_count=min_count, limit=_CANDIDATES_PER_GROUP * top_k
     )
     for row in candidates:
         _consider(int(row.user_id), str(row.content_hash), int(row.send_count))
-    if not best:
+    if not ranked:
         return 0, 0
 
+    bot_id = await _resolve_group_bot(group_id, bot_cache)
     facts = 0
     label_queued = 0
-    for user_id, (_count, content_hash) in sorted(best.items()):
-        label = await label_repo.get(content_hash)
-        caption = str(getattr(label, "caption", "") or "").strip() if label is not None else ""
-        if label is None or not bool(getattr(label, "is_sticker", False)) or not caption:
-            # 未标注的才补标；已标注为非表情/无 caption 的图不进入习惯事实
-            if label is None and label_quota > label_queued and await _enqueue_sticker_label_for_hash(content_hash):
-                label_queued += 1
-            continue
-        bot_id = await _resolve_group_bot(group_id, bot_cache)
-        if bot_id <= 0:
-            continue
-        replace_person_fact_by_source(
-            bot_id=bot_id,
-            group_id=group_id,
-            user_id=user_id,
-            source=STICKER_HABIT_FACT_SOURCE,
-            content=f"常用表情包：{caption}"[:_MAX_FACT_LEN],
-            confidence=0.8,
-        )
-        facts += 1
+    label_cache: dict[str, object] = {}
+    for user_id in sorted(ranked):
+        entries = sorted(ranked[user_id], key=lambda item: (-item[0], item[1]))[:top_k]
+        for rank, (_count, content_hash) in enumerate(entries, start=1):
+            if content_hash not in label_cache:
+                label_cache[content_hash] = await label_repo.get(content_hash)
+            label = label_cache[content_hash]
+            caption = str(getattr(label, "caption", "") or "").strip() if label is not None else ""
+            if label is None or not bool(getattr(label, "is_sticker", False)) or not caption:
+                # 未标注的才补标；已标注为非表情/无 caption 的图不进入习惯事实
+                if label is None and label_quota > label_queued and await _enqueue_sticker_label_for_hash(content_hash):
+                    label_queued += 1
+                continue
+            content = f"常用表情包：{caption}" if rank <= 1 else f"也常发表情包：{caption}"
+            if bot_id > 0:
+                replace_person_fact_by_source(
+                    bot_id=bot_id,
+                    group_id=group_id,
+                    user_id=user_id,
+                    source=_habit_fact_source(rank),
+                    content=content[:_MAX_FACT_LEN],
+                    confidence=0.8,
+                )
+                facts += 1
+        if bot_id > 0 and len(entries) < _MAX_TOP_K:
+            # 产出缩水（阈值/K 调整）时清理多余的键控事实
+            forget_person_facts_by_source(
+                bot_id=bot_id,
+                group_id=group_id,
+                user_id=user_id,
+                sources=[_habit_fact_source(rank) for rank in range(len(entries) + 1, _MAX_TOP_K + 1)],
+            )
     return facts, label_queued
 
 

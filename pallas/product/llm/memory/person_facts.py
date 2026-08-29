@@ -142,6 +142,35 @@ def replace_person_fact_by_source(
     return fact
 
 
+def forget_person_facts_by_source(*, bot_id: int, group_id: int, user_id: int, sources: list[str]) -> int:
+    """把指定 source 集合的 active 事实置 forgotten，返回失活条数。
+
+    供 top-K 类确定性管线在产出缩水时清理多余的键控事实。
+    """
+    wanted = {str(source) for source in sources if str(source)}
+    if not wanted:
+        return 0
+    facts = _read_facts()
+    now = int(time.time())
+    hit = 0
+    next_facts: list[PersonFact] = []
+    for fact in facts:
+        if (
+            fact.bot_id == int(bot_id)
+            and fact.group_id == int(group_id)
+            and fact.user_id == int(user_id)
+            and fact.source in wanted
+            and fact.status == "active"
+        ):
+            next_facts.append(fact.model_copy(update={"status": "forgotten", "updated_at": now}))
+            hit += 1
+        else:
+            next_facts.append(fact)
+    if hit:
+        _write_facts(next_facts)
+    return hit
+
+
 def list_person_facts(
     *,
     bot_id: int | None = None,
