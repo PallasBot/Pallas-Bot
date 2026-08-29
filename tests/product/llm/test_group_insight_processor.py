@@ -161,6 +161,57 @@ async def test_rebuild_pairs_same_second_cursor_only_skips_processed_prefix(monk
 
 
 @pytest.mark.asyncio
+async def test_rebuild_pairs_prefers_quoted_over_adjacent(monkeypatch) -> None:
+    """quoted 样本可接受率远高于 adjacent，limit 不足时不得被时间靠前的 adjacent 挤出。"""
+    from pallas.product.llm import group_insight_processor as mod
+
+    monkeypatch.setattr(mod, "sender_kind", lambda user_id, *, self_bot_id: "human")
+    monkeypatch.setattr(
+        mod,
+        "make_message_repository",
+        lambda: _DummyMessageRepo([
+            _msg(1, 11, "相邻前句一", time=1000),
+            _msg(2, 12, "相邻接话一", time=1005),
+            _msg(3, 11, "相邻前句二", time=1010),
+            _msg(4, 12, "相邻接话二", time=1015),
+            _msg(5, 11, "引用前句", time=1020),
+            _msg(6, 12, "引用接话", time=1025, reply_to_message_id=5),
+        ]),
+    )
+
+    pairs = await _rebuild_pairs_from_messages(bot_id=100, group_id=42, limit=2)
+
+    assert [pair[2] for pair in pairs] == ["quoted", "adjacent"]
+    assert [pair[5] for pair in pairs] == [6, 2]
+
+
+@pytest.mark.asyncio
+async def test_rebuild_pairs_skips_pure_media_reply_keeps_face(monkeypatch) -> None:
+    """接话端只剩图片/媒体占位（无文字）不送标注；表情回复是真实接话，保留。"""
+    from pallas.product.llm import group_insight_processor as mod
+
+    monkeypatch.setattr(mod, "sender_kind", lambda user_id, *, self_bot_id: "human")
+    monkeypatch.setattr(
+        mod,
+        "make_message_repository",
+        lambda: _DummyMessageRepo([
+            _msg(1, 11, "看图", time=1000),
+            _msg(2, 12, "[CQ:image,file=abc.jpg]", time=1005, reply_to_message_id=1),
+            _msg(3, 12, "哈这个词好怪", time=1010, reply_to_message_id=1),
+            _msg(4, 12, "[CQ:face,id=6]", time=1015),
+            _msg(5, 12, "[CQ:image,file=a.png][CQ:record,url=b]", time=1020),
+        ]),
+    )
+
+    pairs = await _rebuild_pairs_from_messages(bot_id=100, group_id=42)
+
+    reply_ids = [pair[5] for pair in pairs]
+    assert 2 not in reply_ids
+    assert 3 in reply_ids
+    assert 4 in reply_ids
+
+
+@pytest.mark.asyncio
 async def test_handle_group_insight_dispatches_semantic_task(monkeypatch) -> None:
     from pallas.product.llm import group_insight_processor as mod
 

@@ -41,6 +41,10 @@ _CQ_PLACEHOLDER_MAP = {
     "face": "[表情]",
 }
 
+# 接话端只剩图片/媒体占位（无任何文字）时对 LLM 标注没有信息量，直接跳过；
+# [表情] 是真实的文字化接话，不在此列。
+_MEDIA_ONLY_REPLY_RE = re.compile(r"(?:\s*(?:\[图片\]|\[媒体\])\s*)+")
+
 
 def _cq_placeholder(match: re.Match[str]) -> str:
     return _CQ_PLACEHOLDER_MAP.get(match.group(1).lower(), "[媒体]")
@@ -275,12 +279,13 @@ async def _rebuild_pairs_from_messages(
         (int(getattr(item, "time", 0) or 0), int(getattr(item, "message_id", 0) or 0)) for item in human_ordered
     ]
     pairs: list[tuple[str, str, str, int, int, int, int, bool]] = []
+    adjacent_pairs: list[tuple[str, str, str, int, int, int, int, bool]] = []
     seen: set[tuple[int, int]] = set()
 
     for reply_message in ordered:
         reply_user_id = int(getattr(reply_message, "user_id", 0) or 0)
         reply_text = _text(getattr(reply_message, "plain_text", "") or getattr(reply_message, "raw_message", ""))
-        if not reply_text:
+        if not reply_text or _MEDIA_ONLY_REPLY_RE.fullmatch(reply_text):
             continue
         reply_is_bot = sender_kind(reply_user_id, self_bot_id=bot_id) != "human"
         reply_id = int(getattr(reply_message, "message_id", 0) or 0)
@@ -325,7 +330,7 @@ async def _rebuild_pairs_from_messages(
         if not trigger_text or trigger_text == reply_text:
             continue
         seen.add((predecessor_id, reply_id))
-        pairs.append((
+        adjacent_pairs.append((
             trigger_text,
             reply_text,
             "adjacent",
@@ -335,9 +340,10 @@ async def _rebuild_pairs_from_messages(
             reply_time,
             reply_is_bot,
         ))
-        if len(pairs) >= limit:
-            break
-    return pairs
+    # 历史 LLM 标注中 quoted 样本几乎全部可接受，adjacent 命中率明显更低；
+    # 先扫完整个窗口再拼接，quoted 排前，避免被大量低命中的 adjacent 挤出 limit。
+    pairs.extend(adjacent_pairs)
+    return pairs[:limit]
 
 
 def _text(value: object) -> str:
