@@ -42,25 +42,11 @@ def resolve_legacy_rwkv_drunk_chat_enabled() -> bool:
     """遗留酒后 RWKV（Bot 侧开关，推理仍打 AI 仓 POST /api/chat）。
 
     与 ``LLM_CHAT_ENABLED`` 独立：两者可同时开；醉酒提交时 LLM 优先，否则走 RWKV。
-    开关来源：``CHAT_ENABLE``；兼容旧扩展插件 ``chat_enable``（若仍安装）。
+    开关来源：``CHAT_ENABLE``；旧扩展插件的配置回退读取已随该插件退役移除。
     """
-    import importlib
-
     env_legacy = _env_bool_first_optional(("CHAT_ENABLE",))
     if env_legacy is not None:
         return env_legacy
-    for import_path in (
-        "pallas_plugin_chat.config",
-        "packages.chat.config",
-    ):
-        try:
-            mod = importlib.import_module(import_path)
-            getter = getattr(mod, "get_chat_config", None)
-            if getter is None:
-                continue
-            return bool(getter().chat_enable)
-        except Exception:
-            continue
     return False
 
 
@@ -225,6 +211,9 @@ class LlmConfig(BaseModel):
     llm_session_user_ttl_sec: int = Field(default=0, ge=0, le=2592000)
     llm_session_private_ttl_sec: int = Field(default=259200, ge=0, le=2592000)
     llm_session_max_content_len: int = Field(default=4000, ge=64, le=16000)
+    # 历史轮独立截断：当前消息仍用 user_message_max_len，历史里一条长文不该吃掉
+    # 大半字符预算。
+    llm_history_turn_max_len: int = Field(default=800, ge=64, le=16000)
     llm_session_strip_vision_enabled: bool = Field(default=True)
     llm_session_vision_describe_enabled: bool = Field(default=True)
     llm_governance_enabled: bool = Field(default=True)
@@ -274,6 +263,11 @@ class LlmConfig(BaseModel):
     llm_sticker_label_backfill_enabled: bool = Field(default=True)
     llm_sticker_label_backfill_daily_limit: int = Field(default=200, ge=0, le=2000)
     llm_sticker_label_realtime_daily_limit: int = Field(default=300, ge=0, le=2000)
+    llm_semantic_style_realtime_daily_limit: int = Field(default=600, ge=0, le=50000)
+    llm_sticker_habit_enabled: bool = Field(default=True)
+    llm_sticker_habit_min_count: int = Field(default=5, ge=1, le=1000)
+    llm_sticker_habit_top_k: int = Field(default=1, ge=1, le=3)
+    llm_sticker_habit_backfill_days: int = Field(default=7, ge=0, le=90)
     llm_reply_effect_eval_enabled: bool = Field(default=False)
     llm_corpus_learn_guard_enabled: bool = Field(default=True)
     llm_corpus_cleanup_scheduled_enabled: bool = Field(default=True)
@@ -286,10 +280,6 @@ class LlmConfig(BaseModel):
     llm_tools_blacklist: list[str] = Field(default_factory=list)
     llm_tools_desc_max_len: int = Field(default=120, ge=32, le=512)
     llm_memory_rag_enabled: bool = Field(default=True)
-    llm_expression_inject_enabled: bool = Field(default=True)
-    llm_expression_learn_enabled: bool = Field(default=True)
-    llm_expression_auto_promote_enabled: bool = Field(default=True)
-    llm_expression_retrieve_limit: int = Field(default=5, ge=1, le=8)
     llm_vector_retrieve: VectorRetrieveMode = Field(default="hybrid")
     llm_embedding_model: str = Field(default="stub")
     llm_embedding_provider: str = Field(default="")
@@ -308,8 +298,11 @@ class LlmConfig(BaseModel):
     llm_memory_auto_ip_enabled: bool = Field(default=False)
     llm_memory_auto_ip_cooldown_sec: int = Field(default=1800, ge=0, le=86400)
     llm_memory_auto_ip_daily_budget: int = Field(default=100, ge=0, le=100000)
+    llm_memory_auto_person_facts_enabled: bool = Field(default=True)
+    llm_memory_auto_person_facts_cooldown_sec: int = Field(default=43200, ge=0, le=86400)
+    llm_memory_auto_person_facts_daily_budget: int = Field(default=200, ge=0, le=100000)
     llm_memory_graph_extract_enabled: bool = Field(default=True)
-    llm_memory_graph_extract_on_write: bool = Field(default=False)
+    llm_memory_graph_extract_on_write: bool = Field(default=True)
     llm_memory_hiergraph_max_layers: int = Field(default=3, ge=1, le=6)
     llm_memory_decay_half_life_days: float = Field(default=30.0, ge=0.0, le=3650.0)
     llm_memory_decay_min_importance: float = Field(default=0.6, ge=0.0, le=1.0)
@@ -341,12 +334,13 @@ class LlmConfig(BaseModel):
     llm_relationship_auto_persist_enabled: bool = Field(default=True)
     llm_relationship_affect_delta_max: float = Field(default=0.15, ge=0.0, le=0.5)
     llm_relationship_affinity_enabled: bool = Field(default=True)
-    llm_relationship_affinity_delta_max: float = Field(default=0.15, ge=0.0, le=1.0)
-    llm_relationship_affinity_llm_cooldown_s: int = Field(default=60, ge=0, le=86400)
-    llm_relationship_affinity_llm_daily_limit: int = Field(default=300, ge=0, le=100000)
-    llm_relationship_affinity_daily_decay_step: float = Field(default=0.02, ge=0.0, le=1.0)
-    llm_relationship_affinity_silence_threshold: float = Field(default=-0.3, ge=-1.0, le=0.0)
-    llm_relationship_affinity_silence_max_penalty: int = Field(default=30, ge=0, le=200)
+    llm_relationship_affinity_ambient_enabled: bool = Field(default=True)
+    llm_relationship_affinity_delta_max: float = Field(default=0.20, ge=0.0, le=1.0)
+    llm_relationship_affinity_llm_cooldown_s: int = Field(default=24, ge=0, le=86400)
+    llm_relationship_affinity_llm_daily_limit: int = Field(default=1000, ge=0, le=100000)
+    llm_relationship_affinity_daily_decay_step: float = Field(default=0.005, ge=0.0, le=1.0)
+    llm_relationship_affinity_silence_threshold: float = Field(default=-0.45, ge=-1.0, le=0.0)
+    llm_relationship_affinity_silence_max_penalty: int = Field(default=40, ge=0, le=200)
     llm_session_summary_enabled: bool = Field(default=True)
     llm_session_summary_threshold: int = Field(default=24, ge=8, le=200)
     llm_session_summary_keep_messages: int = Field(default=16, ge=4, le=120)
@@ -467,6 +461,7 @@ def get_llm_config() -> LlmConfig:
             llm_session_user_ttl_sec=_env_int("LLM_SESSION_USER_TTL_SEC", 0),
             llm_session_private_ttl_sec=_env_int("LLM_SESSION_PRIVATE_TTL_SEC", 259200),
             llm_session_max_content_len=_env_int("LLM_SESSION_MAX_CONTENT_LEN", 4000),
+            llm_history_turn_max_len=_env_int("LLM_HISTORY_TURN_MAX_LEN", 800),
             llm_session_strip_vision_enabled=_env_bool("LLM_SESSION_STRIP_VISION_ENABLED", True),
             llm_session_vision_describe_enabled=_env_bool("LLM_SESSION_VISION_DESCRIBE_ENABLED", True),
             llm_governance_enabled=_env_bool("LLM_GOVERNANCE_ENABLED", True),
@@ -522,6 +517,7 @@ def get_llm_config() -> LlmConfig:
             llm_sticker_label_backfill_enabled=_env_bool("LLM_STICKER_LABEL_BACKFILL_ENABLED", True),
             llm_sticker_label_backfill_daily_limit=_env_int("LLM_STICKER_LABEL_BACKFILL_DAILY_LIMIT", 200),
             llm_sticker_label_realtime_daily_limit=_env_int("LLM_STICKER_LABEL_REALTIME_DAILY_LIMIT", 300),
+            llm_semantic_style_realtime_daily_limit=_env_int("LLM_SEMANTIC_STYLE_REALTIME_DAILY_LIMIT", 600),
             llm_reply_effect_eval_enabled=_env_bool("LLM_REPLY_EFFECT_EVAL_ENABLED", False),
             llm_corpus_learn_guard_enabled=_env_bool("LLM_CORPUS_LEARN_GUARD_ENABLED", True),
             llm_corpus_cleanup_scheduled_enabled=_env_bool("LLM_CORPUS_CLEANUP_SCHEDULED", True),
@@ -540,10 +536,6 @@ def get_llm_config() -> LlmConfig:
             llm_tools_blacklist=_env_str_list("LLM_TOOLS_BLACKLIST"),
             llm_tools_desc_max_len=_env_int("LLM_TOOLS_DESC_MAX_LEN", 120),
             llm_memory_rag_enabled=_env_bool("LLM_MEMORY_RAG_ENABLED", True),
-            llm_expression_inject_enabled=_env_bool("LLM_EXPRESSION_INJECT_ENABLED", True),
-            llm_expression_learn_enabled=_env_bool("LLM_EXPRESSION_LEARN_ENABLED", True),
-            llm_expression_auto_promote_enabled=_env_bool("LLM_EXPRESSION_AUTO_PROMOTE_ENABLED", True),
-            llm_expression_retrieve_limit=min(8, max(1, _env_int("LLM_EXPRESSION_RETRIEVE_LIMIT", 5))),
             llm_vector_retrieve=resolve_llm_vector_retrieve(),
             llm_embedding_model=resolve_llm_embedding_model(),
             llm_embedding_provider=resolve_llm_embedding_provider(),
@@ -562,8 +554,15 @@ def get_llm_config() -> LlmConfig:
             llm_memory_auto_ip_enabled=_env_bool("LLM_MEMORY_AUTO_IP_ENABLED", False),
             llm_memory_auto_ip_cooldown_sec=_env_int("LLM_MEMORY_AUTO_IP_COOLDOWN_SEC", 1800),
             llm_memory_auto_ip_daily_budget=_env_int("LLM_MEMORY_AUTO_IP_DAILY_BUDGET", 100),
+            llm_memory_auto_person_facts_enabled=_env_bool("LLM_MEMORY_AUTO_PERSON_FACTS_ENABLED", True),
+            llm_memory_auto_person_facts_cooldown_sec=_env_int("LLM_MEMORY_AUTO_PERSON_FACTS_COOLDOWN_SEC", 43200),
+            llm_memory_auto_person_facts_daily_budget=_env_int("LLM_MEMORY_AUTO_PERSON_FACTS_DAILY_BUDGET", 200),
+            llm_sticker_habit_enabled=_env_bool("LLM_STICKER_HABIT_ENABLED", True),
+            llm_sticker_habit_min_count=_env_int("LLM_STICKER_HABIT_MIN_COUNT", 5),
+            llm_sticker_habit_top_k=_env_int("LLM_STICKER_HABIT_TOP_K", 1),
+            llm_sticker_habit_backfill_days=_env_int("LLM_STICKER_HABIT_BACKFILL_DAYS", 7),
             llm_memory_graph_extract_enabled=_env_bool("LLM_MEMORY_GRAPH_EXTRACT_ENABLED", True),
-            llm_memory_graph_extract_on_write=_env_bool("LLM_MEMORY_GRAPH_EXTRACT_ON_WRITE", False),
+            llm_memory_graph_extract_on_write=_env_bool("LLM_MEMORY_GRAPH_EXTRACT_ON_WRITE", True),
             llm_memory_hiergraph_max_layers=_env_int("LLM_MEMORY_HIERGRAPH_MAX_LAYERS", 3),
             llm_memory_decay_half_life_days=_env_float("LLM_MEMORY_DECAY_HALF_LIFE_DAYS", 30.0),
             llm_memory_decay_min_importance=_env_float("LLM_MEMORY_DECAY_MIN_IMPORTANCE", 0.6),
@@ -594,12 +593,16 @@ def get_llm_config() -> LlmConfig:
             llm_relationship_auto_persist_enabled=_env_bool("LLM_RELATIONSHIP_AUTO_PERSIST_ENABLED", True),
             llm_relationship_affect_delta_max=_env_float("LLM_RELATIONSHIP_AFFECT_DELTA_MAX", 0.15),
             llm_relationship_affinity_enabled=_env_bool("LLM_RELATIONSHIP_AFFINITY_ENABLED", True),
-            llm_relationship_affinity_delta_max=_env_float("LLM_RELATIONSHIP_AFFINITY_DELTA_MAX", 0.15),
-            llm_relationship_affinity_llm_cooldown_s=_env_int("LLM_RELATIONSHIP_AFFINITY_LLM_COOLDOWN_S", 60),
-            llm_relationship_affinity_llm_daily_limit=_env_int("LLM_RELATIONSHIP_AFFINITY_LLM_DAILY_LIMIT", 300),
-            llm_relationship_affinity_daily_decay_step=_env_float("LLM_RELATIONSHIP_AFFINITY_DAILY_DECAY_STEP", 0.02),
-            llm_relationship_affinity_silence_threshold=_env_float("LLM_RELATIONSHIP_AFFINITY_SILENCE_THRESHOLD", -0.3),
-            llm_relationship_affinity_silence_max_penalty=_env_int("LLM_RELATIONSHIP_AFFINITY_SILENCE_MAX_PENALTY", 30),
+            llm_relationship_affinity_ambient_enabled=_env_bool("LLM_RELATIONSHIP_AFFINITY_AMBIENT_ENABLED", True),
+            llm_relationship_affinity_delta_max=_env_float("LLM_RELATIONSHIP_AFFINITY_DELTA_MAX", 0.20),
+            llm_relationship_affinity_llm_cooldown_s=_env_int("LLM_RELATIONSHIP_AFFINITY_LLM_COOLDOWN_S", 24),
+            llm_relationship_affinity_llm_daily_limit=_env_int("LLM_RELATIONSHIP_AFFINITY_LLM_DAILY_LIMIT", 1000),
+            llm_relationship_affinity_daily_decay_step=_env_float("LLM_RELATIONSHIP_AFFINITY_DAILY_DECAY_STEP", 0.005),
+            llm_relationship_affinity_silence_threshold=_env_float(
+                "LLM_RELATIONSHIP_AFFINITY_SILENCE_THRESHOLD",
+                -0.45,
+            ),
+            llm_relationship_affinity_silence_max_penalty=_env_int("LLM_RELATIONSHIP_AFFINITY_SILENCE_MAX_PENALTY", 40),
             llm_session_summary_enabled=_env_bool("LLM_SESSION_SUMMARY_ENABLED", True),
             llm_session_summary_threshold=_env_int("LLM_SESSION_SUMMARY_THRESHOLD", 24),
             llm_session_summary_keep_messages=_env_int("LLM_SESSION_SUMMARY_KEEP_MESSAGES", 16),

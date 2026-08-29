@@ -776,6 +776,52 @@ class LlmWebuiConfig(BaseModel):
             "超限后当天不再实时标注，只保留回填路径",
         ),
     )
+    llm_semantic_style_realtime_daily_limit: int = Field(
+        default=600,
+        ge=0,
+        le=50000,
+        description=field_help(
+            "语义风格标注每日预算",
+            "默认 600。群洞察处理器从 message 表重建成对样本后调用 LLM 标注语料的每日上限；0 表示不限制",
+            "到达上限后当天不再消费新的语义标注任务，游标保留，次日恢复",
+        ),
+    )
+    llm_sticker_habit_enabled: bool = Field(
+        default=True,
+        description=field_help(
+            "表情包习惯沉淀",
+            "统计群友发送的图片表情，跨过次数阈值后把「常用表情包」写进该群友的人物事实",
+            "只统计图片消息；QQ 商城表情（mface）暂不计入",
+        ),
+    )
+    llm_sticker_habit_min_count: int = Field(
+        default=5,
+        ge=1,
+        le=1000,
+        description=field_help(
+            "表情包习惯最少发送次数",
+            "同一群友发同一张图达到该次数才沉淀为习惯事实；计数受图片采集限流影响，是下界",
+        ),
+    )
+    llm_sticker_habit_top_k: int = Field(
+        default=1,
+        ge=1,
+        le=3,
+        description=field_help(
+            "表情包习惯事实条数",
+            "每位群友最多沉淀几张最爱表情包；调小后多余的条目会在下轮扫描时自动清理",
+        ),
+    )
+    llm_sticker_habit_backfill_days: int = Field(
+        default=7,
+        ge=0,
+        le=90,
+        description=field_help(
+            "表情包习惯回填天数",
+            "首次扫描从多少天前的消息开始统计；0 表示只从启动后开始",
+            "仅影响新群的初始游标，改大不会重扫已有游标的群",
+        ),
+    )
     llm_reply_effect_eval_enabled: bool = Field(
         default=False,
         description=field_help(
@@ -790,40 +836,6 @@ class LlmWebuiConfig(BaseModel):
             "群里「记住：…」以及相关记忆，要不要检索后塞进对话",
             "开=可写入并按相关度注入（推荐）；关=不走群记忆检索，牛牛更「健忘」",
             "关闭后下方记忆条数、自动沉淀等细项基本不再参与对话注入",
-        ),
-    )
-    llm_expression_inject_enabled: bool = Field(
-        default=True,
-        description=field_help(
-            "回复时要不要参考本群常用说法来调口气",
-            "开=注入群表达（更像本群）；关=不用表达库。想统一官方腔可关",
-            "与「学习群表达」独立：关注入仍可能在后台学习，只是当轮不用",
-        ),
-    )
-    llm_expression_learn_enabled: bool = Field(
-        default=True,
-        description=field_help(
-            "要不要从群消息里慢慢学本群口头禅/说法",
-            "开=持续沉淀候选表达（推荐）；关=不再学习新说法",
-            "学到的内容是否自动启用，看「自动晋升」开关",
-        ),
-    )
-    llm_expression_auto_promote_enabled: bool = Field(
-        default=True,
-        description=field_help(
-            "学到的群表达要不要自动变成正式可用",
-            "开=达标后自动启用；关=只留在候选，需人工晋升。怕学坏梗可先关",
-            "依赖学习开关；关闭后注入侧只能用已晋升的表达",
-        ),
-    )
-    llm_expression_retrieve_limit: int = Field(
-        default=5,
-        ge=1,
-        le=8,
-        description=field_help(
-            "每次回复最多带几条群表达进上下文",
-            "默认 5。想更贴群可到 6～8；想省预算降到 3～4",
-            "条数越大越占字符预算；须开启「注入群表达」才有体感",
         ),
     )
     llm_vector_retrieve: VectorRetrieveMode = Field(
@@ -1075,63 +1087,71 @@ class LlmWebuiConfig(BaseModel):
             "好感度会显示在对话的关系备注里，并影响牛牛对低好感者是否接话",
         ),
     )
+    llm_relationship_affinity_ambient_enabled: bool = Field(
+        default=True,
+        description=field_help(
+            "普通群聊时也做轻量好感度观察",
+            "开=群里没@牛牛时，牛牛也会悄悄留意亲昵/冲话，用规则词表微调好感（不调大模型，省费用）；关=只有被@、点名、追问才更新好感度",
+            "只按词表小步调整，不会误判反讽，也不会因为普通闲聊突然掉好感",
+        ),
+    )
     llm_relationship_affinity_delta_max: float = Field(
-        default=0.15,
+        default=0.20,
         ge=0.0,
         le=1.0,
         description=field_help(
             "单次好感度变动的最大幅度",
-            "默认 0.15。越大，一两句话就能明显拉近/拉远关系；越小越平滑",
+            "默认 0.20。越大，一两句话就能明显拉近/拉远关系；越小越平滑",
             "好感度本身在 -1 到 +1 之间",
         ),
     )
     llm_relationship_affinity_llm_cooldown_s: int = Field(
-        default=60,
+        default=24,
         ge=0,
         le=86400,
         description=field_help(
             "规则词表判不出好感时，交给大模型判定的最小间隔（秒）",
-            "默认 60。太小会频繁调大模型；越大越省调用，但反应会变慢",
+            "默认 24。太小会频繁调大模型；越大越省调用，但反应会变慢",
             "只有规则命中不了的话才走大模型",
         ),
     )
     llm_relationship_affinity_llm_daily_limit: int = Field(
-        default=300,
+        default=1000,
         ge=0,
         le=100000,
         description=field_help(
             "每天最多让大模型判定几次好感度",
-            "默认 300。防止规则判不出时无上限调用大模型产生费用；0=不限制",
+            "默认 1000。防止规则判不出时无上限调用大模型产生费用；0=不限制",
             "与冷却间隔共同约束；超出后当天不再用大模型判定",
         ),
     )
     llm_relationship_affinity_daily_decay_step: float = Field(
-        default=0.02,
+        default=0.005,
         ge=0.0,
         le=1.0,
         description=field_help(
             "好感度每天向中立回落的幅度",
-            "默认 0.02，让冷淡/热情随时间慢慢淡出；0=不回落后只升不降",
+            "默认 0.005，让冷淡/热情随时间慢慢淡出；0=不回落后只升不降",
             "若想手动纠偏，可在关系档案里直接改好感度",
         ),
     )
     llm_relationship_affinity_silence_threshold: float = Field(
-        default=-0.3,
+        default=-0.45,
         ge=-1.0,
         le=0.0,
         description=field_help(
             "好感度低于多少时，牛牛对非点名发言开始爱搭不理",
-            "默认 -0.3。只有低到这条线以下，牛牛才会更少接对方的闲聊",
+            "默认 -0.45。只有低到这条线以下，牛牛才会更少接对方的闲聊",
             "被@、点名、追问仍会正常回复",
         ),
     )
     llm_relationship_affinity_silence_max_penalty: int = Field(
-        default=30,
+        default=40,
         ge=0,
         le=200,
         description=field_help(
             "好感度极低时，接话积极性的最多扣分",
-            "默认 30。越大，对低好感者越沉默；0=好感度不影响接话",
+            "默认 40。越大，对低好感者越沉默；0=好感度不影响接话",
             "配合上方的静默阈值使用",
         ),
     )
@@ -1228,12 +1248,13 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_sticker_label_backfill_enabled=cfg.llm_sticker_label_backfill_enabled,
         llm_sticker_label_backfill_daily_limit=cfg.llm_sticker_label_backfill_daily_limit,
         llm_sticker_label_realtime_daily_limit=cfg.llm_sticker_label_realtime_daily_limit,
+        llm_semantic_style_realtime_daily_limit=cfg.llm_semantic_style_realtime_daily_limit,
+        llm_sticker_habit_enabled=cfg.llm_sticker_habit_enabled,
+        llm_sticker_habit_min_count=cfg.llm_sticker_habit_min_count,
+        llm_sticker_habit_top_k=cfg.llm_sticker_habit_top_k,
+        llm_sticker_habit_backfill_days=cfg.llm_sticker_habit_backfill_days,
         llm_reply_effect_eval_enabled=cfg.llm_reply_effect_eval_enabled,
         llm_memory_rag_enabled=cfg.llm_memory_rag_enabled,
-        llm_expression_inject_enabled=cfg.llm_expression_inject_enabled,
-        llm_expression_learn_enabled=cfg.llm_expression_learn_enabled,
-        llm_expression_auto_promote_enabled=cfg.llm_expression_auto_promote_enabled,
-        llm_expression_retrieve_limit=cfg.llm_expression_retrieve_limit,
         llm_vector_retrieve=cfg.llm_vector_retrieve,
         llm_embedding_model=cfg.llm_embedding_model,
         llm_embedding_provider=_embedding_provider_choice(cfg.llm_embedding_provider),
@@ -1260,6 +1281,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_memory_hit_boost_sec=cfg.llm_memory_hit_boost_sec,
         llm_relationship_notes_enabled=cfg.llm_relationship_notes_enabled,
         llm_relationship_affinity_enabled=cfg.llm_relationship_affinity_enabled,
+        llm_relationship_affinity_ambient_enabled=cfg.llm_relationship_affinity_ambient_enabled,
         llm_relationship_affinity_delta_max=cfg.llm_relationship_affinity_delta_max,
         llm_relationship_affinity_llm_cooldown_s=cfg.llm_relationship_affinity_llm_cooldown_s,
         llm_relationship_affinity_llm_daily_limit=cfg.llm_relationship_affinity_llm_daily_limit,

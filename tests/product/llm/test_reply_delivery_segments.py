@@ -485,6 +485,41 @@ async def test_multi_bubble_behavior_records_logical_text_and_shape(monkeypatch:
 
 
 @pytest.mark.asyncio
+async def test_behavior_record_marks_rejection_tone(monkeypatch: pytest.MonkeyPatch) -> None:
+    sender = AsyncMock(return_value=type("Receipt", (), {"delivered": True, "message_id": 10})())
+    recorded: list[object] = []
+    monkeypatch.setattr(
+        "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
+        sender,
+    )
+    monkeypatch.setattr(llm_delivery, "should_append_llm_session", lambda _task: False)
+    monkeypatch.setattr(llm_delivery, "append_behavior_run", recorded.append)
+
+    await llm_delivery.deliver_llm_callback_success(
+        "task-rejection-tone",
+        {
+            "task_type": "llm_chat",
+            "bot_id": 99,
+            "group_id": 42,
+            "user_id": 7,
+            "behavior_scene": "banter",
+        },
+        bot=object(),
+        group_id=42,
+        bot_id=99,
+        bot_id_str="99",
+        text='{"reply_segments":["想得美","自己挣去"]}',
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+        sleeper=lambda _delay: None,
+    )
+
+    run = recorded[0]
+    assert run.auto_feedback_payload["rejection_tone"] is True
+
+
+@pytest.mark.asyncio
 async def test_failed_bubble_does_not_write_incomplete_logical_turn(monkeypatch: pytest.MonkeyPatch) -> None:
     sender = AsyncMock(
         side_effect=[
@@ -494,7 +529,6 @@ async def test_failed_bubble_does_not_write_incomplete_logical_turn(monkeypatch:
     )
     append = AsyncMock(return_value=True)
     behavior = AsyncMock()
-    expression = AsyncMock()
     feedback = AsyncMock()
     monkeypatch.setattr(
         "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
@@ -504,7 +538,6 @@ async def test_failed_bubble_does_not_write_incomplete_logical_turn(monkeypatch:
     monkeypatch.setattr(llm_delivery, "append_behavior_run", behavior)
     monkeypatch.setattr(llm_delivery, "should_append_llm_session", lambda _task: True)
     monkeypatch.setattr(llm_delivery, "get_llm_config", lambda: LlmConfig(llm_repeater_feedback_enabled=True))
-    monkeypatch.setattr("pallas.product.persona.expression_learn.note_expression_from_utterance", expression)
     monkeypatch.setattr("pallas.product.llm.repeater_feedback.append_feedback_entry", feedback)
 
     _reply, text_delivered, delivered = await llm_delivery.deliver_llm_callback_success(
@@ -533,5 +566,4 @@ async def test_failed_bubble_does_not_write_incomplete_logical_turn(monkeypatch:
     assert sender.await_count == 2
     append.assert_not_awaited()
     behavior.assert_not_called()
-    expression.assert_not_awaited()
     feedback.assert_not_called()

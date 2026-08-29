@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import threading
 import time
@@ -10,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
 _LOCK = threading.Lock()
@@ -311,6 +314,113 @@ def tokens_look_corrupt(tokens: dict[str, Any] | None) -> bool:
     completion = int(tokens.get("completion_tokens") or 0)
     total = int(tokens.get("total_tokens") or 0) or (prompt + completion)
     return total > _MAX_SANE_DAY_TOKENS
+
+
+def _ledger_files_in_range(start_day: str, end_day: str) -> list[Path]:
+    try:
+        sd = date.fromisoformat(str(start_day).strip()[:10])
+        ed = date.fromisoformat(str(end_day).strip()[:10])
+    except ValueError:
+        return []
+    if sd > ed:
+        sd, ed = ed, sd
+    files: list[Path] = []
+    cur = sd
+    while cur <= ed:
+        files.extend(_iter_day_files(cur.isoformat()))
+        cur += timedelta(days=1)
+    return files
+
+
+def iter_ledger_rows(start_day: str, end_day: str) -> Iterator[dict[str, Any]]:
+    """按日迭代区间内账本原始记录（含 .wN 分片文件）；坏行静默跳过。"""
+    for path in _ledger_files_in_range(start_day, end_day):
+        try:
+            with path.open(encoding="utf-8") as handle:
+                for line in handle:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        row = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(row, dict):
+                        yield row
+        except OSError:
+            continue
+
+
+def count_ledger_rows(start_day: str, end_day: str) -> int:
+    """区间内非空账本行数（不解析 JSON，供导出提示）。"""
+    total = 0
+    for path in _ledger_files_in_range(start_day, end_day):
+        try:
+            with path.open(encoding="utf-8") as handle:
+                total += sum(1 for line in handle if line.strip())
+        except OSError:
+            continue
+    return total
+
+
+_USAGE_CSV_HEADER = (
+    "时间",
+    "任务",
+    "Provider",
+    "模型",
+    "输入 Token",
+    "输出 Token",
+    "缓存读 Token",
+    "缓存写 Token",
+    "总 Token",
+    "费用",
+    "币种",
+    "定价规则",
+)
+
+
+def iter_usage_csv_lines(*, start_day: str, end_day: str) -> Iterator[str]:
+    """产出请求级明细 CSV（BOM + CRLF，逐行块产出，调用方流式返回）。"""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer, lineterminator="\r\n")
+    writer.writerow(_USAGE_CSV_HEADER)
+    yield "\ufeff" + buffer.getvalue()
+    buffer.seek(0)
+    buffer.truncate(0)
+    for row in iter_ledger_rows(start_day, end_day):
+        prompt = max(0, int(row.get("prompt_tokens") or 0))
+        completion = max(0, int(row.get("completion_tokens") or 0))
+        cache_read = max(0, int(row.get("cache_read_tokens") or 0))
+        cache_write = max(0, int(row.get("cache_write_tokens") or 0))
+        try:
+            cost = round(float(row.get("cost") or 0.0), 6)
+        except (TypeError, ValueError):
+            cost = 0.0
+        if cost != cost or cost < 0:
+            cost = 0.0
+        try:
+            ts = float(row.get("ts") or 0)
+        except (TypeError, ValueError):
+            ts = 0.0
+        rule = row.get("pricing_rule")
+        rule_id = str(rule.get("rule_id") or "") if isinstance(rule, dict) else ""
+        writer.writerow([
+            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts)) if ts > 0 else "",
+            str(row.get("task") or ""),
+            str(row.get("provider") or ""),
+            str(row.get("model") or ""),
+            prompt,
+            completion,
+            cache_read,
+            cache_write,
+            prompt + completion,
+            cost,
+            str(row.get("currency") or ""),
+            rule_id,
+        ])
+        yield buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate(0)
 
 
 def trim_old_ledger_files(*, retain_days: int = _MAX_RETAIN_DAYS) -> int:

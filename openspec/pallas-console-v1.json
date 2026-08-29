@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.3.11-17-gae03ba40-dirty",
+    "version": "v4.3.12-136-g57533b89-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -3625,6 +3625,131 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/persona/semantic-style-examples": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Persona Semantic Style Examples Get",
+        "operationId": "_llm_persona_semantic_style_examples_get_pallas_api_common_config_llm_persona_semantic_style_examples_get",
+        "parameters": [
+          {
+            "name": "bot_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Bot Id"
+            }
+          },
+          {
+            "name": "group_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "title": "Group Id"
+            }
+          },
+          {
+            "name": "scene",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "default": "group_chat",
+              "title": "Scene"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 50,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse__SemanticStyleExamplesData_"
+                }
               }
             }
           },
@@ -8284,147 +8409,6 @@
         }
       }
     },
-    "/pallas/api/llm/agent-platform/observations": {
-      "get": {
-        "tags": [
-          "Pallas-Bot 控制台"
-        ],
-        "summary": "Observations List",
-        "operationId": "observations_list_pallas_api_llm_agent_platform_observations_get",
-        "parameters": [
-          {
-            "name": "bot_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Bot Id"
-            }
-          },
-          {
-            "name": "group_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": 0
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Group Id"
-            }
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Status"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 200,
-              "minimum": 1,
-              "default": 50,
-              "title": "Limit"
-            }
-          },
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Token",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Api-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Api-Key"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/pallas/api/llm/agent-platform/tasks": {
       "get": {
         "tags": [
@@ -8540,232 +8524,6 @@
         ],
         "summary": "Tasks Cancel",
         "operationId": "tasks_cancel_pallas_api_llm_agent_platform_tasks_cancel_post",
-        "parameters": [
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Token",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Api-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Api-Key"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "additionalProperties": true,
-                "title": "Body"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/pallas/api/llm/agent-platform/catchphrases": {
-      "get": {
-        "tags": [
-          "Pallas-Bot 控制台"
-        ],
-        "summary": "Catchphrases List",
-        "operationId": "catchphrases_list_pallas_api_llm_agent_platform_catchphrases_get",
-        "parameters": [
-          {
-            "name": "bot_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Bot Id"
-            }
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Status"
-            }
-          },
-          {
-            "name": "offset",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "default": 0,
-              "title": "Offset"
-            }
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 200,
-              "minimum": 1,
-              "default": 50,
-              "title": "Limit"
-            }
-          },
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Token",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Api-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Api-Key"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/pallas/api/llm/agent-platform/catchphrases/resolve": {
-      "post": {
-        "tags": [
-          "Pallas-Bot 控制台"
-        ],
-        "summary": "Catchphrases Resolve",
-        "operationId": "catchphrases_resolve_pallas_api_llm_agent_platform_catchphrases_resolve_post",
         "parameters": [
           {
             "name": "token",
@@ -17571,6 +17329,105 @@
         }
       }
     },
+    "/pallas/api/common-config/llm/providers/{provider_id}/rename": {
+      "put": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Provider Rename Put",
+        "description": "改提供方 ID：改行内 id 并同步 routing / 主配置引用。",
+        "operationId": "_llm_provider_rename_put_pallas_api_common_config_llm_providers__provider_id__rename_put",
+        "parameters": [
+          {
+            "name": "provider_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Provider Id"
+            }
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/_LlmProviderRenameBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/pallas/api/common-config/llm/providers/{provider_id}/models": {
       "get": {
         "tags": [
@@ -17908,6 +17765,108 @@
                   "type": "null"
                 }
               ],
+              "description": "YYYY-MM-DD，含当日",
+              "title": "End"
+            },
+            "description": "YYYY-MM-DD，含当日"
+          },
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Token",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Token"
+            }
+          },
+          {
+            "name": "X-Pallas-Api-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Pallas-Api-Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/pallas/api/common-config/llm/usage-ledger/export": {
+      "get": {
+        "tags": [
+          "Pallas-Bot 控制台"
+        ],
+        "summary": " Llm Usage Ledger Export",
+        "description": "导出请求级 usage 账本明细 CSV（llm_usage JSONL 原始记录）。",
+        "operationId": "_llm_usage_ledger_export_pallas_api_common_config_llm_usage_ledger_export_get",
+        "parameters": [
+          {
+            "name": "start",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "YYYY-MM-DD，含当日",
+              "title": "Start"
+            },
+            "description": "YYYY-MM-DD，含当日"
+          },
+          {
+            "name": "end",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
               "description": "YYYY-MM-DD，含当日",
               "title": "End"
             },
@@ -21188,221 +21147,6 @@
                 "type": "object",
                 "additionalProperties": true,
                 "title": "Body"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/pallas/api/llm/expression-bank": {
-      "get": {
-        "tags": [
-          "Pallas-Bot 控制台"
-        ],
-        "summary": " Llm Expression Bank Get",
-        "operationId": "_llm_expression_bank_get_pallas_api_llm_expression_bank_get",
-        "parameters": [
-          {
-            "name": "group_id",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "description": "群号",
-              "title": "Group Id"
-            },
-            "description": "群号"
-          },
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "enum": [
-                    "shadow",
-                    "active",
-                    "rejected"
-                  ],
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "状态筛选",
-              "title": "Status"
-            },
-            "description": "状态筛选"
-          },
-          {
-            "name": "limit",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 200,
-              "minimum": 1,
-              "default": 50,
-              "title": "Limit"
-            }
-          },
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Token",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Api-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Api-Key"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/pallas/api/llm/expression-bank/resolve": {
-      "post": {
-        "tags": [
-          "Pallas-Bot 控制台"
-        ],
-        "summary": " Llm Expression Bank Resolve",
-        "operationId": "_llm_expression_bank_resolve_pallas_api_llm_expression_bank_resolve_post",
-        "parameters": [
-          {
-            "name": "token",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Token",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Token"
-            }
-          },
-          {
-            "name": "X-Pallas-Api-Key",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Pallas-Api-Key"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/_ExpressionBankResolveRequest"
               }
             }
           }
@@ -32483,7 +32227,6 @@
             "type": "string",
             "enum": [
               "undo_outcome",
-              "restore_expression",
               "restore_semantic"
             ],
             "title": "Action"
@@ -34656,6 +34399,28 @@
         ],
         "title": "_ApiOkResponse[_PersonaObserveData]"
       },
+      "_ApiOkResponse__SemanticStyleExamplesData_": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/_SemanticStyleExamplesData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "_ApiOkResponse[_SemanticStyleExamplesData]"
+      },
       "_ApiOkResponse__SemanticStyleStatusData_": {
         "properties": {
           "ok": {
@@ -35430,35 +35195,6 @@
           "row_id"
         ],
         "title": "_DbTableRowUpsertBody"
-      },
-      "_ExpressionBankResolveRequest": {
-        "properties": {
-          "entry_id": {
-            "type": "string",
-            "title": "Entry Id"
-          },
-          "action": {
-            "type": "string",
-            "enum": [
-              "approve",
-              "reject",
-              "restore"
-            ],
-            "title": "Action"
-          },
-          "reason": {
-            "type": "string",
-            "title": "Reason",
-            "default": ""
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "entry_id",
-          "action"
-        ],
-        "title": "_ExpressionBankResolveRequest"
       },
       "_FilesCreateBody": {
         "properties": {
@@ -36672,6 +36408,22 @@
         "type": "object",
         "title": "_LlmProviderModelsDiscoverBody",
         "description": "Bot 直连发现模型：由控制台传入草稿凭证，不经 AI Runtime。"
+      },
+      "_LlmProviderRenameBody": {
+        "properties": {
+          "new_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "New Id"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "new_id"
+        ],
+        "title": "_LlmProviderRenameBody"
       },
       "_LlmProviderRowBody": {
         "properties": {
@@ -37898,13 +37650,164 @@
         ],
         "title": "_RequestBatchGroupRow"
       },
+      "_SemanticStyleBehaviorStrategyData": {
+        "properties": {
+          "scene": {
+            "type": "string",
+            "title": "Scene",
+            "default": ""
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "default": ""
+          },
+          "outcome": {
+            "type": "string",
+            "title": "Outcome",
+            "default": ""
+          },
+          "learning_type": {
+            "type": "string",
+            "enum": [
+              "observed",
+              "self_reflection"
+            ],
+            "title": "Learning Type",
+            "default": "observed"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count",
+            "default": 1
+          }
+        },
+        "type": "object",
+        "title": "_SemanticStyleBehaviorStrategyData"
+      },
+      "_SemanticStyleExampleData": {
+        "properties": {
+          "example_id": {
+            "type": "string",
+            "title": "Example Id"
+          },
+          "created_at": {
+            "type": "integer",
+            "title": "Created At"
+          },
+          "pair_relation": {
+            "type": "string",
+            "enum": [
+              "quoted",
+              "adjacent"
+            ],
+            "title": "Pair Relation"
+          },
+          "trigger_text": {
+            "type": "string",
+            "title": "Trigger Text"
+          },
+          "reply_text": {
+            "type": "string",
+            "title": "Reply Text"
+          },
+          "learning_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "observed",
+                  "self_reflection"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Learning Type"
+          },
+          "label": {
+            "$ref": "#/components/schemas/_SemanticStyleLabelData"
+          },
+          "behavior_strategy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/_SemanticStyleBehaviorStrategyData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "example_id",
+          "created_at",
+          "pair_relation",
+          "trigger_text",
+          "reply_text",
+          "label"
+        ],
+        "title": "_SemanticStyleExampleData"
+      },
+      "_SemanticStyleExamplesData": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/_SemanticStyleExampleData"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "title": "_SemanticStyleExamplesData"
+      },
+      "_SemanticStyleLabelData": {
+        "properties": {
+          "interaction_actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Interaction Actions"
+          },
+          "semantic_relations": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Semantic Relations"
+          },
+          "intensity": {
+            "type": "string",
+            "title": "Intensity",
+            "default": "neutral"
+          },
+          "forms": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Forms"
+          }
+        },
+        "type": "object",
+        "title": "_SemanticStyleLabelData"
+      },
       "_SemanticStyleManageBody": {
         "properties": {
           "action": {
             "type": "string",
             "enum": [
               "status",
-              "overrides",
+              "direct_enabled",
               "clear",
               "rebuild",
               "quality",
@@ -37942,15 +37845,16 @@
             "title": "Scene",
             "default": "group_chat"
           },
-          "overrides": {
+          "direct_enabled": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/_SemanticStyleOverridesPatch"
+                "type": "boolean"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Direct Enabled"
           },
           "collection_enabled": {
             "anyOf": [
@@ -37992,85 +37896,6 @@
           "action"
         ],
         "title": "_SemanticStyleManageBody"
-      },
-      "_SemanticStyleOverridesData": {
-        "properties": {
-          "aggressive": {
-            "type": "boolean",
-            "title": "Aggressive"
-          },
-          "nonsense": {
-            "type": "boolean",
-            "title": "Nonsense"
-          },
-          "direct": {
-            "type": "boolean",
-            "title": "Direct"
-          },
-          "image": {
-            "type": "boolean",
-            "title": "Image"
-          }
-        },
-        "type": "object",
-        "required": [
-          "aggressive",
-          "nonsense",
-          "direct",
-          "image"
-        ],
-        "title": "_SemanticStyleOverridesData"
-      },
-      "_SemanticStyleOverridesPatch": {
-        "properties": {
-          "aggressive": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Aggressive"
-          },
-          "nonsense": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Nonsense"
-          },
-          "direct": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Direct"
-          },
-          "image": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Image"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "title": "_SemanticStyleOverridesPatch"
       },
       "_SemanticStyleProfileSummaryData": {
         "properties": {
@@ -38195,15 +38020,16 @@
             "title": "Injection Enabled",
             "default": true
           },
-          "overrides": {
+          "direct_enabled": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/_SemanticStyleOverridesData"
+                "type": "boolean"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Direct Enabled"
           },
           "example_count": {
             "type": "integer",

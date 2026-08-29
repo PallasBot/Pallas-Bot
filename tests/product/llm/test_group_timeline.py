@@ -166,9 +166,7 @@ def test_format_group_timeline_context_extracts_raw_images_and_keeps_placeholder
     ])
 
     assert context.text == "【刚才的群聊】\n- 兔兔：[图片] 看这个"
-    assert context.images == (
-        GroupTimelineImage(speaker="兔兔", text="看这个", url="https://example.com/a.png"),
-    )
+    assert context.images == (GroupTimelineImage(speaker="兔兔", text="看这个", url="https://example.com/a.png"),)
 
 
 def test_format_group_timeline_context_extracts_raw_mface_image() -> None:
@@ -186,9 +184,7 @@ def test_format_group_timeline_context_extracts_raw_mface_image() -> None:
     ])
 
     assert context.text == "【刚才的群聊】\n- 兔兔：[图片]"
-    assert context.images == (
-        GroupTimelineImage(speaker="兔兔", text="", url="https://example.com/mface.png"),
-    )
+    assert context.images == (GroupTimelineImage(speaker="兔兔", text="", url="https://example.com/mface.png"),)
 
 
 def test_should_include_group_timeline_for_vision_turn() -> None:
@@ -244,3 +240,41 @@ def test_format_group_timeline_context_deduplicates_urls_and_keeps_latest_images
         "https://example.com/c.png",
         "https://example.com/d.png",
     ]
+
+
+def test_ambient_snapshot_from_timeline_matches_ambient_shape() -> None:
+    messages = [
+        Message.model_construct(
+            group_id=1,
+            user_id=99,
+            bot_id=99,
+            plain_text="我来也",
+            sender_name="牛牛",
+            message_id=101,
+            time=1000,
+        ),
+        Message.model_construct(
+            group_id=1,
+            user_id=11,
+            bot_id=99,
+            plain_text="好耶",
+            sender_name="兔兔",
+            message_id=102,
+            time=1001,
+        ),
+    ]
+
+    context = format_group_timeline_context(messages, self_bot_id=99)
+    snapshot = group_timeline.ambient_snapshot_from_timeline(
+        context,
+        bot_id=99,
+        group_id=1,
+        self_bot_id=99,
+    )
+
+    assert [item["user_id"] for item in snapshot] == [99, 11]
+    assert all(str(item["turn_id"]).startswith("ambient:99:1:") for item in snapshot)
+    # 本 bot 发言标 assistant，群友标 user，与群环境摘录快照形态一致。
+    assert "assistant" in str(snapshot[0]["turn_id"])
+    assert "user" in str(snapshot[1]["turn_id"])
+    assert snapshot[1]["text_preview"] == "好耶"

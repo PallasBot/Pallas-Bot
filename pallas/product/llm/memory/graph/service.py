@@ -14,7 +14,6 @@ from pallas.product.llm.memory.graph.store import (
     upsert_edge,
     upsert_entity,
 )
-from pallas.product.llm.memory.observation import observation_queue_size
 from pallas.product.llm.memory.ops import list_memory_entity_summaries_async
 from pallas.product.llm.memory.relationship_store import is_relationship_store_available
 from pallas.product.llm.memory.store import is_llm_memory_store_available, list_memory_entries
@@ -203,7 +202,6 @@ async def build_graph_stats(
         "edge_count": len(edges),
         "active_edge_count": sum(1 for e in edges if e.get("invalid_at") is None),
         "category_count": len(categories),
-        "observation_queue_size": observation_queue_size(),
         "scope_keys": [s["scope_key"] for s in await list_scopes(bot_id=bid, limit=50)],
     }
 

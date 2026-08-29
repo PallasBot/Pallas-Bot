@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Header, HTTPException, Query
@@ -24,25 +23,19 @@ def register_agent_platform_router(
         bot_id: int | None = Query(default=None, ge=1),
         group_id: int | None = Query(default=None, ge=0),
     ) -> JSONResponse:
-        from pallas.product.llm.memory.observation import observation_queue_size
         from pallas.product.llm.orchestration.task_store import list_tasks
         from pallas.product.llm.tools.registry import build_tools_catalog_ui, ensure_tools_loaded
-        from pallas.product.persona.catchphrase_bank import list_catchphrases
 
         ensure_tools_loaded()
         catalog = build_tools_catalog_ui()
         tasks = [item for item in list_tasks() if group_id is None or item.group_id in (None, int(group_id))][:50]
-        catchphrases = list_catchphrases(bot_id)
         tools = catalog.get("items") if isinstance(catalog, dict) else None
         return JSONResponse({
             "ok": True,
             "data": {
-                "observation_queue_size": observation_queue_size(),
                 "tool_count": len(tools) if isinstance(tools, list) else int(catalog.get("count") or 0),
                 "task_count": len(tasks),
                 "open_tasks": sum(1 for item in tasks if item.status not in {"done", "cancelled"}),
-                "catchphrase_candidates": sum(1 for item in catchphrases if item.status == "candidate"),
-                "catchphrase_active": sum(1 for item in catchphrases if item.status == "active"),
                 "scope": {"bot_id": bot_id, "group_id": group_id},
             },
         })
@@ -128,31 +121,6 @@ def register_agent_platform_router(
         )
         return JSONResponse({"ok": True, "data": item.model_dump()})
 
-    @router.get(f"{x}/llm/agent-platform/observations", include_in_schema=True)
-    async def observations_list(
-        bot_id: int | None = Query(default=None, ge=1),
-        group_id: int | None = Query(default=None, ge=0),
-        status: str | None = Query(default=None),
-        limit: int = Query(default=50, ge=1, le=200),
-    ) -> JSONResponse:
-        from pallas.product.llm.memory.observation import list_observations, observation_queue_size
-
-        status_filter = None if status in (None, "", "all") else status
-        items = list_observations(
-            bot_id=bot_id,
-            group_id=group_id,
-            status=status_filter,  # type: ignore[arg-type]
-            limit=limit,
-        )
-        return JSONResponse({
-            "ok": True,
-            "data": {
-                "items": [item.model_dump() for item in items],
-                "count": len(items),
-                "queue_size": observation_queue_size(),
-            },
-        })
-
     @router.get(f"{x}/llm/agent-platform/tasks", include_in_schema=True)
     async def tasks_list(
         group_id: int | None = Query(default=None, ge=0),
@@ -177,54 +145,6 @@ def register_agent_platform_router(
         item = cancel_task(str(body.get("task_id") or ""))
         if item is None:
             raise HTTPException(status_code=404, detail="task not found")
-        return JSONResponse({"ok": True, "data": item.model_dump()})
-
-    @router.get(f"{x}/llm/agent-platform/catchphrases", include_in_schema=True)
-    async def catchphrases_list(
-        bot_id: int | None = Query(default=None, ge=1),
-        status: str | None = Query(default=None),
-        offset: int = Query(default=0, ge=0),
-        limit: int = Query(default=50, ge=1, le=200),
-    ) -> JSONResponse:
-        from pallas.product.persona.catchphrase_bank import list_catchphrases
-
-        rows = await asyncio.to_thread(list_catchphrases, bot_id)
-        counts = {
-            "candidate": sum(1 for item in rows if item.status == "candidate"),
-            "active": sum(1 for item in rows if item.status == "active"),
-            "all": len(rows),
-        }
-        filtered = rows if status is None else [item for item in rows if item.status == status]
-        items = filtered[offset : offset + limit]
-        return JSONResponse({
-            "ok": True,
-            "data": {
-                "items": [item.model_dump() for item in items],
-                "count": len(items),
-                "total": len(filtered),
-                "counts": counts,
-            },
-        })
-
-    @router.post(f"{x}/llm/agent-platform/catchphrases/resolve", include_in_schema=True)
-    async def catchphrases_resolve(
-        body: dict[str, Any],
-        token: str | None = Query(default=None),
-        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
-    ) -> JSONResponse:
-        check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.persona.catchphrase_bank import promote_catchphrase, reject_catchphrase
-
-        action = str(body.get("action") or "").strip().lower()
-        entry_id = str(body.get("entry_id") or "").strip()
-        if action == "approve":
-            item = await asyncio.to_thread(promote_catchphrase, entry_id, force=True)
-        elif action == "reject":
-            item = await asyncio.to_thread(reject_catchphrase, entry_id)
-        else:
-            raise HTTPException(status_code=400, detail="action must be approve or reject")
-        if item is None:
-            raise HTTPException(status_code=404, detail="catchphrase not found or not eligible")
         return JSONResponse({"ok": True, "data": item.model_dump()})
 
     @router.get(f"{x}/llm/agent-platform/tools", include_in_schema=True)

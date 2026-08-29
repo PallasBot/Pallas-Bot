@@ -22,7 +22,6 @@ TaskBudgetKey = Literal[
     "vision_messages",
     "memory_graph_extract",
     "memory_graph_hiergraph",
-    "catchphrase_extract",
     "offline_quality_eval",
     "llm.relationship.affinity",
 ]
@@ -39,7 +38,6 @@ _TASK_TOKEN_BUDGETS: dict[TaskBudgetKey, int] = {
     "vision_messages": 256,
     "memory_graph_extract": 1200,
     "memory_graph_hiergraph": 1500,
-    "catchphrase_extract": 200,
     "offline_quality_eval": 96,
     "llm.relationship.affinity": 128,
 }

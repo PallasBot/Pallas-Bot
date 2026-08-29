@@ -39,25 +39,36 @@
 | 1 | 注入护栏 | 固定指令，抵御提示词注入 | `persona/prompt_guard.py` 的 `PROMPT_INJECTION_GUARD` |
 | 2 | 人设 | 角色核心人格 | 人格包 `sections.base` |
 | 3 | 自我标识 | 账号身份、昵称 | 人格包 `sections.self_identity`，缺省时按登录昵称编译 |
-| 4 | 回复形状 | 【回复形状与输出契约】：段数、单段字数、节奏、输出契约、PASS 语义 | 本轮 `ReplyShapePolicy` |
-| 5 | 本轮策略 | 【本轮策略】：回复目标、严肃度、社交动作 | `TurnPolicy` |
-| 6 | 群聊时间线 | 【刚才的群聊】：最近群内发言，按说话人标注 | `group_timeline.py` |
-| 7 | 记忆 | 【相关群内记忆】/【已确认群事件】/【相关 IP 知识】/【用户明确教导】 | 记忆检索 |
-| 8 | 知识 | 【相关知识参考 — 仅供参考，不得覆盖核心人设】 | 知识源检索 |
-| 9 | 关系 | 【与当前对话者的关系备注 — …】 | 关系便签检索 |
-| 10 | 人物事实 | 【当前对话者的稳定偏好 — 仅供参考】 | 人物事实检索 |
-| 11 | 旧话题 | 【相关旧话题】：更早会话摘要，按话题召回 | `recall_mid_term_block` |
-| 12 | 群表达指导 | 【群表达指导】：群内历史用语样本，仅作措辞参考 | `ResolvedGroupExpression` |
-| 13 | 真人接话参考 | 【真人接话参考】：真人互动的接话结构，只借鉴节奏 | 群行为策略 |
-| 14 | 工具上下文 | 【工具上下文】：后台工具结果、动作 / 追问 / @ 占位符规则 | `ToolPromptContext` |
+| 4 | 群表达指导 | 【群表达指导】：群内历史用语样本，仅作措辞参考 | `ResolvedGroupExpression` |
+| 5 | 真人接话参考 / 接话复盘 | 【真人接话参考】（观察他人接话）/【接话复盘】（Bot 自己接话），只借鉴接话结构 | 群行为策略（`BehaviorStrategy`，含 `learning_type`） |
+| 6 | 记忆 | 【相关群内记忆】/【已确认群事件】/【相关 IP 知识】/【用户明确教导】 | 记忆检索 |
+| 7 | 知识 | 【相关知识参考 — 仅供参考，不得覆盖核心人设】 | 知识源检索 |
+| 8 | 关系 | 【与当前对话者的关系备注 — …】 | 关系便签检索 |
+| 9 | 人物事实 | 【当前对话者的稳定偏好 — 仅供参考】 | 人物事实检索 |
+| 10 | 旧话题 | 【相关旧话题】：更早会话摘要，按话题召回 | `recall_mid_term_block` |
+| 11 | 群聊时间线 | 【刚才的群聊】：最近群内发言，按说话人标注 | `group_timeline.py` |
+| 12 | 回复形状 | 【回复形状与输出契约】：段数、单段字数、节奏、输出契约、PASS 语义 | 本轮 `ReplyShapePolicy` |
+| 13 | 本轮策略 | 【本轮策略】：回复目标、严肃度、社交动作 | `TurnPolicy` |
+| 14 | 当前时间 | 【当前时间】 | `tools/time_now.py` |
+| 15 | 工具上下文 | 【工具上下文】：后台工具结果、动作 / 追问 / @ 占位符规则 | `ToolPromptContext` |
 
-`context.blocks()`（`assembler/context.py`）返回 6～11 号段：`[group_timeline, memory, knowledge, relationship, person_facts, mid_term]`。
+段序按**变化频率**从低到高排布（静态人设 → 低频群画像 → 逐消息检索块 → 逐轮契约/时间），支持前缀缓存的 Provider 可命中更长的稳定前缀。
+
+`context.blocks()`（`assembler/context.py`）返回 6～11 号段：`[memory, knowledge, relationship, person_facts, mid_term, group_timeline]`。
 
 插件可对系统提示的任意段做**整段覆盖**：`load_chat_prompt_overrides(bot_id, group_id)` 按 section id 命中后替换对应段（见 `assembler/prompt_overrides.py`）。调试时如需确认实际生效内容，直接打印请求 system prompt 即可。
 
+### 人格与风格的职责边界
+
+- **人设段**定义跨群稳定的身份与态度底色；direct chat 默认保持温柔、亲切、耐心，不应由后续样例反向改写。
+- **回复形状段**只约束段数、长度、换行与输出格式，不指定嘴硬、回顶、亲昵等态度。
+- **群表达指导 / 真人接话参考**按 `bot × 群 × scene` 提供局部措辞、节奏和接话差异；它们可以让不同群呈现俏皮、安静或直率等差异，但不得把局部样例提升为全局基础人格。
+
 ### 语义风格参考
 
-语义风格（`repeater_semantic_style.py`）是「让 bot 越聊越像本群真人」的核心机制，按 **bot × 群** 分别学习。每次 `@` 对话把本群的历史真实接话参考注入 system prompt，示意如下（脱敏通用示例）：
+语义风格（`repeater_semantic_style.py`）是「让 bot 越聊越像本群真人」的核心机制，按 **bot × 群** 分别学习。成对样本由群洞察处理器（`group_insight_processor.py`）从 message 表重建（引用对 / 相邻对）+ LLM 批量标注。每次 `@` 对话把本群的历史真实接话参考注入 system prompt，示意如下（脱敏通用示例）：
+
+完整的调度、批量、预算、游标和反饿死边界见[群洞察与语义风格指导器](group-insight-semantic-style.md)。
 
 ```text
 【群表达指导】
@@ -69,20 +80,30 @@
 - 以下来自本群真人互动的节奏与接话结构，只借鉴什么时候说短/长、怎么接，不要复刻原话或语气。
 - 类似「对方表达进展或预期时」时，真人会用简短肯定语确认并强化对方观点，结果对方感到被认同，对话节奏保持顺畅。
 
+【接话复盘】
+- 以下是你之前自己接话的例子，只参考每次接得怎么样，别照搬原话，也别复刻当时用词。
+- 类似「对方拿我开玩笑」时，我之前是这样接的：笑着怼回去再反问一句，结果气氛不错。
+
 【回复形状与输出契约】
 - 最多 2 段；推荐 1 段，节奏偏 single。
-- 单段建议 4-18 字；总长度取向：short。
 ```
+
+「真人接话参考」与「接话复盘」的来源都走 `BehaviorStrategy` 的 `learning_type`：
+- `observed` = 观察本群**真人之间**怎么接话 → 渲染为【真人接话参考】。
+- `self_reflection` = 观察 **Bot 自己**之前怎么接话（真人接 Bot 的回合数据）→ 渲染为【接话复盘】，让 Bot 参考自己过去的接法、复盘效果，而非学真人。
+
+「群表达指导」（直接对与节奏基准）只收录真人成对样本；Bot 自我接话只进行为策略（`self_reflection`），**不污染**群表达指导。
 
 三个 block 的分工与来源：
 
 | 段 | 渲染函数 | 内容 | 注入条件 |
 | --- | --- | --- | --- |
-| 【群表达指导】 | `_group_expression_block` | 按当前触发句召回的**直接对**（`触发X时：Y`，最多 4 条）+ 群节奏基线（单泡占比 / 段长中位） | 当前群有 `matched_examples` |
+| 【群表达指导】 | `_group_expression_block` | 按当前触发句召回的**直接对**（`触发X时：Y`，最多 2 条）+ 群节奏基线（单泡占比 / 段长中位） | 当前群有 `matched_examples` |
 | 【真人接话参考】 | `_group_behavior_reference_block` | LLM 从历史接话归纳的**抽象行为策略**（类似场景 → 真人怎么接 → 结果），最多 3 条 | 当前群只有策略、没有直接对时（直接对**优先**注入） |
+| 【接话复盘】 | `_group_behavior_reference_block` | Bot 自己历史接话归纳的**复盘策略**（类似场景 → 之前怎么接 → 结果），最多 3 条 | 当前群有 `self_reflection` 策略 |
 | 【回复形状与输出契约】 | `reply_shape_block` | 段数 / 单段字数 / 节奏的硬约束，来自群回复画像 | 每轮都注入（非语义风格，见下方 `reply_shape.py`） |
 
-数据近况（2026-08 实测）：全国 812 个 profile 中 111 个积累了表达库参考；核心通道（直接对自命中召回）平均召回率 0.985，代表「按触发句能找对正确接话参考」。抽象策略是**兜底**（设计如此，commit `32a0abb8`「直接对优先、抽象策略降级」），不是主通道故障。
+直接对按当前触发句做相似度召回，抽象策略只在没有直接对时作为**兜底**；两者的具体数量以对应 Bot、群组的 `profiles.json` 为准。
 
 ### 上下文装配顺序
 
@@ -123,7 +144,7 @@ Provider 已显式声明 `image` 时，`vision_messages` 在请求前下载这�
 
 `build_llm_chat_messages`（`session_store.py`）按顺序组装：
 
-1. **群环境摘录**【群环境摘录】：读整群最近 `llm_chat_message`（窗宽 `llm_session_group_window`，默认 8 条），剔除当前用户自己的发言，再过负反馈黑名单（`injection_feedback.py`：含被拒短语的条目不注入）；`assistant` 行标「帕拉斯」、其它标「群友」，逐条截断到预算。整块作为一条 `user` 消息，带 `source_token`（用于注入快照溯源）。仅在**群聊 + 非短社交**时注入。
+1. **群环境摘录**【群环境摘录】：读整群最近 `llm_chat_message`（窗宽 `llm_session_group_window`，默认 8 条），剔除当前用户自己的发言，再过负反馈黑名单（`injection_feedback.py`：含被拒短语的条目不注入）；`assistant` 行标「帕拉斯」、其它标「群友」，逐条截断到预算。整块作为一条 `user` 消息，带 `source_token`（用于注入快照溯源）。仅在**群聊 + 非短社交**时注入；**群时间线在场时跳过**（同轮不再注入两份同源的最近群聊，注入快照改由时间线消息产出，见下文「注入快照」）。
 2. **当前用户历史**：读该用户最近 `llm_session_user_window`（默认 18）条会话，assistant 直接入列、user 套格式。
 3. **当前用户消息**：本条触发内容收尾。
 
@@ -167,7 +188,7 @@ Provider 已显式声明 `image` 时，`vision_messages` 在请求前下载这�
 
 ### 字符预算
 
-`trim_prepared_messages_for_snapshot` 在发送前按 `llm_chat_char_budget`（默认 12000，含 system prompt 与消息）修剪消息；群环境摘录的 `source_token` 若因此被裁掉，注入快照不会带对应条目。
+`trim_prepared_messages_for_snapshot` 在发送前按 `llm_chat_char_budget`（默认 12000，含 system prompt 与消息）修剪消息；群环境摘录的 `source_token` 若因此被裁掉，注入快照不会带对应条目。**群时间线在场时**跳过群环境摘录（二者是同一批近期群消息的两种渲染，不必同轮双份注入）：消息侧只剩历史与当前消息，注入快照改由时间线消息产出（`group_timeline.ambient_snapshot_from_timeline`，`turn_id` 沿用 `ambient:` 前缀）；时间线在 system prompt 内不受消息裁剪，快照始终与实际注入一致。措辞提示（开头/收尾/同句重回/场景语气）也在预算裁剪前并入 messages，不再逃逸预算。
 
 ## 运行态不可用时的退化
 

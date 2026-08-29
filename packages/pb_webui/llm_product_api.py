@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Annotated, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -30,8 +30,6 @@ from pallas.product.llm.ops_api import (
     set_feedback_entry_eligibility,
     set_relationship_note_content,
 )
-from pallas.product.persona.expression_bank import ExpressionStatus, get_group_expression, list_group_expressions
-from pallas.product.persona.expression_promote import resolve_expression
 
 from .console_openapi_models import _ApiOkResponse
 from .extended_common import check_pallas_write_token
@@ -46,32 +44,21 @@ def _semantic_style():
     return repeater_semantic_style
 
 
-class _SemanticStyleOverridesPatch(BaseModel):
+class _SemanticStyleDirectEnabledPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    aggressive: bool | None = None
-    nonsense: bool | None = None
-    direct: bool | None = None
-    image: bool | None = None
+    direct_enabled: bool | None = None
 
 
 class InjectionGovernanceManageRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    action: Literal["undo_outcome", "restore_expression", "restore_semantic"]
+    action: Literal["undo_outcome", "restore_semantic"]
     bot_id: str
     group_id: str
     outcome_id: str | None = None
     entry_id: str | None = None
     source_example_id: str | None = None
-
-
-class _ExpressionBankResolveRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    entry_id: str
-    action: Literal["approve", "reject", "restore"]
-    reason: str = ""
 
 
 def _injection_governance_scope(*, bot_id: str, group_id: str) -> tuple[int, int]:
@@ -85,19 +72,12 @@ def _injection_governance_scope(*, bot_id: str, group_id: str) -> tuple[int, int
     return parsed_bot_id, parsed_group_id
 
 
-class _SemanticStyleOverridesData(BaseModel):
-    aggressive: bool
-    nonsense: bool
-    direct: bool
-    image: bool
-
-
 class _SemanticStyleManageBody(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     action: Literal[
         "status",
-        "overrides",
+        "direct_enabled",
         "clear",
         "rebuild",
         "quality",
@@ -109,7 +89,7 @@ class _SemanticStyleManageBody(BaseModel):
     bot_id: int | None = None
     group_id: int | None = None
     scene: str = "group_chat"
-    overrides: _SemanticStyleOverridesPatch | None = None
+    direct_enabled: bool | None = None
     collection_enabled: bool | None = None
     injection_enabled: bool | None = None
     continue_learning: bool | None = None
@@ -136,7 +116,7 @@ class _SemanticStyleStatusData(BaseModel):
     enabled: bool = True
     collection_enabled: bool = True
     injection_enabled: bool = True
-    overrides: _SemanticStyleOverridesData | None = None
+    direct_enabled: bool | None = None
     example_count: int = 0
     profile_count: int = 0
     backfill_cursor: dict[str, Any] = Field(default_factory=dict)
@@ -255,15 +235,13 @@ def register_llm_product_router(
                 data = (
                     semantic_style.semantic_style_status(**scope) if scope else semantic_style.semantic_style_status()
                 )
-            elif action == "overrides":
-                overrides = body.overrides
-                if overrides is None:
-                    raise HTTPException(status_code=400, detail="overrides 必须为对象")
-                override_patch = overrides.model_dump(exclude_unset=True, exclude_none=True)
+            elif action == "direct_enabled":
+                if body.direct_enabled is None:
+                    raise HTTPException(status_code=400, detail="direct_enabled 必须为布尔值")
                 data = (
-                    semantic_style.update_semantic_style_overrides(override_patch, **scope)
+                    semantic_style.set_semantic_style_direct_enabled(body.direct_enabled, **scope)
                     if scope
-                    else semantic_style.update_semantic_style_overrides(override_patch)
+                    else semantic_style.set_semantic_style_direct_enabled(body.direct_enabled)
                 )
             elif action == "clear":
                 clear_kwargs: dict[str, object] = {}
@@ -400,28 +378,6 @@ def register_llm_product_router(
         check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
         bot_id, group_id = _injection_governance_scope(bot_id=body.bot_id, group_id=body.group_id)
         action = body.action
-        if action == "restore_expression":
-            entry_id = str(body.entry_id or "").strip()
-            if not entry_id:
-                raise HTTPException(status_code=400, detail="entry_id 必填")
-            try:
-                entry = await asyncio.to_thread(
-                    get_group_expression,
-                    group_id=group_id,
-                    entry_id=entry_id,
-                )
-            except Exception as e:  # noqa: BLE001
-                raise HTTPException(status_code=500, detail=str(e)) from e
-            if entry is None:
-                raise HTTPException(status_code=404, detail="未找到该群表达记录")
-            try:
-                updated = await asyncio.to_thread(resolve_expression, entry_id, action="restore")
-            except Exception as e:  # noqa: BLE001
-                raise HTTPException(status_code=500, detail=str(e)) from e
-            if updated is None:
-                raise HTTPException(status_code=404, detail="未找到该群表达记录")
-            return JSONResponse({"ok": True, "data": {"entry_id": entry_id, "status": updated.status}})
-
         outcome_id = str(body.outcome_id or "").strip()
         if not outcome_id:
             raise HTTPException(status_code=400, detail="outcome_id 必填")
@@ -569,47 +525,6 @@ def register_llm_product_router(
             raise HTTPException(status_code=500, detail=str(e)) from e
         if updated is None:
             raise HTTPException(status_code=404, detail="未找到该反哺记录")
-        return JSONResponse({"ok": True, "data": updated.model_dump(mode="json")})
-
-    @router.get(f"{x}/llm/expression-bank", include_in_schema=True)
-    async def _llm_expression_bank_get(
-        group_id: int = Query(..., ge=1, description="群号"),
-        status: Annotated[ExpressionStatus | None, Query(description="状态筛选")] = None,
-        limit: int = Query(default=50, ge=1, le=200),
-    ) -> JSONResponse:
-        try:
-            rows = list_group_expressions(group_id=group_id, status=status, limit=limit)
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(status_code=500, detail=str(e)) from e
-        return JSONResponse({
-            "ok": True,
-            "data": {
-                "items": [row.model_dump(mode="json") for row in rows],
-                "limit": limit,
-            },
-        })
-
-    @router.post(f"{x}/llm/expression-bank/resolve", include_in_schema=True)
-    async def _llm_expression_bank_resolve(
-        body: _ExpressionBankResolveRequest,
-        token: str | None = Query(default=None),
-        x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
-    ) -> JSONResponse:
-        check_pallas_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        entry_id = body.entry_id.strip()
-        action = body.action
-        if not entry_id:
-            raise HTTPException(status_code=400, detail="entry_id required")
-        try:
-            updated = resolve_expression(
-                entry_id,
-                action=action,
-                reason=body.reason.strip(),
-            )
-        except Exception as e:  # noqa: BLE001
-            raise HTTPException(status_code=500, detail=str(e)) from e
-        if updated is None:
-            raise HTTPException(status_code=404, detail="未找到表达记录")
         return JSONResponse({"ok": True, "data": updated.model_dump(mode="json")})
 
     @router.get(f"{x}/llm/conversation-kernel/status", include_in_schema=True)

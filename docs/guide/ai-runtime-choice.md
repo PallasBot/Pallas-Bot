@@ -15,12 +15,12 @@ Pallas-Bot 的日常 LLM 对话和媒体任务走不同的运行路径：`@牛�
 
 ```mermaid
 flowchart LR
-    Need{需要什么能力?} -->|@牛牛 聊天| P[Bot 内核 + Provider<br>控制台 AI 配置]
-    Need -->|唱歌 / TTS| A[Pallas-Bot-AI + 媒体包]
-    Need -->|遗留 RWKV| R[Pallas-Bot-AI + 旧聊天资源包]
-    P -->|只配 Provider| Done[完成]
-    A -->|部署 AI Runtime| Done
-    R -->|部署 AI Runtime| Done
+    Need{需要什么能力?} -->|"@牛牛 聊天"| P["Bot 内核 + Provider<br/>控制台 AI 配置"]
+    Need -->|"唱歌 / TTS"| A["Pallas-Bot-AI + 媒体包"]
+    Need -->|"遗留 RWKV"| R["Pallas-Bot-AI + 旧聊天资源包"]
+    P -->|"只配 Provider"| Done[完成]
+    A -->|"部署 AI Runtime"| Done
+    R -->|"部署 AI Runtime"| Done
 ```
 
 ## 配置普通聊天

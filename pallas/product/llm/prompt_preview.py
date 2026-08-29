@@ -17,21 +17,22 @@ from pallas.product.llm.reply_shape import resolve_reply_shape
 from pallas.product.llm.tools.time_now import current_time_text
 from pallas.product.llm.turn_policy import TurnPolicy
 
+# 与 ChatPromptAssembler.section_ids 保持同序（按变化频率从低到高）。
 _SECTION_META = (
     ("injection_guard", "安全边界", "persona.prompt_guard"),
     ("persona", "核心人设", "persona.compile_persona_prompt"),
     ("identity", "自我身份", "persona.self_identity"),
-    ("reply_shape", "回复形状与输出契约", "llm.reply_shape"),
-    ("turn_policy", "本轮策略", "llm.turn_policy"),
-    ("current_time", "当前时间", "llm.tools.time_now"),
-    ("group_timeline", "群聊上下文", "llm.assembler.context"),
+    ("group_expression", "群表达指导", "llm.assembler.chat_prompt"),
+    ("behavior_reference", "真人接话参考", "llm.assembler.chat_prompt"),
     ("memory", "长期记忆", "llm.assembler.context"),
     ("knowledge", "知识检索", "llm.assembler.context"),
     ("relationship", "关系上下文", "llm.assembler.context"),
     ("person_facts", "人物事实", "llm.assembler.context"),
     ("mid_term", "中期摘要", "llm.assembler.context"),
-    ("group_expression", "群表达指导", "llm.assembler.chat_prompt"),
-    ("behavior_reference", "真人接话参考", "llm.assembler.chat_prompt"),
+    ("group_timeline", "群聊上下文", "llm.assembler.context"),
+    ("reply_shape", "回复形状与输出契约", "llm.reply_shape"),
+    ("turn_policy", "本轮策略", "llm.turn_policy"),
+    ("current_time", "当前时间", "llm.tools.time_now"),
     ("tool_context", "工具上下文", "preview（默认关闭）"),
 )
 
@@ -106,11 +107,7 @@ async def build_prompt_preview(
         ],
         baseline_note=str(getattr(semantic_style, "baseline_note", "") or ""),
         behavior_strategies=[
-            (
-                str(item.scene or ""),
-                str(item.action or ""),
-                str(item.outcome or ""),
-            )
+            item
             for item in (getattr(semantic_style, "behavior_strategies", None) or [])[:2]
             if str(getattr(item, "scene", "") or "").strip() and str(getattr(item, "action", "") or "").strip()
         ],

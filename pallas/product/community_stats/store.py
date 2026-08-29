@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from datetime import UTC, datetime
 from threading import Lock
 from typing import Any
 
 from pallas.core.foundation.config.repo_settings import repo_webui_settings_path
 
 _STATE_FILE = "community_stats.json"
+_GALLERY_POSTS_KEY = "gallery_posts"
 _state_cache_lock = Lock()
 _state_cache_sig: tuple[bool, int, int] | None = None
 _state_cache_data: dict[str, Any] | None = None
@@ -122,3 +124,35 @@ def load_or_create_deployment_id() -> str:
     data["deployment_id"] = dep
     _write_state(data)
     return dep
+
+
+def _now_iso() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+def load_local_gallery_posts() -> list[dict[str, Any]]:
+    data = _read_state_raw()
+    posts = data.get(_GALLERY_POSTS_KEY) or []
+    return [dict(p) for p in posts if isinstance(p, dict)]
+
+
+def add_local_gallery_post(**fields: Any) -> dict[str, Any]:
+    post = dict(fields)
+    post.setdefault("id", str(uuid.uuid4()))
+    post.setdefault("created_at", _now_iso())
+    data = _read_state_raw()
+    data.setdefault(_GALLERY_POSTS_KEY, [])
+    data[_GALLERY_POSTS_KEY].insert(0, post)
+    _write_state(data)
+    return dict(post)
+
+
+def remove_local_gallery_post(post_id: str) -> bool:
+    data = _read_state_raw()
+    posts = data.setdefault(_GALLERY_POSTS_KEY, [])
+    before = len(posts)
+    data[_GALLERY_POSTS_KEY] = [p for p in posts if not (isinstance(p, dict) and p.get("id") == post_id)]
+    if len(data[_GALLERY_POSTS_KEY]) != before:
+        _write_state(data)
+        return True
+    return False

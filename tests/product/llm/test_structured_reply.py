@@ -174,3 +174,41 @@ def test_validate_reply_chars_allows_mention_placeholder() -> None:
 
     ok2, reason2 = validate_reply_chars("|||")
     assert ok2 is False
+
+
+def test_validate_reply_chars_allows_parenthesized_ascii_label() -> None:
+    ok, _reason = validate_reply_chars("林（Lin）")
+    assert ok is True
+
+
+def test_validate_reply_chars_rejects_markdown_bold() -> None:
+    ok, reason = validate_reply_chars("**林**（Lin）")
+    assert ok is False
+    assert "markdown" in reason
+
+
+def test_validate_reply_chars_rejects_markdown_italic() -> None:
+    ok, reason = validate_reply_chars("*林*是谁")
+    assert ok is False
+    assert "markdown" in reason
+
+
+def test_validate_reply_chars_rejects_markdown_heading() -> None:
+    ok, reason = validate_reply_chars("# 第一是林")
+    assert ok is False
+    assert "markdown" in reason
+
+
+def test_validate_reply_chars_rejects_bare_url() -> None:
+    ok, reason = validate_reply_chars("去 https://example.com 看看")
+    assert ok is False
+    assert "url" in reason
+
+
+def test_normalize_plain_markdown_fail_closed() -> None:
+    assert normalize_model_reply("**林**（Lin）") == ""
+    assert normalize_model_reply("第一是 https://example.com") == ""
+
+
+def test_parse_structured_reply_rejects_markdown_segment() -> None:
+    assert parse_structured_reply('{"reply_segments":["第一是**林**"]}').reply_segments == ()

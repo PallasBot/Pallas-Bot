@@ -54,7 +54,7 @@ async def test_repeater_semantic_style_quality_response_is_typed_and_has_no_quot
         "semantic_style_quality",
         lambda **scope: {
             "enabled": True,
-            "overrides": {"aggressive": True, "nonsense": True, "direct": True, "image": True},
+            "direct_enabled": True,
             "example_count": 3,
             "profile_count": 1,
             "backfill_cursor": {},
@@ -81,7 +81,7 @@ async def test_repeater_semantic_style_quality_response_is_typed_and_has_no_quot
     assert response.json()["data"] == {
         "status": {
             "enabled": True,
-            "overrides": {"aggressive": True, "nonsense": True, "direct": True, "image": True},
+            "direct_enabled": True,
             "example_count": 3,
             "profile_count": 1,
             "backfill_cursor": {},
@@ -103,17 +103,9 @@ async def test_repeater_semantic_style_api_forwards_bot_group_scope(monkeypatch)
     )
     monkeypatch.setattr(
         semantic_style,
-        "update_semantic_style_overrides",
-        lambda overrides, *, bot_id=None, group_id=None: (
-            calls.append(("overrides", bot_id, group_id))
-            or {
-                "overrides": {
-                    "aggressive": False,
-                    "nonsense": False,
-                    "direct": overrides.get("direct", False),
-                    "image": False,
-                },
-            }
+        "set_semantic_style_direct_enabled",
+        lambda enabled, *, bot_id=None, group_id=None: (
+            calls.append(("direct_enabled", bot_id, group_id)) or {"enabled": True, "direct_enabled": enabled}
         ),
     )
     app = _build_app(monkeypatch)
@@ -121,14 +113,14 @@ async def test_repeater_semantic_style_api_forwards_bot_group_scope(monkeypatch)
         status = await client.get("/pallas/api/llm/repeater-semantic-style?bot_id=100&group_id=42")
         updated = await client.post(
             "/pallas/api/llm/repeater-semantic-style/manage",
-            json={"action": "overrides", "bot_id": 100, "group_id": 42, "overrides": {"direct": False}},
+            json={"action": "direct_enabled", "bot_id": 100, "group_id": 42, "direct_enabled": False},
         )
         incomplete = await client.get("/pallas/api/llm/repeater-semantic-style?bot_id=100")
 
     assert status.status_code == 200, status.text
     assert updated.status_code == 200, updated.text
     assert incomplete.status_code == 422
-    assert calls == [("status", 100, 42), ("overrides", 100, 42)]
+    assert calls == [("status", 100, 42), ("direct_enabled", 100, 42)]
 
 
 @pytest.mark.asyncio
@@ -138,19 +130,8 @@ async def test_repeater_semantic_style_manage_api_dispatches_actions(monkeypatch
     calls: list[tuple[str, object]] = []
     monkeypatch.setattr(
         semantic_style,
-        "update_semantic_style_overrides",
-        lambda overrides: (
-            calls.append(("overrides", overrides))
-            or {
-                "enabled": True,
-                "overrides": {
-                    "aggressive": False,
-                    "nonsense": False,
-                    "direct": overrides.get("direct", False),
-                    "image": False,
-                },
-            }
-        ),
+        "set_semantic_style_direct_enabled",
+        lambda enabled: calls.append(("direct_enabled", enabled)) or {"enabled": True, "direct_enabled": enabled},
         raising=False,
     )
     monkeypatch.setattr(
@@ -186,7 +167,7 @@ async def test_repeater_semantic_style_manage_api_dispatches_actions(monkeypatch
     app = _build_app(monkeypatch)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         for body in (
-            {"action": "overrides", "overrides": {"direct": False}},
+            {"action": "direct_enabled", "direct_enabled": False},
             {"action": "clear"},
             {"action": "rebuild"},
             {"action": "quality"},
@@ -198,7 +179,7 @@ async def test_repeater_semantic_style_manage_api_dispatches_actions(monkeypatch
             assert response.json()["ok"] is True
 
     assert calls == [
-        ("overrides", {"direct": False}),
+        ("direct_enabled", False),
         ("clear", None),
         ("rebuild", None),
         ("quality", None),
@@ -208,55 +189,40 @@ async def test_repeater_semantic_style_manage_api_dispatches_actions(monkeypatch
 
 
 @pytest.mark.asyncio
-async def test_repeater_semantic_style_override_patch_preserves_unspecified_values(monkeypatch) -> None:
-    from pallas.product.llm import repeater_semantic_style as semantic_style
-
-    current = {"aggressive": True, "nonsense": True, "direct": True, "image": True}
-
-    def update(overrides):
-        current.update(overrides)
-        return {"enabled": True, "overrides": current}
-
-    monkeypatch.setattr(semantic_style, "update_semantic_style_overrides", update)
-
+async def test_repeater_semantic_style_direct_enabled_action_requires_boolean(monkeypatch) -> None:
     response = await request(
         monkeypatch,
         "POST",
         "/pallas/api/llm/repeater-semantic-style/manage",
-        json={"action": "overrides", "overrides": {"direct": False}},
+        json={"action": "direct_enabled"},
     )
 
-    assert response.status_code == 200, response.text
-    assert response.json()["data"]["overrides"] == {
-        "aggressive": True,
-        "nonsense": True,
-        "direct": False,
-        "image": True,
-    }
+    assert response.status_code == 400
+    assert response.json()["detail"] == "direct_enabled 必须为布尔值"
 
 
 @pytest.mark.asyncio
-async def test_repeater_semantic_style_null_override_is_a_noop(monkeypatch) -> None:
+async def test_repeater_semantic_style_direct_enabled_action_forwards_flag(monkeypatch) -> None:
     from pallas.product.llm import repeater_semantic_style as semantic_style
 
-    current = {"aggressive": True, "nonsense": False, "direct": True, "image": False}
-
-    def update(overrides):
-        assert all(isinstance(value, bool) for value in overrides.values())
-        current.update(overrides)
-        return {"enabled": True, "overrides": current}
-
-    monkeypatch.setattr(semantic_style, "update_semantic_style_overrides", update)
+    calls: list[tuple[bool]] = []
+    monkeypatch.setattr(
+        semantic_style,
+        "set_semantic_style_direct_enabled",
+        lambda enabled: calls.append((enabled,)) or {"enabled": True, "direct_enabled": enabled},
+        raising=False,
+    )
 
     response = await request(
         monkeypatch,
         "POST",
         "/pallas/api/llm/repeater-semantic-style/manage",
-        json={"action": "overrides", "overrides": {"direct": None}},
+        json={"action": "direct_enabled", "direct_enabled": False},
     )
 
     assert response.status_code == 200, response.text
-    assert response.json()["data"]["overrides"] == current
+    assert calls == [(False,)]
+    assert response.json()["data"]["direct_enabled"] is False
 
 
 @pytest.mark.asyncio
@@ -329,9 +295,7 @@ async def test_repeater_semantic_style_set_governance_dispatches_both_flags(monk
     )
 
     assert response.status_code == 200, response.text
-    assert calls == [
-        {"bot_id": 100, "group_id": 42, "collection_enabled": False, "injection_enabled": True}
-    ]
+    assert calls == [{"bot_id": 100, "group_id": 42, "collection_enabled": False, "injection_enabled": True}]
     assert response.json()["data"]["collection_enabled"] is False
     assert response.json()["data"]["injection_enabled"] is True
 

@@ -136,8 +136,9 @@ async def test_relationship_inject_affinity_line() -> None:
     ("affinity", "level"),
     [
         (-0.7, "厌恶"),
-        (-0.3, "冷淡"),
-        (0.25, "认识"),
+        (-0.35, "冷淡"),
+        (0.1, "陌生"),
+        (0.3, "认识"),
         (0.5, "熟人"),
         (0.7, "朋友"),
         (0.9, "挚友"),
@@ -167,7 +168,7 @@ async def test_relationship_inject_affinity_only_uses_line_not_fallback() -> Non
     cfg = LlmConfig(llm_chat_enabled=True, llm_relationship_notes_enabled=True)
     profile = RelationshipProfile(
         content="",
-        affinity=-0.6,
+        affinity=-0.7,
         source="auto",
     )
     with patch(
@@ -181,6 +182,6 @@ async def test_relationship_inject_affinity_only_uses_line_not_fallback() -> Non
             user_id=3,
             cfg=cfg,
         )
-    assert "好感度：厌恶（-0.60）" in result.system_prompt
+    assert "好感度：厌恶（-0.70）" in result.system_prompt
     assert result.trace["fallback"] is False
     assert result.trace["hit_count"] == 1

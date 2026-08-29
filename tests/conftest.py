@@ -52,6 +52,7 @@ async def beanie_fixture(monkeypatch: pytest.MonkeyPatch):
         Message,
         StickerLabel,
         UserConfigModule,
+        UserStickerStat,
     )
 
     motor_client = AsyncMongoMockClient()
@@ -80,6 +81,7 @@ async def beanie_fixture(monkeypatch: pytest.MonkeyPatch):
             LlmMemoryEntry,
             LlmRelationshipNote,
             StickerLabel,
+            UserStickerStat,
         ],
         allow_index_dropping=True,
     )
@@ -97,6 +99,7 @@ async def beanie_fixture(monkeypatch: pytest.MonkeyPatch):
     await motor_db.drop_collection("llm_memory_entry")
     await motor_db.drop_collection("llm_relationship_note")
     await motor_db.drop_collection("sticker_label")
+    await motor_db.drop_collection("user_sticker_stat")
     motor_client.close()
 
 

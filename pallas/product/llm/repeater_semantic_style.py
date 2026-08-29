@@ -22,9 +22,8 @@ from pallas.core.foundation.db import make_local_context_repository, make_messag
 from pallas.core.foundation.fs_lock import atomic_write_text, interprocess_file_lock
 from pallas.core.foundation.logging import log_rate_limited
 from pallas.core.foundation.paths import plugin_data_dir
-from pallas.core.foundation.startup_report import register_startup_ready, register_startup_scheduled
+from pallas.core.foundation.startup_report import register_startup_ready
 from pallas.core.platform.work_jobs.models import WorkJob
-from pallas.core.platform.work_jobs.runtime import build_work_job_store
 from pallas.product.llm.inference_params import task_token_budget
 
 if TYPE_CHECKING:
@@ -44,6 +43,8 @@ SEMANTIC_STYLE_REALTIME_MAX_PER_DAY = 1000
 SEMANTIC_STYLE_REALTIME_MAX_PER_SCOPE_PER_DAY = 40
 SEMANTIC_STYLE_REALTIME_SAMPLE_DIVISOR = 2
 SEMANTIC_STYLE_LABEL_MAX_RETRIES = 2
+_BATCH_LABEL_MAX = 8
+SEMANTIC_STYLE_LABEL_BATCH_MAX = _BATCH_LABEL_MAX
 _SEMANTIC_STYLE_BACKFILL_GROUP_LIMIT = 128
 _SEMANTIC_STYLE_BACKFILL_PAGE_SIZE = 32
 _SEMANTIC_STYLE_BACKFILL_START_DELAY_SEC = 30.0
@@ -218,29 +219,22 @@ class SemanticStyleResolution(BaseModel):
     style_profile: dict[str, Any] = Field(default_factory=dict)
 
 
-class SemanticStyleOverride(BaseModel):
-    aggressive: bool = True
-    nonsense: bool = True
-    direct: bool = True
-    image: bool = True
-
-
 class SemanticStyleSettings(BaseModel):
     collection_enabled: bool = True
     injection_enabled: bool = True
-    overrides: SemanticStyleOverride = Field(default_factory=SemanticStyleOverride)
+    direct_enabled: bool = True
 
     @model_validator(mode="before")
     @classmethod
     def _migrate_legacy_enabled(cls, data: Any) -> Any:
-        if (
-            isinstance(data, dict)
-            and "enabled" in data
-            and "collection_enabled" not in data
-            and "injection_enabled" not in data
-        ):
+        if not isinstance(data, dict):
+            return data
+        if "enabled" in data and "collection_enabled" not in data and "injection_enabled" not in data:
             legacy = bool(data["enabled"])
-            return {**data, "collection_enabled": legacy, "injection_enabled": legacy}
+            data = {**data, "collection_enabled": legacy, "injection_enabled": legacy}
+        legacy_overrides = data.get("overrides")
+        if isinstance(legacy_overrides, dict) and "direct_enabled" not in data:
+            data = {**data, "direct_enabled": bool(legacy_overrides.get("direct", True))}
         return data
 
     @property
@@ -280,6 +274,80 @@ _profiles_revision: tuple[int, int] | None = None
 _reload_task: asyncio.Task[None] | None = None
 _backfill_task: asyncio.Task[None] | None = None
 _startup_bound = False
+_labeled_ids_index_built_at = 0.0
+_labeled_ids_index: dict[tuple[int, int], set[int]] = {}
+_LABELED_IDS_INDEX_TTL_SEC = 5.0
+# 群语义采样游标 (time, message_id)：message_id 维度保证同秒内消息不被增量跳过。
+_semantic_style_seen_cursors: dict[tuple[int, int], tuple[int, int]] = {}
+# 旧版秒级游标（无 message_id）读入时的边界值：视为该秒已全部处理。
+_CURSOR_MID_SENTINEL = 2**63 - 1
+
+
+def labeled_semantic_style_reply_ids(bot_id: int, group_id: int) -> set[int]:
+    """已落库语义样本的接话 message_id 集合（TTL 内存索引），供入 LLM 前去重过滤。
+
+    example_id 格式为 ``{group_id}:{message_id}:{bot_id}``，message_id 可能为负
+    （新版本 QQ），取中间段解析。重读 examples.jsonl 后重建，避免漏掉并发落库的样本。
+    """
+    now = time.time()
+    global _labeled_ids_index_built_at
+    with _semantic_data_thread_lock:
+        if now - _labeled_ids_index_built_at > _LABELED_IDS_INDEX_TTL_SEC:
+            index: dict[tuple[int, int], set[int]] = {}
+            for example in _load_semantic_style_examples(semantic_style_examples_path()):
+                if example.annotation_source != "llm_v2":
+                    continue
+                parts = example.example_id.rsplit(":", 2)
+                if len(parts) != 3:
+                    continue
+                try:
+                    message_id = int(parts[1])
+                except ValueError:
+                    continue
+                index.setdefault((example.bot_id, example.group_id), set()).add(message_id)
+            _labeled_ids_index.clear()
+            _labeled_ids_index.update(index)
+            _labeled_ids_index_built_at = now
+    return _labeled_ids_index.get((int(bot_id), int(group_id)), set())
+
+
+def get_semantic_style_group_cursor(bot_id: int, group_id: int) -> tuple[int, int]:
+    """读取某群已处理的语义采样消息游标 ``(time, message_id)``。
+
+    旧版仅存秒级时间戳（正整数），读作 ``(time, _CURSOR_MID_SENTINEL)``，
+    即该秒视为已全部处理，与历史行为一致。
+    """
+    scope_key = _semantic_style_group_cursor_key(bot_id, group_id)
+    with semantic_style_data_lock():
+        cursor = _load_semantic_style_group_cursors().get(scope_key, (0, 0))
+    with _profiles_lock:
+        _semantic_style_seen_cursors[(int(bot_id), int(group_id))] = cursor
+    return cursor
+
+
+def mark_semantic_style_group_processed(
+    bot_id: int,
+    group_id: int,
+    *,
+    processed_at: int,
+    processed_message_id: int = 0,
+) -> None:
+    """原子持久化某群语义采样游标，按 (time, message_id) 只允许向前推进。"""
+    if processed_at <= 0:
+        return
+    next_cursor = (int(processed_at), int(processed_message_id))
+    scope_key = _semantic_style_group_cursor_key(bot_id, group_id)
+    with semantic_style_data_lock():
+        cursors = _load_semantic_style_group_cursors()
+        current = cursors.get(scope_key, (0, 0))
+        if next_cursor <= current:
+            return
+        cursors[scope_key] = next_cursor
+        _save_semantic_style_group_cursors(cursors)
+    with _profiles_lock:
+        _semantic_style_seen_cursors[(int(bot_id), int(group_id))] = next_cursor
+
+
 _direct_quota_windows: dict[tuple[int, int], deque[bool]] = {}
 _semantic_style_visual_circuit = SemanticStyleVisualCircuitState()
 _DIRECT_QUOTA_WINDOW = 100
@@ -597,68 +665,6 @@ async def collect_semantic_style_backfill_candidates(
     return sorted(candidates, key=lambda item: (int(item["created_at"]), int(item["message_id"])), reverse=True)
 
 
-async def run_semantic_style_backfill_round(*, now: int | None = None) -> int:
-    """历史数据没有作者来源，停止生成语义风格回填任务。"""
-    if not SEMANTIC_STYLE_BACKFILL_ENABLED:
-        return 0
-    current_time = int(time.time()) if now is None else int(now)
-    bot_ids: list[int] = []
-    for key, bot in get_bots().items():
-        value = getattr(bot, "self_id", key)
-        try:
-            bot_id = int(value)
-        except (TypeError, ValueError):
-            continue
-        if bot_id > 0 and bot_id not in bot_ids:
-            bot_ids.append(bot_id)
-    if not bot_ids:
-        return 0
-    day = current_time // (24 * 60 * 60)
-    job = WorkJob.create(
-        kind="repeater.semantic_style.backfill.scan",
-        payload={"bot_ids": sorted(bot_ids), "now": current_time},
-        idempotency_key=f"repeater.semantic_style.backfill.scan:{day}",
-    )
-    await build_work_job_store().enqueue(job)
-    return 1
-
-
-async def handle_repeater_semantic_style_backfill_scan(payload: dict[str, Any]) -> int:
-    """在 work aux 扫描历史消息，并持久化生成的语义标注任务。"""
-    if not SEMANTIC_STYLE_BACKFILL_ENABLED:
-        return 0
-    current_time = int(payload.get("now") or time.time())
-    raw_bot_ids = payload.get("bot_ids")
-    if not isinstance(raw_bot_ids, list):
-        return 0
-    bot_ids: list[int] = []
-    for item in raw_bot_ids:
-        try:
-            bot_id = int(item)
-        except (TypeError, ValueError):
-            continue
-        if bot_id > 0:
-            bot_ids.append(bot_id)
-    if not bot_ids:
-        return 0
-    cursor = load_semantic_style_backfill_cursor()
-    candidates = await collect_semantic_style_backfill_candidates(
-        now=current_time,
-        bot_ids=bot_ids,
-        cursor=cursor,
-    )
-    batch = build_semantic_style_backfill_batch(
-        candidates,
-        cursor=cursor,
-        now=current_time,
-    )
-    if not batch.jobs:
-        return 0
-    await build_work_job_store().enqueue_many(batch.jobs)
-    save_semantic_style_backfill_cursor(batch.cursor)
-    return len(batch.jobs)
-
-
 def parse_semantic_style_label(value: object) -> SemanticStyleLabel:
     raw = value if isinstance(value, dict) else {}
     intensity = str(raw.get("intensity") or "").strip().lower()
@@ -708,6 +714,130 @@ def semantic_style_data_lock_path() -> Path:
     return semantic_style_base_dir() / "semantic_style_data.lock"
 
 
+def semantic_style_group_cursor_path() -> Path:
+    return semantic_style_base_dir() / "semantic_style_group_cursors.json"
+
+
+def _semantic_style_group_cursor_key(bot_id: int, group_id: int) -> str:
+    return f"{int(bot_id)}:{int(group_id)}"
+
+
+def _parse_semantic_style_cursor(value: object) -> tuple[int, int] | None:
+    """游标值兼容两种形态：正整数（旧版秒级）与 ``[time, message_id]``。"""
+    if isinstance(value, int | float):
+        parsed_time = int(value)
+        if parsed_time <= 0:
+            return None
+        return (parsed_time, _CURSOR_MID_SENTINEL)
+    if isinstance(value, list) and len(value) == 2:
+        try:
+            parsed_time = int(value[0])
+            parsed_mid = int(value[1])
+        except (TypeError, ValueError):
+            return None
+        if parsed_time <= 0:
+            return None
+        return (parsed_time, parsed_mid)
+    return None
+
+
+def _load_semantic_style_group_cursors() -> dict[str, tuple[int, int]]:
+    try:
+        raw = json.loads(semantic_style_group_cursor_path().read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    cursors: dict[str, tuple[int, int]] = {}
+    for key, value in raw.items():
+        cursor = _parse_semantic_style_cursor(value)
+        if cursor is not None:
+            cursors[str(key)] = cursor
+    return cursors
+
+
+def _save_semantic_style_group_cursors(cursors: dict[str, tuple[int, int]]) -> None:
+    payload = {key: [cursor[0], cursor[1]] for key, cursor in cursors.items()}
+    atomic_write_text(
+        semantic_style_group_cursor_path(),
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n",
+    )
+
+
+def semantic_style_label_budget_path() -> Path:
+    """语义风格每日 LLM 标注预算计数文件路径（按天记录已提交次数）。"""
+    return semantic_style_base_dir() / "semantic_style_label_budget.json"
+
+
+def _semantic_label_budget_state() -> dict[str, Any]:
+    try:
+        raw = json.loads(semantic_style_label_budget_path().read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else {}
+    except Exception:
+        return {}
+
+
+def semantic_label_budget_used_today(*, day_key: int | None = None) -> int:
+    """今日已提交的语义风格 LLM 标注次数（跨进程按天持久化计数）。"""
+    if day_key is None:
+        day_key = int(time.time() // 86400)
+    state = _semantic_label_budget_state()
+    return int(state.get(str(day_key)) or 0)
+
+
+def record_semantic_label_budget(n: int = 1) -> None:
+    """累加一次语义风格 LLM 标注提交计数（按天分桶，供预算闸消费侧判断）。"""
+    if n <= 0:
+        return
+    day_key = int(time.time() // 86400)
+    state = _semantic_label_budget_state()
+    state[str(day_key)] = int(state.get(str(day_key)) or 0) + n
+    try:
+        tmp = semantic_style_label_budget_path().with_suffix(".tmp")
+        tmp.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+        Path(tmp).replace(semantic_style_label_budget_path())
+    except Exception as exc:
+        logger.warning("记录语义标注预算失败：{}", exc)
+
+
+def claim_semantic_label_budget(n: int = 1) -> bool:
+    """在发起语义标注请求前原子预占每日预算。"""
+    if n <= 0:
+        return True
+    from pallas.product.llm.config import get_llm_config
+
+    limit = max(0, int(getattr(get_llm_config(), "llm_semantic_style_realtime_daily_limit", 0) or 0))
+    day_key = str(int(time.time() // 86400))
+    with semantic_style_data_lock():
+        state = _semantic_label_budget_state()
+        used = int(state.get(day_key) or 0)
+        if limit > 0 and used + n > limit:
+            return False
+        state[day_key] = used + n
+        try:
+            tmp = semantic_style_label_budget_path().with_suffix(".tmp")
+            tmp.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+            Path(tmp).replace(semantic_style_label_budget_path())
+        except Exception as exc:
+            logger.warning("记录语义标注预算失败：{}", exc)
+            return False
+    return True
+
+
+def semantic_label_budget_ok(*, day_key: int | None = None) -> bool:
+    """语义风格每日 LLM 标注预算闸：消费侧检查今日累计是否已达上限。
+
+    上限配置 ``llm_semantic_style_realtime_daily_limit``，默认 600 次/天。
+    达到上限返回 False，由调用方跳过本次标注（软上限，不阻塞入队、不影响游标轮转）。
+    """
+    from pallas.product.llm.config import get_llm_config
+
+    limit = max(0, int(getattr(get_llm_config(), "llm_semantic_style_realtime_daily_limit", 0) or 0))
+    if limit <= 0:
+        return True
+    return semantic_label_budget_used_today(day_key=day_key) < limit
+
+
 def semantic_style_legacy_migration_marker_path() -> Path:
     return semantic_style_base_dir() / "legacy_profiles_migrated_v2.json"
 
@@ -723,17 +853,6 @@ def semantic_style_backfill_cursor_path(*, bot_id: int | None = None, group_id: 
     if scope is None:
         return semantic_style_base_dir() / "backfill_cursor.json"
     return semantic_style_base_dir() / "backfill_cursors" / str(scope[0]) / f"{scope[1]}.json"
-
-
-def semantic_style_realtime_budget_path(*, bot_id: int | None = None, group_id: int | None = None) -> Path:
-    scope = _semantic_style_scope(bot_id, group_id)
-    if scope is None:
-        return semantic_style_base_dir() / "realtime_budget.json"
-    return semantic_style_base_dir() / "realtime_budgets" / str(scope[0]) / f"{scope[1]}.json"
-
-
-def semantic_style_realtime_budget_lock_path() -> Path:
-    return semantic_style_base_dir() / "realtime_budget.lock"
 
 
 def _semantic_style_scope(bot_id: int | None, group_id: int | None) -> tuple[int, int] | None:
@@ -759,77 +878,6 @@ def semantic_style_settings_path(*, bot_id: int | None = None, group_id: int | N
     if scope is None:
         return semantic_style_base_dir() / "settings.json"
     return semantic_style_base_dir() / "settings" / str(scope[0]) / f"{scope[1]}.json"
-
-
-def _semantic_style_day_started_at(now: int) -> int:
-    return int(now) - int(now) % (24 * 60 * 60)
-
-
-def _load_semantic_style_realtime_budget(path: Path, *, now: int) -> SemanticStyleRealtimeBudget:
-    try:
-        budget = SemanticStyleRealtimeBudget.model_validate(json.loads(path.read_text(encoding="utf-8")))
-    except (OSError, ValueError, TypeError, json.JSONDecodeError):
-        budget = SemanticStyleRealtimeBudget()
-    day_started_at = _semantic_style_day_started_at(now)
-    return (
-        budget
-        if budget.day_started_at == day_started_at
-        else SemanticStyleRealtimeBudget(day_started_at=day_started_at)
-    )
-
-
-def _save_semantic_style_realtime_budget(path: Path, budget: SemanticStyleRealtimeBudget) -> None:
-    atomic_write_text(path, budget.model_dump_json())
-
-
-def claim_semantic_style_realtime_admission(
-    *, bot_id: int, group_id: int, example_id: str, now: int | None = None
-) -> bool:
-    """稳定采样并原子占用实时语义标注预算。"""
-    current_time = int(time.time()) if now is None else int(now)
-    scope = _semantic_style_scope(bot_id, group_id)
-    assert scope is not None
-    global_path = semantic_style_realtime_budget_path()
-    scope_path = semantic_style_realtime_budget_path(bot_id=bot_id, group_id=group_id)
-    sampled = (
-        int.from_bytes(hashlib.blake2b(str(example_id).encode("utf-8"), digest_size=8).digest(), "big")
-        % (SEMANTIC_STYLE_REALTIME_SAMPLE_DIVISOR)
-        == 0
-    )
-    with interprocess_file_lock(semantic_style_realtime_budget_lock_path()):
-        global_budget = _load_semantic_style_realtime_budget(global_path, now=current_time)
-        if not sampled:
-            _save_semantic_style_realtime_budget(
-                global_path,
-                global_budget.model_copy(update={"sampled_out_today": global_budget.sampled_out_today + 1}),
-            )
-            return False
-        scope_budget = _load_semantic_style_realtime_budget(scope_path, now=current_time)
-        if global_budget.admitted_today >= SEMANTIC_STYLE_REALTIME_MAX_PER_DAY:
-            _save_semantic_style_realtime_budget(
-                global_path,
-                global_budget.model_copy(
-                    update={"global_budget_skipped_today": global_budget.global_budget_skipped_today + 1}
-                ),
-            )
-            return False
-        if scope_budget.admitted_today >= SEMANTIC_STYLE_REALTIME_MAX_PER_SCOPE_PER_DAY:
-            _save_semantic_style_realtime_budget(
-                scope_path,
-                scope_budget.model_copy(
-                    update={"scope_budget_skipped_today": scope_budget.scope_budget_skipped_today + 1}
-                ),
-            )
-            return False
-        _save_semantic_style_realtime_budget(
-            global_path,
-            global_budget.model_copy(update={"admitted_today": global_budget.admitted_today + 1}),
-        )
-        _save_semantic_style_realtime_budget(
-            scope_path,
-            scope_budget.model_copy(update={"admitted_today": scope_budget.admitted_today + 1}),
-        )
-    return True
 
 
 def load_semantic_style_settings(*, bot_id: int | None = None, group_id: int | None = None) -> SemanticStyleSettings:
@@ -862,7 +910,7 @@ def semantic_style_status(*, bot_id: int | None = None, group_id: int | None = N
         "enabled": settings.enabled,
         "collection_enabled": settings.collection_enabled,
         "injection_enabled": settings.injection_enabled,
-        "overrides": settings.overrides.model_dump(mode="json"),
+        "direct_enabled": settings.direct_enabled,
         "example_count": len(scoped_examples),
         "profile_count": len(scoped_profiles),
         "backfill_cursor": load_semantic_style_backfill_cursor(bot_id=bot_id, group_id=group_id).model_dump(
@@ -871,16 +919,13 @@ def semantic_style_status(*, bot_id: int | None = None, group_id: int | None = N
     }
 
 
-def update_semantic_style_overrides(
-    overrides: Mapping[str, object], *, bot_id: int | None = None, group_id: int | None = None
+def set_semantic_style_direct_enabled(
+    enabled: bool, *, bot_id: int | None = None, group_id: int | None = None
 ) -> dict[str, Any]:
-    settings = load_semantic_style_settings(bot_id=bot_id, group_id=group_id)
-    updated = settings.model_copy(
-        update={
-            "overrides": SemanticStyleOverride.model_validate({**settings.overrides.model_dump(), **dict(overrides)})
-        }
+    settings = load_semantic_style_settings(bot_id=bot_id, group_id=group_id).model_copy(
+        update={"direct_enabled": bool(enabled)}
     )
-    _save_semantic_style_settings(updated, bot_id=bot_id, group_id=group_id)
+    _save_semantic_style_settings(settings, bot_id=bot_id, group_id=group_id)
     return semantic_style_status(bot_id=bot_id, group_id=group_id)
 
 
@@ -1056,6 +1101,7 @@ def _build_profile(
     existing: SemanticStyleProfile | None,
     *,
     now: int | None = None,
+    is_bot_reply: bool = False,
 ) -> SemanticStyleProfile:
     label = example.label
     prior_actions = list(existing.interaction_actions) if existing else []
@@ -1081,7 +1127,7 @@ def _build_profile(
         bot_style_sample_count >= BOT_STYLE_PROMOTION_SAMPLE_COUNT
         and recent_bot_style_sample_count >= BOT_STYLE_PROMOTION_RECENT_SAMPLE_COUNT
     )
-    if example.source_kind == "human_pair" and reply_text:
+    if example.source_kind == "human_pair" and reply_text and not is_bot_reply:
         direct_examples = [item for item in direct_examples if item != reply_text]
         direct_examples.append(reply_text)
         pair = SemanticStyleDirectPair(
@@ -1104,7 +1150,7 @@ def _build_profile(
         strategy = example.behavior_strategy
         if not strategy.trigger:
             strategy = strategy.model_copy(update={"trigger": _short_text(example.trigger_text, _MAX_SEED_LEN)})
-        if example.bot_style_positive:
+        if example.bot_style_positive or is_bot_reply:
             strategy = strategy.model_copy(update={"learning_type": "self_reflection"})
         merged = False
         for index, prior in enumerate(strategies):
@@ -1142,6 +1188,31 @@ def _build_profile(
         human_only=True,
         updated_at=example.created_at,
     )
+
+
+def persist_semantic_style_examples(
+    new_examples: list[SemanticStyleExample],
+) -> dict[tuple[int, int, str], SemanticStyleProfile]:
+    """批量落盘语义风格样本：按 example_id 幂等去重，一次重建全部 profiles。
+
+    同一 job 重复处理（跨天 idempotency_key 变化、异常重放等）会带来重复 example_id；
+    这里按 example_id 去重，避免 profiles.json 的 sample_count 虚增与 direct_pairs 重复。
+    相比逐条 persist_semantic_style_example，只做一次文件读写与 profiles 重建。
+    """
+    with semantic_style_data_lock():
+        examples = load_examples_with_legacy_migration_locked()
+        existing_ids = {item.example_id for item in examples}
+        merged = {item.example_id: item for item in examples}
+        for example in new_examples:
+            if example.example_id in existing_ids:
+                continue
+            existing_ids.add(example.example_id)
+            merged[example.example_id] = example
+        updated = sorted(merged.values(), key=lambda item: (item.created_at, item.example_id))
+        _write_semantic_style_examples(semantic_style_examples_path(), updated)
+        profiles = _rebuild_profiles(updated, now=int(time.time()))
+        _write_profiles(profiles)
+        return profiles
 
 
 def persist_semantic_style_example(example: SemanticStyleExample) -> SemanticStyleProfile | None:
@@ -1249,6 +1320,26 @@ def _load_semantic_style_examples(path: Path) -> list[SemanticStyleExample]:
             continue
         examples.append(example.model_copy(update={"label": parse_semantic_style_label(example.label.model_dump())}))
     return examples
+
+
+def list_semantic_style_examples(
+    *, bot_id: int, group_id: int, scene: str, limit: int = 20
+) -> list[SemanticStyleExample]:
+    cap = max(1, min(int(limit), 50))
+    target_bot_id = int(bot_id)
+    target_group_id = int(group_id)
+    target_scene = str(scene)
+    with semantic_style_data_lock():
+        examples = _load_semantic_style_examples(semantic_style_examples_path())
+        scoped = [
+            example
+            for example in examples
+            if example.source_kind == "human_pair"
+            and example.bot_id == target_bot_id
+            and example.group_id == target_group_id
+            and example.scene == target_scene
+        ]
+    return sorted(scoped, key=lambda item: (item.created_at, item.example_id), reverse=True)[:cap]
 
 
 def migrate_legacy_profiles_to_examples(
@@ -1361,15 +1452,25 @@ def _rebuild_profiles(
         if example.source_kind == "legacy_unknown":
             _apply_legacy_rhythm_statistics(profiles, example)
             continue
-        if example.source_kind != "human_pair" or not is_human_semantic_style_pair(
+        if example.source_kind != "human_pair":
+            continue
+        reply_is_bot = _example_reply_is_bot(example)
+        if not reply_is_bot and not is_human_semantic_style_pair(
             trigger_user_id=example.trigger_user_id,
             reply_user_id=example.reply_user_id,
             bot_id=example.bot_id,
         ):
             continue
         key = _profile_key(example.bot_id, example.group_id, example.scene)
-        profiles[key] = _build_profile(example, profiles.get(key), now=now)
+        profiles[key] = _build_profile(example, profiles.get(key), now=now, is_bot_reply=reply_is_bot)
     return profiles
+
+
+def _example_reply_is_bot(example: SemanticStyleExample) -> bool:
+    """判断某 example 的接话端是否为 bot（自身或协作 bot），用于 self_reflection 学习。"""
+    from pallas.product.llm.sender_identity import sender_kind
+
+    return sender_kind(example.reply_user_id, self_bot_id=example.bot_id) != "human"
 
 
 def prune_semantic_style_examples(*, now: int | None = None) -> int:
@@ -1704,7 +1805,7 @@ def should_deliver_semantic_style_direct_candidate(
 ) -> bool:
     """按群维护最近 100 次内核任务的直投占比。"""
     settings = load_semantic_style_settings(bot_id=bot_id, group_id=group_id)
-    if not settings.injection_enabled or not settings.overrides.direct:
+    if not settings.injection_enabled or not settings.direct_enabled:
         return False
     key = (int(bot_id or 0), int(group_id or 0))
     text = _short_text(candidate, _MAX_SEED_LEN)
@@ -1790,6 +1891,8 @@ async def label_semantic_style_visual_with_cached_image(*, cq_code: str) -> Sema
     endpoint = resolve_endpoint_for_task("repeater_semantic_style")
     if endpoint is None or "image" not in endpoint.capabilities:
         return None
+    if not claim_semantic_label_budget():
+        return None
     import base64
 
     from pallas.product.llm.provider_client import complete_chat_message
@@ -1853,6 +1956,8 @@ async def label_semantic_style_with_retry(
     *, trigger_text: str, reply_text: str, pair_relation: Literal["quoted", "adjacent"] = "adjacent"
 ) -> tuple[SemanticStyleLabel, BehaviorStrategy | None] | None:
     for retry_index in range(SEMANTIC_STYLE_LABEL_MAX_RETRIES + 1):
+        if not claim_semantic_label_budget():
+            return None
         try:
             return await label_semantic_style_with_llm(
                 trigger_text=trigger_text,
@@ -1867,103 +1972,98 @@ async def label_semantic_style_with_retry(
     return None
 
 
-async def handle_repeater_semantic_style(payload: dict[str, Any]) -> None:
-    bot_id = int(payload.get("bot_id") or 0)
-    group_id = int(payload.get("group_id") or 0)
-    if not semantic_style_collection_enabled(bot_id=bot_id, group_id=group_id):
-        return
-    trigger = str(payload.get("trigger_text") or "").strip()
-    reply = str(payload.get("reply_text") or "").strip()
-    if not trigger or not reply:
-        return
-    if payload.get("source_kind") != "human_pair" or not is_human_semantic_style_pair(
-        trigger_user_id=payload.get("trigger_user_id"),
-        reply_user_id=payload.get("reply_user_id"),
-        bot_id=bot_id,
-    ):
-        return
-    if not payload.get("realtime_admitted") and not claim_semantic_style_realtime_admission(
-        bot_id=bot_id,
-        group_id=group_id,
-        example_id=str(payload.get("example_id") or f"{group_id}:{payload.get('message_id')}:{bot_id}"),
-    ):
-        return
-    pair_relation = "quoted" if payload.get("pair_relation") == "quoted" else "adjacent"
-    label, behavior_strategy = await label_semantic_style_with_llm(
-        trigger_text=trigger,
-        reply_text=reply,
-        pair_relation=pair_relation,
-    )
-    if not label.is_reply_pair or not label.transferable:
-        return
-    visual = await maybe_label_semantic_style_visual(payload)
-    if visual is not None:
-        label = label.model_copy(update={"visual": visual})
-    example = SemanticStyleExample(
-        example_id=str(payload.get("example_id") or f"{payload.get('group_id')}:{payload.get('message_id')}"),
-        created_at=int(payload.get("created_at") or time.time()),
-        bot_id=int(payload["bot_id"]),
-        group_id=int(payload["group_id"]),
-        scene=str(payload.get("scene") or "default"),
-        trigger_text=_short_text(trigger, 240),
-        reply_text=_short_text(reply, 240),
-        label=label,
-        source_kind="human_pair",
-        trigger_user_id=int(payload["trigger_user_id"]),
-        reply_user_id=int(payload["reply_user_id"]),
-        pair_relation=pair_relation,
-        behavior_strategy=behavior_strategy,
-    )
-    persist_semantic_style_example(example)
+async def label_semantic_style_batch_with_llm(
+    pairs: list[tuple[str, str, Literal["quoted", "adjacent"]]],
+    *,
+    max_batch: int = SEMANTIC_STYLE_LABEL_BATCH_MAX,
+) -> list[tuple[SemanticStyleLabel, BehaviorStrategy | None] | None]:
+    """一次 LLM 提交批量标注多个「前句→接话」对，逐项返回标签。
+
+    参照 gsuid 后台管线的「一次输出 JSON 数组」范式，显著降低语义风格采集的
+    LLM 提交次数。批量解析缺项时仅对缺失下标回退单对接口
+    ``label_semantic_style_with_retry``，已解析项按位置保留。
+    """
+    from pallas.product.llm.config import get_llm_config
+    from pallas.product.llm.provider_client import complete_chat_message
+
+    results: list[tuple[SemanticStyleLabel, BehaviorStrategy | None] | None] = []
+    remaining = list(pairs)
+    while remaining:
+        chunk = remaining[:max_batch]
+        remaining = remaining[max_batch:]
+        prompt_items = []
+        for index, (trigger_text, reply_text, pair_relation) in enumerate(chunk):
+            relation = "明确引用前句" if pair_relation == "quoted" else "仅时间相邻"
+            prompt_items.append(
+                f"[{index}] 关联：{relation}\n前：{_short_text(trigger_text, 72)}\n后：{_short_text(reply_text, 72)}"
+            )
+        cfg = get_llm_config()
+        prompt = _label_semantic_style_batch_prompt(len(chunk)) + "\n\n" + "\n\n".join(prompt_items)
+        if not claim_semantic_label_budget():
+            return results
+        try:
+            response = await complete_chat_message(
+                [{"role": "user", "content": prompt}],
+                model=str(cfg.llm_model or ""),
+                options={"temperature": 0, "max_tokens": 128 * len(chunk)},
+                cfg=cfg,
+                task="repeater.semantic_style",
+            )
+            parsed = _parse_label_batch_response(str(response.get("content") or ""), len(chunk))
+        except Exception as exc:
+            logger.warning("repeater semantic style batch label failed: {}", exc)
+            parsed = []
+        if len(parsed) == len(chunk):
+            results.extend(parsed)
+            continue
+        # 批量解析不完整（缺项/异常）时，仅对缺失下标逐对回退单对标注；
+        # 已解析出的项按位置直接保留，避免整批重标放大调用量。
+        logger.debug(
+            "Repeater semantic style batch incomplete ([{}]/[{}]); falling back for missing",
+            len(parsed),
+            len(chunk),
+        )
+        results.extend(parsed)
+        for item in chunk[len(parsed) :]:
+            fallback = await label_semantic_style_with_retry(
+                trigger_text=item[0], reply_text=item[1], pair_relation=item[2]
+            )
+            results.append(fallback)
+    return results
 
 
-async def handle_repeater_semantic_style_visual(payload: dict[str, Any]) -> None:
-    """兼容独立视觉 work job；语义关系仍由同一实时处理器持久化。"""
-    await handle_repeater_semantic_style(payload)
+def _label_semantic_style_batch_prompt(count: int) -> str:
+    return (
+        f"判断 {count} 组群聊前后句，只输出长度为 {count} 的 JSON 数组。字段："
+        "is_reply_pair、transferable、interaction_actions、semantic_relations、intensity、forms、behavior_strategy。"
+        "确实回应前句才 is_reply_pair=true；脱离人名、局部梗、临时事实仍可复用才 transferable=true，"
+        "否则均为 false。intensity 只能 quiet/soft/neutral/sharp/strong，数组字段只能用受控英文词。"
+        "behavior_strategy 为 null 或 "
+        '{"scene":"可泛化场景","action":"实际接话动作","outcome":"可观察变化",'
+        '"learning_type":"observed"}。不抄原话，不带人名或临时梗。严格按输入顺序输出。'
+    )
 
 
-async def handle_repeater_semantic_style_backfill(payload: dict[str, Any], *, now: int | None = None) -> None:
-    """历史样本没有可靠作者来源，禁止作为真人接话参考。"""
-    if not SEMANTIC_STYLE_BACKFILL_ENABLED:
-        return
-    if not semantic_style_collection_enabled(
-        bot_id=int(payload.get("bot_id") or 0), group_id=int(payload.get("group_id") or 0)
-    ):
-        return
-    current_time = int(time.time()) if now is None else int(now)
-    if int(payload.get("expires_at") or 0) <= current_time:
-        return
-    trigger = str(payload.get("trigger_text") or "").strip()
-    reply = str(payload.get("reply_text") or "").strip()
-    if not trigger or not reply:
-        return
-    label_result = await label_semantic_style_with_retry(trigger_text=trigger, reply_text=reply)
-    if label_result is None:
-        return
-    label, behavior_strategy = label_result
-    trigger_user_id = int(payload.get("trigger_user_id") or 0)
-    reply_user_id = int(payload.get("reply_user_id") or 0)
-    bot_id = int(payload.get("bot_id") or 0)
-    is_human_pair = is_human_semantic_style_pair(
-        trigger_user_id=trigger_user_id,
-        reply_user_id=reply_user_id,
-        bot_id=bot_id,
-    )
-    example = SemanticStyleExample(
-        example_id=str(payload.get("example_id") or f"{payload.get('group_id')}:{payload.get('message_id')}"),
-        created_at=int(payload.get("created_at") or current_time),
-        bot_id=bot_id,
-        group_id=int(payload["group_id"]),
-        scene=str(payload.get("scene") or "default"),
-        trigger_text=_short_text(trigger, 240),
-        reply_text=_short_text(reply, 240),
-        label=label,
-        behavior_strategy=behavior_strategy,
-        source_kind="human_pair" if is_human_pair else "legacy_unknown",
-        trigger_user_id=trigger_user_id,
-        reply_user_id=reply_user_id,
-    )
-    persist_semantic_style_example(example)
+def _parse_label_batch_response(
+    content: str,
+    expected: int,
+) -> list[tuple[SemanticStyleLabel, BehaviorStrategy | None]]:
+    """解析批量标注响应为逐项 (label, strategy)；缺项或非法用空标签补齐到 len(响应)。"""
+    text = _JSON_FENCE_RE.sub("", str(content or "").strip()).strip()
+    try:
+        raw = json.loads(text)
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(raw, list):
+        return []
+    results: list[tuple[SemanticStyleLabel, BehaviorStrategy | None]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            results.append((SemanticStyleLabel(), None))
+            continue
+        label, strategy = parse_semantic_style_label(item), parse_behavior_strategy(item.get("behavior_strategy"))
+        results.append((label, strategy))
+    return results[:expected]
 
 
 async def _refresh_loop() -> None:
@@ -1976,7 +2076,7 @@ async def _refresh_loop() -> None:
 
 
 def register_semantic_style_cache_startup_hook() -> None:
-    global _startup_bound, _reload_task, _backfill_task
+    global _startup_bound, _reload_task
     if _startup_bound:
         return
     _startup_bound = True
@@ -1984,39 +2084,15 @@ def register_semantic_style_cache_startup_hook() -> None:
 
     @driver.on_startup
     async def _on_startup() -> None:
-        global _reload_task, _backfill_task
+        global _reload_task
         refresh_semantic_style_cache(force=True)
         _reload_task = asyncio.create_task(_refresh_loop(), name="repeater_semantic_style_cache")
         register_startup_ready("语义风格缓存")
 
-        if SEMANTIC_STYLE_BACKFILL_ENABLED:
-
-            async def _backfill_loop() -> None:
-                await asyncio.sleep(_SEMANTIC_STYLE_BACKFILL_START_DELAY_SEC)
-                while True:
-                    try:
-                        await run_semantic_style_backfill_round()
-                    except Exception as exc:
-                        logger.warning("repeater semantic style backfill round failed: {}", exc)
-                    await asyncio.sleep(_SEMANTIC_STYLE_BACKFILL_INTERVAL_SEC)
-
-            _backfill_task = asyncio.create_task(_backfill_loop(), name="repeater_semantic_style_backfill")
-            register_startup_scheduled(
-                "语义风格回填",
-                (
-                    f"首轮延迟 [{_SEMANTIC_STYLE_BACKFILL_START_DELAY_SEC}s] | "
-                    f"间隔 [{_SEMANTIC_STYLE_BACKFILL_INTERVAL_SEC}s]"
-                ),
-            )
-
     @driver.on_shutdown
     async def _on_shutdown() -> None:
-        global _reload_task, _backfill_task
+        global _reload_task
         if _reload_task is not None:
             _reload_task.cancel()
             await asyncio.gather(_reload_task, return_exceptions=True)
             _reload_task = None
-        if _backfill_task is not None:
-            _backfill_task.cancel()
-            await asyncio.gather(_backfill_task, return_exceptions=True)
-            _backfill_task = None

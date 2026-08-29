@@ -121,6 +121,7 @@ def fetch_embeddings_sync(
     *,
     cfg: LlmConfig | None = None,
     timeout_sec: float = 8.0,
+    fallback_stub: bool = True,
 ) -> list[list[float]] | None:
     global _last_embedding_error  # noqa: PLW0603
     inputs = [str(text or "").strip() for text in texts]
@@ -137,9 +138,10 @@ def fetch_embeddings_sync(
         return vectors
     except Exception as exc:
         _last_embedding_error = str(exc)[:240]
-        if provider.name == "local":
+        if provider.name == "local" or not fallback_stub:
             return None
-        # 远程失败回落 stub，保证调用方不中断
+        # 远程失败回落 stub，保证调用方不中断；检索/落盘路径传 fallback_stub=False，
+        # 避免 sha256 假向量参与打分或经 embedding_dirty 持久化
         return [stub_embedding(text) for text in inputs]
 
 

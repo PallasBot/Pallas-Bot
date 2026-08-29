@@ -2,21 +2,17 @@
 
 from __future__ import annotations
 
+from pallas.core.platform.bot_runtime.plugin_matrix import PLUGIN_LEGACY_ALIASES
 from pallas.core.platform.plugin_runtime.plugin_identity import canonical_plugin_id
 from pallas.core.platform.plugin_runtime.plugin_identity import plugin_identity as resolve_plugin_identity
 
 
 def _build_plugin_package_aliases() -> dict[str, str]:
     aliases: dict[str, str] = {}
-    for raw in (
-        "pallas_webui",
-        "pallas_protocol",
-        "community_stats",
-        "pallas_plugin_community_stats",
-        "ollama",
-        "pallas_plugin_llm_chat",
-    ):
-        aliases[raw] = canonical_plugin_id(raw)
+    # 历史别名统一取自注册表，不在本模块散落旧模块名。
+    for legacy_aliases in PLUGIN_LEGACY_ALIASES.values():
+        for raw in legacy_aliases:
+            aliases[raw] = canonical_plugin_id(raw)
     for plugin_id in (
         "pb_core",
         "repeater",

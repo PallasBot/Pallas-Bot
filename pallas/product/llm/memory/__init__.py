@@ -13,14 +13,6 @@ from .inject import (
     enrich_system_with_person_facts,
     enrich_system_with_relationship_context,
 )
-from .observation import (
-    ObservationRecord,
-    clear_observations_for_tests,
-    dequeue_observations,
-    list_observations,
-    observation_queue_size,
-    observe_message,
-)
 from .person_facts import (
     PersonFact,
     correct_person_fact,
@@ -74,12 +66,6 @@ __all__ = [
     "compile_group_profile_prompt_lines",
     "get_group_profile",
     "upsert_group_profile_hints",
-    "ObservationRecord",
-    "clear_observations_for_tests",
-    "dequeue_observations",
-    "list_observations",
-    "observation_queue_size",
-    "observe_message",
     "PersonFact",
     "correct_person_fact",
     "forget_person_fact",

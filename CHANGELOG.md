@@ -1,6 +1,25 @@
 # Changelog
 
-## [Unreleased]
+## [4.3.13] - 2026-08-29
+
+### 更新公告
+
+- **智能对话**：
+  - 支持引用图片、群聊图片时间线和延迟识图，图片上下文更完整
+  - 识图问句聚焦当前图片，减少历史图片干扰
+  - 超长识图回复按断点拆分，减少答案被截断
+- **群洞察与表达**：
+  - 从消息记录重建群语义样本并批量标注，支持 Bot 自我接话复盘
+  - 群回复形态、场景语气与重复句式提示进一步完善
+  - 自动沉淀群友常用表情包习惯
+- **人物记忆**：
+  - 自动沉淀群友稳定偏好
+  - 记忆图谱支持写入后自动抽取
+- **可靠性与运维**：
+  - 群消息旁路记录支持多数据库去重
+  - 后台任务支持完成保留与 delivery 通知
+  - 增加 turn telemetry、usage ledger 与控制台导出能力
+- 捆绑控制台 WebUI v0.9.16
 
 ### Added
 
@@ -18,6 +37,29 @@
 * feat(webui): 后端首屏预热梯次化并用信号量限外部请求
 * feat(release): 按 Bot commit 选择兼容 WebUI
 * feat(greeting): 戳一戳回应增加时段次数上限
+* feat(insight): 新增群洞察处理器，从 message 表重建成对语义样本并批量标注
+* feat(insight): 群维度扫描并支持指定语义采集账号，成对纳入 Bot 自我接话强化 self_reflection
+* feat(llm): 语义风格改为从 message 表重建成对样本，不再依赖实时 learn（测试群也能有数据）
+* feat(llm): 回复形状改为纯 message 表驱动，语义层仅贡献群表达指导
+* feat(llm): 接通近期回复去重提示，同句重回时换说法避免复述上一句
+* feat(llm): 按 greeting/夸赞/附和等场景注入温和语气提示
+* feat(llm): 观测回复拒绝语气（想得美/少来/别吵等），并扩展离线质量场景覆盖暖性中性对话
+* feat(console): 控制台新增 usage 账本明细 CSV 导出端点
+* feat(llm): 重构好感度体系
+* feat(persona): 语义风格移除摆设开关，合并群风格与语义面板
+* feat(insight): sweep 按采样量优先入队并增加轮转游标
+* feat(insight): 语义标注批量提交并纳入 Bot 自我接话
+* feat(insight): 语义标注增加每日预算闸与增量游标
+* feat(llm): 新增回复态度骨架重复检测
+* feat(llm): 按 learning_type 分流真人接话参考与接话复盘
+* feat(memory): 开启记忆图谱写入后自动抽取
+* feat(memory): 自动沉淀群友稳定偏好
+* feat(llm): 提供方支持改名并级联同步引用
+* feat(llm): 历史消息独立长度上限
+* feat(llm): 提供语义样本只读接口
+* feat(llm): 沉淀群友表情包使用习惯
+* feat(llm): 表情包习惯事实支持 top-K
+* feat(llm): 表情包统计按日清理冷数据
 
 ### Fixed
 
@@ -49,6 +91,24 @@
 * fix(ingress): 日志行右对齐且回复不截断
 * fix(ingress): info日志显示reply引用，便于排查用户是否引用消息
 * fix(help): MAA 远控插件二三级帮助显示对接地址
+* fix(insight): sweep 等待 bot 连接后再执行，并增加轮转游标提高每轮采样量，修复大群号被饿死
+* fix(insight): 成对取数按 message_id 去重并分页回溯，避免多 bot 并发重复记录塞满窗口
+* fix(llm): 分离人格与回复形状，避免默认动作压住同一群内多条回复的形态
+* fix(llm): 拦截普通中文逗号尾半截句（如「这牛确实挺针对的，」）
+* fix(llm): 禁止编造现实动作、设备状态或线下行程
+* fix(llm): 拦截对白中 Markdown 与 URL 泄漏，避免占位/链接直接发出
+* fix(persona): 群风格画像取数分页去重，修复多牛群回复形态为空
+* fix(insight): 语义样本批量落盘去重
+* fix(llm): 会话积压队列加上限与 TTL
+* fix(llm): behavior 落盘加异常保护
+* fix(memory): embedding 失败不再以 stub 向量打分落盘
+* fix(core): Windows 跨进程锁改为非阻塞轮询获取
+* fix(insight): 语义扫描对齐 slot 边界唤醒，预算窗口翻转即恢复采样
+* fix(db): Mongo 消息录制补唯一锚点
+* fix(llm): 修复视觉 data URI 直通分支不可达
+* fix(llm): 分片 worker 跳过表情包习惯扫描
+* fix(llm): 群内表情包候选不再受全局数量限制
+* fix(llm): 表情包习惯阈值上调时清理过期事实
 
 ### Changed
 

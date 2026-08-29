@@ -9,6 +9,28 @@ from typing import Any
 
 _SERVICE_PHRASES = ("有什么可以帮", "为您服务", "希望对你有帮助", "请问", "您好")
 _OVER_EAGER = ("继续聊", "换个话题", "有事叫我", "聊聊吗")
+_REJECTION_MARKERS = (
+    "想得美",
+    "别吵",
+    "别哭",
+    "别闹",
+    "别催",
+    "别乱叫",
+    "别烦我",
+    "少来这套",
+    "少来这个",
+    "欠收拾",
+    "嘴欠",
+    "自己挣去",
+    "自己挨去",
+    "自己想去",
+    "关你屁事",
+)
+
+
+def has_rejection_tone(reply_text: str) -> bool:
+    """探测「想得美/少来/别…/自己…去」类拒绝-顶撞句式，用于观测非挑衅回顶率。"""
+    return any(marker in str(reply_text or "") for marker in _REJECTION_MARKERS)
 
 
 def default_reply_effect_path() -> Path:
@@ -130,6 +152,7 @@ def evaluate_and_record_reply_effect(
         "user_id": user_id,
         "reply_text": str(reply_text or "").strip()[:500],
         "scores": scores,
+        "rejection_tone": has_rejection_tone(reply_text),
         "source": "heuristic",
     }
     append_reply_effect_record(record, path=path)

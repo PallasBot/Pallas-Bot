@@ -10,7 +10,6 @@ from pallas.core.foundation.db import (
     make_local_context_repository,
     make_message_repository,
 )
-from pallas.product.llm.sender_identity import is_peer_bot
 from pallas.product.persona.group_profiler import DEFAULT_WINDOW_HOURS, build_group_style_profile_from_recent_repos
 from pallas.product.persona.loader import invalidate_persona_cache
 
@@ -116,25 +115,6 @@ async def refresh_group_style_profile(
         forced_teach_weight=forced_teach_weight,
     )
 
-    recent_messages = await message_repo.find_recent_in_group(gid, before_time=now_ts + 1, limit=32)
-    try:
-        from pallas.product.persona.expression_learn import (
-            get_llm_config,
-            learn_expressions_from_group_messages,
-        )
-
-        if get_llm_config().llm_expression_learn_enabled:
-            bot_id = next((int(item.bot_id) for item in recent_messages if getattr(item, "bot_id", 0)), 0)
-            texts = [
-                str(item.plain_text or "").strip()
-                for item in recent_messages
-                if str(getattr(item, "plain_text", "") or "").strip()
-                and int(getattr(item, "user_id", 0) or 0) != int(getattr(item, "bot_id", 0) or 0)
-                and not is_peer_bot(int(getattr(item, "user_id", 0) or 0))
-            ]
-            learn_expressions_from_group_messages(gid, texts, bot_id=bot_id)
-    except Exception as exc:
-        logger.debug("Group expression observation was skipped for group [{}]: [{}]", gid, exc)
     await repo.upsert_field(gid, "style_profile", profile)
     invalidate_persona_cache()
 
@@ -153,15 +133,6 @@ def bind_group_style_refresh_lifecycle() -> None:
 
     @driver.on_startup
     async def _start_group_style_refresh_worker() -> None:
-        try:
-            from pallas.product.persona.catchphrase_bank import migrate_legacy_catchphrases
-            from pallas.product.persona.expression_bank import migrate_legacy_expression_entries
-
-            await asyncio.to_thread(migrate_legacy_expression_entries)
-            await asyncio.to_thread(migrate_legacy_catchphrases)
-        except Exception as exc:
-            logger.warning("expression/catchphrase bank legacy migration failed: {}", exc)
-
         async def _run() -> None:
             while True:
                 try:
@@ -174,14 +145,6 @@ def bind_group_style_refresh_lifecycle() -> None:
                     from pallas.product.persona.cross_group_refresh import refresh_dirty_bot_cross_group_batch
 
                     await refresh_dirty_bot_cross_group_batch()
-                    try:
-                        from pallas.product.persona.catchphrase_bank import merge_all_catchphrase_pending
-                        from pallas.product.persona.expression_bank import merge_all_pending_expressions
-
-                        await asyncio.to_thread(merge_all_pending_expressions)
-                        await asyncio.to_thread(merge_all_catchphrase_pending)
-                    except Exception as exc:
-                        logger.warning("expression/catchphrase bank compaction failed: {}", exc)
                 except Exception as exc:
                     logger.warning("group_style_refresh batch loop failed: {}", exc)
                 await asyncio.sleep(_DEFAULT_REFRESH_INTERVAL_SEC)

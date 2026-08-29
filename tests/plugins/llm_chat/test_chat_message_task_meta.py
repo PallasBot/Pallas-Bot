@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from pallas.product.llm.behavior import BehaviorAction, BehaviorPattern, BehaviorScene
+from pallas.product.llm.models import ChatCompletionMessage
 from pallas.product.llm.reply_variation import build_recent_reply_variation_hint
 from pallas.product.llm.session_store import LlmChatTurn
 
@@ -100,7 +101,6 @@ def test_build_injection_snapshot_uses_only_selected_json_safe_sources() -> None
                 "text_preview": "群友说的话",
             }
         ],
-        expression_entries=[SimpleNamespace(entry_id="expr-1", saying="太难了", occasion="venting")],
         semantic_style=SemanticStyleResolution(
             matched_examples=[("触发", "回复")],
             matched_example_sources=[
@@ -127,7 +127,6 @@ def test_build_injection_snapshot_uses_only_selected_json_safe_sources() -> None
 
     assert snapshot == {
         "ambient_turns": [{"turn_id": "ambient:1", "user_id": 2, "text_hash": "hash", "text_preview": "群友说的话"}],
-        "expression_entries": [{"entry_id": "expr-1", "saying": "太难了", "occasion": "venting"}],
         "semantic_examples": [{"example_id": "semantic-1", "trigger": "触发", "reply": "回复"}],
         "memory_entries": [
             {
@@ -151,7 +150,6 @@ def test_build_injection_snapshot_keeps_only_prompted_semantic_pairs_with_stable
 
     snapshot = build_injection_snapshot(
         ambient_turns=[],
-        expression_entries=[],
         semantic_examples=[("第一句", "第一回"), ("第二句", "第二回")],
         semantic_example_sources=[
             SemanticStyleDirectPair(trigger_text="第一句", reply_text="第一回", source_example_id="native-1"),
@@ -189,7 +187,6 @@ def test_semantic_snapshot_fallback_id_matches_feedback_filter(tmp_path, monkeyp
     pair = SemanticStyleDirectPair(trigger_text="触发", reply_text="回复")
     snapshot = build_injection_snapshot(
         ambient_turns=[],
-        expression_entries=[],
         semantic_examples=[("触发", "回复")],
         semantic_example_sources=[pair],
         hybrid_retrieval_trace={},
@@ -267,6 +264,7 @@ def test_llm_chat_rule_accepts_federated_alias_winner(monkeypatch: pytest.Monkey
 
 def test_llm_chat_rule_accepts_group_vision_message_without_perception(monkeypatch: pytest.MonkeyPatch) -> None:
     from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
+
     from packages.llm_chat import chat_message as mod
     from pallas.product.llm.config import LlmConfig
 
@@ -742,6 +740,12 @@ async def test_handle_llm_chat_replied_recent_candidate_reaches_necessity_gate(
         "evaluate_llm_reply_gate_result",
         lambda *_args, **_kwargs: SimpleNamespace(decision="proceed", reason=""),
     )
+    # 好感度检索读真实关系库，会读到前序用例落库的状态并左右 gate 判定：
+    # 固定为 None，保证本用例对 necessity gate 的断言只取决于事件本身。
+    monkeypatch.setattr(
+        "pallas.product.llm.memory.relationship_store.retrieve_relationship_profile",
+        AsyncMock(return_value=None),
+    )
     gate_kwargs: dict[str, object] = {}
     real_gate = mod.evaluate_reply_necessity_gate
 
@@ -750,6 +754,12 @@ async def test_handle_llm_chat_replied_recent_candidate_reaches_necessity_gate(
         return real_gate(**kwargs)
 
     monkeypatch.setattr(mod, "evaluate_reply_necessity_gate", fake_gate)
+    # should_emit_quote 按群概率决定是否走 QUOTE 回复：固定为 False，
+    # 保证用例稳定落在 PASS → necessity gate → 低活跃度路径上。
+    monkeypatch.setattr(
+        "pallas.product.llm.reply_target_candidates.should_emit_quote",
+        lambda group_id: False,
+    )
     monkeypatch.setattr(mod, "check_llm_chat_gate", AsyncMock(return_value=None))
     monkeypatch.setattr(mod, "list_user_llm_messages", AsyncMock(return_value=[]))
     monkeypatch.setattr(mod, "latest_llm_assistant_reply", AsyncMock(return_value=""))
@@ -934,7 +944,12 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
             llm_speak_perception_enabled=False,
         ),
     )
-    monkeypatch.setattr(mod, "build_llm_chat_messages", AsyncMock(return_value=[]))
+    # 措辞提示并入 prepared_messages：至少返回当前用户轮，模拟真实最小消息集。
+    monkeypatch.setattr(
+        mod,
+        "build_llm_chat_messages",
+        AsyncMock(return_value=[ChatCompletionMessage(role="user", content="你还在吗")]),
+    )
     monkeypatch.setattr(
         mod,
         "build_persona_llm_context",
@@ -1000,6 +1015,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
                         url="https://example.com/a.png",
                     ),
                 ),
+                snapshot_sources=((30004, 123456, "还是笨蛋欸"),),
             )
         ),
         raising=False,
@@ -1026,8 +1042,6 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     )
     monkeypatch.setattr(mod, "GroupMessageEvent", SimpleNamespace)
     monkeypatch.setattr(mod, "resolve_conversation_feature_level", lambda *_args, **_kwargs: "full_conversation_kernel")
-    feedback_hint = Mock(return_value="【维护者样本参考】\n- 可写一句群内短梗。")
-    monkeypatch.setattr(mod, "build_group_feedback_chat_hint", feedback_hint, raising=False)
     monkeypatch.setattr(mod, "can_read_behavioral_learning", lambda *_args, **_kwargs: True)
     monkeypatch.setattr(
         mod,
@@ -1106,7 +1120,6 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     assert payload["reply_candidate_ids"] == [40003, 40004]
     reply_context_lookup.assert_called_once_with(group_id=20002, bot_id=10001, message_id=70001)
     assert payload["reply_total_length_band"] == "complete"
-    feedback_hint.assert_not_called()
     submit_request = submit_mock.await_args.args[0]
     assert submit_request.group_timeline_images == [
         {"speaker": "兔兔", "text": "还是笨蛋欸", "url": "https://example.com/a.png"},
@@ -1139,10 +1152,11 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     assert "引用只决定回复哪条消息" in submit_request.system_prompt
     assert "不要因引用把话一次说完" in submit_request.system_prompt
     assert "「行啊」「好呀」" in submit_request.system_prompt
-    assert "【本轮表达去重】" not in "\n".join(submit_request.style_user_hints)
-    assert "【收尾变化参考】" not in "\n".join(submit_request.style_user_hints)
-    assert "本轮直接回答当前问题，别补一整套客套。" not in "\n".join(submit_request.style_user_hints)
-    assert "【本轮临时措辞】" not in "\n".join(submit_request.style_user_hints)
+    # 措辞提示并入 prepared_messages 参与预算裁剪，不再经 request.style_user_hints。
+    style_hints = "\n".join(str(item.content or "") for item in (submit_request.prepared_messages or []))
+    assert "【本轮表达去重】" in style_hints
+    assert "其实" in style_hints
+    assert "【收尾变化参考】" in style_hints
     assert submit_request.style_user_hints == []
     assert "persona_shaping_active" not in submit_request.llm_rewrite_metadata
     assert "variation_hint" not in submit_request.llm_rewrite_metadata
@@ -1157,6 +1171,10 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     assert submit_request.include_session_history is True
     assert submit_request.session_history_limit is None
     assert submit_request.include_group_ambient_history is False
+    # 时间线在场时跳过群环境摘录，注入快照改由时间线消息产出。
+    assert all("群环境摘录" not in str(item.content or "") for item in (submit_request.prepared_messages or []))
+    timeline_ambient = added["payload"]["injection_snapshot"]["ambient_turns"]
+    assert [item["user_id"] for item in timeline_ambient] == [30004]
     assert submit_request.hybrid_retrieval_trace["sources"] == ["memory"]
 
 

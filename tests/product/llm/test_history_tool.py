@@ -19,7 +19,7 @@ async def test_history_tool_reads_full_group_messages(monkeypatch: pytest.Monkey
     class Repo:
         async def find_recent_in_group(self, group_id: int, *, limit: int):
             assert group_id == 42
-            assert limit == 25
+            assert limit == 49  # 默认 48 条 + 1 预读
             return messages
 
     monkeypatch.setattr("pallas.core.foundation.db.make_message_repository", lambda: Repo())
@@ -55,7 +55,7 @@ async def test_recent_summary_uses_full_group_messages_and_caches(monkeypatch: p
     class Repo:
         async def find_recent_in_group(self, group_id: int, *, limit: int):
             assert group_id == 42
-            assert limit == 25
+            assert limit == 49  # 默认 48 条 + 1 预读
             return messages
 
     complete = AsyncMock(return_value={"content": "大家在讨论周五开黑的时间和分工。"})
@@ -94,6 +94,7 @@ def test_history_tool_hints_match_followup_questions() -> None:
 
     register_history_tools()
 
+    # 细节追问命中 chat.history（回灌原始记录），不再同时挂总结工具。
     for question in (
         "谁规定的群聊",
         "到底是谁说的",
@@ -103,7 +104,12 @@ def test_history_tool_hints_match_followup_questions() -> None:
         "他的名字是？",
     ):
         assert "chat.history" in deferred_tools_matched_by_hints(question)
+        assert "chat.recent_summary" not in deferred_tools_matched_by_hints(question)
+
+    # 总结类问题只命中 chat.recent_summary（仅回灌 ≤240 字总结）。
+    for question in ("最近聊了什么", "总结一下群聊", "群里最近在聊什么"):
         assert "chat.recent_summary" in deferred_tools_matched_by_hints(question)
+        assert "chat.history" not in deferred_tools_matched_by_hints(question)
 
     for casual in ("随便聊聊", "今天天气不错", "在吗"):
         assert deferred_tools_matched_by_hints(casual) == frozenset()

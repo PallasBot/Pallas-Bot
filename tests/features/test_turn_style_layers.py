@@ -7,18 +7,12 @@ from types import SimpleNamespace
 from pallas.product.llm.models import ChatCompletionMessage
 from pallas.product.llm.turn_style_layers import (
     build_same_utterance_redup_hint,
+    build_scene_tone_hint,
     build_turn_behavior_block,
     build_turn_wording_user_hints,
     find_previous_reply_for_utterance,
     merge_style_hints_before_last_user,
     normalize_utterance_key,
-)
-from pallas.product.persona.catchphrase_bank import (
-    compile_catchphrase_prompt_lines,
-    list_catchphrases,
-    promote_catchphrase,
-    propose_catchphrase_from_bot_success,
-    select_catchphrases_for_turn,
 )
 
 
@@ -50,6 +44,23 @@ def test_same_utterance_redup_hint() -> None:
     assert "换说法" in hint
 
 
+def test_scene_tone_hint_warms_greeting_and_praise() -> None:
+    greet = build_scene_tone_hint("早上好", stance="neutral")
+    assert greet is not None
+    assert "温柔" in greet or "平和" in greet or "客气" in greet
+    praise = build_scene_tone_hint("你真棒", stance="warm")
+    assert praise is not None
+    assert "接住" in praise or "真诚" in praise or "开心" in praise
+
+
+def test_scene_tone_hint_none_on_provocation() -> None:
+    assert build_scene_tone_hint("打死你", stance="complain") is None
+
+
+def test_scene_tone_hint_none_on_neutral_chitchat() -> None:
+    assert build_scene_tone_hint("今天吃啥", stance="neutral") is None
+
+
 def test_behavior_and_wording_split() -> None:
     behavior = build_turn_behavior_block("【本轮行为参考】\n- 短回", "")
     assert "只管怎么接" in behavior
@@ -67,37 +78,3 @@ def test_merge_style_hints_before_last_user() -> None:
     assert [m.role for m in merged] == ["user", "assistant", "user", "user"]
     assert merged[-2].content.startswith("【本轮临时措辞】")
     assert merged[-1].content == "翻译成中文"
-
-
-def test_catchphrase_selects_by_scene_and_text(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
-    propose_catchphrase_from_bot_success(42, 1, "那很牛了", "接梗玩笑")
-    propose_catchphrase_from_bot_success(42, 2, "那很牛了", "接梗玩笑")
-    propose_catchphrase_from_bot_success(42, 3, "那很牛了", "接梗玩笑")
-
-    row = next(item for item in list_catchphrases(42) if item.saying == "那很牛了")
-    promote_catchphrase(row.entry_id, force=True)
-    picked = select_catchphrases_for_turn(42, user_text="这个梗典炸了", scene="banter", limit=2)
-    assert picked
-    assert picked[0].saying == "那很牛了"
-    lines = compile_catchphrase_prompt_lines(42, user_text="这个梗典炸了", scene="banter", limit=2)
-    assert any("那很牛了" in line for line in lines)
-    assert compile_catchphrase_prompt_lines(42, limit=0) == []
-
-
-def test_catchphrase_canonical_venting_occasion_matches_legacy_variant(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
-    row = propose_catchphrase_from_bot_success(42, 1, "太难了", "吐槽加班")
-    assert row is not None
-    assert row.occasion == "venting"
-    promote_catchphrase(row.entry_id, force=True)
-    picked = select_catchphrases_for_turn(42, user_text="加班太难了", scene="venting", limit=1)
-    assert [item.entry_id for item in picked] == [row.entry_id]
-
-
-def test_catchphrase_rejects_canonical_scene_mismatch_despite_keyword(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
-    row = propose_catchphrase_from_bot_success(42, 1, "太难了", "吐槽加班")
-    assert row is not None
-    promote_catchphrase(row.entry_id, force=True)
-    assert select_catchphrases_for_turn(42, user_text="加班太难了", scene="banter", limit=1) == []

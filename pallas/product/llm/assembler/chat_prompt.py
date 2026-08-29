@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from pallas.product.llm.assembler.context import ChatContextBundle
+    from pallas.product.llm.repeater_semantic_style import BehaviorStrategy
     from pallas.product.llm.reply_shape import ReplyShapePolicy
     from pallas.product.llm.turn_policy import TurnPolicy
 
@@ -20,7 +21,7 @@ if TYPE_CHECKING:
 class ResolvedGroupExpression:
     matched_examples: list[tuple[str, str]] = field(default_factory=list)
     baseline_note: str = ""
-    behavior_strategies: list[tuple[str, str, str]] = field(default_factory=list)
+    behavior_strategies: list[BehaviorStrategy] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -33,23 +34,27 @@ class ToolPromptContext:
 
 
 class ChatPromptAssembler:
-    """Assemble chat-only prompt sections in their policy order."""
+    """Assemble chat-only prompt sections in their policy order.
+
+    段序按变化频率从低到高排布：静态人设在前、逐轮变化的契约/时间在后，
+    让支持前缀缓存的 Provider 能命中更长的稳定前缀。
+    """
 
     section_ids = (
         "injection_guard",
         "persona",
         "identity",
-        "reply_shape",
-        "turn_policy",
-        "current_time",
-        "group_timeline",
+        "group_expression",
+        "behavior_reference",
         "memory",
         "knowledge",
         "relationship",
         "person_facts",
         "mid_term",
-        "group_expression",
-        "behavior_reference",
+        "group_timeline",
+        "reply_shape",
+        "turn_policy",
+        "current_time",
         "tool_context",
     )
 
@@ -97,12 +102,12 @@ class ChatPromptAssembler:
             PROMPT_INJECTION_GUARD,
             core_persona,
             self_identity,
+            self._group_expression_block(group_expression),
+            self._group_behavior_reference_block(group_expression),
+            *context.blocks(),
             self.reply_shape_block(reply_shape),
             self._turn_policy_block(turn_policy),
             self.current_time_block(current_time),
-            *context.blocks(),
-            self._group_expression_block(group_expression),
-            self._group_behavior_reference_block(group_expression),
             self._tool_context_block(tool_context),
         ]
         return apply_prompt_section_overrides(self.section_ids, sections, section_overrides)
@@ -160,22 +165,41 @@ class ChatPromptAssembler:
     def _group_behavior_reference_block(expression: ResolvedGroupExpression | None) -> str:
         if expression is None:
             return ""
-        safe_strategies: list[tuple[str, str, str]] = []
-        for scene, action, outcome in expression.behavior_strategies[:3]:
-            safe_scene = sanitize_prompt_block(scene, max_len=80)
-            safe_action = sanitize_prompt_block(action, max_len=120)
-            if safe_scene and safe_action:
-                safe_strategies.append((safe_scene, safe_action, sanitize_prompt_block(outcome, max_len=80)))
-        if not safe_strategies:
-            return ""
-        lines = [
-            "【真人接话参考】",
-            "- 以下来自本群真人互动的节奏与接话结构，只借鉴什么时候说短/长、怎么接，不要复刻原话或语气。",
-            "- 语气态度保持你自己的底色，不要学对方的口气。",
-        ]
-        for scene, action, outcome in safe_strategies:
-            tail = f"，结果{outcome}" if outcome else ""
-            lines.append(f"- 类似「{scene}」时，真人会{action}{tail}。")
+        grouped: dict[str, list[BehaviorStrategy]] = {
+            "observed": [],
+            "self_reflection": [],
+        }
+        for strategy in expression.behavior_strategies[:3]:
+            if not str(strategy.scene or "").strip() or not str(strategy.action or "").strip():
+                continue
+            grouped.setdefault(str(getattr(strategy, "learning_type", "observed") or "observed"), []).append(strategy)
+
+        observed = grouped.get("observed", [])
+        reflection = grouped.get("self_reflection", [])
+        lines: list[str] = []
+        if observed:
+            lines.extend([
+                "【真人接话参考】",
+                "- 以下来自本群真人互动的节奏与接话结构，只借鉴什么时候说短/长、怎么接，"
+                "不要复刻原话或语气；语气态度保持你自己的底色。",
+            ])
+            for strategy in observed[:3]:
+                scene = sanitize_prompt_block(strategy.scene, max_len=80)
+                action = sanitize_prompt_block(strategy.action, max_len=120)
+                if scene and action:
+                    tail = f"，结果{sanitize_prompt_block(strategy.outcome, max_len=80)}" if strategy.outcome else ""
+                    lines.append(f"- 类似「{scene}」时，真人会{action}{tail}。")
+        if reflection:
+            lines.extend([
+                "【接话复盘】",
+                "- 以下是你之前自己接话的例子，只参考每次接得怎么样，别照搬原话或当时的用词。",
+            ])
+            for strategy in reflection[:3]:
+                scene = sanitize_prompt_block(strategy.scene, max_len=80)
+                action = sanitize_prompt_block(strategy.action, max_len=120)
+                if scene and action:
+                    tail = f"，结果{sanitize_prompt_block(strategy.outcome, max_len=80)}" if strategy.outcome else ""
+                    lines.append(f"- 类似「{scene}」时，我之前是这样接的：{action}{tail}。")
         return "\n".join(lines)
 
     @staticmethod
@@ -196,7 +220,7 @@ class ChatPromptAssembler:
         if policy.total_length_band == "short":
             lines.extend([
                 "- 先发即时反应；有第二个独立意思才另起一行。",
-                "- 接梗/回顶可以分两到四行走走停停，不硬塞进一句里。",
+                "- 需要多段时按独立意思自然分行，不为凑段数硬拆一句话。",
             ])
         elif policy.total_length_band == "complete":
             lines.append("- 回答要清楚，但语气别收干：保持口语，可带一个轻快词，别写成书面语或客服腔。")

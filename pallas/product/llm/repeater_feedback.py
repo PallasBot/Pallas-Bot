@@ -642,54 +642,6 @@ async def apply_negative_feedback_source_decisions(
         release_negative_outcome_effect_claim,
     )
 
-    expression_ids = group_scoped_expression_ids(entry, result)
-    if expression_ids:
-        claimed = await asyncio.to_thread(
-            claim_negative_outcome_effect,
-            outcome_id=result.outcome_id,
-            bot_id=result.bot_id,
-            group_id=result.group_id,
-            kind="expression",
-        )
-        if claimed:
-            begun = await asyncio.to_thread(
-                begin_negative_outcome_effect,
-                outcome_id=result.outcome_id,
-                bot_id=result.bot_id,
-                group_id=result.group_id,
-                kind="expression",
-                lease_id=claimed,
-            )
-            if begun:
-                try:
-                    await asyncio.to_thread(apply_expression_negative_feedback, entry, result, expression_ids)
-                except Exception:
-                    await asyncio.to_thread(
-                        release_negative_outcome_effect_claim,
-                        outcome_id=result.outcome_id,
-                        bot_id=result.bot_id,
-                        group_id=result.group_id,
-                        kind="expression",
-                        lease_id=claimed,
-                    )
-                    log_rate_limited(
-                        logger,
-                        "warning",
-                        "llm.repeater_feedback.expression_apply_failed",
-                        "LLM negative feedback expression update failed for bot [{}] in group [{}]",
-                        entry.bot_id,
-                        entry.group_id,
-                    )
-                else:
-                    await asyncio.to_thread(
-                        mark_negative_outcome_effect_completed,
-                        outcome_id=result.outcome_id,
-                        bot_id=result.bot_id,
-                        group_id=result.group_id,
-                        kind="expression",
-                        lease_id=claimed,
-                    )
-
     aliases = [
         decision.source_id
         for decision in result.decisions
@@ -743,54 +695,6 @@ async def apply_negative_feedback_source_decisions(
                         kind="self_alias",
                         lease_id=claimed,
                     )
-
-
-def group_scoped_expression_ids(
-    entry: LlmRepeaterFeedbackEntry,
-    result: NegativeOutcomeApplyResult,
-) -> list[str]:
-    from pallas.product.persona.expression_bank import _group_id_from_entry_id
-
-    expression_ids: list[str] = []
-    for decision in result.decisions:
-        if decision.kind != "expression" or decision.score >= 0 or not decision.source_id:
-            continue
-        source_group_id = _group_id_from_entry_id(decision.source_id)
-        if source_group_id == int(entry.group_id):
-            expression_ids.append(decision.source_id)
-            continue
-        log_rate_limited(
-            logger,
-            "warning",
-            "llm.repeater_feedback.expression_scope_mismatch",
-            "Ignored LLM negative feedback expression [{}] outside group [{}]",
-            decision.source_id,
-            entry.group_id,
-        )
-    return expression_ids
-
-
-def apply_expression_negative_feedback(
-    entry: LlmRepeaterFeedbackEntry,
-    result: NegativeOutcomeApplyResult,
-    expression_ids: list[str],
-) -> None:
-    from pallas.product.persona.expression_bank import (
-        expression_scene_feedback_score,
-        record_expression_outcome,
-    )
-    from pallas.product.persona.expression_promote import resolve_expression
-
-    scene = entry.behavior_scene or ""
-    record_expression_outcome(
-        expression_ids,
-        scene=scene,
-        score_delta=-3,
-        outcome_id=result.outcome_id,
-    )
-    for entry_id in expression_ids:
-        if expression_scene_feedback_score(entry_id, scene=scene) <= -3:
-            resolve_expression(entry_id, action="reject", reason="llm_negative_feedback")
 
 
 def record_quoted_semantic_style_feedback(

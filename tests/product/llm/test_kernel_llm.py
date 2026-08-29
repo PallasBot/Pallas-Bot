@@ -241,16 +241,18 @@ def test_anthropic_payload_converts_openai_vision_blocks() -> None:
     from pallas.product.llm.provider_client import messages_to_anthropic_payload
 
     payload = messages_to_anthropic_payload(
-        [{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": "看看"},
-                {
-                    "type": "image_url",
-                    "image_url": {"url": "data:image/png;base64,aGk="},
-                },
-            ],
-        }],
+        [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "看看"},
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": "data:image/png;base64,aGk="},
+                    },
+                ],
+            }
+        ],
         model="claude-sonnet-4-5",
         options={},
         tools=None,
@@ -273,13 +275,15 @@ def test_anthropic_payload_accepts_remote_and_case_insensitive_image_urls() -> N
     from pallas.product.llm.provider_client import messages_to_anthropic_payload
 
     payload = messages_to_anthropic_payload(
-        [{
-            "role": "user",
-            "content": [
-                {"type": "image_url", "image_url": {"url": "https://example.com/photo.png"}},
-                {"type": "image_url", "image_url": {"url": "data:IMAGE/PNG;BASE64,aGk="}},
-            ],
-        }],
+        [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image_url", "image_url": {"url": "https://example.com/photo.png"}},
+                    {"type": "image_url", "image_url": {"url": "data:IMAGE/PNG;BASE64,aGk="}},
+                ],
+            }
+        ],
         model="claude-sonnet-4-5",
         options={},
         tools=None,
@@ -322,9 +326,7 @@ def test_kernel_submit_gate_requires_provider(tmp_path, monkeypatch) -> None:
     assert result.status == "provider_not_configured"
     assert user_message_for_submit_status("provider_not_configured")
 
-    ok = assess_llm_kernel_submit_gate(
-        LlmConfig(llm_base_url="http://127.0.0.1:11434/v1", llm_model="qwen2.5:7b")
-    )
+    ok = assess_llm_kernel_submit_gate(LlmConfig(llm_base_url="http://127.0.0.1:11434/v1", llm_model="qwen2.5:7b"))
     assert ok.allowed is True
 
 
@@ -340,7 +342,9 @@ async def test_complete_chat_message_parses_openai_response(monkeypatch: pytest.
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        async def post(self, url: str, json: dict[str, Any] | None = None, headers: dict | None = None, timeout=None) -> FakeResponse:
+        async def post(
+            self, url: str, json: dict[str, Any] | None = None, headers: dict | None = None, timeout=None
+        ) -> FakeResponse:
             assert url.endswith("/chat/completions")
             assert json is not None
             assert json["model"] == "demo"
@@ -384,6 +388,7 @@ async def test_complete_chat_message_downgrades_incompatible_required_tool_choic
                 if status_code == 400
                 else ""
             )
+            self.content = self.text.encode()
 
         def json(self) -> dict[str, Any]:
             return {"choices": [{"message": {"role": "assistant", "content": "你好"}}]}
@@ -392,7 +397,9 @@ async def test_complete_chat_message_downgrades_incompatible_required_tool_choic
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             pass
 
-        async def post(self, url: str, json: dict[str, Any] | None = None, headers: dict | None = None, timeout=None) -> FakeResponse:
+        async def post(
+            self, url: str, json: dict[str, Any] | None = None, headers: dict | None = None, timeout=None
+        ) -> FakeResponse:
             assert json is not None
             payloads.append(json)
             return FakeResponse(400 if len(payloads) == 1 else 200)
@@ -471,6 +478,7 @@ async def test_complete_chat_message_falls_back_to_next_provider(
         def __init__(self, *, ok: bool) -> None:
             self.status_code = 200 if ok else 500
             self.text = "ok" if ok else "boom"
+            self.content = self.text.encode()
 
         def json(self) -> dict[str, Any]:
             return {"choices": [{"message": {"role": "assistant", "content": "fallback-ok"}}]}
@@ -505,10 +513,10 @@ async def test_complete_chat_message_falls_back_to_next_provider(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("primary_capabilities", "backup_capabilities", "backup_has_image"),
+    ("primary_capabilities", "backup_capabilities"),
     [
-        (["text", "image"], ["text"], False),
-        (["text"], ["text", "image"], True),
+        (["text", "image"], ["text"]),
+        (["text"], ["text", "image"]),
     ],
 )
 async def test_provider_fallback_reprepares_messages_for_each_capability(
@@ -516,7 +524,6 @@ async def test_provider_fallback_reprepares_messages_for_each_capability(
     tmp_path,
     primary_capabilities: list[str],
     backup_capabilities: list[str],
-    backup_has_image: bool,
 ) -> None:
     from pallas.product.llm.providers_store import (
         clear_providers_store_cache,
@@ -594,17 +601,11 @@ async def test_provider_fallback_reprepares_messages_for_each_capability(
     assert content == "fallback-ok"
     assert len(seen_payloads) == 1
     backup_messages = seen_payloads[0]["messages"]
-    if backup_has_image:
-        assert [item["role"] for item in backup_messages] == ["user", "user"]
-        assert any(
-            part.get("type") == "image_url"
-            for part in backup_messages[0]["content"]
-            if isinstance(part, dict)
-        )
-        assert backup_messages[-1]["content"] == "现在呢"
-    else:
-        assert [item["role"] for item in backup_messages] == ["user"]
-        assert backup_messages[0]["content"] == "现在呢"
+    # 仅时间线历史图（当前消息无图）不随 provider 能力注入，即使 backup
+    # 有图能力也保持纯文本（契约见 test_vision_messages 的
+    # native_vision_plain_text_ignores_group_timeline_images 用例）。
+    assert [item["role"] for item in backup_messages] == ["user"]
+    assert backup_messages[0]["content"] == "现在呢"
 
 
 @pytest.mark.asyncio

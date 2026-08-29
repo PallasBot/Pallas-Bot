@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import threading
 import time
@@ -1005,30 +1004,11 @@ async def test_negative_feedback_applies_once_with_scoped_audit_and_source_effec
         behavior_scene="banter",
         bot_message_id=40001,
         injection_snapshot={
-            "expression_entries": [
-                {"entry_id": "expr-20001-included", "saying": "别叫我坏名了"},
-                {"entry_id": "expr-99999-foreign", "saying": "不在回复里"},
-            ],
             "self_aliases": [{"alias": "坏名"}],
         },
     )
     append_feedback_entry(entry)
-    expression_calls: list[tuple[list[str], str, int, str]] = []
-    rejected: list[str] = []
     alias_calls: list[tuple[int, list[str]]] = []
-
-    monkeypatch.setattr(
-        "pallas.product.persona.expression_bank.record_expression_outcome",
-        lambda ids, *, scene, score_delta, outcome_id: expression_calls.append((ids, scene, score_delta, outcome_id)),
-    )
-    monkeypatch.setattr(
-        "pallas.product.persona.expression_bank.expression_scene_feedback_score",
-        lambda entry_id, *, scene: -3 if entry_id == "expr-20001-included" else 0,
-    )
-    monkeypatch.setattr(
-        "pallas.product.persona.expression_promote.resolve_expression",
-        lambda entry_id, *, action, reason="": rejected.append(entry_id),
-    )
 
     async def remove_aliases(bot_id: int, aliases: list[str]) -> None:
         alias_calls.append((bot_id, aliases))
@@ -1055,146 +1035,12 @@ async def test_negative_feedback_applies_once_with_scoped_audit_and_source_effec
     assert duplicate is not None
     assert duplicate.applied is False
     assert first.outcome_id == duplicate.outcome_id == "entry-negative:not-allowed"
-    assert expression_calls == [(["expr-20001-included"], "banter", -3, "entry-negative:not-allowed")]
-    assert rejected == ["expr-20001-included"]
     assert alias_calls == [(10001, ["坏名"])]
     stored = json.loads(outcomes_path().read_text(encoding="utf-8"))
     assert stored["bot_id"] == 10001
     assert stored["group_id"] == 20001
     assert stored["actor_id"] == "50001"
     assert stored["reason"] == "not_allowed_reply"
-
-
-@pytest.mark.asyncio
-async def test_negative_feedback_retries_pending_expression_effect_without_double_score(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
-    from pallas.product.llm.injection_feedback import outcomes_path
-    from pallas.product.llm.repeater_feedback import apply_llm_negative_feedback_for_bot_message
-    from pallas.product.persona.expression_bank import (
-        ExpressionEntry,
-        append_or_merge_expression,
-        expression_scene_feedback_score,
-        list_group_expressions,
-    )
-
-    expression = append_or_merge_expression(
-        ExpressionEntry(
-            entry_id="new",
-            group_id=20001,
-            occasion="banter",
-            saying="这句不行",
-            source="llm_success",
-            channel="group",
-            scene_tier="strong",
-            status="shadow",
-            affect_hint="",
-            created_at=1,
-            updated_at=1,
-        )
-    )
-    append_feedback_entry(
-        build_feedback_entry(
-            entry_id="retry-expression",
-            request_id="retry-expression",
-            bot_id=10001,
-            group_id=20001,
-            user_id=30001,
-            user_text="你好",
-            reply_text="这句不行",
-            behavior_scene="banter",
-            bot_message_id=40001,
-            injection_snapshot={"expression_entries": [{"entry_id": expression.entry_id, "saying": "这句不行"}]},
-        )
-    )
-    from pallas.product.persona import expression_promote
-
-    original_resolve = expression_promote.resolve_expression
-    attempts = 0
-
-    def fail_once(entry_id: str, *, action: str, reason: str = "") -> None:
-        nonlocal attempts
-        attempts += 1
-        if attempts == 1:
-            raise OSError("transient expression store failure")
-        original_resolve(entry_id, action=action, reason=reason)
-
-    monkeypatch.setattr(expression_promote, "resolve_expression", fail_once)
-
-    first = await apply_llm_negative_feedback_for_bot_message(
-        bot_id="10001", group_id="20001", bot_message_id="40001", actor_id="50001", reason="not_allowed_reply"
-    )
-    second = await apply_llm_negative_feedback_for_bot_message(
-        bot_id="10001", group_id="20001", bot_message_id="40001", actor_id="50002", reason="admin_recall"
-    )
-
-    assert first is not None
-    assert first.applied is True
-    assert second is not None
-    assert second.applied is False
-    assert attempts == 2
-    assert expression_scene_feedback_score(expression.entry_id, scene="banter") == -3
-    assert {item.entry_id: item for item in list_group_expressions(20001)}[expression.entry_id].status == "rejected"
-    stored = json.loads(outcomes_path().read_text(encoding="utf-8"))
-    assert stored["effects"]["expression"]["completed"] is True
-
-
-@pytest.mark.asyncio
-async def test_concurrent_negative_feedback_claims_expression_effect_once(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
-    from pallas.product.llm import repeater_feedback
-
-    append_feedback_entry(
-        build_feedback_entry(
-            entry_id="concurrent-expression",
-            request_id="concurrent-expression",
-            bot_id=10001,
-            group_id=20001,
-            user_id=30001,
-            user_text="你好",
-            reply_text="这句不行",
-            behavior_scene="banter",
-            bot_message_id=40001,
-            injection_snapshot={"expression_entries": [{"entry_id": "expr-20001-concurrent", "saying": "这句不行"}]},
-        )
-    )
-    first_started = threading.Event()
-    release_first = threading.Event()
-    application_calls = 0
-
-    def block_first_application(*_args) -> None:
-        nonlocal application_calls
-        application_calls += 1
-        if application_calls == 1:
-            first_started.set()
-            release_first.wait()
-
-    monkeypatch.setattr(repeater_feedback, "apply_expression_negative_feedback", block_first_application)
-
-    first = asyncio.create_task(
-        repeater_feedback.apply_llm_negative_feedback_for_bot_message(
-            bot_id="10001",
-            group_id="20001",
-            bot_message_id="40001",
-            actor_id="50001",
-            reason="not_allowed_reply",
-        )
-    )
-    await asyncio.to_thread(first_started.wait)
-    second = await repeater_feedback.apply_llm_negative_feedback_for_bot_message(
-        bot_id="10001",
-        group_id="20001",
-        bot_message_id="40001",
-        actor_id="50002",
-        reason="admin_recall",
-    )
-    release_first.set()
-    first_result = await first
-
-    assert application_calls == 1
-    assert first_result is not None
-    assert first_result.applied is True
-    assert second is not None
-    assert second.applied is False
 
 
 @pytest.mark.asyncio
@@ -1218,9 +1064,10 @@ async def test_negative_feedback_runs_blocking_ledger_steps_in_threads(monkeypat
         group_id=20001,
         decisions=[
             injection_feedback.SourceDecision(
-                kind="expression",
-                source_id="expr-20001-threaded",
+                kind="self_alias",
+                source_id="坏名",
                 score=-3,
+                remove_alias=True,
             )
         ],
     )
@@ -1236,7 +1083,7 @@ async def test_negative_feedback_runs_blocking_ledger_steps_in_threads(monkeypat
     def apply_outcome(**_kwargs):
         return result
 
-    def apply_expression(*_args) -> None:
+    async def apply_alias(*_args) -> None:
         return None
 
     def claim_effect(**_kwargs) -> bool:
@@ -1253,7 +1100,7 @@ async def test_negative_feedback_runs_blocking_ledger_steps_in_threads(monkeypat
     monkeypatch.setattr(injection_feedback, "claim_negative_outcome_effect", claim_effect)
     monkeypatch.setattr(injection_feedback, "begin_negative_outcome_effect", begin_effect)
     monkeypatch.setattr(injection_feedback, "mark_negative_outcome_effect_completed", mark_effect_completed)
-    monkeypatch.setattr(repeater_feedback, "apply_expression_negative_feedback", apply_expression)
+    monkeypatch.setattr("pallas.product.persona.self_identity.remove_learned_self_aliases", apply_alias)
     monkeypatch.setattr(repeater_feedback.asyncio, "to_thread", run_in_thread)
 
     applied = await repeater_feedback.apply_llm_negative_feedback_for_bot_message(
@@ -1270,13 +1117,12 @@ async def test_negative_feedback_runs_blocking_ledger_steps_in_threads(monkeypat
         "apply_outcome",
         "claim_effect",
         "begin_effect",
-        "apply_expression",
         "mark_effect_completed",
     ]
 
 
 @pytest.mark.asyncio
-async def test_undo_after_effect_claim_prevents_expression_application(monkeypatch, tmp_path) -> None:
+async def test_undo_after_effect_claim_prevents_alias_application(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     from pallas.product.llm import injection_feedback, repeater_feedback
 
@@ -1294,8 +1140,8 @@ async def test_undo_after_effect_claim_prevents_expression_application(monkeypat
         outcome_id="entry-undo-race:not-allowed",
         bot_id=10001,
         group_id=20001,
-        reply_text="这句不行",
-        injection_snapshot={"expression_entries": [{"entry_id": "expr-20001-race", "saying": "这句不行"}]},
+        reply_text="别叫坏名了",
+        injection_snapshot={"self_aliases": [{"alias": "坏名"}]},
         now=1,
     )
     applied_calls = 0
@@ -1310,7 +1156,7 @@ async def test_undo_after_effect_claim_prevents_expression_application(monkeypat
         )
         return lease_id
 
-    def apply_expression(*_args) -> None:
+    async def apply_alias(*_args) -> None:
         nonlocal applied_calls
         applied_calls += 1
 
@@ -1320,7 +1166,7 @@ async def test_undo_after_effect_claim_prevents_expression_application(monkeypat
         return True
 
     monkeypatch.setattr(injection_feedback, "claim_negative_outcome_effect", claim_then_undo)
-    monkeypatch.setattr(repeater_feedback, "apply_expression_negative_feedback", apply_expression)
+    monkeypatch.setattr("pallas.product.persona.self_identity.remove_learned_self_aliases", apply_alias)
     monkeypatch.setattr(injection_feedback, "mark_negative_outcome_effect_completed", mark_completed)
 
     await repeater_feedback.apply_negative_feedback_source_decisions(entry, result)
@@ -1329,69 +1175,10 @@ async def test_undo_after_effect_claim_prevents_expression_application(monkeypat
     assert completed_calls == 0
     assert (
         original_claim(
-            outcome_id=result.outcome_id, bot_id=result.bot_id, group_id=result.group_id, kind="expression", now=3
+            outcome_id=result.outcome_id, bot_id=result.bot_id, group_id=result.group_id, kind="self_alias", now=3
         )
         is None
     )
-
-
-@pytest.mark.asyncio
-async def test_negative_feedback_rejects_only_expression_in_snapshot(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
-    from pallas.product.llm.repeater_feedback import apply_llm_negative_feedback_for_bot_message
-    from pallas.product.persona.expression_bank import (
-        ExpressionEntry,
-        append_or_merge_expression,
-        expression_scene_feedback_score,
-        list_group_expressions,
-    )
-
-    def make_expression(saying: str) -> ExpressionEntry:
-        return ExpressionEntry(
-            entry_id="new",
-            group_id=20001,
-            occasion="banter",
-            saying=saying,
-            source="llm_success",
-            channel="group",
-            scene_tier="strong",
-            status="shadow",
-            affect_hint="",
-            created_at=1,
-            updated_at=1,
-        )
-
-    included = append_or_merge_expression(make_expression("这句不行"))
-    unrelated = append_or_merge_expression(make_expression("这句没进快照"))
-    append_feedback_entry(
-        build_feedback_entry(
-            entry_id="entry-expression",
-            request_id="request-expression",
-            bot_id=10001,
-            group_id=20001,
-            user_id=30001,
-            user_text="你好",
-            reply_text="这句不行",
-            behavior_scene="banter",
-            bot_message_id=40001,
-            injection_snapshot={"expression_entries": [{"entry_id": included.entry_id, "saying": "这句不行"}]},
-        )
-    )
-
-    result = await apply_llm_negative_feedback_for_bot_message(
-        bot_id="10001",
-        group_id="20001",
-        bot_message_id="40001",
-        actor_id="50001",
-        reason="not_allowed_reply",
-    )
-
-    assert result is not None
-    assert result.applied is True
-    assert expression_scene_feedback_score(included.entry_id, scene="banter") == -3
-    entries = {item.entry_id: item for item in list_group_expressions(20001)}
-    assert entries[included.entry_id].status == "rejected"
-    assert entries[unrelated.entry_id].status == "shadow"
 
 
 def test_feedback_retention_noop_when_nothing_expired(tmp_path, monkeypatch) -> None:

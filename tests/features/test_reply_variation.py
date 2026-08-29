@@ -9,6 +9,7 @@ from pallas.product.llm.reply_variation import (
     classify_repeated_opener,
     extract_recent_motifs,
     repeated_assistant_openers,
+    repeated_attitude_skeletons,
     should_wait_for_more,
 )
 from pallas.product.persona.self_identity import compile_self_identity_prompt
@@ -113,6 +114,37 @@ def test_extract_recent_motifs_catches_sticky_horn_without_blacklist() -> None:
     ])
     assert "复读对方词" in hint
     assert "牛角" in hint
+
+
+def test_repeated_attitude_skeletons_flags_rejection_templates() -> None:
+    skeletons = repeated_attitude_skeletons([
+        "想得美，自己挣去。",
+        "少来这套，哭也没用。",
+        "想得美。",
+        "少来这套。",
+        "自己挨去。",
+    ])
+    assert "想得美" in skeletons
+    assert "少来" in skeletons
+    assert "自己…去" in skeletons
+
+
+def test_repeated_attitude_skeletons_ignores_single_occurrence() -> None:
+    assert repeated_attitude_skeletons([
+        "想得美。",
+        "在呢，咋了。",
+        "好啊，一起。",
+    ]) == []
+
+
+def test_build_recent_reply_variation_hint_flags_repeated_attitude_skeleton() -> None:
+    turns = [
+        SimpleNamespace(role="assistant", content="想得美，自己挣去。"),
+        SimpleNamespace(role="assistant", content="少来这套，没门。"),
+        SimpleNamespace(role="assistant", content="想得美，还惦记呢。"),
+    ]
+    hint = build_recent_reply_variation_hint(turns)
+    assert "换个温和的说法" in hint
 
 
 def test_compile_self_identity_prompt_mentions_niu_niu() -> None:

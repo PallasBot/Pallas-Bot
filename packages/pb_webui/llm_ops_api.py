@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import TYPE_CHECKING, Annotated, Any, Literal
 
@@ -104,6 +105,37 @@ class _GroupStyleManageBody(BaseModel):
 class _GroupStyleGovernanceData(BaseModel):
     collection_enabled: bool
     injection_enabled: bool
+
+
+class _SemanticStyleLabelData(BaseModel):
+    interaction_actions: list[str] = Field(default_factory=list)
+    semantic_relations: list[str] = Field(default_factory=list)
+    intensity: str = "neutral"
+    forms: list[str] = Field(default_factory=list)
+
+
+class _SemanticStyleBehaviorStrategyData(BaseModel):
+    scene: str = ""
+    action: str = ""
+    outcome: str = ""
+    learning_type: Literal["observed", "self_reflection"] = "observed"
+    count: int = 1
+
+
+class _SemanticStyleExampleData(BaseModel):
+    example_id: str
+    created_at: int
+    pair_relation: Literal["quoted", "adjacent"]
+    trigger_text: str
+    reply_text: str
+    learning_type: Literal["observed", "self_reflection"] | None = None
+    label: _SemanticStyleLabelData
+    behavior_strategy: _SemanticStyleBehaviorStrategyData | None = None
+
+
+class _SemanticStyleExamplesData(BaseModel):
+    items: list[_SemanticStyleExampleData] = Field(default_factory=list)
+    total: int = 0
 
 
 class _BasePromptPreviewVersion(BaseModel):
@@ -220,6 +252,42 @@ def _base_prompt_preview_summary(status: dict[str, Any]) -> dict[str, Any]:
         "text_preview": preview,
         "versions": versions,
     }
+
+
+def semantic_style_examples_response_data(examples: list[Any]) -> dict[str, Any]:
+    items: list[_SemanticStyleExampleData] = []
+    for example in examples:
+        strategy = getattr(example, "behavior_strategy", None)
+        strategy_data = (
+            _SemanticStyleBehaviorStrategyData.model_validate(strategy.model_dump(mode="json"))
+            if strategy is not None
+            else None
+        )
+        learning_type = strategy_data.learning_type if strategy_data is not None else None
+        if bool(getattr(example, "bot_style_positive", False)):
+            learning_type = "self_reflection"
+            if strategy_data is not None:
+                strategy_data = strategy_data.model_copy(update={"learning_type": learning_type})
+        label = getattr(example, "label", None)
+        label_data = _SemanticStyleLabelData(
+            interaction_actions=list(getattr(label, "interaction_actions", []) or []),
+            semantic_relations=list(getattr(label, "semantic_relations", []) or []),
+            intensity=str(getattr(label, "intensity", "neutral") or "neutral"),
+            forms=list(getattr(label, "forms", []) or []),
+        )
+        items.append(
+            _SemanticStyleExampleData(
+                example_id=str(example.example_id),
+                created_at=int(example.created_at),
+                pair_relation=example.pair_relation,
+                trigger_text=str(example.trigger_text),
+                reply_text=str(example.reply_text),
+                learning_type=learning_type,
+                label=label_data,
+                behavior_strategy=strategy_data,
+            )
+        )
+    return _SemanticStyleExamplesData(items=items, total=len(items)).model_dump(mode="json")
 
 
 def register_llm_ops_router(
@@ -716,6 +784,31 @@ def register_llm_ops_router(
             for section_id, value in saved.items()
         }
         return JSONResponse({"ok": True, "data": response_sections})
+
+    @router.get(
+        f"{x}/common-config/llm/persona/semantic-style-examples",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_SemanticStyleExamplesData],
+    )
+    async def _llm_persona_semantic_style_examples_get(
+        bot_id: int = Query(..., ge=1),
+        group_id: int = Query(..., ge=1),
+        scene: str = Query(default="group_chat", min_length=1, max_length=64),
+        limit: int = Query(default=20, ge=1, le=50),
+    ) -> JSONResponse:
+        from pallas.product.llm import repeater_semantic_style
+
+        try:
+            examples = await asyncio.to_thread(
+                repeater_semantic_style.list_semantic_style_examples,
+                bot_id=bot_id,
+                group_id=group_id,
+                scene=scene,
+                limit=limit,
+            )
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500, detail=str(e)) from e
+        return JSONResponse({"ok": True, "data": semantic_style_examples_response_data(examples)})
 
     @router.get(
         f"{x}/common-config/llm/persona/group-style",

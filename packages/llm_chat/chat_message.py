@@ -56,7 +56,12 @@ from pallas.product.llm.current_turn_decision import (
 from pallas.product.llm.event_observation import record_event_stage
 from pallas.product.llm.followup_window import in_followup_window, note_hard_speak_trigger
 from pallas.product.llm.governance import check_llm_chat_gate, refresh_llm_chat_cooldown
-from pallas.product.llm.group_timeline import build_recent_group_timeline_context, should_include_group_timeline
+from pallas.product.llm.group_timeline import (
+    GroupTimelineContext,
+    ambient_snapshot_from_timeline,
+    build_recent_group_timeline_context,
+    should_include_group_timeline,
+)
 from pallas.product.llm.kernel import (
     ConversationContext,
     behavior_scene_to_conversation_scene,
@@ -74,6 +79,7 @@ from pallas.product.llm.memory import (
 )
 from pallas.product.llm.memory.auto_episode import maybe_auto_save_episode
 from pallas.product.llm.memory.auto_ip_knowledge import schedule_auto_save_ip_knowledge
+from pallas.product.llm.memory.auto_person_facts import schedule_auto_save_person_facts
 from pallas.product.llm.message_guard import normalize_llm_chat_user_text
 from pallas.product.llm.models import ChatCompletionMessage
 from pallas.product.llm.persona_context import (
@@ -87,15 +93,26 @@ from pallas.product.llm.reply_target_candidates import (
     list_reply_target_candidates,
     record_reply_target_candidate,
 )
-from pallas.product.llm.reply_variation import should_wait_for_more
+from pallas.product.llm.reply_variation import (
+    build_recent_reply_ending_hint,
+    build_recent_reply_variation_hint,
+    should_wait_for_more,
+)
 from pallas.product.llm.session_store import build_llm_chat_messages, list_user_llm_messages
 from pallas.product.llm.session_summary import schedule_session_summary
 from pallas.product.llm.speak_perception import evaluate_speak_perception, speak_perception_metrics
 from pallas.product.llm.task_metrics import record_bot_llm_task
 from pallas.product.llm.tools.time_now import current_time_text
 from pallas.product.llm.turn_policy import resolve_turn_policy
+from pallas.product.llm.turn_style_layers import (
+    build_same_utterance_redup_hint,
+    build_scene_tone_hint,
+    find_previous_reply_for_utterance,
+    merge_style_hints_before_last_user,
+)
 from pallas.product.llm.turn_telemetry import new_turn_id, record_turn_event
 from pallas.product.llm.vision_content import user_message_has_vision_content, vision_payload_from_segments
+from pallas.product.persona.corpus_expression_habits import infer_expression_affect_stance
 from pallas.product.persona.peer_bots_prompt import save_peer_alias_from_teach
 from pallas.product.persona.prompt_guard import sanitize_prompt_literal
 from pallas.product.persona.self_identity import (
@@ -171,7 +188,6 @@ def emit_turn_telemetry(
 def build_injection_snapshot(
     *,
     ambient_turns: list[dict[str, object]],
-    expression_entries: list[object],
     semantic_style: object | None = None,
     semantic_examples: list[tuple[str, str]] | None = None,
     semantic_example_sources: list[object] | None = None,
@@ -212,15 +228,6 @@ def build_injection_snapshot(
     chunks = knowledge_retrieval_trace.get("chunks", []) if isinstance(knowledge_retrieval_trace, dict) else []
     return {
         "ambient_turns": [dict(item) for item in ambient_turns if isinstance(item, dict)],
-        "expression_entries": [
-            {
-                "entry_id": str(getattr(item, "entry_id", "") or ""),
-                "saying": str(getattr(item, "saying", "") or "")[:120],
-                "occasion": str(getattr(item, "occasion", "") or "")[:120],
-            }
-            for item in expression_entries
-            if str(getattr(item, "entry_id", "") or "").strip()
-        ],
         "semantic_examples": snapshot_semantic_examples,
         "memory_entries": [dict(item) for item in memory_entries if isinstance(item, dict)],
         "knowledge_chunks": [dict(item) for item in chunks if isinstance(item, dict)],
@@ -1103,6 +1110,7 @@ async def prepare_and_submit_llm_chat_turn(
         direct_context_started = time.perf_counter()
         group_timeline = ""
         group_timeline_images: list[dict[str, str]] = []
+        timeline_context: GroupTimelineContext | None = None
         if group_id is not None and should_include_group_timeline(
             is_to_me=is_to_me,
             speak_trigger=speak_trigger,
@@ -1121,6 +1129,7 @@ async def prepare_and_submit_llm_chat_turn(
                 ]
             except Exception:
                 logger.debug("group timeline context skipped for group [{}]", group_id)
+                timeline_context = None
         replied_message_id = extract_reply_id_from_raw_message(str(getattr(event, "raw_message", "") or ""))
         replied_text = lookup_bot_reply_context(
             group_id=group_id or 0,
@@ -1131,6 +1140,19 @@ async def prepare_and_submit_llm_chat_turn(
             reply_context = sanitize_prompt_literal(replied_text, max_len=500)
             if reply_context:
                 group_timeline = "\n".join(part for part in (group_timeline, "【牛牛刚才说】", reply_context) if part)
+        # 时间线已覆盖最近群聊渲染时跳过群环境摘录，避免同轮注入两份同源
+        # 上下文；注入快照改由时间线消息产出（时间线在 system prompt 内，
+        # 不受消息裁剪影响，快照始终与实际注入一致）。
+        timeline_snapshot = (
+            ambient_snapshot_from_timeline(
+                timeline_context,
+                bot_id=int(bot.self_id),
+                group_id=group_id,
+                self_bot_id=int(bot.self_id),
+            )
+            if timeline_context is not None and timeline_context.text
+            else []
+        )
         assembled_context = await assemble_direct_chat_context(
             bot_id=int(bot.self_id),
             group_id=group_id,
@@ -1217,12 +1239,12 @@ async def prepare_and_submit_llm_chat_turn(
         from pallas.product.llm.reply_shape import resolve_reply_hard_cap
         from pallas.product.llm.scene_style import scene_length_cap
 
-        _style_profile = getattr(semantic_style, "style_profile", None) or {}
+        reply_shape_hint = getattr(group_expression_profile, "reply_shape", None)
         reply_max_length = resolve_reply_hard_cap(
             scene_length_cap(behavior_scene),
             preferred_bubbles=reply_shape.preferred_bubbles,
-            bubble_count_p50=int(_style_profile.get("bubble_count_p50") or 0),
-            segment_char_length_p50=int(_style_profile.get("segment_char_length_p50") or 0),
+            bubble_count_p50=int(getattr(reply_shape_hint, "bubble_count_p50", 0) or 0),
+            segment_char_length_p50=int(getattr(reply_shape_hint, "segment_char_length_p50", 0) or 0),
         )
         semantic_example_sources = list(getattr(semantic_style, "matched_example_sources", []) or [])
         semantic_examples: list[tuple[str, str]] = []
@@ -1238,9 +1260,9 @@ async def prepare_and_submit_llm_chat_turn(
             matched_examples=semantic_examples,
             baseline_note=str(getattr(semantic_style, "baseline_note", "") or ""),
             behavior_strategies=[
-                (str(item.scene or ""), str(item.action or ""), str(item.outcome or ""))
+                item
                 for item in (getattr(semantic_style, "behavior_strategies", None) or [])[:2]
-                if str(item.scene or "").strip() and str(item.action or "").strip()
+                if str(getattr(item, "scene", "") or "").strip() and str(getattr(item, "action", "") or "").strip()
             ],
         )
         core_persona = system_prompt
@@ -1291,8 +1313,36 @@ async def prepare_and_submit_llm_chat_turn(
             or focus_text.strip()
         )
         learned_self_aliases = extract_raw_learned_self_aliases(persona_dict)
+        # 措辞提示在预算裁剪前并入 prepared_messages：原先经 request.style_user_hints
+        # 在 client 侧 trim 之后才 merge，逃逸字符预算，且内容与历史里的
+        # assistant 轮本身重复。
+        style_user_hints: list[str] = []
+        if recent_turns:
+            variation_hint = build_recent_reply_variation_hint(recent_turns)
+            ending_hint = build_recent_reply_ending_hint(recent_turns)
+            if variation_hint:
+                style_user_hints.append(variation_hint)
+            if ending_hint:
+                style_user_hints.append(ending_hint)
+            previous_reply = find_previous_reply_for_utterance(
+                llm_user_text,
+                recent_turns=recent_turns,
+            )
+            same_utterance_hint = build_same_utterance_redup_hint(
+                user_text=llm_user_text,
+                previous_reply=previous_reply,
+            )
+            if same_utterance_hint:
+                style_user_hints.append(same_utterance_hint)
+        scene_tone_hint = build_scene_tone_hint(
+            llm_user_text,
+            stance=infer_expression_affect_stance(llm_user_text),
+        )
+        if scene_tone_hint:
+            style_user_hints.append(scene_tone_hint)
         ambient_turns: list[dict[str, object]] = []
         ambient_message_tokens: list[str] = []
+        include_group_ambient = not include_recent_pair and not timeline_snapshot
         prepared_messages = await build_llm_chat_messages(
             int(bot.self_id),
             group_id,
@@ -1301,20 +1351,29 @@ async def prepare_and_submit_llm_chat_turn(
             cfg=llm_cfg,
             include_history=include_persistent_history or include_recent_pair,
             history_limit=None,
-            include_group_ambient=not include_recent_pair,
+            include_group_ambient=include_group_ambient,
             ambient_turns_out=ambient_turns,
             ambient_message_token_out=ambient_message_tokens,
         )
-        prepared_messages, ambient_turns = trim_prepared_messages_for_snapshot(
-            prepared_messages,
-            ambient_turns=ambient_turns,
-            ambient_message_token=ambient_message_tokens[0] if ambient_message_tokens else "",
-            system_prompt=system_prompt,
-            budget_chars=int(getattr(llm_cfg, "llm_chat_char_budget", 0) or 0),
-        )
+        if style_user_hints:
+            prepared_messages = merge_style_hints_before_last_user(prepared_messages, style_user_hints)
+        if timeline_snapshot:
+            prepared_messages = trim_messages_to_char_budget(
+                prepared_messages,
+                system_prompt=system_prompt,
+                budget_chars=int(getattr(llm_cfg, "llm_chat_char_budget", 0) or 0),
+            )
+            ambient_turns = timeline_snapshot
+        else:
+            prepared_messages, ambient_turns = trim_prepared_messages_for_snapshot(
+                prepared_messages,
+                ambient_turns=ambient_turns,
+                ambient_message_token=ambient_message_tokens[0] if ambient_message_tokens else "",
+                system_prompt=system_prompt,
+                budget_chars=int(getattr(llm_cfg, "llm_chat_char_budget", 0) or 0),
+            )
         injection_snapshot = build_injection_snapshot(
             ambient_turns=ambient_turns,
-            expression_entries=[],
             semantic_examples=semantic_examples,
             semantic_example_sources=injected_semantic_sources,
             hybrid_retrieval_trace=hybrid_retrieval_trace,
@@ -1393,7 +1452,7 @@ async def prepare_and_submit_llm_chat_turn(
                 hybrid_retrieval_trace=hybrid_retrieval_trace,
                 include_session_history=include_persistent_history or include_recent_pair,
                 session_history_limit=None,
-                include_group_ambient_history=not include_recent_pair,
+                include_group_ambient_history=include_group_ambient,
                 prepared_messages=prepared_messages,
                 group_timeline_images=group_timeline_images,
                 # 用用户实际引用(reply)的目标消息 id，而非 bot 的 QUOTE 决策 id。
@@ -1494,6 +1553,15 @@ async def prepare_and_submit_llm_chat_turn(
                 )
             except Exception as exc:
                 logger.debug("llm chat auto_ip_knowledge schedule skipped: {}", exc)
+            try:
+                schedule_auto_save_person_facts(
+                    bot_id=int(bot.self_id),
+                    group_id=int(group_id),
+                    user_id=user_id,
+                    cfg=llm_cfg,
+                )
+            except Exception as exc:
+                logger.debug("llm chat auto_person_facts schedule skipped: {}", exc)
             try:
                 schedule_session_summary(
                     bot_id=int(bot.self_id),

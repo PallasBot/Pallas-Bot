@@ -119,7 +119,15 @@ class Message(Document):
     class Settings:
         name = "message"
         collection = "message"
-        indexes = [IndexModel([("time", pymongo.DESCENDING)], name="time_index")]
+        indexes = [
+            IndexModel([("time", pymongo.DESCENDING)], name="time_index"),
+            IndexModel(
+                [("group_id", 1), ("bot_id", 1), ("message_id", 1)],
+                name="uq_message_group_bot_message_id",
+                unique=True,
+                partialFilterExpression={"message_id": {"$type": "int"}},
+            ),
+        ]
 
 
 class BackgroundJob(Document):
@@ -332,6 +340,29 @@ class StickerLabel(Document):
         indexes = [
             IndexModel([("content_hash", pymongo.ASCENDING)], name="content_hash_unique", unique=True),
             IndexModel([("labeled_at", pymongo.DESCENDING), ("content_hash", pymongo.ASCENDING)], name="list_index"),
+        ]
+
+
+class UserStickerStat(Document):
+    """群成员发送图片的次数统计，按内容哈希聚合，不带 bot 维度。"""
+
+    group_id: int = Field(...)
+    user_id: int = Field(...)
+    content_hash: str = Field(...)
+    send_count: int = Field(default=0)
+    last_sent_at: int = Field(default=0)
+    updated_at: int = Field(default=0)
+
+    class Settings:
+        name = "user_sticker_stat"
+        collection = "user_sticker_stat"
+        indexes = [
+            IndexModel(
+                [("group_id", pymongo.ASCENDING), ("user_id", pymongo.ASCENDING), ("content_hash", pymongo.ASCENDING)],
+                name="group_user_hash_unique",
+                unique=True,
+            ),
+            IndexModel([("send_count", pymongo.DESCENDING)], name="send_count_index"),
         ]
 
 

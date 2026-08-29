@@ -20,6 +20,121 @@ def test_group_expression_openapi_uses_unified_profile_shape() -> None:
     assert {item["name"] for item in operation["parameters"]} == {"bot_id", "group_id", "scene"}
 
 
+def test_semantic_style_examples_openapi_uses_limited_read_contract() -> None:
+    app = FastAPI()
+    register_llm_ops_router(app.router, x="/pallas/api", plugin_config=Config(), check_write_token=lambda *a, **k: None)
+
+    operation = app.openapi()["paths"]["/pallas/api/common-config/llm/persona/semantic-style-examples"]["get"]
+    response_schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
+    assert response_schema["$ref"].endswith("_ApiOkResponse__SemanticStyleExamplesData_")
+    assert {item["name"] for item in operation["parameters"]} == {"bot_id", "group_id", "scene", "limit"}
+
+
+@pytest.mark.asyncio
+async def test_semantic_style_examples_returns_scoped_limited_content(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import repeater_semantic_style
+
+    example = repeater_semantic_style.SemanticStyleExample(
+        example_id="42:100:7",
+        created_at=100,
+        bot_id=7,
+        group_id=42,
+        scene="group_chat",
+        trigger_text="前句",
+        reply_text="接话",
+        label=repeater_semantic_style.SemanticStyleLabel(
+            interaction_actions=["echo"],
+            semantic_relations=["同意"],
+            intensity="soft",
+            forms=["短句"],
+            is_reply_pair=True,
+            transferable=True,
+        ),
+        source_kind="human_pair",
+        trigger_user_id=123,
+        reply_user_id=456,
+        pair_relation="quoted",
+        behavior_strategy=repeater_semantic_style.BehaviorStrategy(
+            scene="轻松闲聊",
+            action="接住前句",
+            outcome="保持互动",
+            learning_type="observed",
+            count=2,
+        ),
+    )
+    monkeypatch.setattr(
+        repeater_semantic_style,
+        "list_semantic_style_examples",
+        lambda **kwargs: [example],
+    )
+    app = FastAPI()
+    register_llm_ops_router(app.router, x="/pallas/api", plugin_config=Config(), check_write_token=lambda *a, **k: None)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/pallas/api/common-config/llm/persona/semantic-style-examples",
+            params={"bot_id": 7, "group_id": 42, "limit": 1},
+        )
+
+    assert response.status_code == 200, response.text
+    data = response.json()["data"]
+    assert data["total"] == 1
+    assert data["items"] == [
+        {
+            "example_id": "42:100:7",
+            "created_at": 100,
+            "pair_relation": "quoted",
+            "trigger_text": "前句",
+            "reply_text": "接话",
+            "learning_type": "observed",
+            "label": {
+                "interaction_actions": ["echo"],
+                "semantic_relations": ["同意"],
+                "intensity": "soft",
+                "forms": ["短句"],
+            },
+            "behavior_strategy": {
+                "scene": "轻松闲聊",
+                "action": "接住前句",
+                "outcome": "保持互动",
+                "learning_type": "observed",
+                "count": 2,
+            },
+        }
+    ]
+    assert "trigger_user_id" not in data["items"][0]
+    assert "reply_user_id" not in data["items"][0]
+
+
+def test_semantic_style_examples_marks_bot_reply_as_self_reflection() -> None:
+    from packages.pb_webui.llm_ops_api import semantic_style_examples_response_data
+    from pallas.product.llm import repeater_semantic_style
+
+    example = repeater_semantic_style.SemanticStyleExample(
+        example_id="42:101:7",
+        created_at=101,
+        bot_id=7,
+        group_id=42,
+        scene="group_chat",
+        trigger_text="前句",
+        reply_text="牛牛接话",
+        label=repeater_semantic_style.SemanticStyleLabel(is_reply_pair=True, transferable=True),
+        source_kind="human_pair",
+        bot_style_positive=True,
+        behavior_strategy=repeater_semantic_style.BehaviorStrategy(
+            scene="相似场景",
+            action="接住话题",
+            outcome="继续互动",
+            learning_type="observed",
+        ),
+    )
+
+    item = semantic_style_examples_response_data([example])["items"][0]
+
+    assert item["learning_type"] == "self_reflection"
+    assert item["behavior_strategy"]["learning_type"] == "self_reflection"
+
+
 @pytest.mark.asyncio
 async def test_group_expression_merges_legacy_and_exact_semantic_scope(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.product.llm import repeater_semantic_style
@@ -76,11 +191,11 @@ async def test_group_expression_merges_legacy_and_exact_semantic_scope(monkeypat
     assert data["examples_summary"]["rewrite_seed_count"] == 1
     assert data["examples_summary"]["intensity_counts"] == {"soft": 2}
     assert data["examples_summary"]["form_counts"] == {"question": 1}
-    assert data["reply_shape"]["bubble_count_p50"] == 2
-    assert data["reply_shape"]["bubble_count_p90"] == 2
-    assert data["reply_shape"]["segment_char_length_p50"] == 4
-    assert data["reply_shape"]["segment_char_length_p90"] == 6
-    assert data["reply_shape"]["rhythm_distribution"] == {"single": 0.3333, "multi": 0.6667}
+    assert data["reply_shape"]["bubble_count_p50"] == 0
+    assert data["reply_shape"]["bubble_count_p90"] == 0
+    assert data["reply_shape"]["segment_char_length_p50"] == 0
+    assert data["reply_shape"]["segment_char_length_p90"] == 0
+    assert data["reply_shape"]["rhythm_distribution"] == {}
     assert refresh_calls == [False]
 
 
@@ -153,7 +268,7 @@ def test_semantic_style_manage_openapi_has_typed_actions() -> None:
 
     assert set(body_schema["properties"]["action"]["enum"]) == {
         "status",
-        "overrides",
+        "direct_enabled",
         "clear",
         "rebuild",
         "quality",

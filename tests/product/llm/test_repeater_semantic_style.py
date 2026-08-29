@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -10,6 +10,7 @@ from pallas.product.llm.repeater_semantic_style import (
     build_cached_semantic_style_block,
     clear_semantic_style_cache_for_tests,
     is_positive_bot_style_outcome,
+    list_semantic_style_examples,
     parse_semantic_style_label,
     persist_semantic_style_example,
     prompt_safe_expression_sample,
@@ -40,6 +41,43 @@ def test_prompt_safe_expression_sample_rejects_identifiers_and_instructions(samp
 def test_prompt_safe_expression_sample_keeps_short_chinese_reply() -> None:
     assert prompt_safe_expression_sample("这就来啦") == "这就来啦"
     assert prompt_safe_expression_sample("roleplay 一下也行") == "roleplay 一下也行"
+
+
+def test_list_semantic_style_examples_filters_scope_and_limits_results(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    def example(example_id: str, *, created_at: int, group_id: int = 42, source_kind: str = "human_pair"):
+        return SemanticStyleExample(
+            example_id=example_id,
+            created_at=created_at,
+            bot_id=7,
+            group_id=group_id,
+            scene="group_chat",
+            trigger_text="前句",
+            reply_text="接话",
+            label=mod.SemanticStyleLabel(is_reply_pair=True, transferable=True),
+            source_kind=source_kind,
+        )
+
+    monkeypatch.setattr(
+        mod,
+        "_load_semantic_style_examples",
+        lambda _path: [
+            example("old", created_at=100),
+            example("new", created_at=200),
+            example("other-group", created_at=300, group_id=99),
+            example("legacy", created_at=400, source_kind="legacy_unknown"),
+        ],
+    )
+    monkeypatch.setattr(
+        mod,
+        "load_examples_with_legacy_migration_locked",
+        lambda: pytest.fail("listing examples must not trigger legacy migration"),
+    )
+
+    results = list_semantic_style_examples(bot_id=7, group_id=42, scene="group_chat", limit=1)
+
+    assert [item.example_id for item in results] == ["new"]
 
 
 def test_backfill_batch_bounds_history_window_and_advances_cursor() -> None:
@@ -139,99 +177,6 @@ def test_backfill_batch_advances_past_candidates_outside_the_history_window() ->
     assert batch.cursor.before_message_id == 1
 
 
-@pytest.mark.asyncio
-async def test_semantic_style_backfill_handler_skips_expired_and_retries_label_twice(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from pallas.product.llm import repeater_semantic_style as mod
-
-    monkeypatch.setattr(mod, "SEMANTIC_STYLE_BACKFILL_ENABLED", False)
-    label = parse_semantic_style_label({"reuse": "rewrite"})
-    worker = AsyncMock(side_effect=[RuntimeError("temporary"), RuntimeError("temporary"), (label, None)])
-    persist = Mock()
-    monkeypatch.setattr(mod, "label_semantic_style_with_llm", worker)
-    monkeypatch.setattr(mod, "persist_semantic_style_example", persist)
-
-    payload = {
-        "example_id": "42:99:100",
-        "message_id": 99,
-        "created_at": 10_000,
-        "expires_at": 10_001,
-        "bot_id": 100,
-        "group_id": 42,
-        "scene": "group_chat",
-        "trigger_text": "前句",
-        "reply_text": "接话",
-    }
-    await mod.handle_repeater_semantic_style_backfill(payload, now=10_000)
-
-    worker.assert_not_awaited()
-    persist.assert_not_called()
-
-    await mod.handle_repeater_semantic_style_backfill(payload, now=10_001)
-    worker.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_semantic_style_handlers_skip_disabled_scope(monkeypatch: pytest.MonkeyPatch) -> None:
-    from pallas.product.llm import repeater_semantic_style as mod
-
-    worker = AsyncMock()
-    monkeypatch.setattr(mod, "label_semantic_style_with_llm", worker)
-    monkeypatch.setattr(mod, "semantic_style_collection_enabled", lambda *, bot_id, group_id: False)
-    payload = {
-        "example_id": "42:99:100",
-        "message_id": 99,
-        "created_at": 10_000,
-        "expires_at": 10_001,
-        "bot_id": 100,
-        "group_id": 42,
-        "scene": "group_chat",
-        "trigger_text": "前句",
-        "reply_text": "接话",
-    }
-
-    await mod.handle_repeater_semantic_style(payload)
-    await mod.handle_repeater_semantic_style_backfill(payload, now=10_000)
-
-    worker.assert_not_awaited()
-
-
-def test_realtime_admission_respects_persistent_global_and_scope_budgets(tmp_path, monkeypatch) -> None:
-    from pallas.product.llm import repeater_semantic_style as mod
-
-    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
-    monkeypatch.setattr(mod, "SEMANTIC_STYLE_REALTIME_SAMPLE_DIVISOR", 1)
-    monkeypatch.setattr(mod, "SEMANTIC_STYLE_REALTIME_MAX_PER_DAY", 2)
-    monkeypatch.setattr(mod, "SEMANTIC_STYLE_REALTIME_MAX_PER_SCOPE_PER_DAY", 1)
-
-    assert mod.claim_semantic_style_realtime_admission(bot_id=100, group_id=42, example_id="a", now=10_000)
-    assert not mod.claim_semantic_style_realtime_admission(bot_id=100, group_id=42, example_id="b", now=10_000)
-    assert mod.claim_semantic_style_realtime_admission(bot_id=100, group_id=43, example_id="c", now=10_000)
-    assert not mod.claim_semantic_style_realtime_admission(bot_id=100, group_id=44, example_id="d", now=10_000)
-
-
-@pytest.mark.asyncio
-async def test_realtime_handler_drops_legacy_job_when_budget_rejects(monkeypatch: pytest.MonkeyPatch) -> None:
-    from pallas.product.llm import repeater_semantic_style as mod
-
-    worker = AsyncMock()
-    monkeypatch.setattr(mod, "label_semantic_style_with_llm", worker)
-    monkeypatch.setattr(mod, "semantic_style_collection_enabled", lambda **_kwargs: True)
-    monkeypatch.setattr(mod, "claim_semantic_style_realtime_admission", lambda **_kwargs: False)
-
-    await mod.handle_repeater_semantic_style({
-        "example_id": "42:99:100",
-        "bot_id": 100,
-        "group_id": 42,
-        "trigger_text": "前句",
-        "reply_text": "接话",
-    })
-
-    worker.assert_not_awaited()
-
-
-@pytest.mark.asyncio
 async def test_semantic_style_label_uses_deterministic_short_options(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
@@ -317,173 +262,6 @@ async def test_collect_backfill_candidates_uses_online_bot_groups_and_verified_r
     assert candidates[0]["reply_user_id"] == 11
 
 
-@pytest.mark.asyncio
-async def test_backfill_handler_persists_human_pair_when_authors_known(monkeypatch: pytest.MonkeyPatch) -> None:
-    from pallas.product.llm import repeater_semantic_style as mod
-
-    label = parse_semantic_style_label({"reuse": "rewrite"})
-    worker = AsyncMock(return_value=(label, None))
-    persist = Mock()
-    monkeypatch.setattr(mod, "label_semantic_style_with_llm", worker)
-    monkeypatch.setattr(mod, "persist_semantic_style_example", persist)
-    monkeypatch.setattr(mod, "semantic_style_collection_enabled", lambda *, bot_id, group_id: True)
-
-    payload = {
-        "example_id": "42:99:100",
-        "message_id": 99,
-        "created_at": 10_000,
-        "expires_at": 10_001,
-        "bot_id": 100,
-        "group_id": 42,
-        "scene": "group_chat",
-        "trigger_text": "前句",
-        "reply_text": "接话",
-        "trigger_user_id": 11,
-        "reply_user_id": 12,
-    }
-    await mod.handle_repeater_semantic_style_backfill(payload, now=10_000)
-
-    example = persist.call_args.args[0]
-    assert example.source_kind == "human_pair"
-    assert example.trigger_user_id == 11
-    assert example.reply_user_id == 12
-
-
-@pytest.mark.asyncio
-async def test_backfill_handler_falls_back_to_legacy_when_authors_unknown(monkeypatch: pytest.MonkeyPatch) -> None:
-    from pallas.product.llm import repeater_semantic_style as mod
-
-    label = parse_semantic_style_label({"reuse": "rewrite"})
-    worker = AsyncMock(return_value=(label, None))
-    persist = Mock()
-    monkeypatch.setattr(mod, "label_semantic_style_with_llm", worker)
-    monkeypatch.setattr(mod, "persist_semantic_style_example", persist)
-    monkeypatch.setattr(mod, "semantic_style_collection_enabled", lambda *, bot_id, group_id: True)
-
-    payload = {
-        "example_id": "42:99:100",
-        "message_id": 99,
-        "created_at": 10_000,
-        "expires_at": 10_001,
-        "bot_id": 100,
-        "group_id": 42,
-        "scene": "group_chat",
-        "trigger_text": "前句",
-        "reply_text": "接话",
-    }
-    await mod.handle_repeater_semantic_style_backfill(payload, now=10_000)
-
-    example = persist.call_args.args[0]
-    assert example.source_kind == "legacy_unknown"
-    assert example.trigger_user_id == 0
-    assert example.reply_user_id == 0
-
-
-@pytest.mark.asyncio
-async def test_backfill_round_enqueues_scan_without_scanning_in_unified_process(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from pallas.product.llm import repeater_semantic_style as mod
-
-    monkeypatch.setattr(mod, "SEMANTIC_STYLE_BACKFILL_ENABLED", False)
-    collect = AsyncMock()
-    store = SimpleNamespace(enqueue=AsyncMock())
-    monkeypatch.setattr(mod, "collect_semantic_style_backfill_candidates", collect)
-    monkeypatch.setattr(mod, "build_work_job_store", lambda: store)
-    monkeypatch.setattr(mod, "get_bots", lambda: {"100": SimpleNamespace(self_id="100")})
-
-    assert await mod.run_semantic_style_backfill_round(now=2_000_000_000) == 0
-    collect.assert_not_awaited()
-    store.enqueue.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_backfill_scan_handler_persists_jobs_before_advancing_cursor(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from pallas.product.llm import repeater_semantic_style as mod
-
-    monkeypatch.setattr(mod, "SEMANTIC_STYLE_BACKFILL_ENABLED", False)
-    now = 2_000_000_000
-    cursor = mod.SemanticStyleBackfillCursor()
-    next_cursor = mod.SemanticStyleBackfillCursor(before_created_at=now - 10, before_message_id=99)
-    collected = [
-        {
-            "message_id": 99,
-            "created_at": now - 10,
-            "bot_id": 100,
-            "group_id": 42,
-            "trigger_text": "前句",
-            "reply_text": "接话",
-        }
-    ]
-    store = SimpleNamespace(enqueue_many=AsyncMock())
-    saved = Mock()
-    monkeypatch.setattr(mod, "load_semantic_style_backfill_cursor", lambda: cursor)
-    monkeypatch.setattr(mod, "collect_semantic_style_backfill_candidates", AsyncMock(return_value=collected))
-    monkeypatch.setattr(
-        mod,
-        "build_semantic_style_backfill_batch",
-        lambda *args, **kwargs: mod.SemanticStyleBackfillBatch(
-            jobs=[
-                mod.WorkJob.create(
-                    kind="repeater.semantic_style.backfill",
-                    payload={"message_id": 99},
-                    idempotency_key="repeater.semantic_style.backfill:42:99:100",
-                )
-            ],
-            cursor=next_cursor,
-        ),
-    )
-    monkeypatch.setattr(mod, "build_work_job_store", lambda: store)
-    monkeypatch.setattr(mod, "save_semantic_style_backfill_cursor", saved)
-
-    assert await mod.handle_repeater_semantic_style_backfill_scan({"bot_ids": [100], "now": now}) == 0
-
-    mod.collect_semantic_style_backfill_candidates.assert_not_awaited()
-    store.enqueue_many.assert_not_awaited()
-    saved.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_backfill_scan_handler_keeps_cursor_when_enqueue_fails(monkeypatch: pytest.MonkeyPatch) -> None:
-    from pallas.product.llm import repeater_semantic_style as mod
-
-    monkeypatch.setattr(mod, "SEMANTIC_STYLE_BACKFILL_ENABLED", False)
-    cursor = mod.SemanticStyleBackfillCursor()
-    store = SimpleNamespace(enqueue_many=AsyncMock(side_effect=RuntimeError("database unavailable")))
-    saved = Mock()
-    monkeypatch.setattr(mod, "load_semantic_style_backfill_cursor", lambda: cursor)
-    monkeypatch.setattr(mod, "collect_semantic_style_backfill_candidates", AsyncMock(return_value=[]))
-    monkeypatch.setattr(
-        mod,
-        "build_semantic_style_backfill_batch",
-        lambda *args, **kwargs: mod.SemanticStyleBackfillBatch(
-            jobs=[
-                mod.WorkJob.create(
-                    kind="repeater.semantic_style.backfill",
-                    payload={"message_id": 99},
-                    idempotency_key="repeater.semantic_style.backfill:42:99:100",
-                )
-            ],
-            cursor=cursor,
-        ),
-    )
-    monkeypatch.setattr(mod, "build_work_job_store", lambda: store)
-    monkeypatch.setattr(mod, "save_semantic_style_backfill_cursor", saved)
-
-    assert await mod.handle_repeater_semantic_style_backfill_scan({"bot_ids": [100], "now": 2_000_000_000}) == 0
-    store.enqueue_many.assert_not_awaited()
-    saved.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_backfill_scan_handler_ignores_invalid_bot_ids() -> None:
-    from pallas.product.llm import repeater_semantic_style as mod
-
-    assert await mod.handle_repeater_semantic_style_backfill_scan({"bot_ids": ["invalid", 0, -1]}) == 0
-
-
 def test_parse_label_accepts_only_annotation_axes() -> None:
     label = parse_semantic_style_label({
         "interaction_actions": ["tease", "tease"],
@@ -512,6 +290,123 @@ def test_parse_label_accepts_only_annotation_axes() -> None:
     }
 
 
+def test_labeled_semantic_style_reply_ids_indexes_exported_reply_ids(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod.clear_semantic_style_cache_for_tests()
+    mod.persist_semantic_style_example(
+        mod.SemanticStyleExample(
+            example_id="42:101:100",
+            created_at=100,
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            trigger_text="前句1",
+            reply_text="接话1",
+            label=mod.parse_semantic_style_label({"reuse": "direct"}),
+            source_kind="human_pair",
+            trigger_user_id=11,
+            reply_user_id=12,
+            annotation_source="llm_v2",
+        )
+    )
+    mod.persist_semantic_style_example(
+        mod.SemanticStyleExample(
+            example_id="42:-5:100",
+            created_at=200,
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            trigger_text="前句2",
+            reply_text="接话2",
+            label=mod.parse_semantic_style_label({"reuse": "direct"}),
+            source_kind="human_pair",
+            trigger_user_id=11,
+            reply_user_id=12,
+            annotation_source="llm_v2",
+        )
+    )
+    # force index rebuild despite 5s TTL
+    mod._labeled_ids_index_built_at = 0.0
+
+    assert mod.labeled_semantic_style_reply_ids(100, 42) == {101, -5}
+    assert mod.labeled_semantic_style_reply_ids(100, 99) == set()
+
+
+def test_semantic_style_group_cursor_advances_monotonically_but_not_backwards(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod._semantic_style_seen_cursors.clear()
+    assert mod.get_semantic_style_group_cursor(100, 42) == (0, 0)
+    mod.mark_semantic_style_group_processed(100, 42, processed_at=1000, processed_message_id=7)
+    assert mod.get_semantic_style_group_cursor(100, 42) == (1000, 7)
+    # 同秒内更小的 message_id 不应回退
+    mod.mark_semantic_style_group_processed(100, 42, processed_at=1000, processed_message_id=3)
+    assert mod.get_semantic_style_group_cursor(100, 42) == (1000, 7)
+    # 旧秒级时间回退同样无效
+    mod.mark_semantic_style_group_processed(100, 42, processed_at=900)
+    assert mod.get_semantic_style_group_cursor(100, 42) == (1000, 7)
+    # 同秒更大的 message_id 允许推进
+    mod.mark_semantic_style_group_processed(100, 42, processed_at=1000, processed_message_id=9)
+    assert mod.get_semantic_style_group_cursor(100, 42) == (1000, 9)
+    mod._semantic_style_seen_cursors.clear()
+
+
+def test_semantic_style_group_cursor_survives_cache_reset(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod._semantic_style_seen_cursors.clear()
+    mod.mark_semantic_style_group_processed(100, 42, processed_at=1234)
+    mod._semantic_style_seen_cursors.clear()
+
+    assert mod.get_semantic_style_group_cursor(100, 42) == (1234, 0)
+
+
+def test_semantic_style_group_cursor_does_not_regress_after_older_write(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod._semantic_style_seen_cursors.clear()
+    mod.mark_semantic_style_group_processed(100, 42, processed_at=1234)
+    mod.mark_semantic_style_group_processed(100, 42, processed_at=1200)
+
+    assert mod.get_semantic_style_group_cursor(100, 42) == (1234, 0)
+
+
+def test_semantic_style_group_cursor_reads_legacy_second_only_value(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod._semantic_style_seen_cursors.clear()
+    # 旧版只存秒级正整数：读作 (time, 哨兵)，同秒视为已全部处理。
+    mod.semantic_style_group_cursor_path().write_text('{"100:42": 1234}', encoding="utf-8")
+    assert mod.get_semantic_style_group_cursor(100, 42) == (1234, mod._CURSOR_MID_SENTINEL)
+    # 旧游标语义下同秒更小 mid 属于回退，仅更新到更晚秒时才落到新格式
+    mod.mark_semantic_style_group_processed(100, 42, processed_at=1234, processed_message_id=5)
+    assert mod.get_semantic_style_group_cursor(100, 42) == (1234, mod._CURSOR_MID_SENTINEL)
+    mod.mark_semantic_style_group_processed(100, 42, processed_at=1240, processed_message_id=5)
+    assert mod.get_semantic_style_group_cursor(100, 42) == (1240, 5)
+    assert '"100:42":[1240,5]' in mod.semantic_style_group_cursor_path().read_text(encoding="utf-8").replace(" ", "")
+    mod._semantic_style_seen_cursors.clear()
+
+
+def test_semantic_label_budget_claim_is_atomic_and_bounded(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(
+        "pallas.product.llm.config.get_llm_config",
+        lambda: SimpleNamespace(llm_semantic_style_realtime_daily_limit=3),
+    )
+
+    assert mod.claim_semantic_label_budget(2) is True
+    assert mod.claim_semantic_label_budget(2) is False
+    assert mod.semantic_label_budget_used_today() == 2
+
+
 def test_semantic_style_management_persists_controls_and_rebuilds_data(tmp_path, monkeypatch) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
@@ -534,13 +429,8 @@ def test_semantic_style_management_persists_controls_and_rebuilds_data(tmp_path,
     )
 
     assert mod.semantic_style_status()["enabled"] is True
-    assert mod.update_semantic_style_overrides({"direct": False})["overrides"]["direct"] is False
-    assert mod.update_semantic_style_overrides({"image": False})["overrides"] == {
-        "aggressive": True,
-        "nonsense": True,
-        "direct": False,
-        "image": False,
-    }
+    assert mod.set_semantic_style_direct_enabled(False)["direct_enabled"] is False
+    assert mod.set_semantic_style_direct_enabled(True)["direct_enabled"] is True
     assert mod.set_semantic_style_enabled(False)["enabled"] is False
     assert mod.rebuild_semantic_style_profiles()["profile_count"] == 1
     assert mod.semantic_style_quality()["example_count"] == 1
@@ -701,10 +591,8 @@ def test_semantic_style_management_isolated_by_bot_and_group_with_global_fallbac
             )
         )
 
-    assert (
-        mod.update_semantic_style_overrides({"direct": False}, bot_id=100, group_id=42)["overrides"]["direct"] is False
-    )
-    assert mod.semantic_style_status(bot_id=101, group_id=43)["overrides"]["direct"] is True
+    assert mod.set_semantic_style_direct_enabled(False, bot_id=100, group_id=42)["direct_enabled"] is False
+    assert mod.semantic_style_status(bot_id=101, group_id=43)["direct_enabled"] is True
     assert mod.set_semantic_style_enabled(False, bot_id=100, group_id=42)["enabled"] is False
     assert mod.semantic_style_injection_enabled("scope-disabled", bot_id=100, group_id=42) is False
     assert mod.semantic_style_status()["enabled"] is True
@@ -1415,82 +1303,6 @@ async def test_delivery_receipt_feedback_reply_promotes_exact_semantic_source(tm
     assert all(observe_quoted_semantic_style_feedback(event) is None for event in invalid_events)
 
 
-@pytest.mark.asyncio
-async def test_semantic_style_worker_labels_and_persists_relation(tmp_path, monkeypatch) -> None:
-    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
-    label = parse_semantic_style_label({"is_reply_pair": True, "transferable": True})
-    worker = AsyncMock(return_value=(label, None))
-    monkeypatch.setattr("pallas.product.llm.repeater_semantic_style.label_semantic_style_with_llm", worker)
-    from pallas.product.llm.repeater_semantic_style import handle_repeater_semantic_style
-
-    await handle_repeater_semantic_style({
-        "example_id": "42:100:99",
-        "bot_id": 99,
-        "group_id": 42,
-        "scene": "group_chat",
-        "trigger_text": "又炸了",
-        "reply_text": "没救了",
-        "source_kind": "human_pair",
-        "trigger_user_id": 11,
-        "reply_user_id": 12,
-        "pair_relation": "quoted",
-        "realtime_admitted": True,
-    })
-
-    worker.assert_awaited_once_with(trigger_text="又炸了", reply_text="没救了", pair_relation="quoted")
-    assert "没救了" in build_cached_semantic_style_block(99, 42, "group_chat")
-
-
-@pytest.mark.asyncio
-async def test_semantic_style_worker_drops_adjacent_pair_without_transferable_reply(tmp_path, monkeypatch) -> None:
-    from pallas.product.llm import repeater_semantic_style as mod
-
-    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
-    worker = AsyncMock(return_value=(mod.SemanticStyleLabel(is_reply_pair=False, transferable=False), None))
-    persist = Mock()
-    monkeypatch.setattr(mod, "label_semantic_style_with_llm", worker)
-    monkeypatch.setattr(mod, "persist_semantic_style_example", persist)
-
-    await mod.handle_repeater_semantic_style({
-        "example_id": "42:100:99",
-        "bot_id": 99,
-        "group_id": 42,
-        "scene": "group_chat",
-        "trigger_text": "ai开智了",
-        "reply_text": "是三个不一样的牛牛",
-        "source_kind": "human_pair",
-        "trigger_user_id": 11,
-        "reply_user_id": 12,
-        "pair_relation": "adjacent",
-        "realtime_admitted": True,
-    })
-
-    worker.assert_awaited_once_with(trigger_text="ai开智了", reply_text="是三个不一样的牛牛", pair_relation="adjacent")
-    persist.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_semantic_style_worker_rejects_payload_without_human_provenance(monkeypatch: pytest.MonkeyPatch) -> None:
-    from pallas.product.llm import repeater_semantic_style as mod
-
-    worker = AsyncMock()
-    persist = Mock()
-    monkeypatch.setattr(mod, "semantic_style_collection_enabled", lambda **_kwargs: True)
-    monkeypatch.setattr(mod, "label_semantic_style_with_llm", worker)
-    monkeypatch.setattr(mod, "persist_semantic_style_example", persist)
-
-    await mod.handle_repeater_semantic_style({
-        "bot_id": 99,
-        "group_id": 42,
-        "trigger_text": "又炸了",
-        "reply_text": "没救了",
-        "realtime_admitted": True,
-    })
-
-    worker.assert_not_awaited()
-    persist.assert_not_called()
-
-
 def test_rebuild_skips_human_pair_without_author_provenance(tmp_path, monkeypatch) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
@@ -1567,41 +1379,6 @@ def test_visual_circuit_can_disable_probe_and_recover_without_io() -> None:
 
     recovered = record_semantic_style_visual_circuit_success(state, now=160)
     assert semantic_style_visual_circuit_decision(recovered, enabled=True, now=161).mode == "allow"
-
-
-@pytest.mark.asyncio
-async def test_realtime_image_relation_uses_cached_image_and_never_persists_bytes(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from pallas.product.llm import repeater_semantic_style as mod
-
-    text_label = parse_semantic_style_label({"is_reply_pair": True, "transferable": True})
-    visual_label = mod.parse_semantic_style_visual_label({
-        "subject": "character",
-        "action": "reaction",
-        "tone": "playful",
-        "text": "absent",
-    })
-    persist = Mock()
-    monkeypatch.setattr(mod, "label_semantic_style_with_llm", AsyncMock(return_value=(text_label, None)))
-    monkeypatch.setattr(mod, "label_semantic_style_visual_with_cached_image", AsyncMock(return_value=visual_label))
-    monkeypatch.setattr(mod, "persist_semantic_style_example", persist)
-
-    await mod.handle_repeater_semantic_style({
-        "bot_id": 100,
-        "group_id": 42,
-        "trigger_text": "前句",
-        "reply_text": "接话",
-        "source_kind": "human_pair",
-        "trigger_user_id": 11,
-        "reply_user_id": 12,
-        "image_cq_code": "[CQ:image,file=cache.image]",
-        "realtime_admitted": True,
-    })
-
-    persisted = persist.call_args.args[0]
-    assert persisted.label.visual == visual_label
-    assert "cache.image" not in persisted.model_dump_json()
 
 
 def test_parse_label_extracts_behavior_strategy() -> None:
@@ -1947,7 +1724,7 @@ def test_semantic_style_settings_dump_keeps_split_bits_without_stale_enabled(tmp
     monkeypatch.setattr(mod, "semantic_style_settings_path", lambda **_: path)
     mod.set_semantic_style_governance(collection_enabled=False, injection_enabled=True, bot_id=100, group_id=42)
     dumped = json.loads(path.read_text(encoding="utf-8"))
-    assert set(dumped) == {"collection_enabled", "injection_enabled", "overrides"}
+    assert set(dumped) == {"collection_enabled", "injection_enabled", "direct_enabled"}
     assert dumped["collection_enabled"] is False
     assert dumped["injection_enabled"] is True
 
@@ -2057,3 +1834,167 @@ def test_rebuild_profiles_merges_legacy_statistics_with_human_pair(tmp_path, mon
     assert profile.bubble_counts == [2, 1]
     assert profile.direct_examples == ["新样本"]
     assert profile.rewrite_seeds == []
+
+
+@pytest.mark.asyncio
+async def test_label_semantic_style_batch_returns_multiple_labels(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    complete = AsyncMock(
+        return_value={
+            "content": (
+                '[{"is_reply_pair": true, "transferable": true, "intensity": "soft", "forms": ["short"], '
+                '"interaction_actions": ["support"], "semantic_relations": [], '
+                '"behavior_strategy": {"scene": "倾诉", "action": "倾听", '
+                '"outcome": "对方愿多讲", "learning_type": "observed"}},'
+                '{"is_reply_pair": false, "transferable": false, "intensity": "neutral", "forms": [], '
+                '"interaction_actions": [], "semantic_relations": [], "behavior_strategy": null}]'
+            )
+        }
+    )
+    monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", complete)
+    monkeypatch.setattr(
+        "pallas.product.llm.config.get_llm_config",
+        lambda: SimpleNamespace(llm_model="test-model"),
+    )
+    monkeypatch.setattr(mod, "claim_semantic_label_budget", lambda n=1: True)
+
+    pairs = [("好烦又要加班", "怎么了说说", "adjacent"), ("今天天气", "嗯", "adjacent")]
+    results = await mod.label_semantic_style_batch_with_llm(pairs, max_batch=2)
+
+    assert len(results) == 2
+    assert results[0][0].is_reply_pair is True
+    assert results[0][0].transferable is True
+    assert results[0][1].learning_type == "observed"
+    assert results[1][0].is_reply_pair is False
+    assert results[1][1] is None
+    assert complete.await_args.kwargs["options"]["max_tokens"] == 256
+
+
+@pytest.mark.asyncio
+async def test_label_semantic_style_batch_falls_back_for_missing_when_incomplete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    calls: list[str] = []
+
+    async def fake_complete(messages, *, model=None, options=None, cfg=None, task=None):
+        content = str(messages[0]["content"])
+        if content.startswith("判断 2 组"):  # 批量请求
+            calls.append("batch")
+            # 只返回 1 项 → 仅缺失下标回退单对
+            return {"content": '[{"is_reply_pair": true}]'}
+        calls.append("single")
+        return {"content": '{"is_reply_pair": true, "transferable": true, "intensity": "soft"}'}
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", fake_complete)
+    monkeypatch.setattr(
+        "pallas.product.llm.config.get_llm_config",
+        lambda: SimpleNamespace(llm_model="test-model"),
+    )
+    monkeypatch.setattr(mod, "claim_semantic_label_budget", lambda n=1: True)
+
+    pairs = [("前句1", "接话1", "adjacent"), ("前句2", "接话2", "adjacent")]
+    results = await mod.label_semantic_style_batch_with_llm(pairs, max_batch=2)
+
+    # 一次批量（1/2 项）→ 已解析项保留，仅缺失 1 项回退单对，共 1 + 1 = 2 次调用。
+    assert calls == ["batch", "single"]
+    assert len(results) == 2
+    assert results[0][0].is_reply_pair is True
+    assert results[1][0].is_reply_pair is True
+
+
+@pytest.mark.asyncio
+async def test_label_semantic_style_batch_keeps_failed_fallbacks_unprocessed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    async def fake_complete(messages, *, model=None, options=None, cfg=None, task=None):
+        return {"content": "not json"}
+
+    async def fake_retry(*, trigger_text, reply_text, pair_relation):
+        return None
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", fake_complete)
+    monkeypatch.setattr(
+        "pallas.product.llm.config.get_llm_config",
+        lambda: SimpleNamespace(llm_model="test-model"),
+    )
+    monkeypatch.setattr(mod, "claim_semantic_label_budget", lambda n=1: True)
+    monkeypatch.setattr(mod, "label_semantic_style_with_retry", fake_retry)
+    monkeypatch.setattr(mod, "record_semantic_label_budget", lambda n=1: None)
+
+    results = await mod.label_semantic_style_batch_with_llm(
+        [("前句一", "接话一", "adjacent"), ("前句二", "接话二", "adjacent")],
+        max_batch=2,
+    )
+
+    assert results == [None, None]
+
+
+@pytest.mark.asyncio
+async def test_label_semantic_style_batch_accepts_incomplete_labels_when_len_matches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    calls: list[str] = []
+
+    async def fake_complete(messages, *, model=None, options=None, cfg=None, task=None):
+        content = str(messages[0]["content"])
+        if content.startswith("判断 2 组"):
+            calls.append("batch")
+            # 长度正确，但标签全空：按契约逐项接受，靠落库过滤，不整批回退。
+            return {
+                "content": '[{"is_reply_pair": false, "transferable": false},'
+                ' {"is_reply_pair": false, "transferable": false}]'
+            }
+        calls.append("single")
+        return {"content": '{"is_reply_pair": true, "transferable": true, "intensity": "soft"}'}
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", fake_complete)
+    monkeypatch.setattr(
+        "pallas.product.llm.config.get_llm_config",
+        lambda: SimpleNamespace(llm_model="test-model"),
+    )
+    monkeypatch.setattr(mod, "claim_semantic_label_budget", lambda n=1: True)
+
+    pairs = [("前句1", "接话1", "adjacent"), ("前句2", "接话2", "adjacent")]
+    results = await mod.label_semantic_style_batch_with_llm(pairs, max_batch=2)
+
+    # 批量长度正确即接受（空标签合法），不再触发整批回退：仅 1 次 batch。
+    assert calls == ["batch"]
+    assert len(results) == 2
+    assert results[0][0].is_reply_pair is False
+    assert results[1][0].is_reply_pair is False
+
+
+def test_merge_bot_reply_only_teaches_behavior_strategy(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    # bot 自我接话对：trigger 是真人(11)，reply 是本机 bot(100)。应进入 behavior_strategy(self_reflection)，
+    # 但不应写入 direct_pairs（避免污染「群表达指导」）。
+    example = mod.SemanticStyleExample(
+        example_id="42:7:100",
+        created_at=100,
+        bot_id=100,
+        group_id=42,
+        scene="group_chat",
+        trigger_text="好烦，又要加班",
+        reply_text="要不要歇口气",
+        label=mod.parse_semantic_style_label({"intensity": "soft"}),
+        behavior_strategy=mod.BehaviorStrategy(
+            scene="倾诉", action="问候", outcome="对方再说一句", learning_type="observed"
+        ),
+        source_kind="human_pair",
+        trigger_user_id=11,
+        reply_user_id=100,
+    )
+    profile = mod._build_profile(example, None, now=100, is_bot_reply=True)
+
+    assert profile.direct_pairs == []
+    assert profile.direct_examples == []
+    assert len(profile.behavior_strategies) == 1
+    assert profile.behavior_strategies[0].learning_type == "self_reflection"

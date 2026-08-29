@@ -124,7 +124,7 @@ def retrieve_chunks_embedding(
     if not chunk_rows:
         return []
 
-    vectors = fetch_embeddings_sync(embed_inputs, timeout_sec=EMBEDDING_QUERY_TIMEOUT_SEC)
+    vectors = fetch_embeddings_sync(embed_inputs, timeout_sec=EMBEDDING_QUERY_TIMEOUT_SEC, fallback_stub=False)
     if vectors is None or len(vectors) != len(embed_inputs):
         return None
 

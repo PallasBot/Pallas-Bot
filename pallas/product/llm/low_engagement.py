@@ -107,14 +107,8 @@ def pick_emotion_tangent_saying(rng: random.Random | None = None) -> str:
 
 
 def list_gentle_short_sayings(group_id: int, *, limit: int = 16) -> list[str]:
-    """Return this group's active, short, gentle expression-bank sayings (capped)."""
-    try:
-        from pallas.product.persona.expression_bank import list_group_expressions
-
-        rows = list_group_expressions(int(group_id), status="active", limit=64)
-    except Exception:
-        return []
-    pool = [item.saying for item in rows if _is_gentle_short_saying(item.saying)]
+    """Return this group's local gentle short-saying pool (capped)."""
+    pool = [item for item in _GENTLE_POOL if _is_gentle_short_saying(item)]
     seen: set[str] = set()
     unique: list[str] = []
     for saying in pool:
@@ -122,13 +116,13 @@ def list_gentle_short_sayings(group_id: int, *, limit: int = 16) -> list[str]:
             continue
         seen.add(saying)
         unique.append(saying)
-    return unique[: _MAX_SAYING_CHARS + 4][: max(1, int(limit))]
+    return unique[: max(1, int(limit))]
 
 
 def pick_low_engagement_saying(group_id: int, rng: random.Random | None = None) -> str:
     """Pick a low-engagement phrase, avoiding immediate repeats for the same group."""
     rng = rng or random
-    candidates = [*list_gentle_short_sayings(group_id), *_GENTLE_POOL, *_EMOJI_FALLBACK_POOL]
+    candidates = list_gentle_short_sayings(group_id) + [*_EMOTION_TANGENT_POOL, *_EMOJI_FALLBACK_POOL]
     if not candidates:
         return "哈哈"
     last = _last_used_cache.get(int(group_id))

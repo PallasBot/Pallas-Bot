@@ -15,8 +15,6 @@ from pallas.core.platform.work_jobs.runtime import build_work_job_store
 from .learn_runtime_config import get_repeater_learn_runtime_config
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
-
     from nonebot.adapters.onebot.v11 import GroupMessageEvent
 
     from .model import Chat
@@ -218,12 +216,6 @@ async def enqueue_repeater_learn(chat: Chat, event: GroupMessageEvent) -> bool:
 
         record_learn_skipped_full()
         return False
-    semantic_job = build_semantic_style_job(payload.to_dict(), event)
-    if semantic_job is not None:
-        try:
-            learn_queue().put_nowait(semantic_job)
-        except asyncio.QueueFull:
-            logger.debug("repeater semantic style enqueue skipped: queue full")
     from pallas.core.platform.ingress.hotpath_metrics import record_learn_buffered, record_learn_enqueued
 
     record_learn_enqueued()
@@ -269,98 +261,6 @@ def observe_quoted_semantic_style_feedback(event: GroupMessageEvent) -> object |
         following_user_id=int(event.user_id),
         following_text=str(event.get_plaintext() or "").strip(),
     )
-
-
-def build_semantic_style_job(payload: dict[str, object], event: GroupMessageEvent) -> WorkJob | None:
-    """关系学习已入队后，附带一份可随压力丢弃的标注任务。"""
-    chat = payload.get("chat")
-    predecessor = payload.get("predecessor")
-    if not isinstance(chat, dict) or not isinstance(predecessor, dict):
-        return None
-    trigger = str(predecessor.get("plain_text") or predecessor.get("raw_message") or "").strip()
-    reply = str(chat.get("plain_text") or chat.get("raw_message") or "").strip()
-    if not trigger or not reply:
-        return None
-    group_id = int(chat.get("group_id") or 0)
-    bot_id = int(chat.get("bot_id") or 0)
-    if group_id <= 0 or bot_id <= 0:
-        return None
-    from pallas.product.llm.repeater_semantic_style import (
-        claim_semantic_style_realtime_admission,
-        is_human_semantic_style_pair,
-        semantic_style_collection_enabled,
-    )
-
-    trigger_user_id = int(predecessor.get("user_id") or 0)
-    reply_user_id = int(chat.get("user_id") or 0)
-    if not is_human_semantic_style_pair(
-        trigger_user_id=trigger_user_id,
-        reply_user_id=reply_user_id,
-        bot_id=bot_id,
-    ):
-        return None
-    if not semantic_style_collection_enabled(bot_id=bot_id, group_id=group_id):
-        return None
-    predecessor_message_id = int(predecessor.get("message_id") or 0)
-    reply_to_message_id = int(chat.get("reply_to_message_id") or 0)
-    pair_relation = "quoted" if predecessor_message_id and reply_to_message_id == predecessor_message_id else "adjacent"
-    example_id = f"{group_id}:{int(event.message_id)}:{bot_id}"
-    if not claim_semantic_style_realtime_admission(bot_id=bot_id, group_id=group_id, example_id=example_id):
-        return None
-    return WorkJob.create(
-        kind="repeater.semantic_style",
-        payload={
-            "example_id": example_id,
-            "message_id": int(event.message_id),
-            "created_at": int(chat.get("time") or 0),
-            "bot_id": bot_id,
-            "group_id": group_id,
-            "scene": "group_chat",
-            "trigger_text": trigger,
-            "reply_text": reply,
-            "source_kind": "human_pair",
-            "trigger_user_id": trigger_user_id,
-            "reply_user_id": reply_user_id,
-            "pair_relation": pair_relation,
-            "realtime_admitted": True,
-        },
-        idempotency_key=f"repeater.semantic_style:{group_id}:{int(event.message_id)}:{bot_id}",
-    )
-
-
-def build_semantic_style_backfill_batch(
-    candidates: Iterable[Mapping[str, object]],
-    *,
-    cursor: object | None = None,
-    now: int | None = None,
-    remaining_today: int | None = None,
-):
-    """历史候选仅在实时 learn 队列清空后入队，避免抢占新接话标注。"""
-    from pallas.product.llm.repeater_semantic_style import SemanticStyleBackfillCursor
-    from pallas.product.llm.repeater_semantic_style import build_semantic_style_backfill_batch as build_batch
-
-    resolved_cursor = cursor if isinstance(cursor, SemanticStyleBackfillCursor) else SemanticStyleBackfillCursor()
-    return build_batch(
-        candidates,
-        cursor=resolved_cursor,
-        now=now,
-        remaining_today=remaining_today,
-        has_pending_new_jobs=not learn_queue().empty(),
-    )
-
-
-def enqueue_semantic_style_backfill_jobs(jobs: Iterable[WorkJob]) -> int:
-    """已排程的历史任务只填充实时队列空档。"""
-    if not learn_queue().empty():
-        return 0
-    queued = 0
-    for job in jobs:
-        try:
-            learn_queue().put_nowait(job)
-        except asyncio.QueueFull:
-            break
-        queued += 1
-    return queued
 
 
 def _learn_workers_running() -> bool:

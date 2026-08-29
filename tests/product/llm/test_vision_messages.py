@@ -354,6 +354,16 @@ def test_image_bytes_to_data_uri_sniffs_mime_and_ignores_over_size() -> None:
 
 
 @pytest.mark.asyncio
+async def test_fetch_image_data_uri_passthrough_data_uri_and_rejects_other_schemes() -> None:
+    from pallas.product.llm import vision_messages as vm
+
+    data_uri = "data:image/png;base64,AAAA"
+    assert await vm.fetch_image_data_uri(data_uri) == data_uri
+    assert await vm.fetch_image_data_uri("ftp://example.com/a.png") is None
+    assert await vm.fetch_image_data_uri("") is None
+
+
+@pytest.mark.asyncio
 async def test_fetch_image_data_uri_falls_back_to_media_cache_on_http_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

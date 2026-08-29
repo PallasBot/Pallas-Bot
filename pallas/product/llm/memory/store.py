@@ -246,7 +246,9 @@ async def save_memory_entry(
 
         text = memory_embedding_text(keywords=keywords, content=safe_content)
         vectors = (
-            await asyncio.to_thread(fetch_embeddings_sync, [text], timeout_sec=EMBEDDING_QUERY_TIMEOUT_SEC)
+            await asyncio.to_thread(
+                fetch_embeddings_sync, [text], timeout_sec=EMBEDDING_QUERY_TIMEOUT_SEC, fallback_stub=False
+            )
             if text.strip()
             else None
         )

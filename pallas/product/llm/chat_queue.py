@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 
 from pallas.product.llm.config import LlmConfig, get_llm_config
 
-_QUEUE: dict[str, list[tuple[str, int]]] = {}
+# 单会话积压上限与条目 TTL：防止长时间无人取走导致内存与合并文本无界增长
+_MAX_PENDING_PER_KEY = 8
+_PENDING_TTL_SEC = 600.0
+
+_QUEUE: dict[str, list[tuple[str, int, float]]] = {}
 _IN_FLIGHT: set[str] = set()
 
 
@@ -33,6 +38,16 @@ def finish_chat_turn(bot_id: int, group_id: int | None, user_id: int) -> None:
     _IN_FLIGHT.discard(chat_queue_key(bot_id, group_id, user_id))
 
 
+def _fresh_entries(key: str) -> list[tuple[str, int, float]]:
+    now = time.monotonic()
+    entries = [entry for entry in _QUEUE.get(key, []) if now - entry[2] <= _PENDING_TTL_SEC]
+    if entries:
+        _QUEUE[key] = entries
+    else:
+        _QUEUE.pop(key, None)
+    return entries
+
+
 def stash_pending_chat(
     bot_id: int,
     group_id: int | None,
@@ -42,22 +57,29 @@ def stash_pending_chat(
     message_id: int = 0,
 ) -> None:
     value = str(text or "").strip()
-    if value:
-        _QUEUE.setdefault(chat_queue_key(bot_id, group_id, user_id), []).append((value, int(message_id or 0)))
+    if not value:
+        return
+    entries = _QUEUE.setdefault(chat_queue_key(bot_id, group_id, user_id), [])
+    entries.append((value, int(message_id or 0), time.monotonic()))
+    if len(entries) > _MAX_PENDING_PER_KEY:
+        del entries[: len(entries) - _MAX_PENDING_PER_KEY]
 
 
 def take_pending_chat(bot_id: int, group_id: int | None, user_id: int) -> str:
-    return "\n".join(text for text, _message_id in _QUEUE.pop(chat_queue_key(bot_id, group_id, user_id), []))
+    entries = _fresh_entries(chat_queue_key(bot_id, group_id, user_id))
+    _QUEUE.pop(chat_queue_key(bot_id, group_id, user_id), None)
+    return "\n".join(text for text, _message_id, _created_at in entries)
 
 
 def take_pending_chat_one(bot_id: int, group_id: int | None, user_id: int) -> tuple[str, int]:
-    key = chat_queue_key(bot_id, group_id, user_id)
-    entries = _QUEUE.get(key)
+    entries = _fresh_entries(chat_queue_key(bot_id, group_id, user_id))
     if not entries:
         return "", 0
-    text, message_id = entries.pop(0)
-    if not entries:
-        _QUEUE.pop(key, None)
+    text, message_id, _created_at = entries.pop(0)
+    if entries:
+        _QUEUE[chat_queue_key(bot_id, group_id, user_id)] = entries
+    else:
+        _QUEUE.pop(chat_queue_key(bot_id, group_id, user_id), None)
     return text, message_id
 
 

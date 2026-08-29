@@ -4,20 +4,24 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from pallas.core.platform.bot_runtime.plugin_matrix import PLUGIN_BUNDLED_MODULE_PREFIXES
 from pallas.core.platform.shard import context as shard_ctx
 
 if TYPE_CHECKING:
     from pallas.core.platform.shard.registry.config import BotRole
 
-HUB_PLUGIN_MODULES: tuple[str, ...] = (
-    "packages.pb_webui",
-    "packages.pb_protocol",
-    "packages.relogin_bot",
-    "packages.maa_hub",
-    "packages.blacklist",
-    "packages.help",
-    "packages.pb_stats",
+# hub 进程必须加载的 bundled 插件名；模块名统一取自注册表的 bundled 前缀表。
+_HUB_PLUGIN_NAMES: tuple[str, ...] = (
+    "pb_webui",
+    "pb_protocol",
+    "relogin_bot",
+    "maa_hub",
+    "blacklist",
+    "help",
+    "pb_stats",
 )
+
+HUB_PLUGIN_MODULES: tuple[str, ...] = tuple(PLUGIN_BUNDLED_MODULE_PREFIXES[name] for name in _HUB_PLUGIN_NAMES)
 
 WORKER_SKIP_PLUGIN_NAMES: frozenset[str] = frozenset({
     "pb_webui",

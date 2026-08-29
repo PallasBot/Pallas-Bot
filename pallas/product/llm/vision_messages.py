@@ -147,10 +147,10 @@ def vision_user_plain_text(metadata: dict[str, Any] | None, user_text: str = "")
 
 async def fetch_image_data_uri(url: str) -> str | None:
     target = str(url or "").strip()
+    if target.lower().startswith("data:"):
+        return target
     if not target.lower().startswith(("http://", "https://")):
         return None
-    if target.startswith("data:"):
-        return target
     # QQ 多媒体 URL 常带签名且会过期，裸 GET（无 Referer/浏览器指纹）会拿 400。
     # 先查本地缓存命中就直接复用；否则走 reference_resolve 的平台下载传输层
     # （curl_cffi 模拟 chrome124 指纹 + Referer: https://qun.qq.com/），失败再回退缓存。

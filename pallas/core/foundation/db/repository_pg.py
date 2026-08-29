@@ -40,7 +40,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, selectinload
+from sqlalchemy.orm import DeclarativeBase, Mapped, aliased, mapped_column, relationship, selectinload
 
 from pallas.core.foundation.db.blob_store import (
     delete_image_blob,
@@ -327,6 +327,24 @@ class StickerLabelRow(Base):
     prompt_version: Mapped[int] = mapped_column(Integer, nullable=False)
     labeled_at: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     label_json: Mapped[Any] = mapped_column(_JsonB, nullable=False)
+
+
+class UserStickerStatRow(Base):
+    """群成员发送图片的次数统计，按内容哈希聚合，不带 bot 维度。"""
+
+    __tablename__ = "user_sticker_stat"
+    __table_args__ = (
+        UniqueConstraint("group_id", "user_id", "content_hash", name="uq_user_sticker_stat_group_user_hash"),
+        Index("ix_user_sticker_stat_send_count", "send_count"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    group_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    content_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    send_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_sent_at: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
 
 class LlmChatMessageRow(Base):
@@ -1880,16 +1898,101 @@ class PgMessageRepository:
         group_id: int,
         *,
         before_time: int | None = None,
+        before_message_id: int | None = None,
         user_id: int | None = None,
         limit: int = 8,
     ) -> list[Message]:
         cap = max(1, min(int(limit), 32))
         stmt = select(MessageRow).where(MessageRow.group_id == int(group_id))
         if before_time is not None:
-            stmt = stmt.where(MessageRow.time < int(before_time))
+            if before_message_id is not None:
+                stmt = stmt.where(
+                    or_(
+                        MessageRow.time < int(before_time),
+                        and_(MessageRow.time == int(before_time), MessageRow.message_id < int(before_message_id)),
+                    )
+                )
+            else:
+                stmt = stmt.where(MessageRow.time < int(before_time))
         if user_id is not None:
             stmt = stmt.where(MessageRow.user_id == int(user_id))
-        stmt = stmt.order_by(MessageRow.time.desc()).limit(cap)
+        stmt = stmt.order_by(MessageRow.time.desc(), MessageRow.message_id.desc()).limit(cap)
+        async with get_session(read_only=True) as session:
+            result = await session.execute(stmt)
+            rows = list(result.scalars().all())
+        rows.reverse()
+        return [row_to_message(r) for r in rows]
+
+    async def list_group_messages_after(
+        self,
+        group_id: int,
+        *,
+        after_time: int,
+        after_message_id: int | None = None,
+        limit: int = 2000,
+    ) -> list[Message]:
+        cap = max(1, min(int(limit), 4096))
+        stmt = select(MessageRow).where(MessageRow.group_id == int(group_id))
+        if after_message_id is None:
+            stmt = stmt.where(MessageRow.time > int(after_time))
+        else:
+            stmt = stmt.where(
+                or_(
+                    MessageRow.time > int(after_time),
+                    and_(MessageRow.time == int(after_time), MessageRow.message_id > int(after_message_id)),
+                )
+            )
+        stmt = stmt.order_by(MessageRow.time.asc(), MessageRow.message_id.asc()).limit(cap)
+        async with get_session(read_only=True) as session:
+            result = await session.execute(stmt)
+            rows = list(result.scalars().all())
+        return [row_to_message(r) for r in rows]
+
+    async def find_recent_distinct_in_group(
+        self,
+        group_id: int,
+        *,
+        before_time: int | None = None,
+        before_message_id: int | None = None,
+        since_time: int | None = None,
+        user_id: int | None = None,
+        limit: int = 128,
+    ) -> list[Message]:
+        cap = max(1, min(int(limit), 256))
+        partition_key = case((MessageRow.message_id.is_(None), MessageRow.id), else_=MessageRow.message_id)
+        ranked = select(
+            MessageRow,
+            func
+            .row_number()
+            .over(partition_by=partition_key, order_by=(MessageRow.time.desc(), MessageRow.id.desc()))
+            .label("_message_rank"),
+        ).where(MessageRow.group_id == int(group_id))
+        if before_time is not None:
+            if before_message_id is not None:
+                ranked = ranked.where(
+                    or_(
+                        MessageRow.time < int(before_time),
+                        and_(MessageRow.time == int(before_time), MessageRow.message_id < int(before_message_id)),
+                    )
+                )
+            else:
+                ranked = ranked.where(MessageRow.time < int(before_time))
+        if since_time is not None:
+            ranked = ranked.where(MessageRow.time >= int(since_time))
+        if user_id is not None:
+            ranked = ranked.where(MessageRow.user_id == int(user_id))
+        ranked_subquery = ranked.subquery()
+        ranked_message = aliased(MessageRow, ranked_subquery)
+        stmt = (
+            select(ranked_message)
+            .where(ranked_subquery.c._message_rank == 1)
+            .order_by(
+                ranked_message.time.desc(),
+                ranked_message.message_id.desc().nullslast(),
+                ranked_message.id.desc(),
+            )
+            .limit(cap)
+        )
         async with get_session(read_only=True) as session:
             result = await session.execute(stmt)
             rows = list(result.scalars().all())

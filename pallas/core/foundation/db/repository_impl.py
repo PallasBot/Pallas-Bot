@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 from typing import TYPE_CHECKING, Any
 
 from beanie.operators import Or
+from pymongo.errors import BulkWriteError, DuplicateKeyError
 
 from pallas.core.foundation.db.blob_store import (
     blob_sha256,
@@ -26,6 +28,7 @@ from pallas.core.foundation.db.modules import (
     PallasACL,
     SchemaMigration,
     StickerLabel,
+    UserStickerStat,
 )
 from pallas.core.shared.utils.invalidate_cache import clear_model_cache
 
@@ -174,18 +177,65 @@ class MongoMessageRepository:
         group_id: int,
         *,
         before_time: int | None = None,
+        before_message_id: int | None = None,
         user_id: int | None = None,
         limit: int = 8,
     ) -> list[Message]:
         cap = max(1, min(int(limit), 32))
         query: dict = {"group_id": int(group_id)}
         if before_time is not None:
-            query["time"] = {"$lt": int(before_time)}
+            if before_message_id is not None:
+                query["$or"] = [
+                    {"time": {"$lt": int(before_time)}},
+                    {"time": int(before_time), "message_id": {"$lt": int(before_message_id)}},
+                ]
+            else:
+                query["time"] = {"$lt": int(before_time)}
         if user_id is not None:
             query["user_id"] = int(user_id)
-        docs = await Message.find(query).sort("-time").limit(cap).to_list()
+        docs = await Message.find(query).sort("-time", "-message_id").limit(cap).to_list()
         docs.reverse()
         return docs
+
+    async def find_recent_distinct_in_group(
+        self,
+        group_id: int,
+        *,
+        before_time: int | None = None,
+        before_message_id: int | None = None,
+        since_time: int | None = None,
+        user_id: int | None = None,
+        limit: int = 128,
+    ) -> list[Message]:
+        cap = max(1, min(int(limit), 256))
+        query: dict = {"group_id": int(group_id)}
+        if before_time is not None:
+            if before_message_id is not None:
+                query["$or"] = [
+                    {"time": {"$lt": int(before_time)}},
+                    {"time": int(before_time), "message_id": {"$lt": int(before_message_id)}},
+                ]
+            else:
+                query["time"] = {"$lt": int(before_time)}
+        if since_time is not None:
+            query.setdefault("time", {})["$gte"] = int(since_time)
+        if user_id is not None:
+            query["user_id"] = int(user_id)
+        pipeline = [
+            {"$match": query},
+            {"$sort": {"time": -1, "message_id": -1, "_id": -1}},
+            {
+                "$group": {
+                    "_id": {"$ifNull": ["$message_id", "$_id"]},
+                    "document": {"$first": "$$ROOT"},
+                }
+            },
+            {"$replaceRoot": {"newRoot": "$document"}},
+            {"$sort": {"time": -1, "message_id": -1, "_id": -1}},
+            {"$limit": cap},
+        ]
+        docs = await Message.aggregate(pipeline).to_list()
+        return [Message.model_validate(doc) for doc in reversed(docs)]
 
     async def find_by_message_ids(self, group_id: int, message_ids: list[int]) -> list[Message]:
         # 注意 QQ 新版 message_id 可能是负数，isdigit() 不认负号会误过滤，导致引用图查不到。
@@ -235,8 +285,40 @@ class MongoMessageRepository:
         rows = await Message.aggregate(pipeline).to_list()
         return [int(row["_id"]) for row in rows]
 
+    async def list_group_messages_after(
+        self,
+        group_id: int,
+        *,
+        after_time: int,
+        after_message_id: int | None = None,
+        limit: int = 2000,
+    ) -> list[Message]:
+        cap = max(1, min(int(limit), 4096))
+        query: dict = {"group_id": int(group_id)}
+        if after_message_id is None:
+            query["time"] = {"$gt": int(after_time)}
+        else:
+            query["$or"] = [
+                {"time": {"$gt": int(after_time)}},
+                {"time": int(after_time), "message_id": {"$gt": int(after_message_id)}},
+            ]
+        return await Message.find(query).sort("time", "message_id").limit(cap).to_list()
+
     async def bulk_insert(self, messages: list[Message]) -> None:
-        await Message.insert_many(messages)
+        if not messages:
+            return
+        try:
+            await Message.insert_many(messages, ordered=False)
+        except BulkWriteError as exc:
+            # 唯一锚点 (group_id, bot_id, message_id) 冲突视为幂等重放，其余照常抛出
+            write_errors = exc.details.get("writeErrors", [])
+            dup_errors = [
+                e
+                for e in write_errors
+                if e.get("code") in (11000, 11001) or "duplicate key" in str(e.get("errmsg", ""))
+            ]
+            if not dup_errors or len(dup_errors) != len(write_errors):
+                raise
 
 
 class MongoBlackListRepository:
@@ -588,6 +670,47 @@ class MongoStickerLabelRepository:
     async def delete(self, content_hash: str) -> bool:
         result = await StickerLabel.get_pymongo_collection().delete_one({"content_hash": content_hash})
         return bool(result.deleted_count)
+
+
+class MongoUserStickerStatRepository:
+    """MongoDB 版群成员图片发送统计仓储。"""
+
+    async def increment(self, *, group_id: int, user_id: int, content_hash: str, sent_at: int, count: int = 1) -> None:
+        coll = UserStickerStat.get_pymongo_collection()
+        query = {"group_id": int(group_id), "user_id": int(user_id), "content_hash": content_hash}
+        update = {
+            "$inc": {"send_count": int(count)},
+            "$set": {"last_sent_at": int(sent_at), "updated_at": int(time.time())},
+        }
+        try:
+            await coll.update_one(query, update, upsert=True)
+        except DuplicateKeyError:
+            # 并发 upsert 竞态：键已由他方创建，重放一次自增即可
+            await coll.update_one(query, update)
+
+    async def get(self, *, group_id: int, user_id: int, content_hash: str) -> UserStickerStat | None:
+        return await UserStickerStat.find_one({
+            "group_id": int(group_id),
+            "user_id": int(user_id),
+            "content_hash": content_hash,
+        })
+
+    async def list_group_candidates(
+        self, *, group_id: int, min_count: int, limit: int | None = 5
+    ) -> list[UserStickerStat]:
+        query = UserStickerStat.find({"group_id": int(group_id), "send_count": {"$gte": int(min_count)}}).sort(
+            "-send_count", "-last_sent_at"
+        )
+        if limit is not None:
+            query = query.limit(max(1, min(int(limit), 100)))
+        return await query.to_list()
+
+    async def delete_cold(self, *, before_ts: int, max_count: int) -> int:
+        result = await UserStickerStat.get_pymongo_collection().delete_many({
+            "send_count": {"$lt": int(max_count)},
+            "updated_at": {"$lt": int(before_ts)},
+        })
+        return int(result.deleted_count)
 
 
 class MongoAdminRepository:

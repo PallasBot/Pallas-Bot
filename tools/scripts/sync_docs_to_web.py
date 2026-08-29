@@ -77,6 +77,9 @@ FILE_MAP: dict[str, str] = {
     "developer/architecture/llm-context-injection.md": (
         "developer/architecture/llm-context-injection.md"
     ),
+    "developer/architecture/group-insight-semantic-style.md": (
+        "developer/architecture/group-insight-semantic-style.md"
+    ),
     "developer/plugin-development/getting-started.md": (
         "developer/plugin-development/getting-started.md"
     ),

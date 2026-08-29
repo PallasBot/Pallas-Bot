@@ -46,13 +46,13 @@ _AFFINITY_HINTS = {
 def affinity_level(affinity: float) -> str:
     """好感度分档标签：值越低越厌恶。"""
     value = float(affinity or 0.0)
-    if value < -0.5:
+    if value < -0.6:
         return "厌恶"
-    if value < -0.15:
+    if value < -0.25:
         return "冷淡"
-    if value < 0.15:
+    if value < 0.25:
         return "陌生"
-    if value < 0.4:
+    if value < 0.45:
         return "认识"
     if value < 0.6:
         return "熟人"

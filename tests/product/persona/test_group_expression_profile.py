@@ -55,7 +55,7 @@ def test_new_profile_round_trip_keeps_semantic_summary_without_quota_state() -> 
     assert "quota" not in str(profile.model_dump(mode="json"))
 
 
-def test_semantic_snapshot_updates_examples_and_reply_shape_without_quota() -> None:
+def test_semantic_snapshot_updates_examples_summary_without_overriding_reply_shape() -> None:
     from pallas.product.persona.group_expression_profile import GroupExpressionProfile
 
     profile = GroupExpressionProfile().with_semantic_profile({
@@ -79,7 +79,8 @@ def test_semantic_snapshot_updates_examples_and_reply_shape_without_quota() -> N
     assert profile.examples_summary.direct_pair_count == 1
     assert profile.examples_summary.intensity_counts == {"sharp": 3, "neutral": 1}
     assert profile.examples_summary.form_counts == {"fragment": 2}
-    assert profile.reply_shape.bubble_count_p50 == 2
-    assert profile.reply_shape.bubble_count_p90 == 3
-    assert profile.reply_shape.rhythm_distribution == {"single": 0.25, "multi": 0.75}
+    # reply_shape 只由群消息（group_profiler）计算，语义快照不再覆写其分位。
+    assert profile.reply_shape.bubble_count_p50 == 0
+    assert profile.reply_shape.bubble_count_p90 == 0
+    assert profile.reply_shape.rhythm_distribution == {}
     assert "quota" not in str(profile.model_dump(mode="json"))

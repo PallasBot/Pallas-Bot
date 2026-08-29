@@ -37,7 +37,7 @@
 | 短气泡兜底拆分 | `reply_postprocess.py` `split_short_reply_segments` | short 取向但只有单段时，按句末标点 / 换行拆成多气泡 |
 | 轻量后处理 | `apply_reply_postprocess` | 错别字、句尾句号 |
 | 多气泡投递 | `delivery.py` `deliver_llm_callback_success` | 逐条发送，气泡间按上句长度叠加随机抖动（0.5~3.5s，模拟真人节奏） |
-| 学习回写 | 会话 / `behavior_store` / `expression_learn` / `repeater_feedback` / `auto_episode` | 投递成功后写历史、行为与表达 |
+| 学习回写 | 会话 / `behavior_store` / `repeater_feedback` / `auto_episode` | 投递成功后写历史、行为与表达 |
 
 ## LLM turn telemetry
 
@@ -58,18 +58,20 @@ Telemetry 是 best-effort 的旁路观测：写 key、序列化、目录或文�
 
 ## Prompt 组装
 
-at-chat 系统提示词 `pallas/product/persona/at_chat_system_prompt.txt` 只承载背景 / 输出边界 / 群聊边界等不变原则，不再内嵌具体对话示范；接话的差异化由语义风格按 **bot × 群** 注入（见上表「群表达指导」「真人接话参考」）。`ChatPromptAssembler`（`pallas/product/llm/assembler/chat_prompt.py`）依次组装：persona 核心 → reply_shape（回复形状与输出契约）→ turn policy → 近期上下文 → 群表达指导 / 真人接话参考（随 profile 有数据才注入）。
+at-chat 系统提示词 `pallas/product/persona/at_chat_system_prompt.txt` 只承载背景 / 输出边界 / 群聊边界等不变原则，不再内嵌具体对话示范；接话的差异化由语义风格按 **bot × 群** 注入（见上表「群表达指导」「真人接话参考」）。`ChatPromptAssembler`（`pallas/product/llm/assembler/chat_prompt.py`）按变化频率从低到高依次组装：persona 核心 → 群表达指导 / 真人接话参考（随 profile 有数据才注入）→ 近期上下文（检索块 → 群时间线）→ reply_shape（回复形状与输出契约）→ turn policy → 当前时间 → 工具上下文，使支持前缀缓存的 Provider 可命中更长的稳定前缀。
 
 ## 关键锚点
 
 | 步骤 | 位置 |
 | --- | --- |
 | Repeater 候选与投递 | `packages/repeater/responder.py`、`packages/repeater/handlers/message.py` |
-| LLM 群级表达指导 | `pallas/product/llm/repeater_semantic_style.py` |
+| LLM 群级表达指导 | `pallas/product/llm/repeater_semantic_style.py`（注入消费）；`pallas/product/llm/group_insight_processor.py`（从 message 表重建成对样本，批量标注落盘） |
 | 表达库存取 / 学习 | `pallas/product/persona/expression_*.py` |
 | 进程内投递 | `pallas/product/llm/delivery.py`（`deliver_llm_chat_result`）；`kernel_runner.py` 调用 delivery |
 | 媒体 / HTTP callback 壳 | `pallas/core/platform/ai_callback/runner.py`（薄壳，复用 delivery） |
 | 配置键 | `pallas/product/llm/config.py`；WebUI 段见 `env_sections.py`（侧栏 **AI 配置**） |
+
+群洞察的调度、8 个候选对的批量含义、持久化游标、预算和记忆层批量边界见[群洞察与语义风格指导器](group-insight-semantic-style.md)。
 
 ## 约束
 

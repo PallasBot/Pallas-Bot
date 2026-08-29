@@ -111,7 +111,8 @@ _WARMTH_NEG = ("滚", "别烦我", "讨厌你", "闭嘴", "走开", "别理我",
 _ASSERT_POS = ("来啊", "敢不敢", "你凶", "别装", "顶你")
 _ASSERT_NEG = ("对不起", "抱歉", "别生气", "求你了")
 _AFFINITY_STEP_POS = 0.05
-_AFFINITY_STEP_NEG = 0.08
+_AFFINITY_STEP_NEG = 0.05
+_AFFINITY_STEP_SEVERE_NEG = 0.10
 _AFFINITY_POS = (
     "喜欢你",
     "最喜欢你",
@@ -167,6 +168,28 @@ _AFFINITY_NEG = (
     "杀了你",
     "揍你",
     "举办",
+    "开除",
+    "傻",
+    "笨",
+)
+_AFFINITY_SEVERE_NEG = (
+    "滚",
+    "滚出去",
+    "滚出来",
+    "滚蛋",
+    "滚一边去",
+    "滚的远远",
+    "蠢",
+    "废物",
+    "傻逼",
+    "白痴",
+    "傻牛",
+    "蠢牛",
+    "傻福",
+    "杀了你",
+    "把你烤了",
+    "做成红烧牛肉面",
+    "揍你",
     "开除",
 )
 
@@ -262,12 +285,13 @@ def extract_relationship_attitude_delta(plain_text: str) -> tuple[float, float]:
 
 
 def extract_relationship_affinity_delta(plain_text: str) -> float:
-    """规则词表评好感度：命中正向词 +0.05、负向词 -0.08；双向命中负向优先。"""
+    """规则词表评好感度：命中正向词 +0.05、负向词 -0.05、重词 -0.10；双向命中负向优先。"""
     body = (plain_text or "").strip()
     if not body or len(body) > 60:
         return 0.0
-    neg_hit = any(token in body for token in _AFFINITY_NEG)
-    if neg_hit:
+    if any(token in body for token in _AFFINITY_SEVERE_NEG):
+        return -_AFFINITY_STEP_SEVERE_NEG
+    if any(token in body for token in _AFFINITY_NEG):
         return -_AFFINITY_STEP_NEG
     if any(token in body for token in _AFFINITY_POS):
         return _AFFINITY_STEP_POS

@@ -48,8 +48,10 @@ def _fake_pg_setup(*, backend: str) -> tuple[MagicMock, MagicMock, dict]:
     asyncpg_conn = MagicMock()
     asyncpg_conn.add_listener = add_listener
     asyncpg_conn.remove_listener = remove_listener
+    asyncpg_conn.close = AsyncMock()
 
     raw = MagicMock()
+    raw.is_detached = False
     raw.driver_connection = asyncpg_conn
 
     engine.raw_connection = AsyncMock(return_value=raw)
@@ -73,6 +75,10 @@ async def test_listen_delivery_ready_listens_on_channel_and_invokes_callback(mon
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+        # 取消后应从池中摘除（detach）并直接关闭原生 asyncpg 连接，
+        # 而非归池（归池在池满时走 overflow 硬关闭，无 greenlet 上下文会报错）。
+        raw.detach.assert_called_once()
+        raw.driver_connection.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio

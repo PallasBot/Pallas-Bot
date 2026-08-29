@@ -37,3 +37,11 @@ def test_quality_matrix_summary_groups_by_persona_and_scene() -> None:
     assert summary["by_persona"]["calm"]["count"] == 1
     assert summary["by_scene"]["short_vent"]["scores"]["naturalness"] == 5
     assert summary["by_rule_id"]["short_vent_overexplained"]["count"] == 1
+
+
+def test_anonymous_matrix_covers_warm_neutral_scenarios_with_rejection_guard() -> None:
+    scenes = {case.scene for case in ANONYMOUS_QUALITY_MATRIX}
+    assert {"greeting", "warm_praise", "agreement", "thanks", "q_tease"} <= scenes
+    for case in ANONYMOUS_QUALITY_MATRIX:
+        if case.scene in {"greeting", "warm_praise", "agreement", "thanks", "q_tease"}:
+            assert {"想得美", "少来", "别吵"} <= set(case.forbidden_traits)

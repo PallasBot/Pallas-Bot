@@ -24,30 +24,30 @@ def test_expired_effect_claim_is_reclaimed_and_old_lease_cannot_mutate_it(monkey
         bot_id=10001,
         group_id=20001,
         reply_text="不合适的句子",
-        injection_snapshot={"expression_entries": [{"entry_id": "expr-20001-a", "saying": "不合适的句子"}]},
+        injection_snapshot={"self_aliases": [{"alias": "不合适的句子"}]},
         now=1,
     )
     path = outcomes_path()
     row = json.loads(path.read_text(encoding="utf-8"))
-    row["effects"] = {"expression": {"state": "claimed"}}
+    row["effects"] = {"self_alias": {"state": "claimed"}}
     path.write_text(json.dumps(row, ensure_ascii=False) + "\n", encoding="utf-8")
 
     new_lease = claim_negative_outcome_effect(
-        outcome_id="expired-effect", bot_id=10001, group_id=20001, kind="expression", now=302
+        outcome_id="expired-effect", bot_id=10001, group_id=20001, kind="self_alias", now=302
     )
 
     assert new_lease
     assert not mark_negative_outcome_effect_completed(
-        outcome_id="expired-effect", bot_id=10001, group_id=20001, kind="expression", lease_id="old-lease"
+        outcome_id="expired-effect", bot_id=10001, group_id=20001, kind="self_alias", lease_id="old-lease"
     )
     assert not release_negative_outcome_effect_claim(
-        outcome_id="expired-effect", bot_id=10001, group_id=20001, kind="expression", lease_id="old-lease"
+        outcome_id="expired-effect", bot_id=10001, group_id=20001, kind="self_alias", lease_id="old-lease"
     )
     assert begin_negative_outcome_effect(
-        outcome_id="expired-effect", bot_id=10001, group_id=20001, kind="expression", lease_id=new_lease
+        outcome_id="expired-effect", bot_id=10001, group_id=20001, kind="self_alias", lease_id=new_lease
     )
     assert mark_negative_outcome_effect_completed(
-        outcome_id="expired-effect", bot_id=10001, group_id=20001, kind="expression", lease_id=new_lease
+        outcome_id="expired-effect", bot_id=10001, group_id=20001, kind="self_alias", lease_id=new_lease
     )
 
 
@@ -58,7 +58,7 @@ def test_parallel_effect_claims_remain_exclusive(monkeypatch, tmp_path):
         bot_id=10001,
         group_id=20001,
         reply_text="不合适的句子",
-        injection_snapshot={"expression_entries": [{"entry_id": "expr-20001-a", "saying": "不合适的句子"}]},
+        injection_snapshot={"self_aliases": [{"alias": "不合适的句子"}]},
         now=1,
     )
     barrier = threading.Barrier(2)
@@ -68,7 +68,7 @@ def test_parallel_effect_claims_remain_exclusive(monkeypatch, tmp_path):
         barrier.wait()
         claims.append(
             claim_negative_outcome_effect(
-                outcome_id="parallel-effect", bot_id=10001, group_id=20001, kind="expression", now=2
+                outcome_id="parallel-effect", bot_id=10001, group_id=20001, kind="self_alias", now=2
             )
         )
 
@@ -89,27 +89,27 @@ def test_undo_cancels_effect_leases_and_never_allows_them_to_reapply(monkeypatch
         bot_id=10001,
         group_id=20001,
         reply_text="不合适的句子",
-        injection_snapshot={"expression_entries": [{"entry_id": "expr-20001-a", "saying": "不合适的句子"}]},
+        injection_snapshot={"self_aliases": [{"alias": "不合适的句子"}]},
         now=1,
     )
     lease_id = claim_negative_outcome_effect(
-        outcome_id="undo-effect", bot_id=10001, group_id=20001, kind="expression", now=2
+        outcome_id="undo-effect", bot_id=10001, group_id=20001, kind="self_alias", now=2
     )
 
     assert lease_id
     assert undo_negative_outcome(outcome_id="undo-effect", bot_id=10001, group_id=20001, now=3)
     assert not mark_negative_outcome_effect_completed(
-        outcome_id="undo-effect", bot_id=10001, group_id=20001, kind="expression", lease_id=lease_id
+        outcome_id="undo-effect", bot_id=10001, group_id=20001, kind="self_alias", lease_id=lease_id
     )
     assert not release_negative_outcome_effect_claim(
-        outcome_id="undo-effect", bot_id=10001, group_id=20001, kind="expression", lease_id=lease_id
+        outcome_id="undo-effect", bot_id=10001, group_id=20001, kind="self_alias", lease_id=lease_id
     )
     assert (
-        claim_negative_outcome_effect(outcome_id="undo-effect", bot_id=10001, group_id=20001, kind="expression", now=4)
+        claim_negative_outcome_effect(outcome_id="undo-effect", bot_id=10001, group_id=20001, kind="self_alias", now=4)
         is None
     )
     row = json.loads(outcomes_path().read_text(encoding="utf-8"))
-    assert row["effects"]["expression"]["state"] == "cancelled"
+    assert row["effects"]["self_alias"]["state"] == "cancelled"
 
 
 def test_undo_before_effect_claim_ignores_missing_effect_state(monkeypatch, tmp_path):
@@ -119,7 +119,7 @@ def test_undo_before_effect_claim_ignores_missing_effect_state(monkeypatch, tmp_
         bot_id=10001,
         group_id=20001,
         reply_text="不合适的句子",
-        injection_snapshot={"expression_entries": [{"entry_id": "expr-20001-a", "saying": "不合适的句子"}]},
+        injection_snapshot={"self_aliases": [{"alias": "不合适的句子"}]},
         now=1,
     )
     path = outcomes_path()
@@ -130,7 +130,7 @@ def test_undo_before_effect_claim_ignores_missing_effect_state(monkeypatch, tmp_
 
     assert (
         claim_negative_outcome_effect(
-            outcome_id="undo-before-claim", bot_id=10001, group_id=20001, kind="expression", now=2
+            outcome_id="undo-before-claim", bot_id=10001, group_id=20001, kind="self_alias", now=2
         )
         is None
     )
@@ -140,7 +140,6 @@ def test_negative_outcome_is_idempotent_and_filters_matched_ambient(monkeypatch,
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     snapshot = {
         "ambient_turns": [{"turn_id": "turn-1", "text_preview": "鸡巴又来了"}],
-        "expression_entries": [],
         "semantic_examples": [],
         "memory_entries": [],
         "self_aliases": [],
@@ -191,16 +190,14 @@ def test_every_injected_source_scores_even_without_match(monkeypatch, tmp_path):
         reply_text="这回复不行",
         injection_snapshot={
             "ambient_turns": [{"turn_id": "a1", "text_preview": "完全无关的话"}],
-            "expression_entries": [{"entry_id": "e1", "saying": "完全无关"}],
             "semantic_examples": [{"example_id": "s1", "trigger": "无关", "reply": "无关"}],
             "memory_entries": [{"entry_id": "m1", "text_preview": "无关"}],
         },
         now=100,
     )
 
-    assert {d.kind for d in result.decisions} == {"ambient", "expression", "semantic", "memory"}
+    assert {d.kind for d in result.decisions} == {"ambient", "semantic", "memory"}
     assert effective_source_score(10001, 20001, "ambient", "a1", now=100) == -1.0
-    assert effective_source_score(10001, 20001, "expression", "e1", now=100) == -3.0
     assert effective_source_score(10001, 20001, "semantic", "s1", now=100) == -2.0
     assert effective_source_score(10001, 20001, "memory", "m1", now=100) == -1.0
 

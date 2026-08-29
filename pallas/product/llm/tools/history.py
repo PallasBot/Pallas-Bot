@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 
 _RECENT_SUMMARY_CACHE_TTL_SEC = 600.0
 _recent_summary_cache: dict[tuple[int, int], tuple[float, str, str]] = {}
+# chat.history 结果回灌进后续轮次的总量上限；过大会在 tool loop 里放大输入。
+_HISTORY_RESULT_MAX_CHARS = 4000
 _RECENT_SUMMARY_SYSTEM = """总结当前群最近聊天。只写主要话题、已经达成的结论和明显分歧；
 忽略寒暄、刷屏、命令、辱骂和敏感隐私。若消息不足以形成话题，只说“最近没有形成明确话题”。
 只输出不超过120字的中文总结，不要标题、列表或解释。"""
@@ -28,8 +30,8 @@ def register_history_tools() -> None:
             name="chat.history",
             description=(
                 "读取当前群最近的完整聊天记录（含发言人昵称）。"
-                "用户问「最近聊了什么」「刚才发生什么」「总结群聊」，"
-                "或对总结内容追问细节（如「谁说的」「谁定的」「具体聊了什么」「展开讲讲」）时使用。"
+                "用户对聊天内容追问细节（如「谁说的」「谁定的」「具体聊了什么」「展开讲讲」）"
+                "或需要翻看原始记录时使用；只要话题总结时用 chat.recent_summary。"
             ),
             parameters={"type": "object", "properties": {"limit": {"type": "integer"}}, "required": []},
             domains=frozenset({"chat", "history"}),
@@ -75,21 +77,6 @@ def register_history_tools() -> None:
                 "刚才在聊什么",
                 "总结一下群聊",
                 "群里最近",
-                "谁说的",
-                "谁喊的",
-                "谁定的",
-                "谁规定的",
-                "谁提的",
-                "谁测试的",
-                "谁发的",
-                "谁建的",
-                "谁改的",
-                "哪个人说的",
-                "具体是谁",
-                "他的名字",
-                "展开讲讲",
-                "详细说说",
-                "详细聊聊",
             }),
             estimated_duration_ms=1500,
         )
@@ -125,7 +112,7 @@ async def recent_group_message_rows(context: ToolInvokeContext, *, limit: int) -
         text = sanitize_prompt_literal(str(getattr(message, "plain_text", "") or ""), max_len=180)
         if not text:
             continue
-        if total_chars + len(text) > 7200:
+        if total_chars + len(text) > _HISTORY_RESULT_MAX_CHARS:
             break
         total_chars += len(text)
         speaker = sanitize_prompt_literal(str(getattr(message, "sender_name", "") or ""), max_len=40)

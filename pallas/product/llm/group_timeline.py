@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 
 from pallas.core.foundation.db import Message, make_message_repository
 from pallas.product.llm.sender_identity import speaker_label
+from pallas.product.llm.session_models import normalize_group_scope
 from pallas.product.llm.vision_content import extract_vision_message_payload
 from pallas.product.persona.prompt_guard import sanitize_prompt_block, sanitize_prompt_literal
 
@@ -24,6 +26,9 @@ class GroupTimelineImage:
 class GroupTimelineContext:
     text: str = ""
     images: tuple[GroupTimelineImage, ...] = ()
+    # 注入快照原料 (user_id, created_at, 文本)：时间线在场时由它替代群环境摘录
+    # 产出注入快照，保持反馈溯源形态一致。
+    snapshot_sources: tuple[tuple[int, int, str], ...] = ()
 
 
 def should_include_group_timeline(*, is_to_me: bool, speak_trigger: str) -> bool:
@@ -65,6 +70,7 @@ def format_group_timeline_context(
                     continue
                 seen_urls.add(key)
                 image_items.append(GroupTimelineImage(speaker=speaker, text=text, url=url))
+    snapshot_sources: list[tuple[int, int, str]] = []
     for message, speaker, text, has_image in rendered:
         tail = ""
         reply_to = int(message.reply_to_message_id) if message.reply_to_message_id is not None else 0
@@ -72,11 +78,13 @@ def format_group_timeline_context(
             tail = f"（回{speaker_by_id[reply_to]}的话）"
         display_text = f"[图片] {text}" if has_image and text else "[图片]" if has_image else text
         lines.append(f"- {speaker}{tail}：{display_text}")
+        snapshot_sources.append((int(message.user_id), int(message.time), display_text))
     if len(lines) == 1:
         return GroupTimelineContext()
     return GroupTimelineContext(
         text=sanitize_prompt_block("\n".join(lines), max_len=2400),
         images=tuple(image_items[-_TIMELINE_MAX_IMAGES:]),
+        snapshot_sources=tuple(snapshot_sources),
     )
 
 
@@ -119,3 +127,31 @@ async def build_recent_group_timeline(
         self_bot_id=self_bot_id,
     )
     return context.text
+
+
+def ambient_snapshot_from_timeline(
+    context: GroupTimelineContext,
+    *,
+    bot_id: int,
+    group_id: int | None,
+    self_bot_id: int | None = None,
+) -> list[dict[str, object]]:
+    """把时间线消息转成与群环境摘录同形态的注入快照条目。
+
+    时间线在场时会跳过群环境摘录块，注入快照改由时间线产出，
+    turn_id 沿用 ``ambient:`` 前缀保持反馈溯源格式不变。
+    """
+    if not context.snapshot_sources:
+        return []
+    scope = normalize_group_scope(group_id)
+    out: list[dict[str, object]] = []
+    for user_id, created_at, text in context.snapshot_sources:
+        text_hash = hashlib.sha256(text.encode("utf-8")).hexdigest()
+        role = "assistant" if self_bot_id is not None and int(user_id) == int(self_bot_id) else "user"
+        out.append({
+            "turn_id": f"ambient:{int(bot_id)}:{scope}:{role}:{int(user_id)}:{int(created_at)}:{text_hash}",
+            "user_id": int(user_id),
+            "text_hash": text_hash,
+            "text_preview": text[:120],
+        })
+    return out
