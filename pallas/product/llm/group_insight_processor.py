@@ -342,8 +342,67 @@ async def _rebuild_pairs_from_messages(
         ))
     # 历史 LLM 标注中 quoted 样本几乎全部可接受，adjacent 命中率明显更低；
     # 先扫完整个窗口再拼接，quoted 排前，避免被大量低命中的 adjacent 挤出 limit。
+    # adjacent 二级排序（均零 LLM，纯本地计算）：
+    #   ① repeater answer 热度（真人反复接成功的对，见 _repeater_answer_heat）
+    #   ② trigger/reply 文本相似度（无热度时按语义相关性兜底）
+    #   ③ 原时间顺序保持稳定。
+    heat = await _repeater_answer_heat(bot_id=bot_id, group_id=group_id) if bot_id > 0 else {}
+    from pallas.product.llm.repeater_semantic_style import (
+        normalize_semantic_style_match_text,
+        semantic_style_text_similarity,
+    )
+
+    def _adjacent_sort_key(pair: tuple[str, str, str, int, int, int, int, bool]):
+        trigger, reply = pair[0], pair[1]
+        heat_value = heat.get(
+            (normalize_semantic_style_match_text(trigger), normalize_semantic_style_match_text(reply)),
+            0,
+        )
+        return (-heat_value, -semantic_style_text_similarity(trigger, reply))
+
+    adjacent_pairs.sort(key=_adjacent_sort_key)
     pairs.extend(adjacent_pairs)
     return pairs[:limit]
+
+
+# 复读（repeater）语料近期窗口：只看近期接得成功的对，避免无限放大历史热度。
+_REPEATER_HEAT_LOOKBACK_DAYS = 14
+
+
+async def _repeater_answer_heat(*, bot_id: int, group_id: int) -> dict[tuple[str, str], int]:
+    """从 repeater 语料（context answer）表聚合「真人触发→真人接话」热度。
+
+    repeater learn 是零 LLM 的录音带：`Answer.count` 表示同一 trigger 下这条回复
+    被真人反复接成功的次数（消费端还有 count/_topical 打分）。这里直接读库，把
+    「真人反复接过的对」作为语义标注优先级依据——反复接得上的对才值得花 LLM
+    提炼策略；零热度对仍按文本相似度排序兜底。
+    """
+    from pallas.core.foundation.db import make_local_context_repository
+    from pallas.product.llm.repeater_semantic_style import normalize_semantic_style_match_text
+
+    # 只读本地复读语料：Composite 包装面向接话热路径，未转发表级查询；
+    # 语义采集本来就只关心本机 peered 群里的真人接话。
+    repo = make_local_context_repository()
+    cutoff = int(time.time()) - _REPEATER_HEAT_LOOKBACK_DAYS * 24 * 60 * 60
+    try:
+        answers = await repo.list_answers_for_group_since(group_id, cutoff)
+    except Exception as exc:
+        logger.warning("群洞察无法读取群 [{}] 的复读语料热度：{}", group_id, exc)
+        return {}
+
+    heat: dict[tuple[str, str], int] = {}
+    for answer in answers:
+        trigger = normalize_semantic_style_match_text(str(getattr(answer, "keywords", "") or ""))
+        if not trigger:
+            continue
+        count = max(0, int(getattr(answer, "count", 0) or 0))
+        for message in getattr(answer, "messages", []) or []:
+            reply = normalize_semantic_style_match_text(str(message or ""))
+            if not reply:
+                continue
+            key = (trigger, reply)
+            heat[key] = max(heat.get(key, 0), count)
+    return heat
 
 
 def _text(value: object) -> str:

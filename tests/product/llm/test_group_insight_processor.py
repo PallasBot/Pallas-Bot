@@ -212,6 +212,93 @@ async def test_rebuild_pairs_skips_pure_media_reply_keeps_face(monkeypatch) -> N
 
 
 @pytest.mark.asyncio
+async def test_rebuild_pairs_ranks_adjacent_by_similarity_then_repeater_heat(monkeypatch) -> None:
+    """adjacent 排序：先按复读 answer 真人接话热度（C），再按文本相似度（A），均零 LLM。"""
+    from pallas.product.llm import group_insight_processor as mod
+
+    monkeypatch.setattr(mod, "sender_kind", lambda user_id, *, self_bot_id: "peer_bot" if user_id == 99 else "human")
+
+    async def fake_heat(*, bot_id, group_id):
+        return {
+            ("牛牛今天好可爱", "确实可爱"): 2,
+            ("再换个话题随便聊", "也是无关回复"): 1,
+        }
+
+    monkeypatch.setattr(mod, "_repeater_answer_heat", fake_heat)
+    monkeypatch.setattr(
+        mod,
+        "make_message_repository",
+        lambda: _DummyMessageRepo([
+            _msg(1, 11, "牛牛今天好可爱", time=1000),
+            _msg(2, 11, "牛牛今天好可爱", time=1001),
+            _msg(3, 12, "确实可爱", time=1005),  # 热度 2（trigger=时间线上前一条真人 msg2）
+            _msg(4, 99, "系统状态正常", time=1010),  # bot/peer 消息：作 bot 接话 pair，但相似度 0 且无热度
+            _msg(5, 12, "完全无关的一句话", time=1015),
+            _msg(6, 11, "再换个话题随便聊", time=1020),
+            _msg(7, 12, "也是无关回复", time=1025),
+        ]),
+    )
+
+    pairs = await _rebuild_pairs_from_messages(bot_id=100, group_id=42, limit=2)
+
+    # pair3 热度 2、pair7 热度 1 均排前；无热度的 pair4/pair5 被挤出 limit=2。
+    assert [pair[5] for pair in pairs] == [3, 7]
+
+
+@pytest.mark.asyncio
+async def test_rebuild_pairs_prefers_similarity_within_same_heat(monkeypatch) -> None:
+    """同为无热度时，trigger/reply 文本相似度高的 adjacent 排前（quoted 仍在最前）。"""
+    from pallas.product.llm import group_insight_processor as mod
+
+    monkeypatch.setattr(mod, "sender_kind", lambda user_id, *, self_bot_id: "human")
+    monkeypatch.setattr("pallas.core.foundation.db.make_local_context_repository", lambda: None)
+    monkeypatch.setattr(
+        mod,
+        "make_message_repository",
+        lambda: _DummyMessageRepo([
+            # 真人序列 msg1/msg3/msg5 交错接话 msg2/msg4/msg6；每个 adjacent 的 trigger 是
+            # 时间线上前一条真人消息，故用成对近义文本控制相似度差异。
+            _msg(1, 11, "低相关的开头白", time=1000),
+            _msg(2, 12, " [*] 完全无关", time=1010),
+            _msg(3, 11, "这个副本机制太复杂了", time=1020),
+            _msg(4, 12, "这个机制好难懂啊", time=1030),  # 与 msg3 相似度高
+            _msg(5, 11, "引用源", time=1040),
+            _msg(6, 12, "引用接话", time=1050, reply_to_message_id=5),
+        ]),
+    )
+
+    pairs = await _rebuild_pairs_from_messages(bot_id=100, group_id=42, limit=3)
+
+    assert [pair[2] for pair in pairs] == ["quoted", "adjacent", "adjacent"]
+    assert [pair[5] for pair in pairs] == [6, 4, 2]
+
+
+@pytest.mark.asyncio
+async def test_repeater_answer_heat_builds_pair_counts_from_context_repository(monkeypatch) -> None:
+    """C 链路：answer 热度表从 context 仓库读取（零 LLM），按 (trigger, reply) 聚合最大 count。"""
+    from pallas.product.llm import group_insight_processor as mod
+
+    class _DummyContextRepo:
+        async def list_answers_for_group_since(self, group_id, cutoff_time):
+            assert int(group_id) == 42
+            assert int(cutoff_time) > 0
+            return [
+                SimpleNamespace(keywords="牛牛今天好可爱", count=3, messages=["确实可爱", ""]),
+                SimpleNamespace(keywords="", count=2, messages=["空触发忽略"]),
+                SimpleNamespace(keywords="换个前句", count=1, messages=["低热度回复"]),
+            ]
+
+    monkeypatch.setattr("pallas.core.foundation.db.make_local_context_repository", lambda: _DummyContextRepo())
+
+    heat = await mod._repeater_answer_heat(bot_id=100, group_id=42)
+
+    # 空触发忽略；每条 answer 以最大 count 记一次「trigger→reply」热度。
+    assert heat[("牛牛今天好可爱", "确实可爱")] == 3
+    assert heat[("换个前句", "低热度回复")] == 1
+    assert all(reply != "空触发忽略" for _, reply in heat)
+
+
+@pytest.mark.asyncio
 async def test_handle_group_insight_dispatches_semantic_task(monkeypatch) -> None:
     from pallas.product.llm import group_insight_processor as mod
 
