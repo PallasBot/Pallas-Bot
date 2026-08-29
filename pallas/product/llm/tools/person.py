@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from pallas.product.llm.memory.person_facts import list_person_facts
 from pallas.product.llm.memory.relationship_store import retrieve_relationship_profile, save_relationship_note
 from pallas.product.llm.tools.contracts import ToolCapability
 from pallas.product.llm.tools.registry import LlmToolSpec, register_tool
@@ -17,7 +18,7 @@ def register_person_tools() -> None:
     register_tool(
         LlmToolSpec(
             name="person.profile.query",
-            description="查询群内某用户的人物事实档案。",
+            description="查询群内某用户的人物档案：关系备注与稳定偏好（含爱用的表情包等习惯）。",
             parameters={"type": "object", "properties": {"user_id": {"type": "integer"}}, "required": ["user_id"]},
             domains=frozenset({"person", "memory"}),
             handler=handle_person_profile_query,
@@ -51,14 +52,19 @@ async def handle_person_profile_query(
     if context is None or context.group_id is None:
         return {"ok": False, "error": "group_context_required"}
     user_id = int((arguments or {}).get("user_id") or context.user_id)
+    facts = [
+        fact.content
+        for fact in list_person_facts(bot_id=context.bot_id, group_id=context.group_id, user_id=user_id, limit=8)
+    ]
     profile = await retrieve_relationship_profile(context.bot_id, context.group_id, user_id)
     if profile is None:
-        return {"ok": True, "result": {"user_id": user_id, "facts": []}}
+        return {"ok": True, "result": {"user_id": user_id, "facts": facts}}
     return {
         "ok": True,
         "result": {
             "user_id": user_id,
             "profile": profile.model_dump(mode="json") if hasattr(profile, "model_dump") else vars(profile),
+            "facts": facts,
         },
     }
 

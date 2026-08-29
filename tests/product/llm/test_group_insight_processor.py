@@ -212,6 +212,56 @@ async def test_rebuild_pairs_skips_pure_media_reply_keeps_face(monkeypatch) -> N
 
 
 @pytest.mark.asyncio
+async def test_rebuild_pairs_rejects_punctuation_adjacent_without_heat(monkeypatch) -> None:
+    """无复读热度的纯标点 adjacent 不应进入 LLM 候选。"""
+    from pallas.product.llm import group_insight_processor as mod
+
+    monkeypatch.setattr(mod, "sender_kind", lambda user_id, *, self_bot_id: "human")
+
+    async def fake_heat(**kwargs):
+        return {}
+
+    monkeypatch.setattr(mod, "_repeater_answer_heat", fake_heat)
+    monkeypatch.setattr(
+        mod,
+        "make_message_repository",
+        lambda: _DummyMessageRepo([
+            _msg(1, 11, "今天的部署状态", time=1000),
+            _msg(2, 12, "...", time=1005),
+        ]),
+    )
+
+    pairs = await _rebuild_pairs_from_messages(bot_id=100, group_id=42)
+
+    assert pairs == []
+
+
+@pytest.mark.asyncio
+async def test_rebuild_pairs_keeps_unrelated_adjacent_with_repeater_heat(monkeypatch) -> None:
+    """已有复读热度的 adjacent 即使字面无关，也应保留给语义层复核。"""
+    from pallas.product.llm import group_insight_processor as mod
+
+    monkeypatch.setattr(mod, "sender_kind", lambda user_id, *, self_bot_id: "human")
+
+    async def fake_heat(**kwargs):
+        return {("今天的部署状态", "我在吃饭呢"): 3}
+
+    monkeypatch.setattr(mod, "_repeater_answer_heat", fake_heat)
+    monkeypatch.setattr(
+        mod,
+        "make_message_repository",
+        lambda: _DummyMessageRepo([
+            _msg(1, 11, "今天的部署状态", time=1000),
+            _msg(2, 12, "我在吃饭呢", time=1005),
+        ]),
+    )
+
+    pairs = await _rebuild_pairs_from_messages(bot_id=100, group_id=42)
+
+    assert [pair[5] for pair in pairs] == [2]
+
+
+@pytest.mark.asyncio
 async def test_rebuild_pairs_ranks_adjacent_by_similarity_then_repeater_heat(monkeypatch) -> None:
     """adjacent 排序：先按复读 answer 真人接话热度（C），再按文本相似度（A），均零 LLM。"""
     from pallas.product.llm import group_insight_processor as mod

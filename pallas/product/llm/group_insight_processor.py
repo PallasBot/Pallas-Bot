@@ -44,6 +44,7 @@ _CQ_PLACEHOLDER_MAP = {
 # 接话端只剩图片/媒体占位（无任何文字）时对 LLM 标注没有信息量，直接跳过；
 # [表情] 是真实的文字化接话，不在此列。
 _MEDIA_ONLY_REPLY_RE = re.compile(r"(?:\s*(?:\[图片\]|\[媒体\])\s*)+")
+_PUNCTUATION_ONLY_REPLY_RE = re.compile(r"[!-/:-@[-`{-~。！？、；：…]+")
 
 
 def _cq_placeholder(match: re.Match[str]) -> str:
@@ -318,6 +319,8 @@ async def _rebuild_pairs_from_messages(
                         reply_is_bot,
                     ))
                     continue
+        if not reply_is_bot and _PUNCTUATION_ONLY_REPLY_RE.fullmatch(reply_text):
+            continue
         # 2) 相邻对：取 reply 之前「最近的一条真人消息」作 trigger，跳过中间 bot/状态消息。
         pos = bisect_left(human_keys, (reply_time, reply_id))
         if pos == 0:
@@ -352,16 +355,17 @@ async def _rebuild_pairs_from_messages(
         semantic_style_text_similarity,
     )
 
-    def _adjacent_sort_key(pair: tuple[str, str, str, int, int, int, int, bool]):
+    def _adjacent_rank(pair: tuple[str, str, str, int, int, int, int, bool]) -> tuple[int, float]:
         trigger, reply = pair[0], pair[1]
         heat_value = heat.get(
             (normalize_semantic_style_match_text(trigger), normalize_semantic_style_match_text(reply)),
             0,
         )
-        return (-heat_value, -semantic_style_text_similarity(trigger, reply))
+        return heat_value, semantic_style_text_similarity(trigger, reply)
 
-    adjacent_pairs.sort(key=_adjacent_sort_key)
-    pairs.extend(adjacent_pairs)
+    ranked_adjacent = [(_adjacent_rank(pair), pair) for pair in adjacent_pairs]
+    ranked_adjacent.sort(key=lambda item: (-item[0][0], -item[0][1]))
+    pairs.extend(pair for _, pair in ranked_adjacent)
     return pairs[:limit]
 
 

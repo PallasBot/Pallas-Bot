@@ -264,6 +264,10 @@ class LlmConfig(BaseModel):
     llm_sticker_label_backfill_daily_limit: int = Field(default=200, ge=0, le=2000)
     llm_sticker_label_realtime_daily_limit: int = Field(default=300, ge=0, le=2000)
     llm_semantic_style_realtime_daily_limit: int = Field(default=600, ge=0, le=50000)
+    llm_sticker_habit_enabled: bool = Field(default=True)
+    llm_sticker_habit_min_count: int = Field(default=5, ge=1, le=1000)
+    llm_sticker_habit_top_k: int = Field(default=1, ge=1, le=3)
+    llm_sticker_habit_backfill_days: int = Field(default=7, ge=0, le=90)
     llm_reply_effect_eval_enabled: bool = Field(default=False)
     llm_corpus_learn_guard_enabled: bool = Field(default=True)
     llm_corpus_cleanup_scheduled_enabled: bool = Field(default=True)
@@ -553,6 +557,10 @@ def get_llm_config() -> LlmConfig:
             llm_memory_auto_person_facts_enabled=_env_bool("LLM_MEMORY_AUTO_PERSON_FACTS_ENABLED", True),
             llm_memory_auto_person_facts_cooldown_sec=_env_int("LLM_MEMORY_AUTO_PERSON_FACTS_COOLDOWN_SEC", 43200),
             llm_memory_auto_person_facts_daily_budget=_env_int("LLM_MEMORY_AUTO_PERSON_FACTS_DAILY_BUDGET", 200),
+            llm_sticker_habit_enabled=_env_bool("LLM_STICKER_HABIT_ENABLED", True),
+            llm_sticker_habit_min_count=_env_int("LLM_STICKER_HABIT_MIN_COUNT", 5),
+            llm_sticker_habit_top_k=_env_int("LLM_STICKER_HABIT_TOP_K", 1),
+            llm_sticker_habit_backfill_days=_env_int("LLM_STICKER_HABIT_BACKFILL_DAYS", 7),
             llm_memory_graph_extract_enabled=_env_bool("LLM_MEMORY_GRAPH_EXTRACT_ENABLED", True),
             llm_memory_graph_extract_on_write=_env_bool("LLM_MEMORY_GRAPH_EXTRACT_ON_WRITE", True),
             llm_memory_hiergraph_max_layers=_env_int("LLM_MEMORY_HIERGRAPH_MAX_LAYERS", 3),

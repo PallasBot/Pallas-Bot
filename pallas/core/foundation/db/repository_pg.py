@@ -329,6 +329,24 @@ class StickerLabelRow(Base):
     label_json: Mapped[Any] = mapped_column(_JsonB, nullable=False)
 
 
+class UserStickerStatRow(Base):
+    """群成员发送图片的次数统计，按内容哈希聚合，不带 bot 维度。"""
+
+    __tablename__ = "user_sticker_stat"
+    __table_args__ = (
+        UniqueConstraint("group_id", "user_id", "content_hash", name="uq_user_sticker_stat_group_user_hash"),
+        Index("ix_user_sticker_stat_send_count", "send_count"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    group_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    content_hash: Mapped[str] = mapped_column(Text, nullable=False)
+    send_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_sent_at: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    updated_at: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+
+
 class LlmChatMessageRow(Base):
     __tablename__ = "llm_chat_message"
     __table_args__ = (
@@ -1903,6 +1921,31 @@ class PgMessageRepository:
             result = await session.execute(stmt)
             rows = list(result.scalars().all())
         rows.reverse()
+        return [row_to_message(r) for r in rows]
+
+    async def list_group_messages_after(
+        self,
+        group_id: int,
+        *,
+        after_time: int,
+        after_message_id: int | None = None,
+        limit: int = 2000,
+    ) -> list[Message]:
+        cap = max(1, min(int(limit), 4096))
+        stmt = select(MessageRow).where(MessageRow.group_id == int(group_id))
+        if after_message_id is None:
+            stmt = stmt.where(MessageRow.time > int(after_time))
+        else:
+            stmt = stmt.where(
+                or_(
+                    MessageRow.time > int(after_time),
+                    and_(MessageRow.time == int(after_time), MessageRow.message_id > int(after_message_id)),
+                )
+            )
+        stmt = stmt.order_by(MessageRow.time.asc(), MessageRow.message_id.asc()).limit(cap)
+        async with get_session(read_only=True) as session:
+            result = await session.execute(stmt)
+            rows = list(result.scalars().all())
         return [row_to_message(r) for r in rows]
 
     async def find_recent_distinct_in_group(
