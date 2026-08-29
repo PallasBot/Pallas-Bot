@@ -528,6 +528,7 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         matchers_considered=0,
                         matchers_selected=0,
                         matchers_run=0,
+                        record_p95=False,
                     )
                     await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
                     return
@@ -542,6 +543,7 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                             matchers_considered=0,
                             matchers_selected=0,
                             matchers_run=0,
+                            record_p95=False,
                         )
                         await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
                         return
