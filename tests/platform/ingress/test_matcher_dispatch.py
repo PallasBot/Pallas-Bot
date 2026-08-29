@@ -467,6 +467,10 @@ async def test_patched_handle_event_drops_chat_when_overloaded(monkeypatch: pyte
     pre_mock = AsyncMock(return_value=True)
     post_mock = AsyncMock()
     run_matcher = AsyncMock()
+    metrics: list[dict[str, object]] = []
+
+    def _record_metrics(**kwargs: object) -> None:
+        metrics.append(kwargs)
 
     monkeypatch.setattr(dispatch, "GroupMessageEvent", FakeGroupMessageEvent)
     monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", pre_mock)
@@ -479,7 +483,7 @@ async def test_patched_handle_event_drops_chat_when_overloaded(monkeypatch: pyte
     monkeypatch.setattr(dispatch, "chat_drop_on_overload_enabled", lambda: True)
     monkeypatch.setattr(dispatch, "is_overloaded", lambda: True)
     monkeypatch.setattr(dispatch, "record_chatter_overload_dropped", lambda: None)
-    monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatch, "record_group_message_ingress", _record_metrics)
     monkeypatch.setattr(dispatch, "matchers", {1: [PassiveMatcher]})
 
     await dispatch.patched_handle_event(bot, event)
@@ -487,6 +491,8 @@ async def test_patched_handle_event_drops_chat_when_overloaded(monkeypatch: pyte
     pre_mock.assert_awaited_once()
     post_mock.assert_awaited_once()
     run_matcher.assert_not_awaited()
+    assert len(metrics) == 1
+    assert metrics[0]["record_p95"] is False
 
 
 @pytest.mark.asyncio
@@ -1058,6 +1064,10 @@ async def test_patched_handle_event_drops_stale_chat_message(monkeypatch: pytest
     post_mock = AsyncMock()
     run_matcher = AsyncMock()
     dropped = {"n": 0}
+    metrics: list[dict[str, object]] = []
+
+    def _record_metrics(**kwargs: object) -> None:
+        metrics.append(kwargs)
 
     def _bump_dropped() -> None:
         dropped["n"] += 1
@@ -1073,7 +1083,7 @@ async def test_patched_handle_event_drops_stale_chat_message(monkeypatch: pytest
     monkeypatch.setattr(dispatch, "is_overloaded", lambda: False)
     monkeypatch.setattr(dispatch, "stale_message_drop_needed", lambda _event: True)
     monkeypatch.setattr(dispatch, "record_stale_message_dropped", _bump_dropped)
-    monkeypatch.setattr(dispatch, "record_group_message_ingress", lambda **_kwargs: None)
+    monkeypatch.setattr(dispatch, "record_group_message_ingress", _record_metrics)
     monkeypatch.setattr(dispatch, "matchers", {1: [PassiveMatcher]})
 
     await dispatch.patched_handle_event(bot, event)
@@ -1082,3 +1092,5 @@ async def test_patched_handle_event_drops_stale_chat_message(monkeypatch: pytest
     pre_mock.assert_awaited_once()
     post_mock.assert_awaited_once()
     run_matcher.assert_not_awaited()
+    assert len(metrics) == 1
+    assert metrics[0]["record_p95"] is False
