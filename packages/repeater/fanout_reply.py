@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 from itertools import starmap
 
 from pallas.api.logging import format_plugin_event
+from pallas.api.platform import GROUP_ONLINE_TTL_SEC
 from pallas.core.foundation.config import BotConfig
 from pallas.core.platform.bot_runtime.send_unavailable import BOT_SEND_UNAVAILABLE_ERRORS, log_bot_send_unavailable
 from pallas.core.platform.multi_bot.dedup import try_claim_group_message_once
@@ -29,7 +30,7 @@ from .model import Chat, ChatData
 from .responder import ReplyBundle, Responder
 
 _FANOUT_PLUGIN = "repeater_fanout"
-_FANOUT_BOT_IDS_CACHE_TTL = 2.0
+_FANOUT_BOT_IDS_CACHE_TTL = GROUP_ONLINE_TTL_SEC
 _FANOUT_BOT_IDS_CACHE: dict[int, tuple[float, list[int]]] = {}
 # 复读/接话的每群冷却（秒）。比 BotConfig 默认 5s 略长，进一步压一压刷屏感。
 REPEATER_REPLY_COOLDOWN = 8

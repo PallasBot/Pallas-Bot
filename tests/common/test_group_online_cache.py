@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from pallas.core.platform.multi_bot import group_online_cache as mod
@@ -70,3 +72,17 @@ async def test_forget_group_bot_removes_only_target_from_all_group_caches() -> N
     assert mod.recent_local_group_bot_ids(group_id) == [222]
     assert mod.get_cached_group_bot_ids(group_id, namespace=mod.NS_FLEET) == [222]
     assert mod.get_cached_group_bot_ids(group_id, namespace=mod.NS_LOCAL_CONNECTED) == [222]
+
+
+@pytest.mark.asyncio
+async def test_local_connected_bots_stops_when_probe_budget_is_exhausted(monkeypatch) -> None:
+    mod.clear_group_online_cache()
+    monkeypatch.setattr(mod, "_GROUP_MEMBER_PROBE_TIMEOUT_SEC", 0.01)
+
+    class HangingBot:
+        async def get_group_member_info(self, *, group_id: int, user_id: int):
+            await asyncio.Event().wait()
+
+    monkeypatch.setattr(mod, "get_bots", lambda: {"111": HangingBot(), "222": HangingBot()})
+
+    assert await mod.resolve_local_connected_bots_in_group(626266906, force_probe=True) == []

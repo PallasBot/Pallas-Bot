@@ -7,8 +7,11 @@ import time
 
 from nonebot import get_bots, logger
 
+from pallas.core.foundation.logging import log_rate_limited
+
 GROUP_ONLINE_TTL_SEC = 45.0
 GROUP_ONLINE_CACHE_MAX = 512
+_GROUP_MEMBER_PROBE_TIMEOUT_SEC = 3.0
 NS_FLEET = "fleet"
 NS_LOCAL_CONNECTED = "local_connected"
 
@@ -116,13 +119,36 @@ async def resolve_local_connected_bots_in_group(group_id: int, *, force_probe: b
 
     bots = get_bots()
     out: list[int] = []
+    deadline = time.monotonic() + _GROUP_MEMBER_PROBE_TIMEOUT_SEC
     for key in sorted(bots.keys(), key=lambda x: int(x) if str(x).isdigit() else 0):
         try:
             bid = int(key)
         except ValueError:
             continue
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            log_rate_limited(
+                logger,
+                "warning",
+                f"group_online_cache.probe_exhausted.{gid}",
+                "group online cache: probe budget exhausted for group [{}]",
+                gid,
+            )
+            break
         try:
-            await bots[key].get_group_member_info(group_id=gid, user_id=bid)
+            await asyncio.wait_for(
+                bots[key].get_group_member_info(group_id=gid, user_id=bid),
+                timeout=remaining,
+            )
+        except TimeoutError:
+            log_rate_limited(
+                logger,
+                "warning",
+                f"group_online_cache.probe_exhausted.{gid}",
+                "group online cache: probe budget exhausted for group [{}]",
+                gid,
+            )
+            break
         except Exception as e:
             logger.debug("group online cache: probe {} failed for group [{}]: {}", bid, gid, e)
             continue
