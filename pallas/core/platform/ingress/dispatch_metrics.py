@@ -77,6 +77,7 @@ def record_group_message_ingress(
     matchers_considered: int,
     matchers_selected: int,
     matchers_run: int,
+    record_p95: bool = True,
 ) -> None:
     _rollover_if_needed()
     _state["group_messages"] += 1
@@ -87,6 +88,8 @@ def record_group_message_ingress(
     _state["matchers_considered"] += max(0, matchers_considered)
     _state["matchers_selected"] += max(0, matchers_selected)
     _state["matchers_run"] += max(0, matchers_run)
+    if not record_p95:
+        return
     now = time.monotonic()
     if duration_ms >= 0:
         _ingress_ms_samples.append((now, float(duration_ms)))

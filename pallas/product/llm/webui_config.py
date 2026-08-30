@@ -1023,6 +1023,16 @@ class LlmWebuiConfig(BaseModel):
             "须开启图谱抽取总开关；频繁开启会明显增加模型请求",
         ),
     )
+    llm_memory_graph_extract_daily_budget: int = Field(
+        default=200,
+        ge=0,
+        le=100000,
+        description=field_help(
+            "图谱抽取每日调用上限",
+            "按天计数，含写入后自动抽取与手动抽取；0=不限制（默认 200）",
+            "超限后当天跳过抽取，次日自动恢复",
+        ),
+    )
     llm_memory_hiergraph_max_layers: int = Field(
         default=3,
         ge=1,
@@ -1274,6 +1284,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_memory_auto_ip_cooldown_sec=cfg.llm_memory_auto_ip_cooldown_sec,
         llm_memory_graph_extract_enabled=cfg.llm_memory_graph_extract_enabled,
         llm_memory_graph_extract_on_write=cfg.llm_memory_graph_extract_on_write,
+        llm_memory_graph_extract_daily_budget=cfg.llm_memory_graph_extract_daily_budget,
         llm_memory_hiergraph_max_layers=cfg.llm_memory_hiergraph_max_layers,
         llm_memory_decay_half_life_days=cfg.llm_memory_decay_half_life_days,
         llm_memory_decay_min_importance=cfg.llm_memory_decay_min_importance,

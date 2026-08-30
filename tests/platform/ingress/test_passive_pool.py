@@ -60,3 +60,31 @@ async def test_pool_drops_work_when_queue_full_and_droppable() -> None:
     await first
     await pool.stop()
     assert pool.snapshot()["dropped"] == 1
+
+
+@pytest.mark.asyncio
+async def test_pool_reports_running_work_duration_and_oldest_age() -> None:
+    pool = PassiveWorkPool("repeater", max_concurrency=1, queue_max=1, droppable=False)
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def work() -> None:
+        started.set()
+        await release.wait()
+
+    submit = asyncio.create_task(pool.submit(work))
+    await started.wait()
+    await asyncio.sleep(0.01)
+
+    snapshot = pool.snapshot()
+
+    assert snapshot["active"] == 1
+    assert snapshot["active_oldest_ms"] >= 10
+    assert snapshot["run_ms_p95"] is None
+
+    release.set()
+    await submit
+    await asyncio.sleep(0)
+    snapshot = pool.snapshot()
+    assert snapshot["run_ms_p95"] >= 10
+    await pool.stop()

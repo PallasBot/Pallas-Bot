@@ -432,7 +432,12 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
             else:
                 log.success(nb_message.escape_tag(f" Bot {bot.self_id} | {event_log}"))
         elif inbound_event_log_as_debug(event_type):
-            log.debug(nb_message.escape_tag(f" {bot.type} {bot.self_id} | {event_log}"))
+            log.debug(
+                " {} {} | {}",
+                nb_message.escape_tag(bot.type),
+                nb_message.escape_tag(bot.self_id),
+                nb_message.escape_tag(event_log),
+            )
         else:
             log.success(nb_message.escape_tag(f" {bot.type} {bot.self_id} | {event_log}"))
 
@@ -528,6 +533,7 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         matchers_considered=0,
                         matchers_selected=0,
                         matchers_run=0,
+                        record_p95=False,
                     )
                     await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
                     return
@@ -542,6 +548,7 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                             matchers_considered=0,
                             matchers_selected=0,
                             matchers_run=0,
+                            record_p95=False,
                         )
                         await nb_message._apply_event_postprocessors(bot, event, state, stack, dependency_cache)
                         return

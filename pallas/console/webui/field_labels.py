@@ -187,6 +187,7 @@ FIELD_LABELS: dict[str, str] = {
     "llm_memory_auto_person_facts_daily_budget": "个人偏好总结每日上限",
     "llm_memory_graph_extract_enabled": "记忆图谱抽取",
     "llm_memory_graph_extract_on_write": "写入后自动抽取图谱",
+    "llm_memory_graph_extract_daily_budget": "图谱抽取每日上限",
     "llm_memory_hiergraph_max_layers": "分层图谱最大层数",
     "llm_memory_decay_half_life_days": "记忆淡出半衰期（天）",
     "llm_memory_decay_min_importance": "记忆淡出重要性下限",

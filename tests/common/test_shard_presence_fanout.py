@@ -152,7 +152,9 @@ def test_list_fanout_bot_ids_filters_offline(monkeypatch):
     asyncio.run(run())
 
 
-def test_list_fanout_bot_ids_uses_short_ttl_cache(monkeypatch):
+def test_list_fanout_bot_ids_uses_group_online_ttl_cache(monkeypatch):
+    from pallas.api.platform import GROUP_ONLINE_TTL_SEC
+
     fanout_mod._FANOUT_BOT_IDS_CACHE.clear()
     calls = 0
     now = 100.0
@@ -182,6 +184,7 @@ def test_list_fanout_bot_ids_uses_short_ttl_cache(monkeypatch):
 
     asyncio.run(run())
     assert calls == 1
+    assert fanout_mod._FANOUT_BOT_IDS_CACHE_TTL == GROUP_ONLINE_TTL_SEC
 
 
 def test_resolve_fanout_gate_uses_single_bot_list_lookup(monkeypatch):
@@ -189,6 +192,8 @@ def test_resolve_fanout_gate_uses_single_bot_list_lookup(monkeypatch):
     calls: list[int] = []
 
     monkeypatch.setattr(fanout_mod, "repeater_fanout_enabled", lambda: True)
+    monkeypatch.setattr(fanout_mod, "get_repeater_config", lambda: SimpleNamespace(fanout_max_bots=2))
+    monkeypatch.setattr(fanout_mod, "select_fanout_bot_ids", lambda bot_ids, *, max_bots: sorted(bot_ids))
 
     async def fake_list(group_id: int) -> list[int]:
         calls.append(group_id)

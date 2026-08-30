@@ -27,6 +27,23 @@ def test_record_group_message_and_p95() -> None:
     assert snap["route_index_fallback_ratio"] == 0.02
 
 
+def test_record_group_message_skips_p95_when_dropped() -> None:
+    dispatch_metrics.clear_dispatch_metrics_for_tests()
+    dispatch_metrics.record_group_message_ingress(
+        duration_ms=78_000.0,
+        full_duration_ms=78_000.0,
+        command_traffic=False,
+        matchers_considered=0,
+        matchers_selected=0,
+        matchers_run=0,
+        record_p95=False,
+    )
+    snap = dispatch_metrics.dispatch_metrics_snapshot()
+    assert snap["group_messages"] == 1
+    assert snap["ingress_duration_ms_p95"] is None
+    assert snap["ingress_full_ms_p95"] is None
+
+
 def test_lane_wait_and_alerts() -> None:
     dispatch_metrics.clear_dispatch_metrics_for_tests()
     dispatch_metrics.record_lane_wait(120.0)
