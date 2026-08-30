@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from nonebot import logger
@@ -56,10 +57,42 @@ _BATCH_EXTRACT_USER = """scope={scope_key}
 请按 [0],[1],[2]… 输出严格 JSON 数组。"""
 
 _EXTRACT_EPISODE_TEXT_LIMIT = 800
-_EXTRACT_COOLDOWN_SEC = 30
+# 写入后自动抽取属于后台富化而非热路径，冷却 5 分钟 + 每日预算闸控制调用量
+_EXTRACT_COOLDOWN_SEC = 300
 
 _extract_cooldown = WriteCooldown()
 _last_extract_sig: dict[tuple[int, int], str] = {}
+_graph_extract_budget_day = ""
+_graph_extract_daily_budget_used = 0
+
+
+def clear_extract_state_for_tests() -> None:
+    _extract_cooldown.clear()
+    _last_extract_sig.clear()
+    global _graph_extract_budget_day, _graph_extract_daily_budget_used
+    _graph_extract_budget_day = ""
+    _graph_extract_daily_budget_used = 0
+
+
+def _graph_extract_budget_ok() -> bool:
+    limit = int(get_llm_config().llm_memory_graph_extract_daily_budget)
+    if limit <= 0:
+        return True
+    global _graph_extract_budget_day, _graph_extract_daily_budget_used
+    today = time.strftime("%Y-%m-%d")
+    if _graph_extract_budget_day != today:
+        _graph_extract_budget_day = today
+        _graph_extract_daily_budget_used = 0
+    return _graph_extract_daily_budget_used < limit
+
+
+def _bump_graph_extract_budget() -> None:
+    global _graph_extract_budget_day, _graph_extract_daily_budget_used
+    today = time.strftime("%Y-%m-%d")
+    if _graph_extract_budget_day != today:
+        _graph_extract_budget_day = today
+        _graph_extract_daily_budget_used = 0
+    _graph_extract_daily_budget_used += 1
 
 
 def _resolve_extract_task_and_model() -> tuple[str, str]:
@@ -222,6 +255,8 @@ async def extract_from_text(
     raw_text = str(text or "").strip()
     if not raw_text:
         return {"entities_upserted": 0, "edges_upserted": 0, "error": "empty text"}
+    if not _graph_extract_budget_ok():
+        return {"entities_upserted": 0, "edges_upserted": 0, "error": "daily budget exhausted"}
     if not is_memory_graph_store_available():
         return {"entities_upserted": 0, "edges_upserted": 0, "error": "store unavailable"}
 
@@ -242,6 +277,7 @@ async def extract_from_text(
         payload=payload,
         episode_id=episode_id,
     )
+    _bump_graph_extract_budget()
     return {"entities_upserted": entities_n, "edges_upserted": edges_n, "raw": raw}
 
 
@@ -348,6 +384,8 @@ async def maybe_extract_after_episode_write(
             return
         key = (int(bot_id), int(group_id or 0))
         if _last_extract_sig.get(key) == raw_text:
+            return
+        if not _graph_extract_budget_ok():
             return
         if not _extract_cooldown.ok(key, _EXTRACT_COOLDOWN_SEC):
             return
