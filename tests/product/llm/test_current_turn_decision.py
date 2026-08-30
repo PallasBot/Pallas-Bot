@@ -373,6 +373,26 @@ def test_recent_pair_trigger_surface_unchanged_after_history_always_on() -> None
         explicitly_addressed=True,
         has_recent_assistant_turn=True,
     )
+    # 文本命中短社交正则的 ANSWER 回合 → 仍带 recent_pair
+    assert should_include_recent_pair_for_turn(
+        "我又改输出了，烦",
+        CurrentTurnSocialAction.ANSWER,
+        explicitly_addressed=True,
+        has_recent_assistant_turn=True,
+    )
+    # AFFECTION / JOKE 等短社交动作 → 仍带 recent_pair
+    assert should_include_recent_pair_for_turn(
+        "继续讲",
+        CurrentTurnSocialAction.AFFECTION,
+        explicitly_addressed=True,
+        has_recent_assistant_turn=True,
+    )
+    assert should_include_recent_pair_for_turn(
+        "继续讲",
+        CurrentTurnSocialAction.JOKE,
+        explicitly_addressed=True,
+        has_recent_assistant_turn=True,
+    )
     # 非显式寻址 → False
     assert not should_include_recent_pair_for_turn(
         "继续讲",
