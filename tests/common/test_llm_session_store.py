@@ -210,10 +210,10 @@ async def test_build_llm_chat_messages_backfills_own_recent_pair_when_ambient_em
 ) -> None:
     cfg = LlmConfig(llm_session_enabled=True, llm_session_group_window=4)
     ambient = [
-        LlmChatTurn(role="assistant", content="新回复", user_id=300, created_at=1004),
-        LlmChatTurn(role="user", content="新提问", user_id=300, created_at=1003),
-        LlmChatTurn(role="assistant", content="旧回复", user_id=300, created_at=1002),
         LlmChatTurn(role="user", content="旧提问", user_id=300, created_at=1001),
+        LlmChatTurn(role="assistant", content="旧回复", user_id=300, created_at=1002),
+        LlmChatTurn(role="user", content="新提问", user_id=300, created_at=1003),
+        LlmChatTurn(role="assistant", content="新回复", user_id=300, created_at=1004),
     ]
     monkeypatch.setattr("pallas.product.llm.session_store.can_read_runtime_state", lambda _cfg: True)
     monkeypatch.setattr(
@@ -226,7 +226,7 @@ async def test_build_llm_chat_messages_backfills_own_recent_pair_when_ambient_em
     await build_llm_chat_messages(10001, 100, 300, "当前提问", cfg=cfg, ambient_turns_out=selected)
 
     assert [item["user_id"] for item in selected] == [300, 300]
-    assert [item["text_preview"] for item in selected] == ["新回复", "新提问"]
+    assert [item["text_preview"] for item in selected] == ["新提问", "新回复"]
 
 
 @pytest.mark.asyncio
@@ -235,9 +235,10 @@ async def test_build_llm_chat_messages_backfills_own_pair_keeps_other_turns(
 ) -> None:
     cfg = LlmConfig(llm_session_enabled=True, llm_session_group_window=4)
     ambient = [
-        LlmChatTurn(role="user", content="自己新消息", user_id=300, created_at=1006),
-        LlmChatTurn(role="assistant", content="自己新回复", user_id=300, created_at=1005),
-        LlmChatTurn(role="user", content="群友消息", user_id=200, created_at=1001),
+        LlmChatTurn(role="user", content="自己旧消息", user_id=300, created_at=1001),
+        LlmChatTurn(role="user", content="群友消息", user_id=200, created_at=1002),
+        LlmChatTurn(role="user", content="自己新提问", user_id=300, created_at=1003),
+        LlmChatTurn(role="assistant", content="自己新回复", user_id=300, created_at=1004),
     ]
     monkeypatch.setattr("pallas.product.llm.session_store.can_read_runtime_state", lambda _cfg: True)
     monkeypatch.setattr(
@@ -249,7 +250,8 @@ async def test_build_llm_chat_messages_backfills_own_pair_keeps_other_turns(
 
     await build_llm_chat_messages(10001, 100, 300, "当前提问", cfg=cfg, ambient_turns_out=selected)
 
-    assert [item["text_preview"] for item in selected] == ["自己新消息", "自己新回复", "群友消息"]
+    assert [item["text_preview"] for item in selected] == ["自己新提问", "自己新回复", "群友消息"]
+    assert [item["user_id"] for item in selected] == [300, 300, 200]
 
 
 @pytest.mark.asyncio
