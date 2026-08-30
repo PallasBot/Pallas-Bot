@@ -144,16 +144,8 @@ def should_read_persistent_memory_for_turn(
     text: str,
     social_action: CurrentTurnSocialAction | str,
 ) -> bool:
-    """Keep retrieval out of short social turns without changing reply routing."""
-    action = str(getattr(social_action, "value", social_action) or "").strip().upper()
-    if action in {
-        CurrentTurnSocialAction.ACK.value,
-        CurrentTurnSocialAction.AFFECTION.value,
-        CurrentTurnSocialAction.JOKE.value,
-    }:
-        return False
-    current = str(text or "").strip()
-    return not (len(current) <= 24 and bool(_SHORT_SOCIAL_MEMORY_TURN_RE.search(current)))
+    """Persistent user history now stays available for every turn."""
+    return True
 
 
 def should_include_recent_pair_for_turn(
@@ -166,7 +158,15 @@ def should_include_recent_pair_for_turn(
     """Keep one direct-chat exchange when a short social turn omits context."""
     if not explicitly_addressed or not has_recent_assistant_turn:
         return False
-    return not should_read_persistent_memory_for_turn(text, social_action)
+    action = str(getattr(social_action, "value", social_action) or "").strip().upper()
+    if action in {
+        CurrentTurnSocialAction.ACK.value,
+        CurrentTurnSocialAction.AFFECTION.value,
+        CurrentTurnSocialAction.JOKE.value,
+    }:
+        return True
+    current = str(text or "").strip()
+    return len(current) <= 24 and bool(_SHORT_SOCIAL_MEMORY_TURN_RE.search(current))
 
 
 def resolve_reply_target(
@@ -228,6 +228,8 @@ def build_current_turn_decision_prompt(turn: CurrentTurnDecisionInput) -> str:
         '"delivery_style":"PLAIN|QUOTE|MENTION","reply_message_id":number|null}. '
         "social_action is the visible conversational move, not a writing style. "
         "ACK is for a short vent, acknowledgement, or low-stakes reaction. "
+        "If the message replies to one of the reply candidates, "
+        "the social_action must not be ACK; classify it as REPLY with ANSWER or QUOTE. "
         "AFFECTION is for warmly receiving praise or responding to affectionate, clingy, or cute behavior. "
         "JOKE is for banter or a playful reaction. "
         "For a short ACK or JOKE without a question or request, use PASS. "

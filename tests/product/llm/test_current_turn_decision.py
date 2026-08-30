@@ -332,10 +332,32 @@ def test_current_turn_prompt_distinguishes_short_vent_from_explicit_opinion() ->
     assert "QUOTE only when directly answering the current message" in prompt
 
 
-def test_short_vent_does_not_read_persistent_memory_even_when_model_calls_it_an_answer() -> None:
-    assert not should_read_persistent_memory_for_turn(
+def test_current_turn_prompt_forbids_ack_when_replying_to_bot_candidate() -> None:
+    turn = CurrentTurnDecisionInput(
+        text="真的吗",
+        is_to_me=False,
+        reply_candidates=[
+            ReplyTargetCandidate(message_id=1803128195, sender_id=10001, text="这又是什么缩写"),
+        ],
+    )
+    prompt = build_current_turn_decision_prompt(turn)
+
+    assert "If the message replies to one of the reply candidates" in prompt
+    assert "must not be ACK" in prompt
+
+
+def test_short_social_turns_still_read_persistent_memory() -> None:
+    assert should_read_persistent_memory_for_turn(
         "我又改输出了，烦",
         CurrentTurnSocialAction.ANSWER,
+    )
+    assert should_read_persistent_memory_for_turn(
+        "我又改输出了，烦",
+        CurrentTurnSocialAction.ACK,
+    )
+    assert should_read_persistent_memory_for_turn(
+        "真的吗",
+        CurrentTurnSocialAction.ACK,
     )
     assert should_read_persistent_memory_for_turn(
         "刚才那个输出怎么改的？",
@@ -343,25 +365,29 @@ def test_short_vent_does_not_read_persistent_memory_even_when_model_calls_it_an_
     )
 
 
-def test_explicit_short_social_turn_uses_recent_pair_when_assistant_replied() -> None:
+def test_recent_pair_trigger_surface_unchanged_after_history_always_on() -> None:
+    # 显式寻址 + 近期 assistant 回复 + 短社交 → 仍带 recent_pair
     assert should_include_recent_pair_for_turn(
         "继续讲",
         CurrentTurnSocialAction.ACK,
         explicitly_addressed=True,
         has_recent_assistant_turn=True,
     )
+    # 非显式寻址 → False
     assert not should_include_recent_pair_for_turn(
         "继续讲",
         CurrentTurnSocialAction.ACK,
         explicitly_addressed=False,
         has_recent_assistant_turn=True,
     )
+    # 无近期 assistant 回复 → False
     assert not should_include_recent_pair_for_turn(
         "继续讲",
         CurrentTurnSocialAction.ACK,
         explicitly_addressed=True,
         has_recent_assistant_turn=False,
     )
+    # 问句（非短社交）→ False
     assert not should_include_recent_pair_for_turn(
         "刚才那个输出怎么改的？",
         CurrentTurnSocialAction.ANSWER,
