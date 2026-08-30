@@ -48,6 +48,7 @@ async def store_cached_group_bot_ids(
     ids: tuple[int, ...] | list[int],
     *,
     namespace: str,
+    ttl_sec: float | None = None,
 ) -> None:
     gid = int(group_id)
     now = time.time()
@@ -60,7 +61,7 @@ async def store_cached_group_bot_ids(
                 bucket.pop(k, None)
             if len(bucket) >= GROUP_ONLINE_CACHE_MAX:
                 bucket.clear()
-        bucket[gid] = (now + GROUP_ONLINE_TTL_SEC, tup)
+        bucket[gid] = (now + (ttl_sec if ttl_sec is not None else GROUP_ONLINE_TTL_SEC), tup)
 
 
 def remember_local_group_bot(group_id: int, bot_id: int) -> None:
