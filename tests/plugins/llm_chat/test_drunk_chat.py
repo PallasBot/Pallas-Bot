@@ -104,3 +104,31 @@ async def test_drunk_chat_yields_to_extension_plugin(monkeypatch: pytest.MonkeyP
             return "你好"
 
     assert await chat_mod.is_to_drunk_chat(DummyEvent()) is False
+
+
+@pytest.mark.asyncio
+async def test_sober_up_keeps_llm_history_and_clears_service_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from packages.llm_chat import drunk_chat as chat_mod
+
+    deleted: list[str] = []
+    rwkv_deleted: list[str] = []
+
+    async def fake_delete(session_id: str) -> None:
+        deleted.append(session_id)
+
+    async def fake_delete_rwkv(session_id: str) -> None:
+        rwkv_deleted.append(session_id)
+
+    monkeypatch.setattr(chat_mod, "delete_llm_chat_session", fake_delete)
+    monkeypatch.setattr(chat_mod, "delete_rwkv_chat_session", fake_delete_rwkv)
+    monkeypatch.setattr(chat_mod, "extension_drunk_chat_loaded", lambda: False)
+    monkeypatch.setattr(chat_mod, "is_legacy_rwkv_drunk_chat_enabled", lambda: False)
+
+    await chat_mod.on_sober_up("123456", 42, 1)
+
+    assert deleted == ["123456_42"]
+    assert rwkv_deleted == []
+    # 醒酒后 llm_chat_message 保留，不再引用 clear_llm_messages
+    assert not hasattr(chat_mod, "clear_llm_messages")

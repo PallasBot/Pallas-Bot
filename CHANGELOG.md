@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+* feat(memory): 好感度兜底顺带沉淀稳定关系事实
+
+### Fixed
+
+* fix(llm_chat): 命令车道消息交回 matcher 处理
+* fix(llm): 短社交话不再跳过用户历史注入
+* fix(llm): 群环境摘录剔除自己后回退保留最近一对
+* fix(llm_chat): 醒酒保留群聊历史只清服务端会话
+
 ## [4.3.13] - 2026-08-29
 
 ### 更新公告

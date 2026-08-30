@@ -168,6 +168,8 @@ LLM_EMBEDDING_PROVIDER=local
 | `LLM_KNOWLEDGE_FILE_INGEST_ENABLED` | 开 | 扫描 `data/pallas_knowledge/` |
 | `LLM_RELATIONSHIP_NOTES_ENABLED` | 开 | 关系备注 |
 
+关系便签正文有三种来源：人工教导（「记住关系：」）、规则观察句式、好感度 LLM 兜底（`LLM_RELATIONSHIP_AFFINITY_LLM_DAILY_LIMIT` 与独立冷却内）在倾向明显且把握足时顺带归纳的稳定特征句；只有好感度分数而无正文属正常现象。
+
 模型也可通过 tools `memory.search` / `memory.save` 主动检索与写入。控制台：`GET/POST /pallas/api/llm/conversation-kernel/memory`、`GET /pallas/api/llm/knowledge/sources`。
 
 排障：会话「记不住」先查 `LLM_SESSION_ENABLED`、Provider 是否测通，以及数据库是否已初始化（PG 或 Mongo）。群记忆 / 关系便签同需对应开关与存储就绪；向量检索异常时回落关键词。

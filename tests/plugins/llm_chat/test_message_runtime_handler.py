@@ -7,7 +7,12 @@ import pytest
 from pallas.core.platform.message_runtime.models import MessageContext
 
 
-def _context(*, plain_text: str = "你好") -> MessageContext:
+def _context(
+    *,
+    plain_text: str = "你好",
+    command_traffic: bool = False,
+    route_modules: frozenset[str] = frozenset(),
+) -> MessageContext:
     return MessageContext(
         ingress_id="i-1",
         bot_id=1,
@@ -16,8 +21,8 @@ def _context(*, plain_text: str = "你好") -> MessageContext:
         plain_text=plain_text,
         raw_text=plain_text,
         is_to_me=True,
-        command_traffic=False,
-        route_modules=frozenset(),
+        command_traffic=command_traffic,
+        route_modules=route_modules,
     )
 
 
@@ -49,4 +54,22 @@ async def test_native_llm_handler_falls_back_for_empty_direct_mention(monkeypatc
     outcome = await module.LlmChatDirectHandler().handle(_context(plain_text=""), bot="bot", event=event)
 
     assert outcome.fallback_to_matcher is True
+    legacy_handler.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_native_llm_handler_falls_back_for_command_traffic(monkeypatch) -> None:
+    from packages.llm_chat import message_runtime_handler as module
+
+    legacy_handler = AsyncMock()
+    monkeypatch.setattr(module, "handle_llm_chat", legacy_handler)
+
+    outcome = await module.LlmChatDirectHandler().handle(
+        _context(plain_text="重置表达", command_traffic=True, route_modules=frozenset({"llm_chat"})),
+        bot="bot",
+        event="event",
+    )
+
+    assert outcome.fallback_to_matcher is True
+    assert outcome.fallback_reason == "command_traffic"
     legacy_handler.assert_not_awaited()
