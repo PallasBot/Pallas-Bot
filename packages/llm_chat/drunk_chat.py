@@ -24,7 +24,6 @@ from pallas.product.llm import (
 )
 from pallas.product.llm.drunk_tts import is_chat_tts_enabled
 from pallas.product.llm.legacy_rwkv import delete_rwkv_chat_session, submit_rwkv_drunk_chat
-from pallas.product.llm.session_store import clear_llm_messages
 
 CHAT_COOLDOWN_KEY = "chat"
 # 与历史扩展仓 chat 一致：优先于清醒 @（llm_chat 默认 ~51）
@@ -59,19 +58,11 @@ async def on_sober_up(bot_id, group_id, drunkenness) -> None:
     session = f"{bot_id}_{group_id}"
     logger.info(
         format_plugin_event(
-            "clear_session",
-            f"Bot [{bot_id}] cleared drunk-chat session [{session}] in group [{group_id}]",
+            "sober_session",
+            f"Bot [{bot_id}] sobered up in group [{group_id}] — keeping group chat history, "
+            f"clearing only the server-side session [{session}]",
         )
     )
-    try:
-        await clear_llm_messages(int(bot_id), int(group_id))
-    except Exception:
-        logger.exception(
-            format_plugin_event(
-                "clear_session",
-                f"Bot [{bot_id}] failed to clear drunk-chat session [{session}] in group [{group_id}]",
-            )
-        )
     await delete_llm_chat_session(session)
     if is_legacy_rwkv_drunk_chat_enabled():
         await delete_rwkv_chat_session(session)
