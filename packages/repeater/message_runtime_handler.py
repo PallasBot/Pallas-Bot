@@ -113,28 +113,34 @@ class RepeaterDirectHandler:
         from pallas.product.message_scrub import is_message_scrub_blocked_async
 
         repeater_context_started = time.perf_counter()
-        repeater_context = await build_repeater_event_context(int(bot.self_id), event)
-        record_stage_duration("repeater_event_gate", (time.perf_counter() - repeater_context_started) * 1000.0)
+        try:
+            repeater_context = await build_repeater_event_context(int(bot.self_id), event)
+        finally:
+            record_stage_duration("repeater_event_gate", (time.perf_counter() - repeater_context_started) * 1000.0)
         if repeater_context is None:
             return HandlingOutcome(handled=True)
         scrub_started = time.perf_counter()
-        if await is_message_scrub_blocked_async(
-            plain_text=repeater_context.plain_body,
-            raw_message=repeater_context.norm_raw,
-        ):
+        try:
+            scrub_blocked = await is_message_scrub_blocked_async(
+                plain_text=repeater_context.plain_body,
+                raw_message=repeater_context.norm_raw,
+            )
+        finally:
             record_stage_duration("repeater_scrub", (time.perf_counter() - scrub_started) * 1000.0)
+        if scrub_blocked:
             return HandlingOutcome(handled=True)
-        record_stage_duration("repeater_scrub", (time.perf_counter() - scrub_started) * 1000.0)
 
         chat = Chat(event)
         prepare_started = time.perf_counter()
-        prepared = await prepare_repeater_reply(
-            event,
-            chat,
-            plain_body=repeater_context.plain_body,
-            sharding_active=repeater_context.sharding_active,
-        )
-        record_stage_duration("repeater_prepare", (time.perf_counter() - prepare_started) * 1000.0)
+        try:
+            prepared = await prepare_repeater_reply(
+                event,
+                chat,
+                plain_body=repeater_context.plain_body,
+                sharding_active=repeater_context.sharding_active,
+            )
+        finally:
+            record_stage_duration("repeater_prepare", (time.perf_counter() - prepare_started) * 1000.0)
         if event.is_tome():
             return HandlingOutcome(
                 handled=False,
@@ -157,8 +163,10 @@ class RepeaterDirectHandler:
             )
 
         answer_started = time.perf_counter()
-        answers = await chat.answer_from_bundle(prepared.bundle)
-        record_stage_duration("repeater_answer", (time.perf_counter() - answer_started) * 1000.0)
+        try:
+            answers = await chat.answer_from_bundle(prepared.bundle)
+        finally:
+            record_stage_duration("repeater_answer", (time.perf_counter() - answer_started) * 1000.0)
         if answers is None:
             return HandlingOutcome(
                 handled=True,
@@ -171,8 +179,10 @@ class RepeaterDirectHandler:
         from pallas.core.platform.ingress.hotpath_metrics import record_reply_local_dispatched
 
         cooldown_started = time.perf_counter()
-        await BotConfig(int(event.self_id), int(event.group_id)).refresh_cooldown("repeat")
-        record_stage_duration("repeater_cooldown", (time.perf_counter() - cooldown_started) * 1000.0)
+        try:
+            await BotConfig(int(event.self_id), int(event.group_id)).refresh_cooldown("repeat")
+        finally:
+            record_stage_duration("repeater_cooldown", (time.perf_counter() - cooldown_started) * 1000.0)
         record_reply_local_dispatched()
         local_outcome = build_repeater_local_reply_outcome(int(event.self_id), int(event.group_id), answers)
         return replace(local_outcome, deferred_actions=(capture_action,) + local_outcome.deferred_actions)

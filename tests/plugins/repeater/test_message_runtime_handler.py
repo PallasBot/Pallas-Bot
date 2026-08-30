@@ -183,6 +183,38 @@ async def test_repeater_native_handler_handles_local_reply_without_llm(monkeypat
     learn.assert_awaited_once_with(chat, event)
 
 
+@pytest.mark.asyncio
+async def test_repeater_native_handler_records_stage_when_prepare_raises(monkeypatch) -> None:
+    from unittest.mock import AsyncMock
+
+    from packages.repeater.message_runtime_handler import RepeaterDirectHandler
+
+    stage_durations: list[str] = []
+
+    async def build_context(_bot_id, _event):
+        return type("Context", (), {"plain_body": "闲聊", "norm_raw": "闲聊", "sharding_active": False})()
+
+    monkeypatch.setattr("packages.repeater.event_gate.build_repeater_event_context", build_context)
+    monkeypatch.setattr("pallas.product.message_scrub.is_message_scrub_blocked_async", AsyncMock(return_value=False))
+    monkeypatch.setattr(
+        "packages.repeater.reply_preparation.prepare_repeater_reply",
+        AsyncMock(side_effect=RuntimeError("prepare failed")),
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.ingress.hotpath_metrics.record_stage_duration",
+        lambda name, _duration_ms: stage_durations.append(name),
+    )
+
+    with pytest.raises(RuntimeError, match="prepare failed"):
+        await RepeaterDirectHandler().build_fanout_plan(
+            _context(),
+            bot=type("Bot", (), {"self_id": 10})(),
+            event=type("Event", (), {})(),
+        )
+
+    assert stage_durations == ["repeater_event_gate", "repeater_scrub", "repeater_prepare"]
+
+
 @pytest.mark.parametrize(
     ("is_to_me", "has_bundle", "fallback_reason"),
     [
