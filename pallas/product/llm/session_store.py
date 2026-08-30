@@ -379,7 +379,11 @@ async def build_llm_chat_messages(
         and c.llm_session_group_ambient_enabled
     ):
         ambient = await list_group_ambient_messages(bot_id, group_id, cfg=c)
+        excluded = [turn for turn in ambient if turn.user_id == int(user_id)]
         ambient = [turn for turn in ambient if turn.user_id != int(user_id)]
+        if len(ambient) < 2 and excluded:
+            # 单人连续对话会把窗口挤成全自己的行，剔除后回退补最近一对，避免零上下文
+            ambient = excluded[:2] + ambient
         try:
             from pallas.product.llm.injection_feedback import filter_ambient_turns
 
