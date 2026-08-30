@@ -13,6 +13,7 @@ from pallas.product.llm.provider_client import complete_chat_message
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL | re.IGNORECASE)
 _AFFINITY_INPUT_MAX_LEN = 60
 _AFFINITY_LLM_STEP = 0.4
+_STABLE_NOTE_MAX_LEN = 48
 
 
 async def score_affinity_with_llm(
@@ -21,7 +22,7 @@ async def score_affinity_with_llm(
     task: str = "llm.relationship.affinity",
     cfg: LlmConfig | None = None,
 ) -> dict[str, Any] | None:
-    """判断一句话对 bot 的好感倾向，返回 {affinity_delta, confidence, reason}；失败返回 None。"""
+    """判断一句话对 bot 的好感倾向，返回 {affinity_delta, confidence, reason, stable_note}；失败或中性返回 None。"""
     c = cfg or get_llm_config()
     text = (plain_text or "").strip()[:_AFFINITY_INPUT_MAX_LEN]
     if not text:
@@ -32,7 +33,9 @@ async def score_affinity_with_llm(
         "「你还不感谢我」是命令式索取不算好感。"
         "只输出严格 JSON，不要任何多余文字："
         '{"affinity_delta": -0.4到0.4的浮点数（正为好感升高、负为下降，0为中性）, '
-        '"confidence": 0到1的浮点数（你的把握）, "reason": 不超过40字的中文理由}'
+        '"confidence": 0到1的浮点数（你的把握）, "reason": 不超过40字的中文理由, '
+        '"stable_note": 如能看出该用户的稳定特征（身份/习惯/偏好/相处方式），用不超过48字的第三人称事实句描述，'
+        "仅凭这一句看不出来就填空字符串}"
         f"\n\n群友的话：{text}"
     )
     try:
@@ -64,4 +67,12 @@ async def score_affinity_with_llm(
     affinity_delta = round(max(-_AFFINITY_LLM_STEP, min(_AFFINITY_LLM_STEP, affinity_delta)), 3)
     confidence = round(max(0.0, min(1.0, confidence)), 3)
     reason = str(data.get("reason") or "")[:40]
-    return {"affinity_delta": affinity_delta, "confidence": confidence, "reason": reason}
+    note = " ".join(str(data.get("stable_note") or "").split())[:_STABLE_NOTE_MAX_LEN]
+    if affinity_delta == 0.0:
+        return None
+    return {
+        "affinity_delta": affinity_delta,
+        "confidence": confidence,
+        "reason": reason,
+        "stable_note": note,
+    }
