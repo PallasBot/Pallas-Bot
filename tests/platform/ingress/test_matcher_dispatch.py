@@ -444,6 +444,47 @@ async def test_patched_handle_event_logs_group_message_at_info(monkeypatch: pyte
 
 
 @pytest.mark.asyncio
+async def test_patched_handle_event_escapes_non_group_event_log_for_colors(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeNoticeEvent:
+        def get_log_string(self) -> str:
+            return "notice <le> payload"
+
+        def get_type(self) -> str:
+            return "notice"
+
+    class FakeLog:
+        def __init__(self) -> None:
+            self.messages: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def opt(self, **_kwargs):
+            return self
+
+        def debug(self, *args, **kwargs) -> None:
+            from loguru._colorizer import Colorizer
+
+            if args:
+                Colorizer.prepare_simple_message(str(args[0]))
+            self.messages.append((args, kwargs))
+
+        def success(self, *args, **kwargs) -> None:
+            from loguru._colorizer import Colorizer
+
+            if args:
+                Colorizer.prepare_simple_message(str(args[0]))
+            self.messages.append((args, kwargs))
+
+    log = FakeLog()
+    monkeypatch.setattr(dispatch, "GroupMessageEvent", type("OtherGroupEvent", (), {}))
+    monkeypatch.setattr(dispatch.nb_message, "logger", log)
+    monkeypatch.setattr(dispatch, "mark_activity", lambda: None)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", AsyncMock(return_value=False))
+
+    await dispatch.patched_handle_event_now(MagicMock(type="Bot", self_id="1"), FakeNoticeEvent())
+
+    assert log.messages
+
+
+@pytest.mark.asyncio
 async def test_patched_handle_event_drops_chat_when_overloaded(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeGroupMessageEvent:
         group_id = 100

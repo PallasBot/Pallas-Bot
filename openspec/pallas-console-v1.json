@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.3.12-136-g57533b89-dirty",
+    "version": "v4.3.13-3-gdbf7b65c-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -32053,6 +32053,124 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "IngressDispatchConversationScheduler": {
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": false
+          },
+          "pending": {
+            "type": "integer",
+            "title": "Pending",
+            "default": 0
+          },
+          "pending_peak": {
+            "type": "integer",
+            "title": "Pending Peak",
+            "default": 0
+          },
+          "active": {
+            "type": "integer",
+            "title": "Active",
+            "default": 0
+          },
+          "active_peak": {
+            "type": "integer",
+            "title": "Active Peak",
+            "default": 0
+          },
+          "wait_ms_p95": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wait Ms P95"
+          },
+          "run_ms_p95": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Ms P95"
+          },
+          "passive_repeater_pending": {
+            "type": "integer",
+            "title": "Passive Repeater Pending",
+            "default": 0
+          },
+          "passive_repeater_active": {
+            "type": "integer",
+            "title": "Passive Repeater Active",
+            "default": 0
+          },
+          "passive_repeater_run_ms_p95": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passive Repeater Run Ms P95"
+          },
+          "passive_repeater_active_oldest_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passive Repeater Active Oldest Ms"
+          },
+          "passive_llm_pending": {
+            "type": "integer",
+            "title": "Passive Llm Pending",
+            "default": 0
+          },
+          "passive_llm_active": {
+            "type": "integer",
+            "title": "Passive Llm Active",
+            "default": 0
+          },
+          "passive_llm_run_ms_p95": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passive Llm Run Ms P95"
+          },
+          "passive_llm_active_oldest_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passive Llm Active Oldest Ms"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "IngressDispatchConversationScheduler"
+      },
       "IngressDispatchData": {
         "properties": {
           "sharded": {
@@ -32067,6 +32185,12 @@
             },
             "type": "array",
             "title": "Workers"
+          },
+          "hotpath": {
+            "$ref": "#/components/schemas/IngressDispatchHotpath"
+          },
+          "conversation_scheduler": {
+            "$ref": "#/components/schemas/IngressDispatchConversationScheduler"
           }
         },
         "additionalProperties": true,
@@ -32220,6 +32344,68 @@
           "work_completed"
         ],
         "title": "IngressDispatchHistoryPoint"
+      },
+      "IngressDispatchHotpath": {
+        "properties": {
+          "repeater_event_gate_ms_p95": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repeater Event Gate Ms P95"
+          },
+          "repeater_scrub_ms_p95": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repeater Scrub Ms P95"
+          },
+          "repeater_prepare_ms_p95": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repeater Prepare Ms P95"
+          },
+          "repeater_answer_ms_p95": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repeater Answer Ms P95"
+          },
+          "repeater_cooldown_ms_p95": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repeater Cooldown Ms P95"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "IngressDispatchHotpath"
       },
       "InjectionGovernanceManageRequest": {
         "properties": {

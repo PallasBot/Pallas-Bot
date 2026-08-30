@@ -248,11 +248,45 @@ class SystemRestartAvailabilityData(BaseModel):
     deployment_mode: str = ""
 
 
+class IngressDispatchHotpath(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    repeater_event_gate_ms_p95: float | None = None
+    repeater_scrub_ms_p95: float | None = None
+    repeater_prepare_ms_p95: float | None = None
+    repeater_answer_ms_p95: float | None = None
+    repeater_cooldown_ms_p95: float | None = None
+
+
+class IngressDispatchConversationScheduler(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    enabled: bool = False
+    pending: int = 0
+    pending_peak: int = 0
+    active: int = 0
+    active_peak: int = 0
+    wait_ms_p95: float | None = None
+    run_ms_p95: float | None = None
+    passive_repeater_pending: int = 0
+    passive_repeater_active: int = 0
+    passive_repeater_run_ms_p95: float | None = None
+    passive_repeater_active_oldest_ms: float | None = None
+    passive_llm_pending: int = 0
+    passive_llm_active: int = 0
+    passive_llm_run_ms_p95: float | None = None
+    passive_llm_active_oldest_ms: float | None = None
+
+
 class IngressDispatchData(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     sharded: bool = False
     workers: list[dict[str, Any]] = Field(default_factory=list)
+    hotpath: IngressDispatchHotpath = Field(default_factory=IngressDispatchHotpath)
+    conversation_scheduler: IngressDispatchConversationScheduler = Field(
+        default_factory=IngressDispatchConversationScheduler,
+    )
 
 
 class IngressDispatchHistoryPoint(BaseModel):

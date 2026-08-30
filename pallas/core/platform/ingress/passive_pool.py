@@ -19,6 +19,8 @@ class PassiveWorkPool:
         self._dropped = 0
         self._active = 0
         self._wait_samples_ms: deque[float] = deque(maxlen=256)
+        self._run_samples_ms: deque[float] = deque(maxlen=256)
+        self._active_started: set[float] = set()
         self._tasks: set[asyncio.Task[None]] = set()
         self._stopping = False
         self._sem = asyncio.Semaphore(self.max_concurrency)
@@ -38,17 +40,21 @@ class PassiveWorkPool:
             await self._sem.acquire()
             self._pending = max(0, self._pending - 1)
             self._active += 1
-            self._wait_samples_ms.append((time.monotonic() - queued_at) * 1000.0)
-            task = asyncio.create_task(self._run(work), name=f"passive_{self.name}")
+            started_at = time.monotonic()
+            self._active_started.add(started_at)
+            self._wait_samples_ms.append((started_at - queued_at) * 1000.0)
+            task = asyncio.create_task(self._run(work, started_at), name=f"passive_{self.name}")
             self._tasks.add(task)
             task.add_done_callback(self._tasks.discard)
         except asyncio.CancelledError:
             raise
 
-    async def _run(self, work: Work) -> None:
+    async def _run(self, work: Work, started_at: float) -> None:
         try:
             await work()
         finally:
+            self._run_samples_ms.append((time.monotonic() - started_at) * 1000.0)
+            self._active_started.discard(started_at)
             self._active = max(0, self._active - 1)
             self._changed.set()
             self._sem.release()
@@ -59,6 +65,12 @@ class PassiveWorkPool:
         if ordered:
             index = max(0, min(len(ordered) - 1, int(len(ordered) * 0.95)))
             wait_p95 = round(ordered[index], 2)
+        run_ordered = sorted(self._run_samples_ms)
+        run_p95 = None
+        if run_ordered:
+            index = max(0, min(len(run_ordered) - 1, int(len(run_ordered) * 0.95)))
+            run_p95 = round(run_ordered[index], 2)
+        oldest = min(self._active_started, default=None)
         return {
             "name": self.name,
             "pending": self._pending,
@@ -66,6 +78,8 @@ class PassiveWorkPool:
             "active": self._active,
             "dropped": self._dropped,
             "wait_ms_p95": wait_p95,
+            "run_ms_p95": run_p95,
+            "active_oldest_ms": round((time.monotonic() - oldest) * 1000.0, 2) if oldest is not None else None,
         }
 
     async def stop(self) -> None:

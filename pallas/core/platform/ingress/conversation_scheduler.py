@@ -557,6 +557,8 @@ def conversation_scheduler_status() -> dict[str, int | float | bool | None]:
         base[f"passive_{pool_name}_pending"] = int(stat.get("pending") or 0)
         base[f"passive_{pool_name}_active"] = int(stat.get("active") or 0)
         base[f"passive_{pool_name}_dropped"] = int(stat.get("dropped") or 0)
+        base[f"passive_{pool_name}_run_ms_p95"] = stat.get("run_ms_p95")
+        base[f"passive_{pool_name}_active_oldest_ms"] = stat.get("active_oldest_ms")
     return base
 
 

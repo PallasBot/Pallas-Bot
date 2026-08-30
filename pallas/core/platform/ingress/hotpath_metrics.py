@@ -48,6 +48,11 @@ _COUNTERS = (
     "reply_query_uncached",
 )
 _STAGE_KEYS = (
+    "repeater_event_gate",
+    "repeater_scrub",
+    "repeater_prepare",
+    "repeater_answer",
+    "repeater_cooldown",
     "db_find",
     "persona",
     "affect",
@@ -115,6 +120,11 @@ def _append_stage(name: str, duration_ms: float | None) -> None:
     if samples is None:
         return
     samples.append(float(duration_ms))
+
+
+def record_stage_duration(name: str, duration_ms: float) -> None:
+    _rollover_if_needed()
+    _append_stage(name, duration_ms)
 
 
 def record_route_resolve_ms(duration_ms: float) -> None:
