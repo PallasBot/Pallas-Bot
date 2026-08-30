@@ -22,6 +22,10 @@ class LlmChatDirectHandler:
     async def handle(self, context: MessageContext, *, bot: Bot, event: Event) -> HandlingOutcome:
         if not self.accepts(context):
             return HandlingOutcome(handled=False, fallback_to_matcher=True)
+        if context.command_traffic:
+            # 命令车道命中（如「重置表达」「clear」）必须交给 matcher 执行，
+            # 否则 direct 处理会抢在 on_command 之前把命令当闲聊吞掉。
+            return HandlingOutcome(handled=False, fallback_to_matcher=True, fallback_reason="command_traffic")
         if (
             not context.plain_text.strip()
             and not getattr(event, "reply", None)
