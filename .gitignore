@@ -248,7 +248,7 @@ test.py
 .claude/skills/
 .agents/
 skills-lock.json
-docs/superpowers/
+docs/agent/
 tmp/
 
 # 站点自有插件（保留目录骨架；见 local/README.md）
@@ -256,3 +256,8 @@ local/plugins/*
 !local/plugins/.gitkeep
 local/patches/*
 !local/patches/README.md
+
+# Trellis workflow files
+.trellis/
+.opencode/
+.gitattributes
