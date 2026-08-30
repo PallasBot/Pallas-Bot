@@ -129,5 +129,6 @@ async def test_sober_up_keeps_llm_history_and_clears_service_session(
     await chat_mod.on_sober_up("123456", 42, 1)
 
     assert deleted == ["123456_42"]
+    assert rwkv_deleted == []
     # 醒酒后 llm_chat_message 保留，不再引用 clear_llm_messages
     assert not hasattr(chat_mod, "clear_llm_messages")
