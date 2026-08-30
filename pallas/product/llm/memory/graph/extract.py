@@ -86,13 +86,20 @@ def _graph_extract_budget_ok() -> bool:
     return _graph_extract_daily_budget_used < limit
 
 
-def _bump_graph_extract_budget() -> None:
+def _reserve_graph_extract_budget(count: int = 1) -> bool:
+    count = max(1, int(count))
+    limit = int(get_llm_config().llm_memory_graph_extract_daily_budget)
+    if limit <= 0:
+        return True
     global _graph_extract_budget_day, _graph_extract_daily_budget_used
     today = time.strftime("%Y-%m-%d")
     if _graph_extract_budget_day != today:
         _graph_extract_budget_day = today
         _graph_extract_daily_budget_used = 0
-    _graph_extract_daily_budget_used += 1
+    if _graph_extract_daily_budget_used + count > limit:
+        return False
+    _graph_extract_daily_budget_used += count
+    return True
 
 
 def _resolve_extract_task_and_model() -> tuple[str, str]:
@@ -255,7 +262,7 @@ async def extract_from_text(
     raw_text = str(text or "").strip()
     if not raw_text:
         return {"entities_upserted": 0, "edges_upserted": 0, "error": "empty text"}
-    if not _graph_extract_budget_ok():
+    if not _reserve_graph_extract_budget():
         return {"entities_upserted": 0, "edges_upserted": 0, "error": "daily budget exhausted"}
     if not is_memory_graph_store_available():
         return {"entities_upserted": 0, "edges_upserted": 0, "error": "store unavailable"}
@@ -277,7 +284,6 @@ async def extract_from_text(
         payload=payload,
         episode_id=episode_id,
     )
-    _bump_graph_extract_budget()
     return {"entities_upserted": entities_n, "edges_upserted": edges_n, "raw": raw}
 
 
@@ -325,6 +331,13 @@ async def extract_from_episodes(
     errors: list[str] = []
     if targets:
         scope_key = make_scope_key(bot_id=bot_id, group_id=group_id)
+        if not _reserve_graph_extract_budget(len(targets)):
+            return {
+                "episodes": len(targets),
+                "entities_upserted": 0,
+                "edges_upserted": 0,
+                "error": "daily budget exhausted",
+            }
         try:
             raw = await _call_extract_batch([t[1] for t in targets], scope_key=scope_key)
             parsed = parse_llm_json(raw)
@@ -344,18 +357,7 @@ async def extract_from_episodes(
                 total_entities += entities_n
                 total_edges += edges_n
         else:
-            logger.debug("Memory graph batch extract unreliable, falling back per-episode for scope [{}]", scope_key)
-            for ep_group_id, content, episode_id in targets:
-                result = await extract_from_text(
-                    bot_id=bot_id,
-                    group_id=ep_group_id,
-                    text=content,
-                    episode_id=episode_id,
-                )
-                total_entities += int(result.get("entities_upserted") or 0)
-                total_edges += int(result.get("edges_upserted") or 0)
-                if result.get("error"):
-                    errors.append(str(result["error"]))
+            errors.append("batch result unreliable")
 
     out: dict[str, Any] = {
         "episodes": len(targets),

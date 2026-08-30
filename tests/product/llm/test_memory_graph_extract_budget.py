@@ -27,7 +27,7 @@ async def test_extract_from_text_short_circuits_when_budget_exhausted(
         calls.append("called")
         raise AssertionError("LLM should not be called")
 
-    monkeypatch.setattr(extract, "_graph_extract_budget_ok", lambda: False)
+    monkeypatch.setattr(extract, "_reserve_graph_extract_budget", lambda: False)
     monkeypatch.setattr(extract, "_call_extract_llm", fail_call)
 
     result = await extract.extract_from_text(bot_id=1, group_id=2, text="随便聊点")
@@ -55,11 +55,9 @@ async def test_on_write_hook_short_circuits_when_budget_exhausted(
 
 
 @pytest.mark.asyncio
-async def test_extract_from_text_bumps_budget_after_success(
+async def test_extract_from_text_reserves_budget_before_llm(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    extract.clear_extract_state_for_tests()
-
     async def ok_llm(_text, **_k):
         return '{"entities": [], "edges": []}'
 
@@ -70,9 +68,8 @@ async def test_extract_from_text_bumps_budget_after_success(
         return {"edge_id": 1}
 
     monkeypatch.setattr(extract, "is_memory_graph_store_available", lambda: True)
-    monkeypatch.setattr(extract, "_graph_extract_budget_ok", lambda: True)
-    bumps: list[int] = []
-    monkeypatch.setattr(extract, "_bump_graph_extract_budget", lambda: bumps.append(1))
+    reservations: list[int] = []
+    monkeypatch.setattr(extract, "_reserve_graph_extract_budget", lambda count=1: reservations.append(count) or True)
     monkeypatch.setattr(extract, "_call_extract_llm", ok_llm)
     monkeypatch.setattr(extract, "upsert_entity", ok_upsert_entity)
     monkeypatch.setattr(extract, "upsert_edge", ok_upsert_edge)
@@ -81,4 +78,56 @@ async def test_extract_from_text_bumps_budget_after_success(
 
     assert result["entities_upserted"] == 0
     assert result["edges_upserted"] == 0
-    assert bumps == [1]
+    assert reservations == [1]
+
+
+@pytest.mark.asyncio
+async def test_extract_from_text_keeps_reserved_budget_when_apply_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reservations: list[int] = []
+
+    async def fail_apply(**_kwargs):
+        raise RuntimeError("graph store failed")
+
+    monkeypatch.setattr(extract, "is_memory_graph_store_available", lambda: True)
+    monkeypatch.setattr(extract, "_reserve_graph_extract_budget", lambda count=1: reservations.append(count) or True)
+
+    async def ok_llm(*_args, **_kwargs):
+        return _ok_extract_result()
+
+    monkeypatch.setattr(extract, "_call_extract_llm", ok_llm)
+    monkeypatch.setattr(extract, "_apply_extraction_payload", fail_apply)
+
+    with pytest.raises(RuntimeError, match="graph store failed"):
+        await extract.extract_from_text(bot_id=1, group_id=2, text="小明约大家周六打球")
+
+    assert reservations == [1]
+
+
+def _ok_extract_result() -> str:
+    return '{"entities": [], "edges": []}'
+
+
+def test_graph_extract_budget_reserves_concurrent_slots(monkeypatch: pytest.MonkeyPatch) -> None:
+    extract.clear_extract_state_for_tests()
+    monkeypatch.setattr(
+        extract,
+        "get_llm_config",
+        lambda: type("Config", (), {"llm_memory_graph_extract_daily_budget": 1})(),
+    )
+
+    assert extract._reserve_graph_extract_budget() is True
+    assert extract._reserve_graph_extract_budget() is False
+
+
+def test_graph_extract_budget_reserves_a_batch_atomically(monkeypatch: pytest.MonkeyPatch) -> None:
+    extract.clear_extract_state_for_tests()
+    monkeypatch.setattr(
+        extract,
+        "get_llm_config",
+        lambda: type("Config", (), {"llm_memory_graph_extract_daily_budget": 2})(),
+    )
+
+    assert extract._reserve_graph_extract_budget(2) is True
+    assert extract._reserve_graph_extract_budget() is False
