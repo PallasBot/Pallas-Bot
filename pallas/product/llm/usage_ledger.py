@@ -55,6 +55,7 @@ def append_usage_record(
     cost: float = 0.0,
     currency: str = "",
     pricing_rule: dict[str, Any] | None = None,
+    trigger_source: str | None = None,
     day_key: str | None = None,
     ts: float | None = None,
 ) -> None:
@@ -85,6 +86,9 @@ def append_usage_record(
             "cost": round(float(cost or 0.0), 6),
             "currency": normalize_cost_currency(currency),
         }
+        source = str(trigger_source or "").strip().lower()
+        if source:
+            row["trigger_source"] = source
         if isinstance(pricing_rule, dict):
             row["pricing_rule"] = pricing_rule
         path = ledger_path_for_day(day)
@@ -157,6 +161,7 @@ def _empty_day_bucket() -> dict[str, Any]:
         "by_provider": {},
         "by_model": {},
         "by_hour": {},
+        "by_trigger_source": {},
         "source": "ledger",
     }
 
@@ -275,12 +280,21 @@ def aggregate_day_from_ledger(day: str) -> dict[str, Any] | None:
                     cache_write=cache_write,
                     cost=cost,
                 )
+            _bump_breakdown(
+                bucket["by_trigger_source"],
+                str(row.get("trigger_source") or "unknown"),
+                prompt=prompt,
+                completion=completion,
+                cache_read=cache_read,
+                cache_write=cache_write,
+                cost=cost,
+            )
     if int(bucket["request_count"]) <= 0:
         return None
     bucket["total_tokens"] = int(bucket["prompt_tokens"]) + int(bucket["completion_tokens"])
     bucket["cost_currency"] = currency
     bucket["day_key"] = str(day).strip()[:10]
-    for label in ("by_task", "by_provider", "by_model", "by_hour"):
+    for label in ("by_task", "by_provider", "by_model", "by_hour", "by_trigger_source"):
         for values in bucket[label].values():
             values["total_tokens"] = int(values.get("prompt_tokens") or 0) + int(values.get("completion_tokens") or 0)
     return bucket
@@ -376,6 +390,7 @@ _USAGE_CSV_HEADER = (
     "费用",
     "币种",
     "定价规则",
+    "触发来源",
 )
 
 
@@ -417,6 +432,7 @@ def iter_usage_csv_lines(*, start_day: str, end_day: str) -> Iterator[str]:
             cost,
             str(row.get("currency") or ""),
             rule_id,
+            str(row.get("trigger_source") or ""),
         ])
         yield buffer.getvalue()
         buffer.seek(0)

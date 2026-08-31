@@ -177,6 +177,7 @@ def _record_usage_from_payload(
     provider_id: str,
     model: str,
     local: bool = False,
+    telemetry_context: dict[str, str] | None = None,
 ) -> None:
     try:
         from pallas.product.llm.token_metrics import record_llm_token_usage
@@ -201,6 +202,7 @@ def _record_usage_from_payload(
             completion_tokens=completion,
             cache_read_tokens=cache_read,
             cache_write_tokens=cache_write,
+            trigger_source=str((telemetry_context or {}).get("trigger_source") or "") or None,
         )
     except Exception:
         pass
@@ -1013,6 +1015,7 @@ async def _post_provider_chat(
                 timeout_sec=timeout_sec,
                 task=task,
                 provider_id=provider_id,
+                telemetry_context=telemetry_context,
             )
         if method == "anthropic_messages":
             return await _post_anthropic_messages(
@@ -1025,6 +1028,7 @@ async def _post_provider_chat(
                 timeout_sec=timeout_sec,
                 task=task,
                 provider_id=provider_id,
+                telemetry_context=telemetry_context,
             )
         return await _post_chat_completions(
             messages,
@@ -1036,6 +1040,7 @@ async def _post_provider_chat(
             timeout_sec=timeout_sec,
             task=task,
             provider_id=provider_id,
+            telemetry_context=telemetry_context,
         )
 
     resolved_method = resolve_request_method(request_method, base_url)
@@ -1135,6 +1140,7 @@ async def _post_anthropic_messages(
     timeout_sec: float,
     task: str = "llm_chat",
     provider_id: str = "",
+    telemetry_context: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     model_name = str(model or "").strip()
     if not model_name:
@@ -1155,7 +1161,13 @@ async def _post_anthropic_messages(
     data = response.json()
     if not isinstance(data, dict):
         raise LlmProviderError("invalid anthropic messages payload")
-    _record_usage_from_payload(data, task=task, provider_id=provider_id, model=model_name)
+    _record_usage_from_payload(
+        data,
+        task=task,
+        provider_id=provider_id,
+        model=model_name,
+        telemetry_context=telemetry_context,
+    )
     message_obj = parse_anthropic_message(data)
     if not str(message_obj.get("content", "") or "").strip() and not message_obj.get("tool_calls"):
         raise LlmProviderError("empty provider content")
@@ -1173,6 +1185,7 @@ async def _post_responses(
     timeout_sec: float,
     task: str = "llm_chat",
     provider_id: str = "",
+    telemetry_context: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     model_name = str(model or "").strip()
     if not model_name:
@@ -1196,7 +1209,13 @@ async def _post_responses(
     data = response.json()
     if not isinstance(data, dict):
         raise LlmProviderError("invalid responses payload")
-    _record_usage_from_payload(data, task=task, provider_id=provider_id, model=model_name)
+    _record_usage_from_payload(
+        data,
+        task=task,
+        provider_id=provider_id,
+        model=model_name,
+        telemetry_context=telemetry_context,
+    )
     message_obj = parse_responses_message(data)
     if not str(message_obj.get("content", "") or "").strip() and not message_obj.get("tool_calls"):
         raise LlmProviderError("empty provider content")
@@ -1214,6 +1233,7 @@ async def _post_chat_completions(
     timeout_sec: float,
     task: str = "llm_chat",
     provider_id: str = "",
+    telemetry_context: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     model_name = str(model or "").strip()
     if not model_name:
@@ -1251,7 +1271,13 @@ async def _post_chat_completions(
 
     data = response.json()
     if isinstance(data, dict):
-        _record_usage_from_payload(data, task=task, provider_id=provider_id, model=model_name)
+        _record_usage_from_payload(
+            data,
+            task=task,
+            provider_id=provider_id,
+            model=model_name,
+            telemetry_context=telemetry_context,
+        )
     choices = data.get("choices") if isinstance(data, dict) else None
     if not isinstance(choices, list) or not choices:
         raise LlmProviderError("empty provider choices")

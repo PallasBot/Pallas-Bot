@@ -1477,6 +1477,7 @@ async def prepare_and_submit_llm_chat_turn(
                     "semantic_style_direct_candidate": semantic_style.direct_candidate or None,
                     "semantic_style_source_example_id": getattr(semantic_style, "source_example_id", "") or None,
                     "turn_id": turn_id,
+                    "speak_trigger": speak_trigger or "to_me",
                 },
                 tool_metadata=tool_meta,
             ),
