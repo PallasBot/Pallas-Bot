@@ -78,4 +78,4 @@
 
 - [网页控制台](web-console.md)
 - [连接 QQ](connect-qq.md) · [重新上号](/plugins/relogin_bot)
-- [命令权限](/maintainer/operate/command-permissions) · [FAQ](/deploy/faq)
+- [命令权限](/maintainer/operate/command-permissions) · [FAQ](/FAQ)

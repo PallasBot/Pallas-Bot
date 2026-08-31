@@ -207,4 +207,4 @@ LLM_EMBEDDING_PROVIDER=local
 - [AI Runtime 安装](/maintainer/install/ai-runtime)
 - [排障](troubleshooting.md)
 - [架构总览](/developer/architecture/overview)
-- [FAQ](/deploy/faq)
+- [FAQ](/FAQ)

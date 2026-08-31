@@ -138,6 +138,6 @@ flowchart TD
 | 协议端与账号 | [协议端](/maintainer/install/protocol) |
 | 分片连接 | [分片部署](/maintainer/deploy/sharded) |
 | WebUI 资源 | [WebUI](/maintainer/install/webui) |
-| 环境问题 | [FAQ](/deploy/faq) |
+| 环境问题 | [FAQ](/FAQ) |
 | AI / LLM 对话 | [LLM 与 AI](llm-and-ai.md) |
 | 日志落盘与导出 | [日志](logs.md) |

@@ -59,7 +59,7 @@
 
 ## 其它
 
-- 控制台登录密钥在 `data/pallas_console/`；遗忘见 [FAQ](/deploy/faq)
+- 控制台登录密钥在 `data/pallas_console/`；遗忘见 [FAQ](/FAQ)
 - 旧名 / 迁出指针：`community_stats`、`ollama`、`pallas_*` 等扁平 stub
 - 正文结构模板：[TEMPLATE.md](./TEMPLATE.md)
 - 与文档站同步：[SYNC.md](./SYNC.md)
