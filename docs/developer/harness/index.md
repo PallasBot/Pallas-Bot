@@ -47,7 +47,13 @@
 | --- | --- | --- | --- |
 | 事件级行为实验工具 | `tools/llm_event_harness.py` | llm | unit · `tests/tools/test_llm_event_harness*.py` |
 | 行为实验方法与契约 | [harness/behavior-lab](/developer/harness/behavior-lab) | llm | unit |
+| 跨进程运行态观测（脱敏快照/查询/TTL） | `tools/observe_runtime.py` | platform | unit · `tests/tools/test_observe_runtime.py` |
+| 浏览器级 UI 验收（CDP 驱动 headless chromium） | `tools/browser_acceptance.py` | webui | unit · `tests/tools/test_browser_acceptance.py` |
 | 结构检查脚本 | `tools/check_plugin_imports.py`、`check_console_openapi_drift.py` 等 | platform | ci · `tools/check_*` |
+| 文档链接/锚点检查（doc-gardening） | `tools/check_doc_links.py` | platform | ci · `tools/check_*` |
+| fixture 健康扫描 | `tools/check_fixture_health.py` | llm | ci · `tools/check_*` |
+| 黄金原则扫描（地图链接/owner/验证状态） | `tools/check_golden_principles.py` | platform | ci · `tools/check_*` |
+| 自动 PR loop（治理漂移→修复 PR，保留人工审批） | `tools/auto_pr_loop.py` | platform | unit · `tests/tools/test_auto_pr_loop.py` |
 | CI 门禁（Ruff/import/矩阵/OpenAPI/构建） | `.github/workflows/ci.yml` | platform | ci |
 | 健康/启动检查与容器健康 | `.github/workflows/health-check.yml` | platform | ci · `uv run pallas status` |
 | 回归测试目录 | `tests/api/runtime/`、`tests/platform/message_runtime/`、`tests/product/llm/` | platform | unit |

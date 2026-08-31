@@ -2,7 +2,7 @@
 
 维护者从 **0** 安装时按本清单走查。每条打勾前记录 **日期 / 环境**（OS、GPU、Docker 版本）；失败项记录现象与日志路径。
 
-相关文档：[Docker 部署](/maintainer/deploy/docker) · [AI Runtime](ai-runtime.md) · [运维入口](/maintainer/quickstart) · [升级](/maintainer/deploy/upgrade) · [FAQ](/deploy/faq)
+相关文档：[Docker 部署](/maintainer/deploy/docker) · [AI Runtime](ai-runtime.md) · [运维入口](/maintainer/quickstart) · [升级](/maintainer/deploy/upgrade) · [FAQ](/FAQ)
 
 ---
 
@@ -192,7 +192,7 @@ docker compose -f docker-compose.llm.yml up -d
 | 媒体任务无结果 | `AI_SERVER_*`、callback 地址、AI 与 Bot 网络 |
 | 帮助图样式异常 | 不要将整个 `resource` 挂到 `/app/resource`（见 [Docker 部署](/maintainer/deploy/docker)） |
 
-更多：[FAQ](/deploy/faq) · [排障](/maintainer/operate/troubleshooting) · [LLM 与 AI 运维](/maintainer/operate/llm-and-ai)
+更多：[FAQ](/FAQ) · [排障](/maintainer/operate/troubleshooting) · [LLM 与 AI 运维](/maintainer/operate/llm-and-ai)
 
 ---
 

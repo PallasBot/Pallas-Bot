@@ -11,7 +11,7 @@
 - [网页控制台](web-console.md) 与 [号主](bot-owner.md)。
 - [AI 扩展](ai.md)：唱歌、画画和 LLM 对话；[AI 观测与联网搜索](ai.md#聊得起来之后ai-观测与对话策略)。
 - [@牛牛与复读](llm-and-repeater.md)。
-- [FAQ](/deploy/faq) 与 [排障](/maintainer/operate/troubleshooting)。
+- [FAQ](/FAQ) 与 [排障](/maintainer/operate/troubleshooting)。
 
 ## 部署与运维
 
