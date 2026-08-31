@@ -142,8 +142,8 @@ async def test_score_affinity_with_llm_extracts_stable_note() -> None:
 
 
 @pytest.mark.asyncio
-async def test_score_affinity_with_llm_skips_neutral_note() -> None:
-    payload = json.dumps({"affinity_delta": 0.0, "confidence": 0.9, "reason": "中性", "stable_note": "就是随口问问"})
+async def test_score_affinity_with_llm_neutral_without_fact_returns_none() -> None:
+    payload = json.dumps({"affinity_delta": 0.0, "confidence": 0.9, "reason": "中性", "stable_note": ""})
     with patch(
         "pallas.product.llm.memory.affinity_scorer.complete_chat_message",
         new=AsyncMock(return_value={"content": payload}),
@@ -151,6 +151,71 @@ async def test_score_affinity_with_llm_skips_neutral_note() -> None:
         result = await score_affinity_with_llm("随便说", task="llm.relationship.affinity")
     assert result is None
     assert llm.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_score_affinity_with_llm_neutral_keeps_admissible_note() -> None:
+    payload = json.dumps({
+        "affinity_delta": 0.0,
+        "confidence": 0.9,
+        "reason": "中性",
+        "stable_note": "该用户名叫小明",
+    })
+    with patch(
+        "pallas.product.llm.memory.affinity_scorer.complete_chat_message",
+        new=AsyncMock(return_value={"content": payload}),
+    ):
+        result = await score_affinity_with_llm("我叫小明", task="llm.relationship.affinity")
+    assert result is not None
+    assert result["affinity_delta"] == 0.0
+    assert result["stable_note"] == "该用户名叫小明"
+
+
+@pytest.mark.asyncio
+async def test_score_affinity_with_llm_neutral_rejects_inferred_note() -> None:
+    payload = json.dumps({
+        "affinity_delta": 0.0,
+        "confidence": 0.9,
+        "reason": "中性",
+        "stable_note": "可能依赖牛牛回复",
+    })
+    with patch(
+        "pallas.product.llm.memory.affinity_scorer.complete_chat_message",
+        new=AsyncMock(return_value={"content": payload}),
+    ) as llm:
+        result = await score_affinity_with_llm("随便说", task="llm.relationship.affinity")
+    assert result is None
+    assert llm.await_count == 1
+    casual = json.dumps({
+        "affinity_delta": 0.0,
+        "confidence": 0.9,
+        "reason": "中性",
+        "stable_note": "就是随口问问",
+    })
+    with patch(
+        "pallas.product.llm.memory.affinity_scorer.complete_chat_message",
+        new=AsyncMock(return_value={"content": casual}),
+    ):
+        result = await score_affinity_with_llm("随便说", task="llm.relationship.affinity")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_score_affinity_with_llm_clears_inadmissible_note() -> None:
+    payload = json.dumps({
+        "affinity_delta": -0.3,
+        "confidence": 0.9,
+        "reason": "有点不爽",
+        "stable_note": "似乎在闹脾气",
+    })
+    with patch(
+        "pallas.product.llm.memory.affinity_scorer.complete_chat_message",
+        new=AsyncMock(return_value={"content": payload}),
+    ):
+        result = await score_affinity_with_llm("你还不感谢我", task="llm.relationship.affinity")
+    assert result is not None
+    assert result["affinity_delta"] == -0.3
+    assert result["stable_note"] == ""
 
 
 @pytest.mark.asyncio
@@ -380,6 +445,137 @@ async def test_persist_llm_affinity_weak_note_not_written() -> None:
 
 
 @pytest.mark.asyncio
+async def test_persist_llm_neutral_affinity_writes_admissible_fact() -> None:
+    from pallas.product.llm.memory.relationship_persist import clear_affinity_state_for_tests
+
+    clear_affinity_state_for_tests()
+    cfg = LlmConfig(llm_chat_enabled=True, llm_relationship_notes_enabled=True)
+    upsert = AsyncMock(return_value=True)
+    with (
+        patch(
+            "pallas.product.llm.memory.relationship_persist.upsert_relationship_profile",
+            new=upsert,
+        ),
+        patch(
+            "pallas.product.llm.memory.relationship_persist.score_affinity_with_llm",
+            new=AsyncMock(
+                return_value={
+                    "affinity_delta": 0.0,
+                    "confidence": 0.9,
+                    "reason": "中性",
+                    "stable_note": "该用户名叫小明",
+                }
+            ),
+        ) as llm,
+    ):
+        ok = await maybe_persist_relationship_from_utterance(11, 12, 13, "我叫小明", speak_trigger="followup", cfg=cfg)
+    assert ok is True
+    assert llm.await_count == 1
+    kwargs = upsert.await_args.kwargs
+    assert kwargs["content"] == "该用户名叫小明"
+    assert kwargs["source"] == "observe"
+    assert kwargs["affinity_delta_add"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_persist_llm_neutral_affinity_without_fact_skips_upsert() -> None:
+    from pallas.product.llm.memory.relationship_persist import clear_affinity_state_for_tests
+
+    clear_affinity_state_for_tests()
+    cfg = LlmConfig(llm_chat_enabled=True, llm_relationship_notes_enabled=True)
+    upsert = AsyncMock(return_value=True)
+    with (
+        patch(
+            "pallas.product.llm.memory.relationship_persist.upsert_relationship_profile",
+            new=upsert,
+        ),
+        patch(
+            "pallas.product.llm.memory.relationship_persist.score_affinity_with_llm",
+            new=AsyncMock(
+                return_value={
+                    "affinity_delta": 0.0,
+                    "confidence": 0.9,
+                    "reason": "中性",
+                    "stable_note": "",
+                }
+            ),
+        ) as llm,
+    ):
+        ok = await maybe_persist_relationship_from_utterance(11, 12, 13, "随便说", speak_trigger="followup", cfg=cfg)
+    assert ok is False
+    assert llm.await_count == 1
+    upsert.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_persist_llm_inferred_note_rejected_but_affinity_kept() -> None:
+    from pallas.product.llm.memory.relationship_persist import clear_affinity_state_for_tests
+
+    clear_affinity_state_for_tests()
+    cfg = LlmConfig(llm_chat_enabled=True, llm_relationship_notes_enabled=True)
+    upsert = AsyncMock(return_value=True)
+    with (
+        patch(
+            "pallas.product.llm.memory.relationship_persist.upsert_relationship_profile",
+            new=upsert,
+        ),
+        patch(
+            "pallas.product.llm.memory.relationship_persist.score_affinity_with_llm",
+            new=AsyncMock(
+                return_value={
+                    "affinity_delta": -0.3,
+                    "confidence": 0.9,
+                    "reason": "有点不爽",
+                    "stable_note": "该用户自我中心，可能依赖牛牛回复",
+                }
+            ),
+        ) as llm,
+    ):
+        ok = await maybe_persist_relationship_from_utterance(
+            11, 12, 13, "你还不感谢我", speak_trigger="followup", cfg=cfg
+        )
+    assert ok is True
+    assert llm.await_count == 1
+    kwargs = upsert.await_args.kwargs
+    assert kwargs["content"] is None
+    assert kwargs["affinity_delta_add"] == -0.3
+    assert kwargs["source"] == "auto"
+
+
+@pytest.mark.asyncio
+async def test_persist_llm_low_confidence_note_not_written() -> None:
+    from pallas.product.llm.memory.relationship_persist import clear_affinity_state_for_tests
+
+    clear_affinity_state_for_tests()
+    cfg = LlmConfig(llm_chat_enabled=True, llm_relationship_notes_enabled=True)
+    upsert = AsyncMock(return_value=True)
+    with (
+        patch(
+            "pallas.product.llm.memory.relationship_persist.upsert_relationship_profile",
+            new=upsert,
+        ),
+        patch(
+            "pallas.product.llm.memory.relationship_persist.score_affinity_with_llm",
+            new=AsyncMock(
+                return_value={
+                    "affinity_delta": -0.3,
+                    "confidence": 0.4,
+                    "reason": "拿不准",
+                    "stable_note": "该用户名叫小明",
+                }
+            ),
+        ),
+    ):
+        ok = await maybe_persist_relationship_from_utterance(
+            11, 12, 13, "你还不感谢我", speak_trigger="followup", cfg=cfg
+        )
+    assert ok is True
+    kwargs = upsert.await_args.kwargs
+    assert kwargs["content"] is None
+    assert kwargs["affinity_delta_add"] == -0.3
+
+
+@pytest.mark.asyncio
 async def test_persist_llm_affinity_respects_daily_budget(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.product.llm.memory.relationship_persist import clear_affinity_state_for_tests
 
@@ -487,6 +683,11 @@ async def test_persist_ambient_neutral_skips_upsert() -> None:
 def test_ops_api_exports_set_affinity() -> None:
     assert "set_affinity" in ops_api.__all__
     assert callable(getattr(ops_api, "set_affinity", None))
+
+
+def test_ops_api_exports_cleanup_observed_relationship_facts() -> None:
+    assert "cleanup_observed_relationship_facts" in ops_api.__all__
+    assert callable(getattr(ops_api, "cleanup_observed_relationship_facts", None))
 
 
 def test_webui_config_maps_affinity_fields() -> None:

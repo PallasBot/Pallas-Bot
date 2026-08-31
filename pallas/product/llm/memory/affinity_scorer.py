@@ -8,6 +8,7 @@ from typing import Any
 
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.inference_params import task_token_budget
+from pallas.product.llm.memory.relationship import relationship_auto_fact_is_admissible
 from pallas.product.llm.provider_client import complete_chat_message
 
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL | re.IGNORECASE)
@@ -34,8 +35,9 @@ async def score_affinity_with_llm(
         "只输出严格 JSON，不要任何多余文字："
         '{"affinity_delta": -0.4到0.4的浮点数（正为好感升高、负为下降，0为中性）, '
         '"confidence": 0到1的浮点数（你的把握）, "reason": 不超过40字的中文理由, '
-        '"stable_note": 如能看出该用户的稳定特征（身份/习惯/偏好/相处方式），用不超过48字的第三人称事实句描述，'
-        "仅凭这一句看不出来就填空字符串}"
+        '"stable_note": 仅提取群友在当前这句话中直接明确说出的、可长期复用的身份/称呼/偏好/沟通约定或关系事实，'
+        "用不超过48字的简短事实句描述；禁止推测习惯、动机、人格、道德、情绪或未来行为，"
+        "当前消息没有直接稳定事实就填空字符串}"
         f"\n\n群友的话：{text}"
     )
     try:
@@ -68,7 +70,9 @@ async def score_affinity_with_llm(
     confidence = round(max(0.0, min(1.0, confidence)), 3)
     reason = str(data.get("reason") or "")[:40]
     note = " ".join(str(data.get("stable_note") or "").split())[:_STABLE_NOTE_MAX_LEN]
-    if affinity_delta == 0.0:
+    if note and not relationship_auto_fact_is_admissible(note):
+        note = ""
+    if affinity_delta == 0.0 and not note:
         return None
     return {
         "affinity_delta": affinity_delta,

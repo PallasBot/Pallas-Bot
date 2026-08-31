@@ -168,7 +168,7 @@ LLM_EMBEDDING_PROVIDER=local
 | `LLM_KNOWLEDGE_FILE_INGEST_ENABLED` | 开 | 扫描 `data/pallas_knowledge/` |
 | `LLM_RELATIONSHIP_NOTES_ENABLED` | 开 | 关系备注 |
 
-关系便签正文有三种来源：人工教导（「记住关系：」）、规则观察句式、好感度 LLM 兜底（`LLM_RELATIONSHIP_AFFINITY_LLM_DAILY_LIMIT` 与独立冷却内）在倾向明显且把握足时顺带归纳的稳定特征句；只有好感度分数而无正文属正常现象。
+关系便签正文有三种来源：人工教导（「记住关系：」）、规则观察句式、好感度 LLM 兜底（`LLM_RELATIONSHIP_AFFINITY_LLM_DAILY_LIMIT` 与独立冷却内）顺带归纳的稳定特征句——仅限当前消息直接表达的身份/称呼/偏好/关系事实，推断与人格评判会被确定性准入拦截，与好感度强弱解耦；只有好感度分数而无正文属正常现象。存量自动正文可用 ops 入口 `cleanup_observed_relationship_facts`（默认 dry-run 只统计，显式确认后写回，不触碰教导内容）。
 
 模型也可通过 tools `memory.search` / `memory.save` 主动检索与写入。控制台：`GET/POST /pallas/api/llm/conversation-kernel/memory`、`GET /pallas/api/llm/knowledge/sources`。
 

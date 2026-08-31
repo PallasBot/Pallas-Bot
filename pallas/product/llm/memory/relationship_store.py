@@ -22,6 +22,8 @@ from pallas.product.llm.memory.relationship import (
     merge_relationship_facts,
     normalize_relationship_note,
     prefer_relationship_source,
+    relationship_auto_fact_is_admissible,
+    split_relationship_facts,
 )
 from pallas.product.llm.rage import RageState
 from pallas.product.llm.session_backend import llm_product_storage_ready
@@ -471,6 +473,56 @@ async def trim_relationship_notes(bot_id: int, group_id: int | None, *, cfg: Llm
             await session.execute(delete(LlmRelationshipNoteRow).where(LlmRelationshipNoteRow.id.in_(stale_ids)))
             await session.commit()
     return len(stale_ids)
+
+
+async def cleanup_observed_relationship_facts(
+    *,
+    bot_id: int | None = None,
+    group_id: int | None = None,
+    dry_run: bool = True,
+    cfg: LlmConfig | None = None,
+) -> dict[str, object]:
+    """清理 observe 关系正文中的不合格分段；默认只统计，不改数值字段。"""
+    if not is_relationship_store_available():
+        return {"rows": 0, "changed_rows": 0, "removed_parts": 0, "dry_run": dry_run, "available": False}
+    if _use_mongodb_backend():
+        from pallas.product.llm.memory.relationship_store_mongo import cleanup_observed_relationship_facts_mongo
+
+        return await cleanup_observed_relationship_facts_mongo(
+            bot_id=bot_id, group_id=group_id, dry_run=dry_run, cfg=cfg
+        )
+    if not _use_postgresql_backend():
+        return {"rows": 0, "changed_rows": 0, "removed_parts": 0, "dry_run": dry_run, "available": False}
+    c = cfg or get_llm_config()
+    stmt = select(LlmRelationshipNoteRow).where(LlmRelationshipNoteRow.source == "observe")
+    if bot_id is not None:
+        stmt = stmt.where(LlmRelationshipNoteRow.bot_id == int(bot_id))
+    if group_id is not None:
+        stmt = stmt.where(LlmRelationshipNoteRow.group_id == normalize_group_scope(group_id))
+    rows_seen = changed_rows = removed_parts = 0
+    async with get_session() as session:
+        rows = (await session.execute(stmt)).scalars().all()
+        for row in rows:
+            rows_seen += 1
+            parts = split_relationship_facts(str(row.content or ""))
+            kept = [part for part in parts if relationship_auto_fact_is_admissible(part)]
+            removed = len(parts) - len(kept)
+            if removed == 0:
+                continue
+            changed_rows += 1
+            removed_parts += removed
+            if not dry_run:
+                row.content = normalize_relationship_note("；".join(kept), max_len=c.llm_relationship_content_max_len)
+        if not dry_run and changed_rows:
+            await session.commit()
+    return {
+        "rows": rows_seen,
+        "changed_rows": changed_rows,
+        "removed_parts": removed_parts,
+        "dry_run": dry_run,
+        "bot_id": bot_id,
+        "group_id": normalize_group_scope(group_id) if group_id is not None else None,
+    }
 
 
 async def list_relationship_notes(

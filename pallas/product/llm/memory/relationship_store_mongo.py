@@ -15,6 +15,8 @@ from pallas.product.llm.memory.relationship import (
     merge_relationship_facts,
     normalize_relationship_note,
     prefer_relationship_source,
+    relationship_auto_fact_is_admissible,
+    split_relationship_facts,
 )
 from pallas.product.llm.memory.relationship_store import RelationshipProfile, decayed_weight
 from pallas.product.llm.mongo_id import allocate_mongo_int_id
@@ -184,6 +186,42 @@ async def retrieve_rage_state_mongo(bot_id: int, group_id: int | None, user_id: 
         silenced_until=int(getattr(row, "rage_silenced_until", 0) or 0),
         silence_reason=str(getattr(row, "rage_silence_reason", "") or ""),
     )
+
+
+async def cleanup_observed_relationship_facts_mongo(
+    *,
+    bot_id: int | None = None,
+    group_id: int | None = None,
+    dry_run: bool = True,
+    cfg: LlmConfig | None = None,
+) -> dict[str, object]:
+    filt: dict[str, object] = {"source": "observe"}
+    if bot_id is not None:
+        filt["bot_id"] = int(bot_id)
+    if group_id is not None:
+        filt["group_id"] = normalize_group_scope(group_id)
+    rows = await LlmRelationshipNote.find(filt).to_list()
+    c = cfg or get_llm_config()
+    changed_rows = removed_parts = 0
+    for row in rows:
+        parts = split_relationship_facts(str(row.content or ""))
+        kept = [part for part in parts if relationship_auto_fact_is_admissible(part)]
+        removed = len(parts) - len(kept)
+        if removed == 0:
+            continue
+        changed_rows += 1
+        removed_parts += removed
+        if not dry_run:
+            row.content = normalize_relationship_note("；".join(kept), max_len=c.llm_relationship_content_max_len)
+            await row.save()
+    return {
+        "rows": len(rows),
+        "changed_rows": changed_rows,
+        "removed_parts": removed_parts,
+        "dry_run": dry_run,
+        "bot_id": bot_id,
+        "group_id": normalize_group_scope(group_id) if group_id is not None else None,
+    }
 
 
 async def save_relationship_note_mongo(

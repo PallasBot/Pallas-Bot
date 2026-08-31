@@ -82,6 +82,7 @@ from pallas.product.llm.memory.ops import (
     upsert_memory_preference,
 )
 from pallas.product.llm.memory.relationship_store import (
+    cleanup_observed_relationship_facts,
     clear_rage_state,
     delete_relationship_note,
     list_relationship_notes,
@@ -178,6 +179,7 @@ __all__ = [
     "build_replay_payload",
     "build_task_routing_preview",
     "build_tools_catalog_ui",
+    "cleanup_observed_relationship_facts",
     "clear_feedback_entry_correction",
     "clear_llm_history_session",
     "clear_memory_entries",
