@@ -80,6 +80,8 @@ FILE_MAP: dict[str, str] = {
     "developer/architecture/group-insight-semantic-style.md": (
         "developer/architecture/group-insight-semantic-style.md"
     ),
+    "developer/harness/index.md": "developer/harness/index.md",
+    "developer/harness/behavior-lab.md": "developer/harness/behavior-lab.md",
     "developer/plugin-development/getting-started.md": (
         "developer/plugin-development/getting-started.md"
     ),
