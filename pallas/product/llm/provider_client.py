@@ -156,6 +156,32 @@ def raise_provider_http_error(response: httpx.Response) -> None:
     ) from None
 
 
+def provider_daily_budget_ok(provider_id: str) -> bool:
+    """提供方每日 token / 花费封顶闸（软上限，0=不限制）。
+
+    任一达到上限即拒绝该提供方的新请求（返回 429），次日按天重置。
+    """
+    from pallas.product.llm.daily_budget import used_today
+    from pallas.product.llm.providers_store import find_provider
+
+    try:
+        row = find_provider(provider_id)
+    except Exception:
+        row = None
+    if not row:
+        return True
+    tokens_cap = int(row.get("daily_tokens_cap") or 0)
+    cost_cap = float(row.get("daily_cost_cap") or 0.0)
+    if tokens_cap <= 0 and cost_cap <= 0:
+        return True
+    used = used_today("provider", key=provider_id)
+    if tokens_cap > 0 and used["tokens"] >= tokens_cap:
+        return False
+    if cost_cap > 0 and used["cost"] >= cost_cap:
+        return False
+    return True
+
+
 def endpoint_api_keys(endpoint: Any, *, fallback: str = "") -> list[str]:
     keys: list[str] = []
     seen: set[str] = set()
@@ -965,6 +991,12 @@ async def _post_provider_chat(
     telemetry_context: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     import time
+
+    if provider_id and not provider_daily_budget_ok(provider_id):
+        raise LlmProviderError(
+            f"provider [{provider_id}] daily budget exhausted",
+            status=429,
+        )
 
     def with_provider_trace(
         result: dict[str, Any],

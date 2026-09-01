@@ -295,6 +295,26 @@ def record_llm_token_usage(
             trigger_source=trigger_source,
             day_key=day_for_ledger,
         )
+        if task_key == "llm_chat":
+            from pallas.product.llm.daily_budget import bump_today
+
+            bump_today(
+                "llm_chat",
+                key="llm_chat",
+                calls=1,
+                tokens=prompt + completion,
+                cost=cost,
+            )
+        if provider_key:
+            from pallas.product.llm.daily_budget import bump_today
+
+            bump_today(
+                "provider",
+                key=provider_key,
+                calls=1,
+                tokens=prompt + completion,
+                cost=cost,
+            )
     except Exception as e:
         logger.warning("token ledger append failed: {}", e)
 

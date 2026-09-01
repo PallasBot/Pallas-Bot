@@ -187,3 +187,51 @@ async def test_post_provider_chat_keeps_explicit_effort(monkeypatch: pytest.Monk
         provider_id="aliyun",
     )
     assert captured["options"]["model_effort"] == "high"
+
+
+def test_provider_daily_budget_ok_respects_tokens_cap(monkeypatch) -> None:
+    from pallas.product.llm.provider_client import provider_daily_budget_ok
+
+    monkeypatch.setattr(
+        "pallas.product.llm.providers_store.find_provider",
+        lambda pid: {"daily_tokens_cap": 1000, "daily_cost_cap": 0.0},
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.daily_budget.used_today",
+        lambda *a, **k: {"calls": 1.0, "tokens": 1000.0, "cost": 0.0},
+    )
+    assert provider_daily_budget_ok("ds") is False
+    monkeypatch.setattr(
+        "pallas.product.llm.daily_budget.used_today",
+        lambda *a, **k: {"calls": 1.0, "tokens": 999.0, "cost": 0.0},
+    )
+    assert provider_daily_budget_ok("ds") is True
+
+
+def test_provider_daily_budget_ok_respects_cost_cap(monkeypatch) -> None:
+    from pallas.product.llm.provider_client import provider_daily_budget_ok
+
+    monkeypatch.setattr(
+        "pallas.product.llm.providers_store.find_provider",
+        lambda pid: {"daily_tokens_cap": 0, "daily_cost_cap": 5.0},
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.daily_budget.used_today",
+        lambda *a, **k: {"calls": 1.0, "tokens": 0.0, "cost": 5.0},
+    )
+    assert provider_daily_budget_ok("ds") is False
+    monkeypatch.setattr(
+        "pallas.product.llm.daily_budget.used_today",
+        lambda *a, **k: {"calls": 1.0, "tokens": 0.0, "cost": 4.9},
+    )
+    assert provider_daily_budget_ok("ds") is True
+
+
+def test_provider_daily_budget_ok_unlimited_when_no_caps(monkeypatch) -> None:
+    from pallas.product.llm.provider_client import provider_daily_budget_ok
+
+    monkeypatch.setattr(
+        "pallas.product.llm.providers_store.find_provider",
+        lambda pid: {"daily_tokens_cap": 0, "daily_cost_cap": 0.0},
+    )
+    assert provider_daily_budget_ok("ds") is True
