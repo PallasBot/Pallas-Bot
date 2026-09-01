@@ -174,7 +174,7 @@ def provider_daily_budget_ok(provider_id: str) -> bool:
     cost_cap = float(row.get("daily_cost_cap") or 0.0)
     if tokens_cap <= 0 and cost_cap <= 0:
         return True
-    used = used_today("provider", key=provider_id)
+    used = used_today("provider", key=str(provider_id or "").strip().lower())
     if tokens_cap > 0 and used["tokens"] >= tokens_cap:
         return False
     if cost_cap > 0 and used["cost"] >= cost_cap:
