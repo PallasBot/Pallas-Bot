@@ -16,6 +16,22 @@ from pallas.product.persona.prompt_guard import sanitize_prompt_block
 
 _MIN_VALUE_LEN = 4
 _REJECT_SUBSTRINGS = ("今天烦", "好烦", "烦死", "不开心", "难受", "emo", "心情")
+_AUTO_FACT_REJECT_SUBSTRINGS = (
+    "可能",
+    "似乎",
+    "倾向于",
+    "倾向",
+    "大概",
+    "应该",
+    "或许",
+    "习惯",
+    "依赖",
+    "自我中心",
+    "缺乏边界",
+    "边界感",
+    "寻求陪伴",
+    "随口",
+)
 
 _RELATION_PREFIXES = (
     "记住关系：",
@@ -88,6 +104,14 @@ def relationship_note_has_value(text: str) -> bool:
     if any(token in body for token in _REJECT_SUBSTRINGS):
         return False
     return True
+
+
+def relationship_auto_fact_is_admissible(text: str) -> bool:
+    """判断自动事实是否为可长期复用的直接陈述。"""
+    body = " ".join((text or "").split())
+    if not relationship_note_has_value(body):
+        return False
+    return not any(token in body for token in _AUTO_FACT_REJECT_SUBSTRINGS)
 
 
 def relationship_teach_likely(plain_text: str) -> bool:

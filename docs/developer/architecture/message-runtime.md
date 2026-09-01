@@ -77,4 +77,4 @@ fallback 表示 direct **没有处理**本次消息，由 matcher 接管；conti
 | 公共 API 契约测试 | `tests/api/runtime/` |
 | 内核运行时测试 | `tests/platform/message_runtime/` |
 
-对外接入示例见 [`pallas.api` Cookbook](/developer/plugin-development/pallas-api-cookbook#精确命令与统一运行时)；用户能感知的消息流程见[核心概念](/guide/concepts#消息怎么在-牛牛-中流动)。
+对外接入示例见 [`pallas.api` Cookbook](/developer/plugin-development/pallas-api-cookbook#精确命令与统一运行时)；用户能感知的消息流程见[核心概念](/guide/concepts#通信路径)。

@@ -33,6 +33,7 @@ def test_append_and_aggregate_day(tmp_path, monkeypatch) -> None:
         cache_read_tokens=500,
         cost=0.0013,
         currency="cny",
+        trigger_source="to_me",
         day_key="2026-07-26",
         ts=ts_afternoon,
     )
@@ -44,6 +45,7 @@ def test_append_and_aggregate_day(tmp_path, monkeypatch) -> None:
         completion_tokens=10,
         cost=0.0,
         currency="CNY",
+        trigger_source="followup",
         day_key="2026-07-26",
         ts=ts_afternoon + 3600,
     )
@@ -58,6 +60,8 @@ def test_append_and_aggregate_day(tmp_path, monkeypatch) -> None:
     assert bucket["by_model"]["deepseek-v4-flash"]["prompt_tokens"] == 1000
     assert bucket["by_hour"]["13"]["total_tokens"] == 1100
     assert bucket["by_hour"]["14"]["total_tokens"] == 210
+    assert bucket["by_trigger_source"]["to_me"]["requests"] == 1
+    assert bucket["by_trigger_source"]["followup"]["requests"] == 1
     assert (root / "2026-07-26.jsonl").is_file()
 
 
@@ -112,6 +116,21 @@ def test_usage_ledger_preserves_pricing_rule_snapshot(tmp_path, monkeypatch) -> 
     ]
 
 
+def test_usage_ledger_preserves_trigger_source(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr("pallas.product.llm.usage_ledger.usage_ledger_dir", lambda: tmp_path)
+    append_usage_record(
+        task="llm_chat",
+        provider="ds",
+        model="m1",
+        prompt_tokens=10,
+        completion_tokens=2,
+        trigger_source="followup",
+        day_key="2026-09-01",
+    )
+    rows = [json.loads(line) for line in (tmp_path / "2026-09-01.jsonl").read_text().splitlines()]
+    assert rows[0]["trigger_source"] == "followup"
+
+
 def test_usage_csv_export_and_count(tmp_path, monkeypatch) -> None:
     from pallas.product.llm.usage_ledger import (
         count_ledger_rows,
@@ -138,7 +157,10 @@ def test_usage_csv_export_and_count(tmp_path, monkeypatch) -> None:
 
     lines = list(iter_usage_csv_lines(start_day="2026-07-26", end_day="2026-07-27"))
     assert lines[0].startswith("﻿")
-    assert "时间,任务,Provider,模型,输入 Token,输出 Token,缓存读 Token,缓存写 Token,总 Token,费用,币种,定价规则\r\n" in lines[0]
+    assert (
+        "时间,任务,Provider,模型,输入 Token,输出 Token,缓存读 Token,"
+        "缓存写 Token,总 Token,费用,币种,定价规则,触发来源\r\n" in lines[0]
+    )
     data_rows = [line for line in lines[1:] if line.strip()]
     assert len(data_rows) == 1
     row_cells = data_rows[0].strip("\r\n").split(",")

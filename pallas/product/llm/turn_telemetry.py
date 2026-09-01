@@ -177,7 +177,13 @@ def telemetry_metadata(metadata: object) -> dict[str, str]:
     if not isinstance(metadata, dict):
         return {}
     turn_id = str(metadata.get("turn_id") or "").strip()
-    return {"turn_id": turn_id} if turn_id else {}
+    trigger_source = str(metadata.get("speak_trigger") or "").strip().lower()
+    result: dict[str, str] = {}
+    if turn_id:
+        result["turn_id"] = turn_id
+    if trigger_source:
+        result["trigger_source"] = trigger_source
+    return result
 
 
 def classify_text_shape(text: str, *, has_cq: bool = False) -> dict[str, object]:

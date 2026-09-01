@@ -357,6 +357,26 @@ class LlmWebuiConfig(BaseModel):
             "建议按所用模型窗口留余量；过大浪费费用，过小会丢记忆",
         ),
     )
+    llm_chat_daily_calls_limit: int = Field(
+        default=0,
+        ge=0,
+        le=1000000,
+        description=field_help(
+            "智能对话每日调用次数上限",
+            "默认 0=不限制。达到上限后当天不再发起新的智能对话，次日自动恢复",
+            "用于控制每日 LLM 调用成本；0 表示不限制",
+        ),
+    )
+    llm_chat_daily_tokens_limit: int = Field(
+        default=0,
+        ge=0,
+        le=1000000000,
+        description=field_help(
+            "智能对话每日输入 token 上限",
+            "默认 0=不限制。达到上限后当天不再发起新的智能对话，次日自动恢复",
+            "用于控制每日 LLM 输入成本；0 表示不限制",
+        ),
+    )
     llm_tools_enabled: bool = Field(
         default=True,
         description=field_help(
@@ -764,16 +784,25 @@ class LlmWebuiConfig(BaseModel):
         default=200,
         ge=0,
         le=2000,
-        description=field_help("标签回填每日预算", "每天最多为多少张图调用视觉模型打标签；0 表示关闭。"),
+        description=field_help("标签回填每日预算（张）", "每天最多为多少张图调用视觉模型打标签；0 表示关闭。"),
     )
     llm_sticker_label_realtime_daily_limit: int = Field(
         default=300,
         ge=0,
         le=2000,
         description=field_help(
-            "标签实时标注每日预算",
+            "标签实时标注每日预算（次数）",
             "默认 300。新收到的表情立即识别语义、存入缓存；0=关闭实时标注",
             "超限后当天不再实时标注，只保留回填路径",
+        ),
+    )
+    llm_sticker_label_timeout_sec: float = Field(
+        default=60.0,
+        ge=1.0,
+        le=120.0,
+        description=field_help(
+            "标签视觉标注超时（秒）",
+            "默认 60。视觉模型识别单张表情的等待上限；PNG 大图耗时较长，超时会被记为失败",
         ),
     )
     llm_semantic_style_realtime_daily_limit: int = Field(
@@ -781,8 +810,8 @@ class LlmWebuiConfig(BaseModel):
         ge=0,
         le=50000,
         description=field_help(
-            "语义风格标注每日预算",
-            "默认 600。群洞察处理器从 message 表重建成对样本后调用 LLM 标注语料的每日上限；0 表示不限制",
+            "语义风格标注每日预算（次数）",
+            "默认 600。群洞察处理器从 message 表重建成对样本后调用 LLM 标注语料的每日调用次数上限；0 表示不限制",
             "到达上限后当天不再消费新的语义标注任务，游标保留，次日恢复",
         ),
     )
@@ -1028,7 +1057,7 @@ class LlmWebuiConfig(BaseModel):
         ge=0,
         le=100000,
         description=field_help(
-            "图谱抽取每日调用上限",
+            "图谱抽取每日调用上限（次数）",
             "按天计数，含写入后自动抽取与手动抽取；0=不限制（默认 200）",
             "超限后当天跳过抽取，次日自动恢复",
         ),
@@ -1207,6 +1236,8 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_speak_followup_window_sec=cfg.llm_speak_followup_window_sec,
         llm_speak_followup_max_total_sec=cfg.llm_speak_followup_max_total_sec,
         llm_chat_char_budget=cfg.llm_chat_char_budget,
+        llm_chat_daily_calls_limit=cfg.llm_chat_daily_calls_limit,
+        llm_chat_daily_tokens_limit=cfg.llm_chat_daily_tokens_limit,
         llm_tools_enabled=cfg.llm_tools_enabled,
         llm_tools_selective=cfg.llm_tools_selective,
         llm_tools_soft_recall_enabled=cfg.llm_tools_soft_recall_enabled,
@@ -1258,6 +1289,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_sticker_label_backfill_enabled=cfg.llm_sticker_label_backfill_enabled,
         llm_sticker_label_backfill_daily_limit=cfg.llm_sticker_label_backfill_daily_limit,
         llm_sticker_label_realtime_daily_limit=cfg.llm_sticker_label_realtime_daily_limit,
+        llm_sticker_label_timeout_sec=cfg.llm_sticker_label_timeout_sec,
         llm_semantic_style_realtime_daily_limit=cfg.llm_semantic_style_realtime_daily_limit,
         llm_sticker_habit_enabled=cfg.llm_sticker_habit_enabled,
         llm_sticker_habit_min_count=cfg.llm_sticker_habit_min_count,

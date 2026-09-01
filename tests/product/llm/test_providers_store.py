@@ -534,3 +534,37 @@ async def test_rename_provider_config_updates_embedding_provider_id(tmp_path: Pa
     )
     await rename_provider_config("deepseek", "ds")
     assert patches == []
+
+
+def test_provider_row_preserves_daily_caps(tmp_path: Path, monkeypatch) -> None:
+    store = tmp_path / "llm_providers.json"
+    monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
+    clear_providers_store_cache()
+    clear_llm_config_cache()
+
+    save_providers_document({
+        "providers": [
+            {
+                "id": "ds",
+                "kind": "remote",
+                "base_url": "https://api.deepseek.com",
+                "api_key": "sk-test-key",
+                "default_model": "deepseek-v4-flash",
+                "daily_tokens_cap": 1000000,
+                "daily_cost_cap": 5.5,
+            }
+        ],
+        "routing": {"tasks": {"llm_chat": "ds"}},
+    })
+    clear_providers_store_cache()
+    exported = export_providers_for_api()
+    row = exported["providers"][0]
+    assert row["daily_tokens_cap"] == 1000000
+    assert row["daily_cost_cap"] == 5.5
+
+    from pallas.product.llm.providers_store import find_provider
+
+    found = find_provider("ds")
+    assert found is not None
+    assert found.get("daily_tokens_cap") == 1000000
+    assert found.get("daily_cost_cap") == 5.5

@@ -533,7 +533,7 @@ docker compose -f docker-compose.shard.yml --env-file ./pallas-bot/config/compos
 :::
 
 ::: details 排障：数据库不存在
-旧数据卷库名与当前 `PG_DB` 不一致。对齐库名，或清空 `./postgres/data` 后重建（会丢数据）。见 [FAQ](/deploy/faq)。
+旧数据卷库名与当前 `PG_DB` 不一致。对齐库名，或清空 `./postgres/data` 后重建（会丢数据）。见 [FAQ](/FAQ)。
 :::
 
 ::: details 排障：帮助图样式路径缺失

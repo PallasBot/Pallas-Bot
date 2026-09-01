@@ -197,6 +197,7 @@ def record_llm_token_usage(
     completion_tokens: int = 0,
     cache_read_tokens: int = 0,
     cache_write_tokens: int = 0,
+    trigger_source: str | None = None,
 ) -> None:
     prompt = max(0, int(prompt_tokens))
     completion = max(0, int(completion_tokens))
@@ -291,8 +292,29 @@ def record_llm_token_usage(
             cost=cost,
             currency=currency,
             pricing_rule=pricing_rule,
+            trigger_source=trigger_source,
             day_key=day_for_ledger,
         )
+        if task_key == "llm_chat":
+            from pallas.product.llm.daily_budget import bump_today
+
+            bump_today(
+                "llm_chat",
+                key="llm_chat",
+                calls=1,
+                tokens=prompt + completion,
+                cost=cost,
+            )
+        if provider_key:
+            from pallas.product.llm.daily_budget import bump_today
+
+            bump_today(
+                "provider",
+                key=provider_key,
+                calls=1,
+                tokens=prompt + completion,
+                cost=cost,
+            )
     except Exception as e:
         logger.warning("token ledger append failed: {}", e)
 

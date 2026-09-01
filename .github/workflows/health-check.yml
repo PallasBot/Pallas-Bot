@@ -90,31 +90,22 @@ jobs:
           uv run python -c "
           import time
           start = time.time()
-          import sys
-          sys.path.insert(0, 'src')
 
-          # 测试主要模块的导入时间
-          try:
-              import plugins
-              print(f'✅ Plugins import time: {time.time() - start:.2f}s')
-          except ImportError as e:
-              print(f'⚠️  Plugin import issue: {e}')
+          # 测试核心模块导入时间（内核 pallas）
+          import pallas
+          print(f'✅ pallas core import time: {time.time() - start:.2f}s')
 
           try:
-              import common
-              print(f'✅ Common modules import time: {time.time() - start:.2f}s')
-          except ImportError as e:
-              print(f'⚠️  Common import issue: {e}')
+              from packages import pb_core
+              print(f'✅ built-in plugin import time: {time.time() - start:.2f}s')
+          except Exception as e:
+              print(f'⚠️  Built-in plugin import skipped in headless check: {type(e).__name__}')
           "
 
       - name: Memory usage check
         run: |
           uv run python -c "
-          import sys
           import os
-          sys.path.insert(0, 'src')
-
-          # 检查基本内存使用
           import psutil
           process = psutil.Process(os.getpid())
           memory_mb = process.memory_info().rss / 1024 / 1024

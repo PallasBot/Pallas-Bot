@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 import re
 import time
 from dataclasses import replace
@@ -27,7 +26,7 @@ from pallas.product.llm.sticker_labels import (
 STICKER_LABEL_JOB_KIND = "sticker.label.visual"
 STICKER_LABEL_PROMPT_VERSION = 1
 STICKER_LABEL_MIN_CONFIDENCE = 0.6
-STICKER_LABEL_TIMEOUT_SEC = 15.0
+STICKER_LABEL_TIMEOUT_SEC = 60.0
 STICKER_LABEL_CIRCUIT_FAILURES = 3
 STICKER_LABEL_CIRCUIT_COOLDOWN_SEC = 60.0
 STICKER_LABEL_IMAGE_MAX_SIDE = 384
@@ -63,6 +62,13 @@ def sticker_label_circuit_record(success: bool, *, now: float | None = None) -> 
 
 def reset_sticker_label_runtime_state_for_tests() -> None:
     sticker_label_runtime_state.reset_sticker_label_runtime_state_for_tests()
+
+
+def sticker_label_timeout_sec() -> float:
+    from pallas.product.llm.config import get_llm_config
+
+    value = getattr(get_llm_config(), "llm_sticker_label_timeout_sec", STICKER_LABEL_TIMEOUT_SEC)
+    return max(1.0, float(value or STICKER_LABEL_TIMEOUT_SEC))
 
 
 def lazy_sticker_labels_paused() -> bool:
@@ -214,11 +220,15 @@ async def label_sticker_with_vision(content: bytes) -> tuple[StickerSemanticLabe
     from pallas.product.llm.delivery import prepare_sticker_image
     from pallas.product.llm.provider_client import complete_chat_message
     from pallas.product.llm.providers_store import resolve_endpoint_for_task
-    from pallas.product.llm.vision_messages import openai_vision_user_content
+    from pallas.product.llm.vision_messages import image_bytes_to_data_uri, openai_vision_user_content
 
     endpoint = resolve_endpoint_for_task("sticker_vision")
     if endpoint is None or "image" not in endpoint.capabilities:
         raise RuntimeError("no sticker vision endpoint")
+    prepared = prepare_sticker_image(content, max_side=STICKER_LABEL_IMAGE_MAX_SIDE)
+    data_uri = image_bytes_to_data_uri(prepared)
+    if data_uri is None:
+        raise ValueError("invalid sticker image")
     prompt = (
         "判断这张图片能否在群聊里当作表情/反应图使用。普通照片、聊天截图、游戏截图等"
         "只要画面传达明确情绪、适合接梗或回怼，都算适合；只有纯信息图、纯风景、无情绪指向的随手拍才算不适合。"
@@ -238,12 +248,7 @@ async def label_sticker_with_vision(content: bytes) -> tuple[StickerSemanticLabe
                     "role": "user",
                     "content": openai_vision_user_content(
                         prompt,
-                        [
-                            "data:image/jpeg;base64,"
-                            + base64.b64encode(
-                                prepare_sticker_image(content, max_side=STICKER_LABEL_IMAGE_MAX_SIDE)
-                            ).decode("ascii")
-                        ],
+                        [data_uri],
                     ),
                 },
             ],
@@ -255,7 +260,7 @@ async def label_sticker_with_vision(content: bytes) -> tuple[StickerSemanticLabe
             task="sticker_label",
             provider_id=str(endpoint.provider_id or ""),
         ),
-        timeout=STICKER_LABEL_TIMEOUT_SEC,
+        timeout=sticker_label_timeout_sec(),
     )
     parsed = parse_sticker_visual_label(str(response.get("content") or ""))
     if parsed is None:
@@ -322,10 +327,11 @@ async def handle_sticker_label_visual(payload: dict[str, Any]) -> None:
         await save_sticker_label_observation(job_id, dict(payload), observation)
         return
     try:
-        deadline = asyncio.get_running_loop().time() + STICKER_LABEL_TIMEOUT_SEC
+        timeout_sec = sticker_label_timeout_sec()
+        deadline = asyncio.get_running_loop().time() + timeout_sec
         acquired = False
         try:
-            await asyncio.wait_for(_STICKER_LABEL_SEMAPHORE.acquire(), timeout=STICKER_LABEL_TIMEOUT_SEC)
+            await asyncio.wait_for(_STICKER_LABEL_SEMAPHORE.acquire(), timeout=timeout_sec)
             acquired = True
             remaining = max(0.0, deadline - asyncio.get_running_loop().time())
             label, provider, model = await asyncio.wait_for(label_sticker_with_vision(content), timeout=remaining)

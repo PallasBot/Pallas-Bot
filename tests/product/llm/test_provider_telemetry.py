@@ -26,7 +26,11 @@ def _provider_call_kwargs() -> dict[str, Any]:
         "request_method": "chat_completions",
         "task": "llm_chat",
         "provider_id": "demo-provider",
-        "telemetry_context": {"turn_id": "turn-provider", "request_id": "request-provider"},
+        "telemetry_context": {
+            "turn_id": "turn-provider",
+            "request_id": "request-provider",
+            "trigger_source": "alias",
+        },
     }
 
 
@@ -66,6 +70,38 @@ async def test_provider_success_emits_privacy_safe_attempt_event(
     assert "secret prompt" not in serialized
     assert "messages" not in event
     assert "exception" not in event
+
+
+def test_provider_usage_receives_trigger_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm import provider_client as mod
+    from pallas.product.llm import token_metrics
+
+    captured: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        token_metrics,
+        "record_llm_token_usage",
+        lambda **kwargs: captured.append(kwargs),
+    )
+    mod._record_usage_from_payload(
+        {"usage": {"prompt_tokens": 3, "completion_tokens": 2}},
+        task="llm_chat",
+        provider_id="demo-provider",
+        model="demo-model",
+        telemetry_context={"trigger_source": "alias"},
+    )
+
+    assert captured[0]["trigger_source"] == "alias"
+
+
+def test_telemetry_metadata_preserves_trigger_source() -> None:
+    from pallas.product.llm.turn_telemetry import telemetry_metadata
+
+    assert telemetry_metadata({"turn_id": "turn-1", "speak_trigger": "followup"}) == {
+        "turn_id": "turn-1",
+        "trigger_source": "followup",
+    }
 
 
 @pytest.mark.asyncio

@@ -357,6 +357,8 @@ def _normalize_provider_row(raw: dict[str, Any], existing: dict[str, Any] | None
         "model_effort": model_effort,
         "request_method": request_method,
         "model_pricing": model_pricing,
+        "daily_tokens_cap": int(raw.get("daily_tokens_cap") or 0),
+        "daily_cost_cap": float(raw.get("daily_cost_cap") or 0.0),
     }
 
 
@@ -711,6 +713,8 @@ def export_providers_for_api(*, doc: dict[str, Any] | None = None) -> dict[str, 
             "model_effort": _normalize_model_effort(raw),
             "request_method": provider_request_method(raw),
             "model_pricing": dict(raw.get("model_pricing") or {}),
+            "daily_tokens_cap": int(raw.get("daily_tokens_cap") or 0),
+            "daily_cost_cap": float(raw.get("daily_cost_cap") or 0.0),
         })
     path = providers_store_path()
     routing = payload.get("routing") if isinstance(payload.get("routing"), dict) else {}

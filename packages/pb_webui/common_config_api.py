@@ -396,6 +396,8 @@ class _LlmProviderRowBody(BaseModel):
     model_effort: str = ""
     request_method: str = "chat_completions"
     model_pricing: dict[str, _LlmModelPricingRowBody] = Field(default_factory=dict)
+    daily_tokens_cap: int = Field(default=0, ge=0, le=1000000000)
+    daily_cost_cap: float = Field(default=0.0, ge=0.0, le=1000000.0)
 
 
 class _LlmProvidersRoutingBody(BaseModel):

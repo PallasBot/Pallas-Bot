@@ -9,7 +9,7 @@ from nonebot import logger
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.memory.affinity_scorer import score_affinity_with_llm
 from pallas.product.llm.memory.rate_limit import DailyBudget, WriteCooldown
-from pallas.product.llm.memory.relationship import relationship_note_has_value
+from pallas.product.llm.memory.relationship import relationship_auto_fact_is_admissible
 from pallas.product.llm.memory.relationship_auto import (
     extract_relationship_affinity_delta,
     extract_relationship_attitude_delta,
@@ -84,13 +84,12 @@ async def maybe_persist_relationship_from_utterance(
                     affinity_add = float(scored["affinity_delta"])
                     affinity_source = "llm"
                     _bump_affinity_llm_daily_budget(cfg=c)
-                    # 只有把握足且倾向明显时，才把模型归纳的稳定特征沉淀为关系正文。
+                    # 事实准入独立于好感度；中性消息也可能包含直接事实。
                     note = str(scored.get("stable_note") or "").strip()
                     if (
                         note
                         and float(scored.get("confidence") or 0.0) >= 0.5
-                        and abs(affinity_add) >= 0.2
-                        and relationship_note_has_value(note)
+                        and relationship_auto_fact_is_admissible(note)
                     ):
                         fact = note
                         source = "observe"

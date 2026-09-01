@@ -229,6 +229,8 @@ class LlmConfig(BaseModel):
     llm_chat_queue_max: int = Field(default=8, ge=1, le=64)
     llm_chat_queue_wait_sec: float = Field(default=20.0, ge=0.1, le=120.0)
     llm_chat_char_budget: int = Field(default=12000, ge=0, le=200000)
+    llm_chat_daily_calls_limit: int = Field(default=0, ge=0, le=1000000)
+    llm_chat_daily_tokens_limit: int = Field(default=0, ge=0, le=1000000000)
     llm_chat_disabled_group_ids: list[int] = Field(default_factory=list)
     llm_repeater_feedback_enabled: bool = Field(default=True)
     llm_repeater_bias_enabled: bool = Field(default=True)
@@ -263,6 +265,7 @@ class LlmConfig(BaseModel):
     llm_sticker_label_backfill_enabled: bool = Field(default=True)
     llm_sticker_label_backfill_daily_limit: int = Field(default=200, ge=0, le=2000)
     llm_sticker_label_realtime_daily_limit: int = Field(default=300, ge=0, le=2000)
+    llm_sticker_label_timeout_sec: float = Field(default=60.0, ge=1.0, le=120.0)
     llm_semantic_style_realtime_daily_limit: int = Field(default=600, ge=0, le=50000)
     llm_sticker_habit_enabled: bool = Field(default=True)
     llm_sticker_habit_min_count: int = Field(default=5, ge=1, le=1000)
@@ -478,6 +481,8 @@ def get_llm_config() -> LlmConfig:
             llm_chat_queue_max=_env_int("LLM_CHAT_QUEUE_MAX", 8),
             llm_chat_queue_wait_sec=_env_float("LLM_CHAT_QUEUE_WAIT_SEC", 20.0),
             llm_chat_char_budget=_env_int("LLM_CHAT_CHAR_BUDGET", 12000),
+            llm_chat_daily_calls_limit=_env_int("LLM_CHAT_DAILY_CALLS_LIMIT", 0),
+            llm_chat_daily_tokens_limit=_env_int("LLM_CHAT_DAILY_TOKENS_LIMIT", 0),
             llm_chat_disabled_group_ids=_env_group_id_list("LLM_CHAT_DISABLED_GROUP_IDS"),
             llm_repeater_feedback_enabled=_env_bool("LLM_REPEATER_FEEDBACK_ENABLED", True),
             llm_repeater_bias_enabled=_env_bool("LLM_REPEATER_BIAS_ENABLED", True),
@@ -518,6 +523,7 @@ def get_llm_config() -> LlmConfig:
             llm_sticker_label_backfill_enabled=_env_bool("LLM_STICKER_LABEL_BACKFILL_ENABLED", True),
             llm_sticker_label_backfill_daily_limit=_env_int("LLM_STICKER_LABEL_BACKFILL_DAILY_LIMIT", 200),
             llm_sticker_label_realtime_daily_limit=_env_int("LLM_STICKER_LABEL_REALTIME_DAILY_LIMIT", 300),
+            llm_sticker_label_timeout_sec=_env_float("LLM_STICKER_LABEL_TIMEOUT_SEC", 60.0),
             llm_semantic_style_realtime_daily_limit=_env_int("LLM_SEMANTIC_STYLE_REALTIME_DAILY_LIMIT", 600),
             llm_reply_effect_eval_enabled=_env_bool("LLM_REPLY_EFFECT_EVAL_ENABLED", False),
             llm_corpus_learn_guard_enabled=_env_bool("LLM_CORPUS_LEARN_GUARD_ENABLED", True),

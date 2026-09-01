@@ -7,6 +7,7 @@ from pallas.product.llm.memory.relationship import (
     normalize_relationship_note,
     parse_relationship_teach,
     prefer_relationship_source,
+    relationship_auto_fact_is_admissible,
     relationship_note_has_value,
     relationship_teach_likely,
     resolve_relationship_teach_target_id,
@@ -71,6 +72,31 @@ def test_relationship_note_has_value() -> None:
     assert relationship_note_has_value("是这个群的群主") is True
     assert relationship_note_has_value("嗯") is False
     assert relationship_note_has_value("好烦啊") is False
+
+
+def test_relationship_auto_fact_admissible_direct_statements() -> None:
+    assert relationship_auto_fact_is_admissible("该用户名叫小明") is True
+    assert relationship_auto_fact_is_admissible("是本群群主") is True
+    assert relationship_auto_fact_is_admissible("希望被叫作队长") is True
+    assert relationship_auto_fact_is_admissible("该用户喜欢发猫图") is True
+
+
+def test_relationship_auto_fact_rejects_inference_and_traits() -> None:
+    assert relationship_auto_fact_is_admissible("该用户习惯用塔罗牌话题与博士互动") is False
+    assert relationship_auto_fact_is_admissible("该用户乐于参与群内社交，习惯主动问候新成员") is False
+    assert relationship_auto_fact_is_admissible("可能依赖牛牛回复") is False
+    assert relationship_auto_fact_is_admissible("自我中心") is False
+    assert relationship_auto_fact_is_admissible("缺乏边界感") is False
+    assert relationship_auto_fact_is_admissible("倾向于寻求陪伴") is False
+    assert relationship_auto_fact_is_admissible("该用户似乎在闹脾气") is False
+    assert relationship_auto_fact_is_admissible("就是随口问问") is False
+
+
+def test_relationship_auto_fact_rejects_empty_and_short() -> None:
+    assert relationship_auto_fact_is_admissible("") is False
+    assert relationship_auto_fact_is_admissible("   ") is False
+    assert relationship_auto_fact_is_admissible("嗯") is False
+    assert relationship_auto_fact_is_admissible("好烦啊") is False
 
 
 def test_extract_at_target() -> None:
