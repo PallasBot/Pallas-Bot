@@ -7,7 +7,7 @@ import time
 from datetime import date, timedelta
 from typing import Any, Protocol
 
-from sqlalchemy import text
+from sqlalchemy import delete, text
 
 from pallas.core.foundation.db.blob_store import delete_image_blob, iter_image_blob_files
 
@@ -79,6 +79,8 @@ class PostgresLifecycleAdapter:
             return await self.preview_image_cache(policy)
         if dataset_id == "image_cache_files":
             return await self.preview_image_cache_files()
+        if dataset_id == "sticker_label":
+            return await self.preview_sticker_label()
         if dataset_id == "llm_memory":
             return await self.preview_llm_memory()
         rule = PG_DATASET_RULES.get(dataset_id)
@@ -96,6 +98,8 @@ class PostgresLifecycleAdapter:
             return await self.prune_image_cache(policy)
         if dataset_id == "image_cache_files":
             return await self.prune_image_cache_files()
+        if dataset_id == "sticker_label":
+            return await self.prune_sticker_label()
         if dataset_id == "llm_memory":
             return await self.prune_llm_memory()
         candidate_rows, candidate_bytes = await self.preview_dataset(dataset_id, policy)
@@ -169,6 +173,33 @@ class PostgresLifecycleAdapter:
             delete_image_blob(content_hash)
         return len(orphans), sum(size for _, size in orphans)
 
+    async def _sticker_label_orphan_hashes(self) -> list[str]:
+        async with self.session_factory(read_only=True) as session:
+            result = await session.execute(
+                text(
+                    "SELECT s.content_hash FROM sticker_label AS s "
+                    "LEFT JOIN image_cache AS i ON i.content_hash = s.content_hash "
+                    "WHERE i.content_hash IS NULL"
+                )
+            )
+            return [str(row[0]) for row in result]
+
+    async def preview_sticker_label(self) -> tuple[int, int]:
+        orphans = await self._sticker_label_orphan_hashes()
+        return len(orphans), 0
+
+    async def prune_sticker_label(self) -> tuple[int, int]:
+        orphans = await self._sticker_label_orphan_hashes()
+        if not orphans:
+            return 0, 0
+        from pallas.core.foundation.db.repository_pg import StickerLabelRow
+
+        async with self.session_factory() as session:
+            result = await session.execute(delete(StickerLabelRow).where(StickerLabelRow.content_hash.in_(orphans)))
+            await session.commit()
+            deleted = int(result.rowcount or 0)
+        return deleted, 0
+
     async def preview_llm_memory(self) -> tuple[int, int]:
         now = int(time.time())
         async with self.session_factory(read_only=True) as session:
@@ -225,6 +256,8 @@ class MongoLifecycleAdapter:
             return await self.preview_image_cache(policy)
         if dataset_id == "image_cache_files":
             return await self.preview_image_cache_files()
+        if dataset_id == "sticker_label":
+            return await self.preview_sticker_label()
         collection_name, time_column, extra_filter = mongo_rule(dataset_id)
         query = dict(extra_filter)
         if dataset_id == "llm_memory":
@@ -252,6 +285,8 @@ class MongoLifecycleAdapter:
             return await self.prune_image_cache(policy)
         if dataset_id == "image_cache_files":
             return await self.prune_image_cache_files()
+        if dataset_id == "sticker_label":
+            return await self.prune_sticker_label()
         if dataset_id == "llm_memory":
             now = int(time.time())
             result = await database["llm_memory_entry"].delete_many({"expires_at": {"$gt": 0, "$lt": now}})
@@ -313,6 +348,34 @@ class MongoLifecycleAdapter:
         for content_hash, _size in orphans:
             delete_image_blob(content_hash)
         return len(orphans), sum(size for _, size in orphans)
+
+    async def _sticker_label_orphan_hashes(self) -> list[str]:
+        from pallas.core.foundation.db.modules import ImageCache, StickerLabel
+
+        image_collection = ImageCache.get_pymongo_collection()
+        cursor = image_collection.find({"content_hash": {"$nin": [None, ""]}}, {"content_hash": 1})
+        referenced = {str(row.get("content_hash")) for row in await cursor.to_list(None) if row.get("content_hash")}
+        label_collection = StickerLabel.get_pymongo_collection()
+        cursor = label_collection.find({}, {"content_hash": 1})
+        return [
+            str(row.get("content_hash"))
+            for row in await cursor.to_list(None)
+            if row.get("content_hash") not in referenced
+        ]
+
+    async def preview_sticker_label(self) -> tuple[int, int]:
+        orphans = await self._sticker_label_orphan_hashes()
+        return len(orphans), 0
+
+    async def prune_sticker_label(self) -> tuple[int, int]:
+        orphans = await self._sticker_label_orphan_hashes()
+        if not orphans:
+            return 0, 0
+        from pallas.core.foundation.db.modules import StickerLabel
+
+        collection = StickerLabel.get_pymongo_collection()
+        result = await collection.delete_many({"content_hash": {"$in": orphans}})
+        return int(result.deleted_count), 0
 
 
 def object_stat(

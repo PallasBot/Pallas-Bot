@@ -45,6 +45,15 @@ DATASETS = {
             supports_max_bytes=False,
         ),
         LifecycleDatasetDefinition(
+            dataset_id="sticker_label",
+            label="表情标签",
+            objects=("sticker_label",),
+            risk="low",
+            default_policy=LifecyclePolicy(True, None, None),
+            supports_retention=False,
+            supports_max_bytes=False,
+        ),
+        LifecycleDatasetDefinition(
             dataset_id="llm_chat",
             label="LLM 对话",
             objects=("llm_chat_message",),

@@ -16,14 +16,17 @@ from pallas.core.foundation.db.lifecycle_models import LifecyclePolicy
 
 
 class FakeResult:
-    def __init__(self, rows: list[dict[str, Any]]) -> None:
+    def __init__(self, rows: list[Any]) -> None:
         self.rows = rows
 
     def mappings(self) -> "FakeResult":
         return self
 
-    def all(self) -> list[dict[str, Any]]:
+    def all(self) -> list[Any]:
         return self.rows
+
+    def __iter__(self):
+        return iter(self.rows)
 
 
 class FakeSession:
@@ -205,3 +208,57 @@ async def test_postgres_prune_deletes_capacity_rows_beyond_retention() -> None:
     assert deleted == 2
     assert "time IS NOT NULL" in statements[0]
     assert "time < :cutoff" not in statements[0]
+
+
+class StickerLabelSession:
+    def __init__(self, rows: list[list[Any]]) -> None:
+        self.rows = rows
+        self.deleted: list[str] = []
+
+    async def execute(self, statement: object, _params: dict[str, object] | None = None) -> FakeResult:
+        if "LEFT JOIN image_cache" in str(statement):
+            return FakeResult(self.rows)
+        self.deleted.append(str(statement))
+        return FakeResult([])
+
+    async def commit(self) -> None:
+        return None
+
+
+class StickerLabelDeleteResult:
+    rowcount = 2
+
+
+class StickerLabelDeleteSession(StickerLabelSession):
+    async def execute(self, statement: object, _params: dict[str, object] | None = None) -> Any:
+        if "LEFT JOIN image_cache" in str(statement):
+            return FakeResult(self.rows)
+        self.deleted.append(str(statement))
+        return StickerLabelDeleteResult()
+
+
+@pytest.mark.asyncio
+async def test_postgres_sticker_label_preview_counts_orphan_hashes() -> None:
+    session = StickerLabelSession([["orphan1"], ["orphan2"]])
+
+    @asynccontextmanager
+    async def session_factory(*, read_only: bool = False) -> AsyncIterator[StickerLabelSession]:
+        yield session
+
+    adapter = PostgresLifecycleAdapter(session_factory=session_factory)
+    rows, _bytes = await adapter.preview_dataset("sticker_label", LifecyclePolicy(True, None, None))
+    assert rows == 2
+
+
+@pytest.mark.asyncio
+async def test_postgres_sticker_label_prune_deletes_orphan_hashes() -> None:
+    session = StickerLabelDeleteSession([["orphan1"], ["orphan2"]])
+
+    @asynccontextmanager
+    async def session_factory(*, read_only: bool = False) -> AsyncIterator[StickerLabelDeleteSession]:
+        yield session
+
+    adapter = PostgresLifecycleAdapter(session_factory=session_factory)
+    deleted, _bytes = await adapter.prune_dataset("sticker_label", LifecyclePolicy(True, None, None))
+    assert deleted == 2
+    assert "DELETE FROM sticker_label" in session.deleted[0]
