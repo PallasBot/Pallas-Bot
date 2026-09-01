@@ -784,14 +784,14 @@ class LlmWebuiConfig(BaseModel):
         default=200,
         ge=0,
         le=2000,
-        description=field_help("标签回填每日预算", "每天最多为多少张图调用视觉模型打标签；0 表示关闭。"),
+        description=field_help("标签回填每日预算（张）", "每天最多为多少张图调用视觉模型打标签；0 表示关闭。"),
     )
     llm_sticker_label_realtime_daily_limit: int = Field(
         default=300,
         ge=0,
         le=2000,
         description=field_help(
-            "标签实时标注每日预算",
+            "标签实时标注每日预算（次数）",
             "默认 300。新收到的表情立即识别语义、存入缓存；0=关闭实时标注",
             "超限后当天不再实时标注，只保留回填路径",
         ),
