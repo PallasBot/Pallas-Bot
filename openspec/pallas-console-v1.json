@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.3.13-3-gdbf7b65c-dirty",
+    "version": "v4.3.13-35-g11895f8e",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -36699,6 +36699,20 @@
             },
             "type": "object",
             "title": "Model Pricing"
+          },
+          "daily_tokens_cap": {
+            "type": "integer",
+            "maximum": 1000000000.0,
+            "minimum": 0.0,
+            "title": "Daily Tokens Cap",
+            "default": 0
+          },
+          "daily_cost_cap": {
+            "type": "number",
+            "maximum": 1000000.0,
+            "minimum": 0.0,
+            "title": "Daily Cost Cap",
+            "default": 0.0
           }
         },
         "additionalProperties": false,
