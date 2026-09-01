@@ -38,18 +38,20 @@ def _save(name: str, state: dict[str, Any]) -> None:
         logger.warning("记录每日预算失败 [{}]：{}", name, exc)
 
 
-def _bucket(state: dict[str, Any], day_key: int) -> dict[str, float]:
-    bucket = state.get(str(day_key))
-    if not isinstance(bucket, dict):
-        bucket = {}
-    return {str(k): float(v or 0.0) for k, v in bucket.items()}
+def _bucket(state: dict[str, Any], day_key: int, key: str) -> dict[str, float]:
+    day = state.get(str(day_key))
+    if isinstance(day, dict):
+        bucket = day.get(key)
+        if isinstance(bucket, dict):
+            return {str(k): float(v or 0.0) for k, v in bucket.items()}
+    return {}
 
 
 def used_today(name: str, *, key: str = "", day_key: int | None = None) -> dict[str, float]:
     """今日某 key 的累计计数，返回 ``{"calls":..,"tokens":..,"cost":..}``。"""
     if day_key is None:
         day_key = int(time.time() // 86400)
-    bucket = _bucket(_state(name), day_key)
+    bucket = _bucket(_state(name), day_key, key)
     return {
         "calls": float(bucket.get("calls") or 0.0),
         "tokens": float(bucket.get("tokens") or 0.0),
@@ -70,9 +72,13 @@ def bump_today(
         return
     day_key = int(time.time() // 86400)
     state = _state(name)
-    bucket = _bucket(state, day_key)
+    day = state.get(str(day_key))
+    if not isinstance(day, dict):
+        day = {}
+        state[str(day_key)] = day
+    bucket = _bucket(state, day_key, key)
     bucket["calls"] = float(bucket.get("calls") or 0.0) + max(0.0, calls)
     bucket["tokens"] = float(bucket.get("tokens") or 0.0) + max(0.0, tokens)
     bucket["cost"] = float(bucket.get("cost") or 0.0) + max(0.0, cost)
-    state[str(day_key)] = bucket
+    day[key] = bucket
     _save(name, state)
