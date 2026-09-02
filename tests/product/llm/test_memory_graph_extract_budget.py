@@ -109,8 +109,11 @@ def _ok_extract_result() -> str:
     return '{"entities": [], "edges": []}'
 
 
-def test_graph_extract_budget_reserves_concurrent_slots(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_graph_extract_budget_reserves_concurrent_slots(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     extract.clear_extract_state_for_tests()
+    from pallas.product.llm import daily_budget
+
+    monkeypatch.setattr(daily_budget, "_budget_path", lambda name: tmp_path / f"{name}_budget.json")
     monkeypatch.setattr(
         extract,
         "get_llm_config",
@@ -121,8 +124,11 @@ def test_graph_extract_budget_reserves_concurrent_slots(monkeypatch: pytest.Monk
     assert extract._reserve_graph_extract_budget() is False
 
 
-def test_graph_extract_budget_reserves_a_batch_atomically(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_graph_extract_budget_reserves_a_batch_atomically(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     extract.clear_extract_state_for_tests()
+    from pallas.product.llm import daily_budget
+
+    monkeypatch.setattr(daily_budget, "_budget_path", lambda name: tmp_path / f"{name}_budget.json")
     monkeypatch.setattr(
         extract,
         "get_llm_config",
@@ -130,4 +136,22 @@ def test_graph_extract_budget_reserves_a_batch_atomically(monkeypatch: pytest.Mo
     )
 
     assert extract._reserve_graph_extract_budget(2) is True
+    assert extract._reserve_graph_extract_budget() is False
+
+
+def test_graph_extract_budget_persists_across_process_restart(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    """预算计数落盘后，模拟进程重启（重新走 daily_budget 读文件）仍能拦住超限。"""
+    extract.clear_extract_state_for_tests()
+    from pallas.product.llm import daily_budget
+
+    monkeypatch.setattr(daily_budget, "_budget_path", lambda name: tmp_path / f"{name}_budget.json")
+    monkeypatch.setattr(
+        extract,
+        "get_llm_config",
+        lambda: type("Config", (), {"llm_memory_graph_extract_daily_budget": 1})(),
+    )
+
+    assert extract._reserve_graph_extract_budget() is True
+    # 模拟重启：清掉进程内状态（现在无进程内计数，直接读文件）
+    extract.clear_extract_state_for_tests()
     assert extract._reserve_graph_extract_budget() is False
