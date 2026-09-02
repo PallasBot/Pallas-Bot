@@ -43,7 +43,7 @@ async def test_install_official_extension_uses_uv_pip_install(monkeypatch):
     monkeypatch.setattr(extension_install, "pip_package_installed", lambda package: len(calls) > 0)
 
     result = await extension_install.install_official_extension("pallas-plugin-duel")
-    assert calls == [("pip", "install", "--upgrade", "pallas-plugin-duel")]
+    assert calls == [("pip", "install", "--upgrade-package", "pallas-plugin-duel", "pallas-plugin-duel")]
     assert result["package"] == "pallas-plugin-duel"
 
 
@@ -61,5 +61,15 @@ async def test_update_official_extension_uses_uv_pip_install(monkeypatch):
     monkeypatch.setattr(extension_install, "run_uv_command", fake_run_uv_command)
 
     result = await extension_install.update_official_extension("pallas-plugin-duel")
-    assert calls == [("pip", "install", "--upgrade", "pallas-plugin-duel")]
+    assert calls == [
+        (
+            "pip",
+            "install",
+            "--upgrade-package",
+            "pallas-plugin-duel",
+            "--reinstall-package",
+            "pallas-plugin-duel",
+            "pallas-plugin-duel",
+        )
+    ]
     assert result["package"] == "pallas-plugin-duel"
