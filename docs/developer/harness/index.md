@@ -20,6 +20,7 @@
 | 主题 | 文档 | Owner | 验证状态 |
 | --- | --- | --- | --- |
 | 统一消息入口（direct/matcher） | [architecture/message-runtime](/developer/architecture/message-runtime) | platform | unit · code:`pallas/core/platform/message_runtime/`、`pallas/core/platform/ingress/` |
+| 进程入口（unified / hub / worker / aux） | [reference/repo-layout](/developer/reference/repo-layout) | platform | manual · code:`bot*.py` |
 | 分片运行时 | [architecture/shard-runtime](/developer/architecture/shard-runtime) | platform | unit · code:`pallas/core/platform/shard/` |
 | 多牛协作 | [architecture/multi-bot-collaboration](/developer/architecture/multi-bot-collaboration) | platform | unit |
 | 后台任务与 work aux | [maintainer/deploy/single-process](/maintainer/deploy/single-process) | platform | unit |

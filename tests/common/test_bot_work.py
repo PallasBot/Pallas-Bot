@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import UserList
 from types import SimpleNamespace
 
-import bot_work
+import bot_work_aux
 
 
 async def first_handler(_payload):
@@ -30,7 +30,7 @@ def test_external_work_handlers_load_valid_providers_and_keep_first_duplicate() 
         entry_point("second", lambda: {"media.generate": second_handler, "media.inspect": second_handler}),
     ])
 
-    handlers = bot_work.load_external_work_handlers(entry_points_getter=lambda: points)
+    handlers = bot_work_aux.load_external_work_handlers(entry_points_getter=lambda: points)
 
     assert handlers == {"media.generate": first_handler, "media.inspect": second_handler}
 
@@ -46,7 +46,9 @@ def test_external_work_handlers_skip_broken_and_malformed_providers() -> None:
         entry_point("valid", lambda: {"media.inspect": second_handler}),
     ])
 
-    assert bot_work.load_external_work_handlers(entry_points_getter=lambda: points) == {"media.inspect": second_handler}
+    assert bot_work_aux.load_external_work_handlers(entry_points_getter=lambda: points) == {
+        "media.inspect": second_handler
+    }
 
 
 def test_external_work_handler_provider_is_loaded_atomically() -> None:
@@ -54,21 +56,21 @@ def test_external_work_handler_provider_is_loaded_atomically() -> None:
         entry_point("partial", lambda: {"media.valid": first_handler, "media.invalid": object()}),
     ])
 
-    assert bot_work.load_external_work_handlers(entry_points_getter=lambda: points) == {}
+    assert bot_work_aux.load_external_work_handlers(entry_points_getter=lambda: points) == {}
 
 
 def test_load_work_handlers_keeps_builtins_when_extension_uses_same_kind(monkeypatch) -> None:
-    monkeypatch.setattr(bot_work.nonebot, "init", lambda: None)
-    monkeypatch.setattr(bot_work, "install_repo_console_log_format", lambda: None)
-    monkeypatch.setattr(bot_work, "install_startup_log_noise_patcher", lambda: None)
-    monkeypatch.setattr(bot_work, "repeater_work_handlers", lambda: {"repeater.learn": first_handler})
+    monkeypatch.setattr(bot_work_aux.nonebot, "init", lambda: None)
+    monkeypatch.setattr(bot_work_aux, "install_repo_console_log_format", lambda: None)
+    monkeypatch.setattr(bot_work_aux, "install_startup_log_noise_patcher", lambda: None)
+    monkeypatch.setattr(bot_work_aux, "repeater_work_handlers", lambda: {"repeater.learn": first_handler})
     monkeypatch.setattr(
-        bot_work,
+        bot_work_aux,
         "load_external_work_handlers",
         lambda: {"repeater.learn": second_handler, "media.generate": second_handler},
     )
 
-    assert bot_work.load_work_handlers() == {
+    assert bot_work_aux.load_work_handlers() == {
         "repeater.learn": first_handler,
         "media.generate": second_handler,
     }

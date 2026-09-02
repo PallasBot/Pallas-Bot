@@ -18,7 +18,7 @@ def test_work_aux_starts_detached_service_when_database_is_supported(monkeypatch
     assert work_aux.start_work_aux() == 0
 
     assert work_aux.PID_FILE.read_text(encoding="utf-8") == "321\n"
-    assert spawn.call_args.args[0][-1] == "bot_work.py"
+    assert spawn.call_args.args[0][-1] == "bot_work_aux.py"
 
 
 def test_work_aux_skips_when_database_backend_is_not_supported(monkeypatch):

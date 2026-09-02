@@ -25,6 +25,20 @@ Pallas-Bot 多仓分工与主仓目录。
 | `data/` | 运行时数据（不入库） | — |
 | `local/plugins/` | 站点私有插件（不入库） | 运维 / 私有作者 |
 
+## 进程入口
+
+根目录 `bot*.py` 是各进程形态的入口，按部署形态选择：
+
+| 文件 | 进程形态 | 启动方式 |
+| --- | --- | --- |
+| `bot.py` | unified 单进程（消息 + 控制台） | `uv run pallas` / `uv run pallas run unified` |
+| `bot_hub.py` | 分片 hub（WebUI + 协议端，不接牛牛反向 WS） | `scripts/run_sharded_bot.sh` / `pallas shard` |
+| `bot_worker.py` | 分片 worker（每进程约 5 个牛牛反向 WS） | 同上 |
+| `bot_work_aux.py` | work aux 后台任务消费者 | `uv run pallas` 自动维护；可手动多启 |
+| `bot_embed_aux.py` | 本机 Embedding 辅进程（消费 Redis 队列） | `uv run pallas` 自动维护（local Embedding + Redis 时） |
+
+`bot_work_aux.py` 与 `bot_worker.py` 职责不同：前者是后台任务消费者（work aux），后者是分片消息 worker。
+
 ## 易混边界
 
 | 主题 | 源码 | 运行产物 / 其它 |
