@@ -113,3 +113,19 @@ def pytest_configure(config):  # noqa: ARG001
     except ValueError:
         # Not initialized, so initialize it
         nonebot.init()
+
+
+@pytest.fixture(autouse=True)
+def _reset_nonebot_plugin_registry():
+    """恢复测试期间变更的 NoneBot 插件注册状态。"""
+    from nonebot import plugin as nb_plugin
+    from nonebot.plugin import manager as nb_manager
+
+    saved_plugins = dict(nb_plugin._plugins)
+    saved_managers = list(nb_plugin._managers)
+    saved_current_plugin = nb_manager._current_plugin.get()
+    yield
+    nb_plugin._plugins.clear()
+    nb_plugin._plugins.update(saved_plugins)
+    nb_plugin._managers[:] = saved_managers
+    nb_manager._current_plugin.set(saved_current_plugin)

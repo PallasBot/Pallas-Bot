@@ -27,8 +27,6 @@ _any_bot_admin_fetch_task: asyncio.Task[frozenset[int]] | None = None
 _any_bot_admin_fetch_lock = asyncio.Lock()
 _any_bot_admin_db_fail_until: float = 0.0
 
-_repo = make_bot_config_repository()
-
 
 def mark_bot_admins_db_fail(bot_id: int) -> None:
     _admins_db_fail_until[int(bot_id)] = time.monotonic() + _BOT_ADMINS_DB_FAIL_TTL_SEC
@@ -95,7 +93,7 @@ async def _load_admins_db(bot_id: int) -> list[int]:
     if pg_pool_under_pressure(threshold=0.55):
         return []
     try:
-        doc = await _repo.get(bot_id)
+        doc = await make_bot_config_repository().get(bot_id)
     except Exception as exc:
         if is_pg_pool_timeout_error(exc):
             mark_bot_admins_db_fail(bot_id)

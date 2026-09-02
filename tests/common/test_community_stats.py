@@ -396,6 +396,7 @@ def test_register_apscheduler_startup_hook_idempotent():
     stub = MagicMock()
     with (
         patch.object(mod, "get_driver", return_value=mock_driver),
+        patch.object(mod, "get_plugin", return_value=stub),
         patch.dict(sys.modules, {"nonebot_plugin_apscheduler": stub}),
     ):
         register_apscheduler_startup_hook()

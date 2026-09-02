@@ -6,7 +6,7 @@ from pallas.core.platform.shard.coord import group_activity as mod
 
 
 def test_group_activity_lock_exclusive(fake_coord_redis, monkeypatch) -> None:
-    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(
         mod,
         "get_shard_registry_settings",
@@ -21,7 +21,7 @@ def test_group_activity_lock_exclusive(fake_coord_redis, monkeypatch) -> None:
 
 @pytest.mark.asyncio
 async def test_begin_group_activity_reclaims_orphan(fake_coord_redis, monkeypatch) -> None:
-    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(
         mod,
         "get_shard_registry_settings",

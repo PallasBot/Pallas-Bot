@@ -12,7 +12,7 @@ from pallas.core.platform.shard.registry import config as shard_cfg
 
 @pytest.mark.asyncio
 async def test_unified_ingress_once_discards_second_bot(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr(
@@ -49,7 +49,7 @@ async def test_unified_ingress_once_discards_second_bot(monkeypatch: pytest.Monk
 
 @pytest.mark.asyncio
 async def test_unified_ingress_fanout_allows_all_bots(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr(
@@ -82,7 +82,7 @@ async def test_unified_ingress_fanout_allows_all_bots(monkeypatch: pytest.Monkey
 
 @pytest.mark.asyncio
 async def test_group_admin_owner_blocks_before_fanout_bypass(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr(
@@ -115,7 +115,7 @@ async def test_group_admin_owner_blocks_before_fanout_bypass(monkeypatch: pytest
 async def test_group_admin_owner_falls_back_to_fanout_when_observation_is_unknown(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr(
@@ -171,7 +171,7 @@ async def test_group_admin_notice_ignores_non_local_bot(monkeypatch: pytest.Monk
 
 @pytest.mark.asyncio
 async def test_unified_ingress_fanout_skips_federate_and_once_claim(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
     federate = AsyncMock(return_value=True)
@@ -206,7 +206,7 @@ async def test_unified_ingress_fanout_skips_federate_and_once_claim(monkeypatch:
 
 @pytest.mark.asyncio
 async def test_unified_ingress_pallas_status_uses_local_claim_without_federate(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.federate_peer_bot_ids_contains", lambda _uid: False)
@@ -252,7 +252,7 @@ async def test_unified_ingress_pallas_status_uses_local_claim_without_federate(m
 
 @pytest.mark.asyncio
 async def test_unified_ingress_bypass_skips_federate_claim(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_fanout_bypasses_claim", lambda _plain: False)
@@ -306,7 +306,7 @@ def test_group_at_qq_ids_falls_back_to_raw_message_when_at_segment_missing() -> 
 
 @pytest.mark.asyncio
 async def test_unified_ingress_discards_federate_peer_bot_before_claims(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.federate_peer_bot_ids_contains", lambda uid: int(uid) == 777)
@@ -344,7 +344,7 @@ async def test_unified_ingress_discards_federate_peer_bot_before_claims(monkeypa
 async def test_unified_ingress_non_owner_deployment_skips_command_once_and_federate_claim(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.federate_peer_bot_ids_contains", lambda _uid: False)
@@ -388,7 +388,7 @@ async def test_unified_ingress_yields_peer_covered_command_even_if_not_local_com
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """本机未装决斗插件时不认「牛牛决斗」为本地命令，但仍须让给有能力的对端，不得抢 federate claim。"""
-    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.federate_peer_bot_ids_contains", lambda _uid: False)
@@ -432,7 +432,7 @@ async def test_unified_ingress_peer_declared_command_skips_owner_mismatch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """本机未装画画、但对端显式宣告了牛牛画画时，本机识别为命令流量并让出，不得抢 federate claim。"""
-    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.federate_peer_bot_ids_contains", lambda _uid: False)
@@ -493,7 +493,7 @@ def test_command_lane_traffic_combines_local_and_peer_declared(monkeypatch: pyte
 async def test_unified_ingress_non_owner_still_claims_chat_traffic(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.federate_peer_bot_ids_contains", lambda _uid: False)
@@ -535,7 +535,7 @@ async def test_unified_ingress_non_owner_still_claims_chat_traffic(
 async def test_unified_ingress_reuses_precomputed_plain_for_federate_claim(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_fanout_bypasses_claim", lambda _plain: False)
@@ -573,7 +573,7 @@ async def test_unified_ingress_reuses_precomputed_plain_for_federate_claim(
 
 @pytest.mark.asyncio
 async def test_unified_ingress_only_allows_at_target_bot(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.get_fleet_bot_ids", lambda: frozenset({111, 222}))
@@ -611,7 +611,7 @@ async def test_unified_ingress_only_allows_at_target_bot(monkeypatch: pytest.Mon
 
 @pytest.mark.asyncio
 async def test_unified_ingress_at_target_skips_federate_claim(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.get_fleet_bot_ids", lambda: frozenset({111}))
@@ -646,7 +646,7 @@ async def test_unified_ingress_at_target_skips_federate_claim(monkeypatch: pytes
 
 @pytest.mark.asyncio
 async def test_unified_ingress_at_target_command_skips_federate_ownership(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.get_fleet_bot_ids", lambda: frozenset({111}))
@@ -690,7 +690,7 @@ async def test_unified_ingress_at_target_command_skips_federate_ownership(monkey
 
 @pytest.mark.asyncio
 async def test_unified_ingress_discards_self_sent_message_before_claims(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
     once = AsyncMock(return_value=True)
     federate = AsyncMock(return_value=True)
@@ -722,7 +722,7 @@ async def test_unified_ingress_discards_self_sent_message_before_claims(monkeypa
 
 @pytest.mark.asyncio
 async def test_unified_ingress_marks_winning_alias_for_llm_chat(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(shard_cfg, "is_sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.ingress_gate_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.ingress.gate.fleet_bot_ids_contains", lambda _uid: False)
     monkeypatch.setattr(

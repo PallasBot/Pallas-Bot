@@ -108,3 +108,6 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+# 目录树无 __init__.py，同名测试文件（test_direct/test_service/test_runtime 等）在 prepend 模式下
+# 模块名冲突导致全量收集报 import file mismatch；importlib 模式按文件路径唯一导入。
+addopts = ["--import-mode=importlib"]

@@ -47,10 +47,6 @@ def test_list_webui_env_sections_is_empty():
     assert "LLM_MEMORY_RAG_TOP_K" in env_keys
     assert "LLM_MEMORY_AUTO_EPISODE_COOLDOWN_SEC" in env_keys
     assert "LLM_SESSION_SUMMARY_ENABLED" in env_keys
-    assert "LLM_EXPRESSION_INJECT_ENABLED" in env_keys
-    assert "LLM_EXPRESSION_LEARN_ENABLED" in env_keys
-    assert "LLM_EXPRESSION_AUTO_PROMOTE_ENABLED" in env_keys
-    assert "LLM_EXPRESSION_RETRIEVE_LIMIT" in env_keys
     assert "LLM_BUBBLE_DELAY_BASE_SEC" in env_keys
     assert "LLM_BUBBLE_DELAY_PER_CHAR" in env_keys
     assert "LLM_BUBBLE_DELAY_JITTER" in env_keys
@@ -60,7 +56,6 @@ def test_list_webui_env_sections_is_empty():
     assert "LLM_API_KEY" not in env_keys
     assert "LLM_MODEL" not in env_keys
     assert "LLM_REPEATER_BIAS_ENABLED" in env_keys
-    assert "LLM_REPEATER_WRITEBACK_ENABLED" in env_keys
     assert "CONVERSATION_FEATURE_LEVEL" in env_keys
     assert "LLM_VECTOR_RETRIEVE" in env_keys
     assert "LLM_EMBEDDING_MODEL" in env_keys

@@ -20,6 +20,118 @@ PG_TEST_DSN = os.getenv("PG_TEST_DSN")
 _ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.fixture(autouse=True)
+def _reset_common_runtime_state():
+    """隔离 common 测试使用的进程级缓存和动态导入模块。"""
+    original_env = os.environ.copy()
+    from nonebot import matcher as nb_matcher
+
+    from pallas.core.platform.multi_bot import dedup
+    from pallas.core.platform.shard import ingress_metrics
+    from pallas.core.platform.shard.coord import repeater_buffer, repeater_reply_buffer
+    from pallas.core.platform.shard.registry import config as shard_config
+    from pallas.core.platform.shard.registry import store as shard_store
+
+    original_matchers = {priority: list(items) for priority, items in nb_matcher.matchers.items()}
+    repeater_buffer._seen_event_ids.clear()
+    repeater_buffer._seen_set.clear()
+    repeater_reply_buffer._seen_event_ids.clear()
+    repeater_reply_buffer._seen_set.clear()
+    nb_matcher.matchers.clear()
+    dedup._cross_bot_claim_owners.clear()
+    dedup._shard_ingress_file_locks.clear()
+    dedup._group_message_once_keys.clear()
+    dedup._group_message_once_order.clear()
+    dedup._group_event_sigs.clear()
+    dedup._group_event_sig_set.clear()
+    ingress_metrics.clear_ingress_metrics_for_tests()
+    shard_store.clear_shard_registry_cache()
+    shard_config.get_shard_registry_settings.cache_clear()
+    yield
+    for key in set(os.environ) - set(original_env):
+        del os.environ[key]
+    os.environ.update(original_env)
+    repeater_buffer._seen_event_ids.clear()
+    repeater_buffer._seen_set.clear()
+    repeater_reply_buffer._seen_event_ids.clear()
+    repeater_reply_buffer._seen_set.clear()
+    nb_matcher.matchers.clear()
+    nb_matcher.matchers.update({priority: list(items) for priority, items in original_matchers.items()})
+    dedup._cross_bot_claim_owners.clear()
+    dedup._shard_ingress_file_locks.clear()
+    dedup._group_message_once_keys.clear()
+    dedup._group_message_once_order.clear()
+    dedup._group_event_sigs.clear()
+    dedup._group_event_sig_set.clear()
+    ingress_metrics.clear_ingress_metrics_for_tests()
+    shard_store.clear_shard_registry_cache()
+    shard_config.get_shard_registry_settings.cache_clear()
+
+
+@pytest.fixture
+def isolated_nonebot_plugin_state():
+    """隔离会实际加载 NoneBot 插件的测试，并恢复原模块身份。"""
+    from nonebot import matcher as nb_matcher
+    from nonebot import plugin as nb_plugin
+    from nonebot.plugin import manager as nb_manager
+
+    def is_plugin_module(name: str) -> bool:
+        return name == "packages" or name.startswith(("packages.", "nonebot_plugin_apscheduler", "pallas_plugin_"))
+
+    module_snapshot = {name: module for name, module in sys.modules.items() if is_plugin_module(name)}
+    parent_attrs: dict[tuple[str, str], tuple[bool, object | None]] = {}
+    for name in module_snapshot:
+        parent_name, _, child_name = name.rpartition(".")
+        if not parent_name or parent_name not in module_snapshot:
+            continue
+        parent = module_snapshot[parent_name]
+        if hasattr(parent, child_name):
+            parent_attrs[(parent_name, child_name)] = (True, getattr(parent, child_name))
+        else:
+            parent_attrs[(parent_name, child_name)] = (False, None)
+    saved_plugins = dict(nb_plugin._plugins)
+    saved_managers = list(nb_plugin._managers)
+    saved_matchers = {priority: list(items) for priority, items in nb_matcher.matchers.items()}
+    saved_current_plugin = nb_manager._current_plugin.get()
+
+    def clear_plugin_state() -> None:
+        nb_plugin._plugins.clear()
+        nb_plugin._managers.clear()
+        nb_manager._current_plugin.set(None)
+
+    def remove_plugin_modules() -> None:
+        for name in list(sys.modules):
+            if not is_plugin_module(name):
+                continue
+            module = sys.modules.pop(name)
+            parent_name, _, child_name = name.rpartition(".")
+            parent = sys.modules.get(parent_name)
+            if parent is not None and getattr(parent, child_name, None) is module:
+                delattr(parent, child_name)
+
+    clear_plugin_state()
+    remove_plugin_modules()
+    try:
+        yield
+    finally:
+        clear_plugin_state()
+        remove_plugin_modules()
+        sys.modules.update(module_snapshot)
+        for (parent_name, child_name), (exists, value) in parent_attrs.items():
+            parent = sys.modules.get(parent_name)
+            if parent is None:
+                continue
+            if exists:
+                setattr(parent, child_name, value)
+            elif hasattr(parent, child_name):
+                delattr(parent, child_name)
+        nb_plugin._plugins.update(saved_plugins)
+        nb_plugin._managers.extend(saved_managers)
+        nb_manager._current_plugin.set(saved_current_plugin)
+        nb_matcher.matchers.clear()
+        nb_matcher.matchers.update({priority: list(items) for priority, items in saved_matchers.items()})
+
+
 @pytest.fixture
 async def pg_engine():
     """

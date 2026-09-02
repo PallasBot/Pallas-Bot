@@ -30,7 +30,7 @@ FILE_MAP = _MOD.FILE_MAP
         ),
         (
             "[docker](../../../DockerDeployment.md)",
-            "[docker](/deploy/docker)",
+            "[docker](/maintainer/deploy/docker)",
         ),
         (
             "[stats](../community_stats.md)",
