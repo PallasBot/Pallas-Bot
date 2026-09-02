@@ -13,6 +13,13 @@
 * fix(llm): 群环境摘录剔除自己后回退保留最近一对
 * fix(llm_chat): 醒酒保留群聊历史只清服务端会话
 * fix(webui): 插件商店更新仅升级目标插件包，避免误升级共享依赖
+* fix(llm): 每日预算读写加跨进程锁，分片下计数不丢更新
+* fix(llm): 语义风格协作 bot 判定修复，避免协作 bot 消息混入真人接话参考
+
+### Changed
+
+* refactor(entrypoints): 辅进程入口统一后缀（bot_work_aux / bot_embed_aux）
+* fix(llm): 图谱抽取每日预算改为跨进程持久化，重启不重置
 
 ## [4.3.13] - 2026-08-29
 

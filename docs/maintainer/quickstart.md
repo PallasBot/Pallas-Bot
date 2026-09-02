@@ -19,4 +19,4 @@
 
 ## 后续阅读：多账号与分片
 
-默认 **unified + 辅进程**（如本机 Embedding 的 `bot_embed`）即可；`uv run pallas status` / `pallas logs` 不必先学 worker-N。多个 Bot 账号同时在线且单进程已验证瓶颈、或需要强隔离时，再阅读 [分片部署](/maintainer/deploy/sharded)。
+默认 **unified + 辅进程**（如本机 Embedding 的 `bot_embed_aux`）即可；`uv run pallas status` / `pallas logs` 不必先学 worker-N。多个 Bot 账号同时在线且单进程已验证瓶颈、或需要强隔离时，再阅读 [分片部署](/maintainer/deploy/sharded)。

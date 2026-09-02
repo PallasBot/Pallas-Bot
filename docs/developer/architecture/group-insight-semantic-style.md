@@ -132,7 +132,7 @@ work aux 消费 `group.insight` 后，按该 `(bot_id, group_id)` 的持久化�
 
 只有 `is_reply_pair=true` 且 `transferable=true` 的结果才写入语义样本。完整标注完成后，才推进该群的持久化游标。
 
-语义标注预算配置为 `llm_semantic_style_realtime_daily_limit`，默认每天 5000 次。预算计数文件位于：
+语义标注预算配置为 `llm_semantic_style_realtime_daily_limit`，默认每天 600 次。预算计数文件位于：
 
 ```text
 data/pb_webui/repeater_semantic_style/semantic_style_label_budget.json
@@ -148,7 +148,7 @@ data/pb_webui/repeater_semantic_style/semantic_style_label_budget.json
 data/pb_webui/repeater_semantic_style/semantic_style_group_cursors.json
 ```
 
-key 是 `{bot_id}:{group_id}`，当前保存的是已处理到的秒级时间戳。它能防止正常重启后重复扫描整个历史窗口，但不是完整的复合游标。
+key 是 `{bot_id}:{group_id}`，保存的是已处理到的 `(time, message_id)` 复合游标。它能防止正常重启后重复扫描整个历史窗口，同秒内消息也不会被秒级时间跳过；旧版仅存秒级时间戳的游标读作整秒已处理，兼容无需迁移。
 
 ## 6. 画像落盘与消费
 
@@ -199,7 +199,7 @@ data/pb_webui/repeater_semantic_style/profiles.json
 
 1. sweep 轮转游标目前只在进程内；活跃群超过 1024 且频繁重启时，尾部群可能延迟。
 2. 每个本地 Bot 的群发现查询有 128 个上限；单 Bot 管理大量群时，发现层需要进一步分页或改为直接按群查询。
-3. 语义游标只有秒级时间；同一秒消息极密集时，部分消息可能被跳过。要彻底解决需要 `(time, message_id)` 复合游标。
+3. 单 job 回溯窗口上限为 96 页 × 32 条（约 3072 条）；消息极密集的群一轮可能取不完，剩余部分由下一轮游标继续，不会丢失但会延迟。
 
 这些属于可观测的延迟或极端漏采边界，不是旧实现那种由固定排序造成的永久饿死。
 

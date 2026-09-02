@@ -2,7 +2,7 @@
 
 把单进程扩成 hub + worker。适合**已验证**单进程事件循环/连接压力仍不够、或需要强隔离炸点的场景。依赖明确的角色分工、共享 `data/`，以及 Redis 协调。
 
-**默认建议**：先用 [单进程部署](single-process.md)（`unified`）+ 辅进程（如本机 Embedding 的 `bot_embed`）。热路径不阻塞时，多账号也可先留在单 ingress；分片是可选进阶，不是人人必会的主路径。
+**默认建议**：先用 [单进程部署](single-process.md)（`unified`）+ 辅进程（如本机 Embedding 的 `bot_embed_aux`）。热路径不阻塞时，多账号也可先留在单 ingress；分片是可选进阶，不是人人必会的主路径。
 
 尚未验证单进程瓶颈时，先用 [单进程部署](single-process.md)。
 

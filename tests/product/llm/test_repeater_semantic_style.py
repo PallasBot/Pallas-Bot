@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -1338,6 +1339,86 @@ def test_human_semantic_style_pair_excludes_self_and_peer_bots(monkeypatch: pyte
     assert is_human_semantic_style_pair(trigger_user_id=11, reply_user_id=13, bot_id=100)
     assert not is_human_semantic_style_pair(trigger_user_id=100, reply_user_id=13, bot_id=100)
     assert not is_human_semantic_style_pair(trigger_user_id=11, reply_user_id=12, bot_id=100)
+
+
+def test_human_semantic_style_pair_excludes_known_bots_even_when_peer_detection_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """work aux 进程里 is_peer_bot 判定不可靠（connected roster 为空）时，
+    known_bots（message 表推导）仍能排除协作 bot 消息。"""
+    from pallas.product.llm import sender_identity
+    from pallas.product.llm.repeater_semantic_style import is_human_semantic_style_pair
+
+    monkeypatch.setattr(sender_identity, "is_peer_bot", lambda user_id: False)
+
+    assert is_human_semantic_style_pair(
+        trigger_user_id=11,
+        reply_user_id=13,
+        bot_id=100,
+        known_bots={12, 99},
+    )
+    assert not is_human_semantic_style_pair(
+        trigger_user_id=11,
+        reply_user_id=12,
+        bot_id=100,
+        known_bots={12, 99},
+    )
+    assert not is_human_semantic_style_pair(
+        trigger_user_id=99,
+        reply_user_id=13,
+        bot_id=100,
+        known_bots={12, 99},
+    )
+
+
+def test_legacy_bot_style_positive_self_reply_migrates_reply_is_bot(tmp_path, monkeypatch) -> None:
+    """存量群洞察样本把「接话端是 bot」存进 bot_style_positive；加载时补 reply_is_bot，
+    避免重建时被当作真人接话进 direct_pairs。delivery feedback 的真人样本不受影响。"""
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod.clear_semantic_style_cache_for_tests()
+    path = mod.semantic_style_examples_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {
+            "example_id": "bot:self:1",
+            "created_at": 1000,
+            "bot_id": 100,
+            "group_id": 42,
+            "scene": "group_chat",
+            "trigger_text": "前句",
+            "reply_text": "bot 接话",
+            "label": {"version": 2},
+            "source_kind": "human_pair",
+            "trigger_user_id": 11,
+            "reply_user_id": 100,
+            "bot_style_positive": True,
+        },
+        {
+            "example_id": "human:feedback:1",
+            "created_at": 1001,
+            "bot_id": 100,
+            "group_id": 42,
+            "scene": "group_chat",
+            "trigger_text": "前句",
+            "reply_text": "真人接话",
+            "label": {"version": 2},
+            "source_kind": "human_pair",
+            "trigger_user_id": 11,
+            "reply_user_id": 12,
+            "bot_style_positive": True,
+        },
+    ]
+    path.write_text(
+        "".join(json.dumps(row, ensure_ascii=False) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+
+    examples = mod._load_semantic_style_examples(path)
+    by_id = {item.example_id: item for item in examples}
+    assert by_id["bot:self:1"].reply_is_bot is True
+    assert by_id["human:feedback:1"].reply_is_bot is False
 
 
 def test_visual_label_keeps_only_four_controlled_fields() -> None:

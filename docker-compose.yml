@@ -53,7 +53,7 @@ services:
     container_name: pallasbot_work
     image: ${PALLAS_BOT_IMAGE:-pallasbot/pallas-bot:latest}
     restart: always
-    command: ["python", "bot_work.py"]
+    command: ["python", "bot_work_aux.py"]
     environment:
       TZ: Asia/Shanghai
       ENVIRONMENT: prod

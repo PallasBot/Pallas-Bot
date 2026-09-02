@@ -72,7 +72,7 @@ def start_embed_aux(*, dry_run: bool = False) -> int:
     }
     try:
         pid = spawn_detached(
-            uv_run_python_cmd("bot_embed.py"),
+            uv_run_python_cmd("bot_embed_aux.py"),
             cwd=PROJECT_ROOT,
             env=env,
             log_path=LOG_FILE,

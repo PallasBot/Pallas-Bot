@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from typing import Any
 
 from nonebot import logger
@@ -62,44 +61,29 @@ _EXTRACT_COOLDOWN_SEC = 300
 
 _extract_cooldown = WriteCooldown()
 _last_extract_sig: dict[tuple[int, int], str] = {}
-_graph_extract_budget_day = ""
-_graph_extract_daily_budget_used = 0
 
 
 def clear_extract_state_for_tests() -> None:
     _extract_cooldown.clear()
     _last_extract_sig.clear()
-    global _graph_extract_budget_day, _graph_extract_daily_budget_used
-    _graph_extract_budget_day = ""
-    _graph_extract_daily_budget_used = 0
 
 
 def _graph_extract_budget_ok() -> bool:
     limit = int(get_llm_config().llm_memory_graph_extract_daily_budget)
     if limit <= 0:
         return True
-    global _graph_extract_budget_day, _graph_extract_daily_budget_used
-    today = time.strftime("%Y-%m-%d")
-    if _graph_extract_budget_day != today:
-        _graph_extract_budget_day = today
-        _graph_extract_daily_budget_used = 0
-    return _graph_extract_daily_budget_used < limit
+    from pallas.product.llm.daily_budget import used_today
+
+    return used_today("memory_graph_extract", key="graph")["calls"] < limit
 
 
 def _reserve_graph_extract_budget(count: int = 1) -> bool:
-    count = max(1, int(count))
     limit = int(get_llm_config().llm_memory_graph_extract_daily_budget)
     if limit <= 0:
         return True
-    global _graph_extract_budget_day, _graph_extract_daily_budget_used
-    today = time.strftime("%Y-%m-%d")
-    if _graph_extract_budget_day != today:
-        _graph_extract_budget_day = today
-        _graph_extract_daily_budget_used = 0
-    if _graph_extract_daily_budget_used + count > limit:
-        return False
-    _graph_extract_daily_budget_used += count
-    return True
+    from pallas.product.llm.daily_budget import reserve_today
+
+    return reserve_today("memory_graph_extract", key="graph", count=count, limit=limit)
 
 
 def _resolve_extract_task_and_model() -> tuple[str, str]:

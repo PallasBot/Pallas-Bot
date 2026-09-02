@@ -164,6 +164,7 @@ class SemanticStyleExample(BaseModel):
     trigger_user_id: int = 0
     reply_user_id: int = 0
     pair_relation: Literal["quoted", "adjacent"] = "adjacent"
+    reply_is_bot: bool = False
     bot_style_positive: bool = False
     annotation_source: Literal["llm_v2", "legacy_persisted_v1"] = "llm_v2"
     legacy_reuse: Literal["direct", "rewrite", "style", ""] = ""
@@ -531,8 +532,18 @@ def semantic_style_answer_samples(answers: Iterable[object]) -> set[str]:
     return samples
 
 
-def is_human_semantic_style_pair(*, trigger_user_id: object, reply_user_id: object, bot_id: object) -> bool:
-    """真人接话参考只接受两端都非本机或协作 bot 的消息。"""
+def is_human_semantic_style_pair(
+    *,
+    trigger_user_id: object,
+    reply_user_id: object,
+    bot_id: object,
+    known_bots: set[int] | None = None,
+) -> bool:
+    """真人接话参考只接受两端都非本机或协作 bot 的消息。
+
+    ``known_bots`` 由调用方从 message 表推导（work aux 进程里 ``is_peer_bot``
+    的 connected roster 为空，协作 bot 会被误判为真人），传入后优先按它排除。
+    """
     try:
         trigger_id = int(trigger_user_id)
         reply_id = int(reply_user_id)
@@ -540,6 +551,8 @@ def is_human_semantic_style_pair(*, trigger_user_id: object, reply_user_id: obje
     except (TypeError, ValueError):
         return False
     if trigger_id <= 0 or reply_id <= 0 or self_id <= 0:
+        return False
+    if known_bots and (trigger_id in known_bots or reply_id in known_bots):
         return False
     from pallas.product.llm.sender_identity import is_peer_bot
 
@@ -1119,9 +1132,12 @@ def _build_profile(
         bubble_counts.append(bubble_count)
         prior_segment_lengths.extend(segment_char_lengths)
         rhythm_counts[rhythm] = int(rhythm_counts.get(rhythm) or 0) + 1
-    bot_style_sample_count = (existing.bot_style_sample_count if existing else 0) + int(example.bot_style_positive)
+    bot_style_sample_count = (existing.bot_style_sample_count if existing else 0) + int(
+        example.bot_style_positive or is_bot_reply
+    )
     recent_bot_style_sample_count = (existing.recent_bot_style_sample_count if existing else 0) + int(
-        example.bot_style_positive and (now is None or example.created_at >= now - BOT_STYLE_RECENT_SEC)
+        (example.bot_style_positive or is_bot_reply)
+        and (now is None or example.created_at >= now - BOT_STYLE_RECENT_SEC)
     )
     bot_style_promoted = (
         bot_style_sample_count >= BOT_STYLE_PROMOTION_SAMPLE_COUNT
@@ -1179,7 +1195,7 @@ def _build_profile(
         rhythm_counts=rhythm_counts,
         sample_count=(existing.sample_count if existing else 0) + 1,
         common_style_sample_count=(existing.common_style_sample_count if existing else 0)
-        + int(not example.bot_style_positive),
+        + int(not example.bot_style_positive and not is_bot_reply),
         bot_style_sample_count=bot_style_sample_count,
         recent_bot_style_sample_count=recent_bot_style_sample_count,
         bot_style_promoted=bot_style_promoted,
@@ -1316,6 +1332,11 @@ def _load_semantic_style_examples(path: Path) -> list[SemanticStyleExample]:
                     raw["legacy_style_anchor"] = _short_text(label_raw.get("style_anchor"), _MAX_STYLE_ANCHOR_LEN)
                     raw["legacy_persona_affinities"] = _items(label_raw.get("persona_affinities"))
             example = SemanticStyleExample.model_validate(raw)
+            # 迁移：旧版群洞察把「接话端是 bot」存进 bot_style_positive；本 bot 自我接话
+            # 的存量样本补 reply_is_bot，避免重建时被当作真人接话进 direct_pairs。
+            # delivery feedback 的正面回应样本 reply_user_id != bot_id，不受影响。
+            if example.bot_style_positive and example.reply_user_id == example.bot_id:
+                example = example.model_copy(update={"reply_is_bot": True})
         except (json.JSONDecodeError, ValueError, TypeError):
             continue
         examples.append(example.model_copy(update={"label": parse_semantic_style_label(example.label.model_dump())}))
@@ -1467,10 +1488,12 @@ def _rebuild_profiles(
 
 
 def _example_reply_is_bot(example: SemanticStyleExample) -> bool:
-    """判断某 example 的接话端是否为 bot（自身或协作 bot），用于 self_reflection 学习。"""
-    from pallas.product.llm.sender_identity import sender_kind
+    """判断某 example 的接话端是否为 bot（自身或协作 bot），用于 self_reflection 学习。
 
-    return sender_kind(example.reply_user_id, self_bot_id=example.bot_id) != "human"
+    落盘时已按 known_bots 判定并写入 ``reply_is_bot``；重建时直接信任该字段，
+    避免 work aux 进程里 ``sender_kind`` 的 peer 判定不可靠导致 bot 回复混入 direct_pairs。
+    """
+    return example.reply_is_bot
 
 
 def prune_semantic_style_examples(*, now: int | None = None) -> int:
@@ -1864,7 +1887,8 @@ async def label_semantic_style_with_llm(
         "is_reply_pair 仅当前句确实在回应前句时为 true；transferable 仅接话脱离当时人名、"
         "多人局部梗或临时事实后仍可作为通用措辞参考时为 true。任一不成立都填 false。"
         "intensity 只能 quiet/soft/neutral/sharp/strong；"
-        "数组字段用受控英文词。behavior_strategy 为 null 或 "
+        "数组字段用受控英文词。behavior_strategy 仅在能提炼出可复用行为模式时输出对象，"
+        "否则为 null；对象为 "
         '{"scene":"可泛化场景","action":"实际接话动作","outcome":"可观察变化",'
         '"learning_type":"observed"}。不抄原话，不带人名/临时梗，不做价值判断。\n'
         f"关联：{'明确引用前句' if pair_relation == 'quoted' else '仅时间相邻'}\n"
@@ -2038,7 +2062,7 @@ def _label_semantic_style_batch_prompt(count: int) -> str:
         "is_reply_pair、transferable、interaction_actions、semantic_relations、intensity、forms、behavior_strategy。"
         "确实回应前句才 is_reply_pair=true；脱离人名、局部梗、临时事实仍可复用才 transferable=true，"
         "否则均为 false。intensity 只能 quiet/soft/neutral/sharp/strong，数组字段只能用受控英文词。"
-        "behavior_strategy 为 null 或 "
+        "behavior_strategy 仅在能提炼出可复用行为模式时输出对象，否则为 null；对象为 "
         '{"scene":"可泛化场景","action":"实际接话动作","outcome":"可观察变化",'
         '"learning_type":"observed"}。不抄原话，不带人名或临时梗。严格按输入顺序输出。'
     )

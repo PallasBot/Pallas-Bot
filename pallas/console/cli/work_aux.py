@@ -54,7 +54,7 @@ def start_work_aux(*, dry_run: bool = False) -> int:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     try:
         pid = spawn_detached(
-            uv_run_python_cmd("bot_work.py"),
+            uv_run_python_cmd("bot_work_aux.py"),
             cwd=PROJECT_ROOT,
             env={**os.environ, "PALLAS_BOT_ROLE": "work"},
             log_path=LOG_FILE,
