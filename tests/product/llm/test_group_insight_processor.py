@@ -52,15 +52,10 @@ class _DummyMessageRepo:
 async def test_rebuild_pairs_picks_quoted_pair_and_human_adjacent(monkeypatch) -> None:
     from pallas.product.llm import group_insight_processor as mod
 
-    calls = []
+    def fake_is_peer_bot(user_id):
+        return user_id == 99 or user_id == 501
 
-    def fake_sender_kind(user_id, *, self_bot_id):
-        calls.append((user_id, self_bot_id))
-        if user_id == 99 or user_id == 501:
-            return "peer_bot"
-        return "human"
-
-    monkeypatch.setattr(mod, "sender_kind", fake_sender_kind)
+    monkeypatch.setattr("pallas.product.llm.sender_identity.is_peer_bot", fake_is_peer_bot)
     repo = _DummyMessageRepo([
         _msg(1, 11, "今天好热", time=1000),  # human
         _msg(2, 11, "热死我了", time=1010, reply_to_message_id=1),  # quoted reply
@@ -84,14 +79,7 @@ async def test_rebuild_pairs_picks_quoted_pair_and_human_adjacent(monkeypatch) -
 async def test_rebuild_pairs_marks_bot_self_reply(monkeypatch) -> None:
     from pallas.product.llm import group_insight_processor as mod
 
-    def fake_sender_kind(user_id, *, self_bot_id):
-        if user_id == self_bot_id:
-            return "self"
-        if user_id == 99 or user_id == 501:
-            return "peer_bot"
-        return "human"
-
-    monkeypatch.setattr(mod, "sender_kind", fake_sender_kind)
+    monkeypatch.setattr("pallas.product.llm.sender_identity.is_peer_bot", lambda user_id: user_id in (99, 501))
     repo = _DummyMessageRepo([
         _msg(1, 11, "今天好热", time=1000),  # human
         _msg(2, 100, "是挺热的", time=1010),  # self bot 接话 (self_bot_id=100)
@@ -105,10 +93,33 @@ async def test_rebuild_pairs_marks_bot_self_reply(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
+async def test_rebuild_pairs_known_bots_covers_peer_detection_gap(monkeypatch) -> None:
+    """work aux 进程不连接 QQ，is_peer_bot 恒 False；known_bots（message 表推导）
+    必须仍能把协作 bot 消息标记为 bot 回复，而不是混入真人接话参考。"""
+    from pallas.product.llm import group_insight_processor as mod
+
+    monkeypatch.setattr("pallas.product.llm.sender_identity.is_peer_bot", lambda user_id: False)
+    repo = _DummyMessageRepo([
+        _msg(1, 11, "今天好热", time=1000),  # human
+        _msg(2, 99, "bot插话", time=1010),  # 协作 bot（不在 peer 列表，但 known_bots 里有）
+        _msg(3, 22, "真的吗", time=1020),  # human
+    ])
+    monkeypatch.setattr(mod, "make_message_repository", lambda: repo)
+
+    pairs = await _rebuild_pairs_from_messages(bot_id=100, group_id=42, known_bots={99})
+
+    adjacent = [p for p in pairs if p[2] == "adjacent"]
+    # bot 接话标记 is_bot_reply=True（self_reflection 候选），不进入真人 direct_pairs
+    assert ("今天好热", "bot插话", "adjacent", 11, 99, 2, 1010, True) in adjacent
+    # 真人接话仍正常：bot 消息不在真人序列，msg3 的前驱是 msg1
+    assert ("今天好热", "真的吗", "adjacent", 11, 22, 3, 1020, False) in adjacent
+
+
+@pytest.mark.asyncio
 async def test_rebuild_pairs_keeps_candidates_after_persistent_cursor(monkeypatch) -> None:
     from pallas.product.llm import group_insight_processor as mod
 
-    monkeypatch.setattr(mod, "sender_kind", lambda user_id, *, self_bot_id: "human")
+    monkeypatch.setattr("pallas.product.llm.sender_identity.is_peer_bot", lambda user_id: False)
     monkeypatch.setattr(
         mod,
         "make_message_repository",
@@ -129,7 +140,7 @@ async def test_rebuild_pairs_same_second_pagination_does_not_skip(monkeypatch) -
     """同秒超单页（40 条 > 32）：复合游标翻页应覆盖全部消息，不再漏同秒候选。"""
     from pallas.product.llm import group_insight_processor as mod
 
-    monkeypatch.setattr(mod, "sender_kind", lambda user_id, *, self_bot_id: "human")
+    monkeypatch.setattr("pallas.product.llm.sender_identity.is_peer_bot", lambda user_id: False)
     messages = [_msg(mid, 11, f"消息{mid}", time=1000) for mid in range(1, 41)]
     monkeypatch.setattr(mod, "make_message_repository", lambda: _DummyMessageRepo(messages))
 
@@ -143,7 +154,7 @@ async def test_rebuild_pairs_same_second_cursor_only_skips_processed_prefix(monk
     """增量游标带 message_id：同秒内已处理前缀之后的候选仍可进入重建。"""
     from pallas.product.llm import group_insight_processor as mod
 
-    monkeypatch.setattr(mod, "sender_kind", lambda user_id, *, self_bot_id: "human")
+    monkeypatch.setattr("pallas.product.llm.sender_identity.is_peer_bot", lambda user_id: False)
     monkeypatch.setattr(
         mod,
         "make_message_repository",
@@ -165,7 +176,7 @@ async def test_rebuild_pairs_prefers_quoted_over_adjacent(monkeypatch) -> None:
     """quoted 样本可接受率远高于 adjacent，limit 不足时不得被时间靠前的 adjacent 挤出。"""
     from pallas.product.llm import group_insight_processor as mod
 
-    monkeypatch.setattr(mod, "sender_kind", lambda user_id, *, self_bot_id: "human")
+    monkeypatch.setattr("pallas.product.llm.sender_identity.is_peer_bot", lambda user_id: False)
     monkeypatch.setattr(
         mod,
         "make_message_repository",
@@ -190,7 +201,7 @@ async def test_rebuild_pairs_skips_pure_media_reply_keeps_face(monkeypatch) -> N
     """接话端只剩图片/媒体占位（无文字）不送标注；表情回复是真实接话，保留。"""
     from pallas.product.llm import group_insight_processor as mod
 
-    monkeypatch.setattr(mod, "sender_kind", lambda user_id, *, self_bot_id: "human")
+    monkeypatch.setattr("pallas.product.llm.sender_identity.is_peer_bot", lambda user_id: False)
     monkeypatch.setattr(
         mod,
         "make_message_repository",
@@ -216,7 +227,7 @@ async def test_rebuild_pairs_rejects_punctuation_adjacent_without_heat(monkeypat
     """无复读热度的纯标点 adjacent 不应进入 LLM 候选。"""
     from pallas.product.llm import group_insight_processor as mod
 
-    monkeypatch.setattr(mod, "sender_kind", lambda user_id, *, self_bot_id: "human")
+    monkeypatch.setattr("pallas.product.llm.sender_identity.is_peer_bot", lambda user_id: False)
 
     async def fake_heat(**kwargs):
         return {}
@@ -241,7 +252,7 @@ async def test_rebuild_pairs_keeps_unrelated_adjacent_with_repeater_heat(monkeyp
     """已有复读热度的 adjacent 即使字面无关，也应保留给语义层复核。"""
     from pallas.product.llm import group_insight_processor as mod
 
-    monkeypatch.setattr(mod, "sender_kind", lambda user_id, *, self_bot_id: "human")
+    monkeypatch.setattr("pallas.product.llm.sender_identity.is_peer_bot", lambda user_id: False)
 
     async def fake_heat(**kwargs):
         return {("今天的部署状态", "我在吃饭呢"): 3}
@@ -266,7 +277,7 @@ async def test_rebuild_pairs_ranks_adjacent_by_similarity_then_repeater_heat(mon
     """adjacent 排序：先按复读 answer 真人接话热度（C），再按文本相似度（A），均零 LLM。"""
     from pallas.product.llm import group_insight_processor as mod
 
-    monkeypatch.setattr(mod, "sender_kind", lambda user_id, *, self_bot_id: "peer_bot" if user_id == 99 else "human")
+    monkeypatch.setattr("pallas.product.llm.sender_identity.is_peer_bot", lambda user_id: user_id == 99)
 
     async def fake_heat(*, bot_id, group_id):
         return {
@@ -300,7 +311,7 @@ async def test_rebuild_pairs_prefers_similarity_within_same_heat(monkeypatch) ->
     """同为无热度时，trigger/reply 文本相似度高的 adjacent 排前（quoted 仍在最前）。"""
     from pallas.product.llm import group_insight_processor as mod
 
-    monkeypatch.setattr(mod, "sender_kind", lambda user_id, *, self_bot_id: "human")
+    monkeypatch.setattr("pallas.product.llm.sender_identity.is_peer_bot", lambda user_id: False)
     monkeypatch.setattr("pallas.core.foundation.db.make_local_context_repository", lambda: None)
     monkeypatch.setattr(
         mod,
@@ -618,6 +629,10 @@ async def test_produce_semantic_profile_partial_failure_persists_and_advances(mo
     async def fake_rebuild(**kwargs):
         return pairs
 
+    async def fake_known_bots(group_id):
+        return set()
+
+    monkeypatch.setattr(mod, "_known_bots_in_group", fake_known_bots)
     monkeypatch.setattr(mod, "_rebuild_pairs_from_messages", fake_rebuild)
     monkeypatch.setattr(sem, "semantic_style_collection_enabled", lambda *, bot_id, group_id: True)
     monkeypatch.setattr(sem, "semantic_label_budget_ok", lambda: True)
@@ -656,6 +671,10 @@ async def test_produce_semantic_profile_all_failed_keeps_cursor(monkeypatch) -> 
     async def fake_rebuild(**kwargs):
         return pairs
 
+    async def fake_known_bots(group_id):
+        return set()
+
+    monkeypatch.setattr(mod, "_known_bots_in_group", fake_known_bots)
     monkeypatch.setattr(mod, "_rebuild_pairs_from_messages", fake_rebuild)
     monkeypatch.setattr(sem, "semantic_style_collection_enabled", lambda *, bot_id, group_id: True)
     monkeypatch.setattr(sem, "semantic_label_budget_ok", lambda: True)

@@ -20,7 +20,6 @@ from pallas.core.foundation.db import make_message_repository
 from pallas.core.foundation.startup_report import register_startup_scheduled
 from pallas.core.platform.work_jobs.models import WorkJob
 from pallas.core.platform.work_jobs.runtime import build_work_job_store
-from pallas.product.llm.sender_identity import sender_kind
 
 GROUP_INSIGHT_KIND = "group.insight"
 
@@ -112,11 +111,13 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
         return
 
     cursor_time, cursor_message_id = get_semantic_style_group_cursor(bot_id=bot_id, group_id=group_id)
+    known_bots = await _known_bots_in_group(group_id)
     pairs = await _rebuild_pairs_from_messages(
         bot_id=bot_id,
         group_id=group_id,
         after_time=cursor_time,
         after_message_id=cursor_message_id,
+        known_bots=known_bots,
     )
     if not pairs:
         return
@@ -163,6 +164,7 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
             trigger_user_id=trigger_user_id,
             reply_user_id=reply_user_id,
             bot_id=bot_id,
+            known_bots=known_bots,
         ):
             continue
         example_id = f"{group_id}:{message_id}:{bot_id}"
@@ -185,7 +187,7 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
                 pair_relation=pair_relation,
                 annotation_source="llm_v2",
                 behavior_strategy=strategy,
-                bot_style_positive=is_bot_reply,
+                reply_is_bot=is_bot_reply,
             )
         )
     if accepted:
@@ -204,6 +206,39 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
     )
 
 
+def _is_bot_sender(*, user_id: int, self_bot_id: int, known_bots: set[int]) -> bool:
+    """接话端是否为 bot（自身或已知协作 bot）。
+
+    work aux 进程不连接 QQ，``sender_kind`` 的 peer 判定（connected roster /
+    federate）不可靠，会把手动部署的协作 bot 误判为真人；以 message 表推导的
+    ``known_bots`` 为准，``is_peer_bot`` 仅作兜底。
+    """
+    if user_id == self_bot_id:
+        return True
+    if user_id in known_bots:
+        return True
+    from pallas.product.llm.sender_identity import is_peer_bot
+
+    return is_peer_bot(user_id)
+
+
+async def _known_bots_in_group(group_id: int) -> set[int]:
+    """该群近期作为 bot 记录过消息的账号集合（含本机与协作 bot）。
+
+    message 表的 ``bot_id`` 是记录者账号：任何在该群以 bot_id 出现过的账号，
+    其 user_id 发言都应视为 bot 消息，而不是真人接话参考。
+    """
+    repo = make_message_repository()
+    now_ts = int(time.time())
+    cutoff = now_ts - _SEMANTIC_LOOKBACK_DAYS * 24 * 60 * 60
+    try:
+        bot_ids = await repo.list_recent_bot_ids_for_group(group_id, since_time=cutoff, limit=128)
+    except Exception as exc:
+        logger.warning("群洞察无法列出群 [{}] 的已知账号：{}", group_id, exc)
+        return set()
+    return {int(b) for b in bot_ids if int(b) > 0}
+
+
 async def _rebuild_pairs_from_messages(
     *,
     bot_id: int,
@@ -211,6 +246,7 @@ async def _rebuild_pairs_from_messages(
     limit: int = _MAX_PAIRS_PER_JOB,
     after_time: int = 0,
     after_message_id: int | None = None,
+    known_bots: set[int] | None = None,
 ) -> list[tuple[str, str, str, int, int, int, int, bool]]:
     """从 message 表重建「前句→接话」对，返回 (trigger, reply, relation, t_uid, r_uid, mid, created_at, is_bot_reply)。
 
@@ -223,8 +259,11 @@ async def _rebuild_pairs_from_messages(
 
     ``is_bot_reply`` 标记接话端是否为 bot（自身或协作 bot）：真人接话进入 direct_pairs，
     bot 自我接话只沉淀 behavior_strategy（self_reflection），不污染群表达指导。
+    work aux 进程不连接 QQ，``sender_kind`` 的 peer 判定不可靠，因此以 message 表
+    推导的 ``known_bots`` 为准。
     """
     repo = make_message_repository()
+    known_bots = known_bots or set()
     now_ts = int(time.time())
     before_time = now_ts + 1
     before_message_id: int | None = None
@@ -273,7 +312,11 @@ async def _rebuild_pairs_from_messages(
         item
         for item in ordered
         if item is not None
-        and sender_kind(int(getattr(item, "user_id", 0) or 0), self_bot_id=bot_id) == "human"
+        and not _is_bot_sender(
+            user_id=int(getattr(item, "user_id", 0) or 0),
+            self_bot_id=bot_id,
+            known_bots=known_bots,
+        )
         and _text(getattr(item, "plain_text", "") or getattr(item, "raw_message", ""))
     ]
     human_keys = [
@@ -288,7 +331,7 @@ async def _rebuild_pairs_from_messages(
         reply_text = _text(getattr(reply_message, "plain_text", "") or getattr(reply_message, "raw_message", ""))
         if not reply_text or _MEDIA_ONLY_REPLY_RE.fullmatch(reply_text):
             continue
-        reply_is_bot = sender_kind(reply_user_id, self_bot_id=bot_id) != "human"
+        reply_is_bot = _is_bot_sender(user_id=reply_user_id, self_bot_id=bot_id, known_bots=known_bots)
         reply_id = int(getattr(reply_message, "message_id", 0) or 0)
         if reply_id <= 0:
             continue
@@ -304,7 +347,7 @@ async def _rebuild_pairs_from_messages(
                 trigger_text = _text(getattr(trigger, "plain_text", "") or getattr(trigger, "raw_message", ""))
                 if (
                     trigger_text
-                    and sender_kind(trigger_user_id, self_bot_id=bot_id) == "human"
+                    and not _is_bot_sender(user_id=trigger_user_id, self_bot_id=bot_id, known_bots=known_bots)
                     and (replied_message_id, reply_id) not in seen
                 ):
                     seen.add((replied_message_id, reply_id))
