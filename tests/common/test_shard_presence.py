@@ -19,7 +19,7 @@ def force_file_presence(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_presence_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "plugin_data_dir", lambda name, create=True: tmp_path / name)
-    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: True)
 
     mod.note_worker_bot_connected_sync(qq=111, connection_key="111", adapter="OneBot V11", shard_id=0)
     mod.note_worker_bot_connected_sync(qq=222, connection_key="222", adapter="OneBot V11", shard_id=1)
@@ -38,7 +38,7 @@ def test_presence_roundtrip(tmp_path, monkeypatch):
 
 def test_presence_stale_pruned(tmp_path, monkeypatch):
     monkeypatch.setattr(mod, "plugin_data_dir", lambda name, create=True: tmp_path / name)
-    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: True)
 
     mod.note_worker_bot_connected_sync(qq=333, connection_key="333", adapter="OneBot V11", shard_id=0)
     path = mod._presence_path()
@@ -88,7 +88,7 @@ def test_presence_redis_roundtrip(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(rp, "get_presence_redis_client", lambda: client)
     monkeypatch.setattr(rp, "presence_uses_redis_only", lambda: True)
-    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(mod, "_read_file_bots", dict)
 
     mod.note_worker_bot_connected_sync(qq=111, connection_key="111", adapter="OneBot V11", shard_id=0)
@@ -100,7 +100,7 @@ def test_presence_redis_roundtrip(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_presence_imports_file_when_redis_empty(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mod, "plugin_data_dir", lambda name, create=True: tmp_path / name)
-    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: True)
 
     mod.note_worker_bot_connected_sync(qq=444, connection_key="444", adapter="OneBot V11", shard_id=2)
     file_bots = mod._read_file_bots()
@@ -148,7 +148,7 @@ def test_reconcile_redis_upserts_missing_local_bot(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr(rp, "get_presence_redis_client", lambda: client)
     monkeypatch.setattr(rp, "presence_uses_redis_only", lambda: True)
-    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(mod, "_read_file_bots", dict)
 
     rp.note_worker_bot_connected_redis_sync(
@@ -171,7 +171,7 @@ def test_reconcile_redis_upserts_missing_local_bot(monkeypatch: pytest.MonkeyPat
 
 def test_reconcile_file_upserts_missing_local_bot(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mod, "plugin_data_dir", lambda name, create=True: tmp_path / name)
-    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: True)
 
     mod.note_worker_bot_connected_sync(qq=222, connection_key="222", adapter="OneBot V11", shard_id=1)
     mod.reconcile_local_worker_presence_sync(shard_id=0, local_qq_ids={111})
@@ -185,7 +185,7 @@ def test_reconcile_file_upserts_missing_local_bot(tmp_path, monkeypatch: pytest.
 
 def test_protocol_offline_clears_presence_and_blocks_reconcile(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mod, "plugin_data_dir", lambda name, create=True: tmp_path / name)
-    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: True)
     mod.clear_protocol_bot_offline_sync(qq=111)
 
     mod.note_worker_bot_connected_sync(qq=111, connection_key="111", adapter="OneBot V11", shard_id=0)
@@ -206,7 +206,7 @@ def test_protocol_offline_clears_presence_and_blocks_reconcile(tmp_path, monkeyp
 
 def test_touch_missing_presence_does_not_write_file(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mod, "plugin_data_dir", lambda name, create=True: tmp_path / name)
-    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: True)
 
     writes: list[dict[str, object]] = []
     real_write = mod._write_atomic
@@ -225,7 +225,7 @@ def test_touch_missing_presence_does_not_write_file(tmp_path, monkeypatch: pytes
 
 def test_disconnect_missing_presence_does_not_write_file(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(mod, "plugin_data_dir", lambda name, create=True: tmp_path / name)
-    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: True)
 
     writes: list[dict[str, object]] = []
     real_write = mod._write_atomic
@@ -244,7 +244,7 @@ def test_disconnect_missing_presence_does_not_write_file(tmp_path, monkeypatch: 
 
 @pytest.mark.asyncio
 async def test_note_worker_bot_connected_does_not_call_login_info(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(mod, "is_sharding_active", lambda: True)
+    monkeypatch.setattr(mod.shard_ctx, "sharding_active", lambda: True)
     monkeypatch.setattr(mod, "get_shard_registry_settings", lambda: SimpleNamespace(shard_id=7))
 
     captured: dict[str, object] = {}

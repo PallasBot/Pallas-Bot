@@ -31,7 +31,7 @@ def test_clear_poisoned_apscheduler_import_removes_unregistered_module():
         sys.modules.pop("nonebot_plugin_apscheduler", None)
 
 
-def test_load_apscheduler_plugin_first_recovers_from_poisoned_preimport():
+def test_load_apscheduler_plugin_first_recovers_from_poisoned_preimport(isolated_nonebot_plugin_state):
     nonebot.init()
     stub = types.ModuleType("nonebot_plugin_apscheduler")
     sys.modules["nonebot_plugin_apscheduler"] = stub

@@ -2,7 +2,7 @@ from pallas.core.platform.shard.coord import maa_route_registry as reg
 
 
 def test_register_and_resolve_user_route(fake_coord_redis, monkeypatch) -> None:
-    monkeypatch.setattr(reg, "is_sharding_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: True)
     monkeypatch.setattr(
         reg,
         "get_shard_registry_settings",
@@ -18,14 +18,20 @@ def test_register_and_resolve_user_route(fake_coord_redis, monkeypatch) -> None:
 
 
 def test_resolve_worker_port_falls_back_to_shard_registry(fake_coord_redis, monkeypatch) -> None:
-    monkeypatch.setattr(reg, "is_sharding_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: True)
 
     class _Reg:
         def shard_for_bot(self, bot_id: str):
             return 1 if bot_id == "123456789" else None
 
-    monkeypatch.setattr(reg, "get_shard_registry", lambda: _Reg())
-    monkeypatch.setattr(reg, "worker_port_for_shard", lambda sid, registry=None: 8091 if sid == 1 else 8090)
+    monkeypatch.setattr(
+        "pallas.extensions.coord.maa.route_registry.get_shard_registry",
+        lambda: _Reg(),
+    )
+    monkeypatch.setattr(
+        "pallas.extensions.coord.maa.route_registry.worker_port_for_shard",
+        lambda sid, registry=None: 8091 if sid == 1 else 8090,
+    )
 
     assert reg.resolve_worker_port_for_maa_user("123456789") == 8091
     assert reg.resolve_worker_port_for_maa_user("999999999") is None

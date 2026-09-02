@@ -35,7 +35,7 @@ def test_ingress_metrics_snapshot_and_merge():
 
 def test_should_record_ingress_metrics_unified(monkeypatch):
     monkeypatch.setattr(
-        "pallas.core.platform.shard.registry.config.is_sharding_active",
+        "pallas.core.platform.shard.context.sharding_active",
         lambda: False,
     )
     monkeypatch.setattr(
@@ -48,7 +48,7 @@ def test_should_record_ingress_metrics_unified(monkeypatch):
 
 def test_should_record_ingress_metrics_unified_empty_fleet(monkeypatch):
     monkeypatch.setattr(
-        "pallas.core.platform.shard.registry.config.is_sharding_active",
+        "pallas.core.platform.shard.context.sharding_active",
         lambda: False,
     )
     monkeypatch.setattr(
@@ -60,7 +60,7 @@ def test_should_record_ingress_metrics_unified_empty_fleet(monkeypatch):
 
 def test_should_record_ingress_metrics_shard_rep(monkeypatch):
     monkeypatch.setattr(
-        "pallas.core.platform.shard.registry.config.is_sharding_active",
+        "pallas.core.platform.shard.context.sharding_active",
         lambda: True,
     )
     monkeypatch.setattr(

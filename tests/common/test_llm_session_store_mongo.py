@@ -46,6 +46,7 @@ async def test_mongo_llm_session_user_window_and_ambient(beanie_fixture, monkeyp
     cfg = LlmConfig(
         llm_session_enabled=True,
         llm_session_user_window=2,
+        llm_session_user_storage_window=2,
         llm_session_group_window=2,
         llm_session_user_ttl_sec=0,
     )

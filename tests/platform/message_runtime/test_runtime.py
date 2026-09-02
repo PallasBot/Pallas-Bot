@@ -211,7 +211,7 @@ async def test_native_handler_error_is_classified_without_logging_message_conten
         error_class="RuntimeError",
     )
     logger.warning.assert_called_once_with(
-        "MessageRuntime direct handler failed handler_id={} error_class={}",
+        "MessageRuntime direct handler [{}] failed with error class [{}].",
         "pb_core.raising",
         "RuntimeError",
     )

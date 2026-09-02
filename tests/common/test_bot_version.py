@@ -64,7 +64,7 @@ def test_build_heartbeat_payload_uses_runtime_version():
             "pallas.product.community_stats.reporter.load_or_create_deployment_id",
             return_value="550e8400-e29b-41d4-a716-446655440000",
         ),
-        patch("pallas.product.community_stats.reporter.is_sharding_active", return_value=False),
+        patch("pallas.core.platform.shard.context.sharding_active", return_value=False),
     ):
         payload = build_heartbeat_payload()
     assert payload["version"] == "v3.1.0"

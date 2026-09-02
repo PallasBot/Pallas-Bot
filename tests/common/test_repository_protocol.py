@@ -38,10 +38,28 @@ class MockContextRepo(ContextRepositoryExistenceMixin):
     async def find_ban_reply_target(self, group_id, reply_message):
         return None
 
+    async def list_answers_for_group_since(self, group_id, cutoff_time):
+        return []
+
 
 class MockMessageRepo:
     async def bulk_insert(self, messages):
         pass
+
+    async def find_recent_in_group(self, group_id, **kwargs):
+        return []
+
+    async def find_by_message_ids(self, group_id, message_ids):
+        return []
+
+    async def list_group_messages_after(self, group_id, **kwargs):
+        return []
+
+    async def list_recent_group_ids_for_bot(self, bot_id, **kwargs):
+        return []
+
+    async def list_recent_bot_ids_for_group(self, group_id, **kwargs):
+        return []
 
 
 class MockBlackListRepo:

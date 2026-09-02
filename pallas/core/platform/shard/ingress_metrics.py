@@ -35,6 +35,13 @@ def _rollover_if_needed() -> None:
         _state[k] = 0
 
 
+def clear_ingress_metrics_for_tests() -> None:
+    global _day_key
+    _day_key = ""
+    for key in _COUNTERS:
+        _state[key] = 0
+
+
 def should_record_ingress_metrics(bot_id: int) -> bool:
     """分片 worker 仅代表牛记数；unified 仅最小 QQ 记数，避免多连接重复放大。"""
     from pallas.core.platform.multi_bot.fleet import get_fleet_bot_ids

@@ -11,7 +11,7 @@ def test_pg_pool_estimate_no_warn_at_28_times_9(monkeypatch):
         "pallas.core.foundation.config.repo_settings.repo_env_raw_value",
         fake_env,
     )
-    monkeypatch.setattr("pallas.core.platform.shard.observability.is_sharding_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: True)
     monkeypatch.setattr(
         "pallas.core.platform.shard.observability.get_shard_registry",
         lambda: type("R", (), {"shards": list(range(8))})(),
@@ -29,7 +29,7 @@ def test_pg_pool_estimate_warns_when_oversized(monkeypatch):
         "pallas.core.foundation.config.repo_settings.repo_env_raw_value",
         fake_env,
     )
-    monkeypatch.setattr("pallas.core.platform.shard.observability.is_sharding_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: True)
     monkeypatch.setattr(
         "pallas.core.platform.shard.observability.get_shard_registry",
         lambda: type("R", (), {"shards": [1, 2, 3, 4, 5, 6, 7, 8]})(),

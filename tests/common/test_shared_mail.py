@@ -8,7 +8,8 @@ from pallas.core.shared.utils import mail as mail_mod
 
 def _isolate_env(monkeypatch, env: dict[str, str]) -> None:
     """让 SmtpConfig 只从给定 env 读取（屏蔽磁盘 .env 合并值）。"""
-    monkeypatch.setattr(repo_settings, "merged_repo_settings_upper", dict)
+    monkeypatch.setattr(repo_settings, "merged_repo_settings_upper", lambda: dict(env))
+    monkeypatch.setattr("pallas.console.webui.plugin_config.repo_env_raw_value", lambda key: env.get(key))
     for key, value in env.items():
         monkeypatch.setenv(key, value)
     mail_mod.clear_smtp_config_cache()

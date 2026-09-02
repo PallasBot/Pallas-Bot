@@ -28,7 +28,7 @@ def test_publish_reply_record_skips_coord_when_placeholder():
         "pallas.core.platform.shard.coord.repeater_reply_buffer.schedule_publish_repeater_reply_record",
         MagicMock(),
     ) as mock_schedule:
-        with patch("pallas.core.platform.shard.registry.config.is_sharding_active", return_value=True):
+        with patch("pallas.core.platform.shard.context.sharding_active", return_value=True):
             publish_reply_record(1, 2, {"reply": Chat.REPLY_FLAG, "reply_keywords": Chat.REPLY_FLAG})
     mock_schedule.assert_not_called()
 

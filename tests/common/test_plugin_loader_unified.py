@@ -77,7 +77,10 @@ def test_discover_plugin_modules_auto_skips_extra_when_pip_installed(monkeypatch
     assert "duel" not in names
 
 
-def test_unified_role_loads_core_and_skips_shard_only(monkeypatch: pytest.MonkeyPatch):
+def test_unified_role_loads_core_and_skips_shard_only(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_nonebot_plugin_state,
+):
     monkeypatch.delenv("PALLAS_SHARD_ENABLED", raising=False)
     monkeypatch.delenv("PALLAS_BOT_ROLE", raising=False)
     monkeypatch.setenv("PALLAS_LOAD_BUNDLED_EXTRA", "1")
@@ -103,7 +106,7 @@ def test_unified_role_slim_skips_bundled_extra(monkeypatch: pytest.MonkeyPatch):
     assert "draw" not in names
 
 
-def test_worker_role_skips_maa_hub(monkeypatch: pytest.MonkeyPatch):
+def test_worker_role_skips_maa_hub(monkeypatch: pytest.MonkeyPatch, isolated_nonebot_plugin_state):
     if not (_PACKAGES / "maa").is_dir():
         pytest.skip("maa 未捆绑于 4.0 slim packages/")
     monkeypatch.setenv("PALLAS_SHARD_ENABLED", "true")
@@ -119,7 +122,10 @@ def test_worker_role_skips_maa_hub(monkeypatch: pytest.MonkeyPatch):
     assert "maa" in loaded
 
 
-def test_register_kernel_runtime_does_not_preimport_repeater_plugin(monkeypatch: pytest.MonkeyPatch):
+def test_register_kernel_runtime_does_not_preimport_repeater_plugin(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_nonebot_plugin_state,
+):
     from pallas.core.platform.ai_callback import http as callback_http
     from pallas.core.platform.bot_runtime import kernel_runtime
 
@@ -139,7 +145,10 @@ def test_register_kernel_runtime_does_not_preimport_repeater_plugin(monkeypatch:
     assert "packages.repeater" not in sys.modules
 
 
-def test_register_kernel_runtime_does_not_preimport_pb_webui_plugin(monkeypatch: pytest.MonkeyPatch):
+def test_register_kernel_runtime_does_not_preimport_pb_webui_plugin(
+    monkeypatch: pytest.MonkeyPatch,
+    isolated_nonebot_plugin_state,
+):
     from pallas.core.platform.ai_callback import http as callback_http
     from pallas.core.platform.bot_runtime import kernel_runtime
 
