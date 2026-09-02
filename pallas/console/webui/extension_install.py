@@ -122,7 +122,8 @@ async def install_official_extension(
         INSTALL_TIMEOUT_S,
         "pip",
         "install",
-        "--upgrade",
+        "--upgrade-package",
+        pkg,
         pkg,
     )
     if code != 0:
@@ -161,7 +162,10 @@ async def update_official_extension(
         INSTALL_TIMEOUT_S,
         "pip",
         "install",
-        "--upgrade",
+        "--upgrade-package",
+        pkg,
+        "--reinstall-package",
+        pkg,
         pkg,
     )
     if code != 0:
