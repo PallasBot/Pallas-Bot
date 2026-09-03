@@ -17,6 +17,7 @@ from typing import Any
 from nonebot import get_driver, logger
 
 from pallas.core.foundation.db import make_message_repository
+from pallas.core.foundation.logging import log_rate_limited
 from pallas.core.foundation.startup_report import register_startup_scheduled
 from pallas.core.platform.work_jobs.models import WorkJob
 from pallas.core.platform.work_jobs.runtime import build_work_job_store
@@ -107,7 +108,13 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
     from pallas.product.llm.repeater_semantic_style import semantic_label_budget_ok
 
     if not semantic_label_budget_ok():
-        logger.info("今日语义标注已达上限，跳过本群 [{}]", group_id)
+        log_rate_limited(
+            logger,
+            "info",
+            "group_insight.semantic_budget_exhausted",
+            "今日语义标注已达上限，跳过本群 [{}]",
+            group_id,
+        )
         return
 
     cursor_time, cursor_message_id = get_semantic_style_group_cursor(bot_id=bot_id, group_id=group_id)
@@ -490,6 +497,17 @@ async def _sweep_semantic_groups() -> None:
     now_ts = int(time.time())
     day = _sweep_slot(now_ts)
     cutoff = now_ts - _SEMANTIC_LOOKBACK_DAYS * 24 * 60 * 60
+
+    from pallas.product.llm.repeater_semantic_style import semantic_label_budget_ok
+
+    if not semantic_label_budget_ok():
+        log_rate_limited(
+            logger,
+            "info",
+            "group_insight.sweep_budget_exhausted",
+            "今日语义标注已达上限，本轮群洞察扫描跳过入队",
+        )
+        return
 
     seen_groups: set[int] = set()
     _local = await _local_bot_ids()

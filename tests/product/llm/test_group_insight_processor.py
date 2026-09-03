@@ -505,6 +505,10 @@ async def test_sweep_semantic_groups_dedups_groups_and_skips_needed_check(monkey
     monkeypatch.setattr(mod, "_group_needs_semantic", fake_needs)
     monkeypatch.setattr(mod, "build_work_job_store", lambda: _FakeStore())
     monkeypatch.setattr(mod, "_sweep_cursor", 0)
+    monkeypatch.setattr(
+        "pallas.product.llm.repeater_semantic_style.semantic_label_budget_ok",
+        lambda: True,
+    )
 
     await _sweep_semantic_groups()
 
@@ -543,6 +547,10 @@ async def test_sweep_semantic_groups_prioritizes_low_sample_count(monkeypatch) -
     monkeypatch.setattr(mod, "_group_needs_semantic", fake_needs)
     monkeypatch.setattr(mod, "build_work_job_store", lambda: _FakeStore())
     monkeypatch.setattr(mod, "_sweep_cursor", 0)
+    monkeypatch.setattr(
+        "pallas.product.llm.repeater_semantic_style.semantic_label_budget_ok",
+        lambda: True,
+    )
 
     await _sweep_semantic_groups()
 
@@ -585,6 +593,10 @@ async def test_sweep_semantic_groups_rotates_cursor_across_rounds(monkeypatch) -
     )
     monkeypatch.setattr(mod, "_SWEEP_BATCH_SIZE", 2)
     monkeypatch.setattr(mod, "_sweep_cursor", 0)
+    monkeypatch.setattr(
+        "pallas.product.llm.repeater_semantic_style.semantic_label_budget_ok",
+        lambda: True,
+    )
 
     await _sweep_semantic_groups()
     first_round = [b.payload["group_id"] for b in enqueued]
@@ -696,6 +708,38 @@ async def test_produce_semantic_profile_all_failed_keeps_cursor(monkeypatch) -> 
 
     assert persisted == []
     assert marked == []
+
+
+@pytest.mark.asyncio
+async def test_sweep_semantic_groups_skips_enqueue_when_budget_exhausted(monkeypatch) -> None:
+    """预算耗尽时本轮扫描直接返回，不再入队空转 job。"""
+    from pallas.product.llm import group_insight_processor as mod
+
+    enqueued = []
+
+    class _FakeStore:
+        async def enqueue(self, job):
+            enqueued.append(job)
+
+    async def fake_list_group_ids(self, bot_id, *, since_time, limit=32):
+        return [42, 7]
+
+    repo = type("R", (), {"list_recent_group_ids_for_bot": fake_list_group_ids})()
+    monkeypatch.setattr(mod, "make_message_repository", lambda: repo)
+
+    async def fake_local_bot_ids():
+        return {100}
+
+    monkeypatch.setattr(mod, "_local_bot_ids", fake_local_bot_ids)
+    monkeypatch.setattr(mod, "build_work_job_store", lambda: _FakeStore())
+    monkeypatch.setattr(
+        "pallas.product.llm.repeater_semantic_style.semantic_label_budget_ok",
+        lambda: False,
+    )
+
+    await _sweep_semantic_groups()
+
+    assert enqueued == []
 
 
 def test_sweep_wake_delay_aligns_to_next_slot_boundary(monkeypatch) -> None:
