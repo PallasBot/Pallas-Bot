@@ -114,3 +114,35 @@ async def test_settle_pending_behavior_runs_skips_when_store_unavailable(monkeyp
 
     count = await settle_pending_behavior_runs(now=300)
     assert count == 0
+
+
+@pytest.mark.asyncio
+async def test_settle_pending_behavior_runs_caps_per_pass(monkeypatch) -> None:
+    """每轮结算条数受上限约束，backlog 分多轮消化。"""
+    from pallas.product.llm import behavior_feedback as mod
+
+    monkeypatch.setattr(mod, "is_llm_session_store_available", lambda: True)
+    runs = [_run(f"req-{i}", created_at=100) for i in range(10)]
+    monkeypatch.setattr(mod, "list_behavior_runs", lambda limit: runs)
+    monkeypatch.setattr(mod, "_SETTLE_MAX_PER_PASS", 3)
+
+    async def fake_user_messages(bot_id, group_id, user_id, limit=50):
+        return []
+
+    async def fake_ambient(bot_id, group_id, limit=50):
+        return []
+
+    monkeypatch.setattr(mod, "list_user_llm_messages", fake_user_messages)
+    monkeypatch.setattr(mod, "list_group_ambient_messages", fake_ambient)
+
+    settled: list[str] = []
+
+    def fake_settle(request_id, *, final_outcome, auto_feedback_payload=None):
+        settled.append(request_id)
+        return _run(request_id, created_at=100)
+
+    monkeypatch.setattr(mod, "settle_behavior_run_outcome", fake_settle)
+
+    count = await settle_pending_behavior_runs(now=300)
+    assert count == 3
+    assert settled == ["req-0", "req-1", "req-2"]

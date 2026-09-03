@@ -25,6 +25,9 @@ from pallas.product.llm.session_store import (
 _SETTLE_INTERVAL_SEC = 300
 _SETTLE_WINDOW_SEC = 90
 _SETTLE_RUN_LIMIT = 10_000
+# 每轮最多结算条数：backlog 分多轮消化，避免一次性大批量结算
+# 阻塞事件循环、并让 IGNORED 分数骤降。
+_SETTLE_MAX_PER_PASS = 300
 
 _startup_bound = False
 _settle_task: asyncio.Task[Any] | None = None
@@ -38,6 +41,8 @@ async def settle_pending_behavior_runs(*, now: int | None = None) -> int:
     runs = list_behavior_runs(limit=_SETTLE_RUN_LIMIT)
     settled = 0
     for run in runs:
+        if settled >= _SETTLE_MAX_PER_PASS:
+            break
         if run.final_outcome is not None or int(run.created_at) <= 0:
             continue
         if now - int(run.created_at) < _SETTLE_WINDOW_SEC:
@@ -55,7 +60,12 @@ async def settle_pending_behavior_runs(*, now: int | None = None) -> int:
         outcome, payload = infer_behavior_feedback(run=run, turns=turns, ambient_turns=ambient, now=now)
         if outcome is None:
             continue
-        updated = settle_behavior_run_outcome(run.request_id, final_outcome=outcome, auto_feedback_payload=payload)
+        updated = await asyncio.to_thread(
+            settle_behavior_run_outcome,
+            run.request_id,
+            final_outcome=outcome,
+            auto_feedback_payload=payload,
+        )
         if updated is not None:
             settled += 1
     return settled
@@ -67,7 +77,7 @@ async def _settle_loop() -> None:
         try:
             await settle_pending_behavior_runs()
         except Exception as exc:
-            logger.debug("行为反馈自动结算失败：{}", exc)
+            log_rate_limited(logger, "warning", "behavior_feedback.loop", "行为反馈自动结算失败：{}", exc)
 
 
 def register_behavior_feedback_loop() -> None:
