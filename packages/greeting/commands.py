@@ -19,7 +19,7 @@ from nonebot.adapters.onebot.v11 import (
 from nonebot.rule import Rule, to_me
 from nonebot.typing import T_State
 
-from packages.blacklist import invalidate_group_ban_gate_cache, invalidate_user_ban_gate_cache
+from packages.blacklist import apply_group_banned_change, apply_user_banned_change
 from pallas.api.logging import format_plugin_event
 from pallas.api.perm import (
     group_message_permission_for_command,
@@ -29,7 +29,6 @@ from pallas.core.foundation.config import BotConfig, GroupConfig, UserConfig
 from pallas.core.platform.ingress.matcher_rule_prefilter import mark_exact_plaintext_rule
 from pallas.core.plugin_coord.duel import duel_qte_blocks_greeting_user
 from pallas.core.shared.utils import is_bot_admin
-from pallas.product.ban_gate.snapshot import patch_group_banned, patch_user_banned
 
 from .config import plugin_config
 from .voice import get_random_voice, get_voice_filepath
@@ -403,7 +402,5 @@ async def handle_notice(event: _NoticeEvent):
         if plugin_config.enable_kick_ban:
             await GroupConfig(event.group_id).ban()
             await UserConfig(event.operator_id).ban(operator="system:kick_me")
-            await patch_group_banned(event.group_id, True)
-            await patch_user_banned(event.operator_id, True)
-            await invalidate_group_ban_gate_cache(event.group_id)
-            await invalidate_user_ban_gate_cache(event.operator_id)
+            await apply_group_banned_change(event.group_id, True)
+            await apply_user_banned_change(event.operator_id, True)

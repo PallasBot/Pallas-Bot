@@ -5,9 +5,8 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent, PrivateMessageEvent
 from pallas.api.logging import format_plugin_event
 from pallas.api.perm import permission_for_command
 from pallas.core.foundation.config import GroupConfig, UserConfig
-from pallas.product.ban_gate.snapshot import patch_group_banned, patch_group_blocked_users, patch_user_banned
 
-from .ban_gate import invalidate_group_ban_gate_cache, invalidate_user_ban_gate_cache
+from .ban_gate import apply_group_banned_change, apply_group_blocked_users_change, apply_user_banned_change
 from .helpers import (
     build_blacklist_view_message,
     collect_group_ids_from_plain,
@@ -75,8 +74,7 @@ async def handle_blacklist_add(bot: Bot, event: GroupMessageEvent | PrivateMessa
     if isinstance(event, PrivateMessageEvent):
         for uid in targets:
             await UserConfig(uid).ban(operator=f"u:{event.user_id}")
-            await patch_user_banned(uid, True)
-        await invalidate_user_ban_gate_cache(targets)
+            await apply_user_banned_change(uid, True)
         logger.info(
             format_plugin_event(
                 "block_user",
@@ -88,8 +86,7 @@ async def handle_blacklist_add(bot: Bot, event: GroupMessageEvent | PrivateMessa
         )
         return
     await GroupConfig(event.group_id).add_blocked_users(targets)
-    await patch_group_blocked_users(event.group_id, await GroupConfig(event.group_id).blocked_user_ids())
-    await invalidate_group_ban_gate_cache(event.group_id)
+    await apply_group_blocked_users_change(event.group_id, await GroupConfig(event.group_id).blocked_user_ids())
     logger.info(
         format_plugin_event(
             "block_user",
@@ -111,8 +108,7 @@ async def handle_blacklist_remove(bot: Bot, event: GroupMessageEvent | PrivateMe
     if isinstance(event, PrivateMessageEvent):
         for uid in targets:
             await UserConfig(uid).unban(operator=f"u:{event.user_id}")
-            await patch_user_banned(uid, False)
-        await invalidate_user_ban_gate_cache(targets)
+            await apply_user_banned_change(uid, False)
         logger.info(
             format_plugin_event(
                 "unblock_user",
@@ -124,8 +120,7 @@ async def handle_blacklist_remove(bot: Bot, event: GroupMessageEvent | PrivateMe
         )
         return
     await GroupConfig(event.group_id).remove_blocked_users(targets)
-    await patch_group_blocked_users(event.group_id, await GroupConfig(event.group_id).blocked_user_ids())
-    await invalidate_group_ban_gate_cache(event.group_id)
+    await apply_group_blocked_users_change(event.group_id, await GroupConfig(event.group_id).blocked_user_ids())
     logger.info(
         format_plugin_event(
             "unblock_user",
@@ -150,8 +145,7 @@ async def handle_blacklist_add_group(bot: Bot, event: GroupMessageEvent | Privat
             return
     for gid in targets:
         await GroupConfig(gid).ban()
-        await patch_group_banned(gid, True)
-    await invalidate_group_ban_gate_cache(targets)
+        await apply_group_banned_change(gid, True)
     current_group = isinstance(event, GroupMessageEvent) and targets == [event.group_id]
     log_scope = "current group" if current_group else "global"
     display_scope = "本群" if current_group else "全局"
@@ -181,8 +175,7 @@ async def handle_blacklist_remove_group(bot: Bot, event: GroupMessageEvent | Pri
             return
     for gid in targets:
         await GroupConfig(gid).unban()
-        await patch_group_banned(gid, False)
-    await invalidate_group_ban_gate_cache(targets)
+        await apply_group_banned_change(gid, False)
     current_group = isinstance(event, GroupMessageEvent) and targets == [event.group_id]
     log_scope = "current group" if current_group else "global"
     display_scope = "本群" if current_group else "全局"
