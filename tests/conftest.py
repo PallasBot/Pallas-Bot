@@ -41,6 +41,7 @@ async def beanie_fixture(monkeypatch: pytest.MonkeyPatch):
     from mongomock_motor import AsyncMongoMockClient
 
     from pallas.core.foundation.db.modules import (
+        AdminMember,
         BlackList,
         BotConfigModule,
         Context,
@@ -50,6 +51,8 @@ async def beanie_fixture(monkeypatch: pytest.MonkeyPatch):
         LlmMemoryEntry,
         LlmRelationshipNote,
         Message,
+        PallasACL,
+        SchemaMigration,
         StickerLabel,
         UserConfigModule,
         UserStickerStat,
@@ -70,17 +73,20 @@ async def beanie_fixture(monkeypatch: pytest.MonkeyPatch):
     await init_beanie(
         database=motor_db,
         document_models=[
-            BotConfigModule,
-            GroupConfigModule,
-            UserConfigModule,
-            Message,
-            Context,
+            AdminMember,
             BlackList,
+            BotConfigModule,
+            Context,
+            GroupConfigModule,
             ImageCache,
             LlmChatMessage,
             LlmMemoryEntry,
             LlmRelationshipNote,
+            Message,
+            PallasACL,
+            SchemaMigration,
             StickerLabel,
+            UserConfigModule,
             UserStickerStat,
         ],
         allow_index_dropping=True,
@@ -100,6 +106,9 @@ async def beanie_fixture(monkeypatch: pytest.MonkeyPatch):
     await motor_db.drop_collection("llm_relationship_note")
     await motor_db.drop_collection("sticker_label")
     await motor_db.drop_collection("user_sticker_stat")
+    await motor_db.drop_collection("acl_rules")
+    await motor_db.drop_collection("admin_members")
+    await motor_db.drop_collection("schema_migrations")
     motor_client.close()
 
 
