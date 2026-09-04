@@ -185,3 +185,35 @@ async def test_configured_eval_uses_provider_without_delivery(monkeypatch: pytes
     assert calls[0]["task"] == "llm_chat"
     assert calls[0]["tools"] is None
     assert calls[0]["options"] == {"temperature": 0, "max_tokens": 96}
+
+
+@pytest.mark.asyncio
+async def test_configured_eval_judge_uses_larger_token_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    """judge 复用生成预算（96 tokens）会截断 JSON 导致全 3 分，须用独立更大预算。"""
+    calls: list[dict[str, object]] = []
+
+    async def fake_provider(messages: list[dict[str, str]], **kwargs: object) -> dict[str, str]:
+        calls.append({"messages": messages, **kwargs})
+        if "你是严格的群聊回复质量评审" in messages[0]["content"]:
+            return {
+                "content": (
+                    '{"verdict":"ALLOW","scores":{"grounded":5,"naturalness":5,'
+                    '"overexplained":1,"persona_drift":1},"reasons":[]}'
+                )
+            }
+        return {"content": '{"reply":"能。"}'}
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", fake_provider)
+
+    results = await run_configured_offline_quality_eval(
+        base_system_prompt="base",
+        cases=[OfflineQualityCase("fact", "这也要再动？", "ACK", "fact")],
+        judge=True,
+    )
+
+    assert results[0].judge is not None
+    assert results[0].judge.verdict == "ALLOW"
+    assert results[0].judge.scores["naturalness"] == 5
+    assert len(calls) == 2
+    judge_call = calls[1]
+    assert judge_call["options"] == {"temperature": 0, "max_tokens": 256}
