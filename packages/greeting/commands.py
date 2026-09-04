@@ -402,7 +402,7 @@ async def handle_notice(event: _NoticeEvent):
     elif event.notice_type == "group_decrease" and event.sub_type == "kick_me":
         if plugin_config.enable_kick_ban:
             await GroupConfig(event.group_id).ban()
-            await UserConfig(event.operator_id).ban()
+            await UserConfig(event.operator_id).ban(operator="system:kick_me")
             await patch_group_banned(event.group_id, True)
             await patch_user_banned(event.operator_id, True)
             await invalidate_group_ban_gate_cache(event.group_id)

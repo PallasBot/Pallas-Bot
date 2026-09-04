@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -165,6 +166,9 @@ async def _upsert_db_table_row(table: str, row_id: int, data: dict[str, Any]) ->
         await repo.get_or_create(int(row_id), banned=False)
         for k, v in payload.items():
             await repo.upsert_field(int(row_id), k, v)
+        if "banned" in payload:
+            await repo.upsert_field(int(row_id), "banned_by", "webui")
+            await repo.upsert_field(int(row_id), "banned_at", int(time.time()))
         await repo.invalidate_cache()
         if "banned" in payload:
             from packages.blacklist import apply_user_banned_change

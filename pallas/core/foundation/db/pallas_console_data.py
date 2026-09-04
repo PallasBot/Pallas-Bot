@@ -114,6 +114,8 @@ def user_config_to_public(doc_or_row: Any) -> dict[str, Any]:
     return {
         "user_id": int(doc_or_row.user_id),
         "banned": bool(getattr(doc_or_row, "banned", False)),
+        "banned_by": str(getattr(doc_or_row, "banned_by", "") or ""),
+        "banned_at": int(getattr(doc_or_row, "banned_at", 0) or 0),
     }
 
 

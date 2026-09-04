@@ -1,4 +1,6 @@
 import re
+import time
+from itertools import starmap
 
 from nonebot.adapters import Bot, Event
 from nonebot.adapters.onebot.v11 import (
@@ -52,7 +54,8 @@ def collect_group_ids_from_plain(plain_text: str) -> list[int]:
 _LIST_DISPLAY_LIMIT = 50
 
 
-async def query_global_banned_user_ids() -> list[int]:
+async def query_global_banned_user_ids() -> list[tuple[int, str, int]]:
+    """返回全局拉黑用户列表：[(user_id, banned_by, banned_at)]。"""
     from pallas.core.foundation.db import get_db_backend
 
     backend = get_db_backend()
@@ -60,15 +63,21 @@ async def query_global_banned_user_ids() -> list[int]:
         from pallas.core.foundation.db.modules import UserConfigModule
 
         docs = await UserConfigModule.find(UserConfigModule.banned == True).to_list()  # noqa: E712
-        return sorted(int(d.user_id) for d in docs)
+        return sorted(
+            (int(d.user_id), str(getattr(d, "banned_by", "") or ""), int(getattr(d, "banned_at", 0) or 0)) for d in docs
+        )
     if backend == "postgresql":
         from sqlalchemy import select
 
         from pallas.core.foundation.db.repository_pg import UserConfigRow, get_session
 
         async with get_session(read_only=True) as session:
-            result = await session.execute(select(UserConfigRow.user_id).where(UserConfigRow.banned.is_(True)))
-            return sorted(int(row[0]) for row in result.all())
+            result = await session.execute(
+                select(UserConfigRow.user_id, UserConfigRow.banned_by, UserConfigRow.banned_at).where(
+                    UserConfigRow.banned.is_(True)
+                )
+            )
+            return sorted((int(r[0]), str(r[1] or ""), int(r[2] or 0)) for r in result.all())
     return []
 
 
@@ -102,13 +111,41 @@ def format_id_list(ids: list[int], *, empty_hint: str) -> str:
     return text
 
 
+def _format_ban_operator(operator: str) -> str:
+    """把审计操作者标识转成可读文本。"""
+    if not operator:
+        return "未知"
+    if operator.startswith("u:"):
+        return operator[2:]
+    if operator == "webui":
+        return "WebUI"
+    if operator == "system:kick_me":
+        return "系统(被踢)"
+    return operator
+
+
+def _format_banned_user(uid: int, operator: str, banned_at: int) -> str:
+    if not operator and not banned_at:
+        return str(uid)
+    parts = [str(uid)]
+    if operator:
+        parts.append(f"@{_format_ban_operator(operator)}")
+    if banned_at:
+        parts.append(time.strftime("%m-%d %H:%M", time.localtime(banned_at)))
+    return " ".join(parts)
+
+
 async def build_blacklist_view_message(group_id: int | None) -> str:
     if group_id is None:
         users = await query_global_banned_user_ids()
         groups = await query_global_banned_group_ids()
+        user_text = format_id_list(
+            list(starmap(_format_banned_user, users)),
+            empty_hint="（无）",
+        )
         return "\n".join([
             "博士，米诺斯在册名单如下：",
-            f"全局用户拉黑：{format_id_list(users, empty_hint='（无）')}",
+            f"全局用户拉黑：{user_text}",
             f"全局群拉黑：{format_id_list(groups, empty_hint='（无）')}",
         ])
     blocked = await GroupConfig(group_id).blocked_user_ids()

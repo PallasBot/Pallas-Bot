@@ -440,11 +440,16 @@ class UserConfig(Config):
 
         self.user_id = user_id
 
-    async def ban(self) -> None:
+    async def ban(self, operator: str | None = None) -> None:
         """
         拉黑这个人
+
+        :param operator: 操作者标识（QQ 号 / webui / system:xxx），用于审计
         """
         await self._update("banned", True)
+        if operator:
+            await self._update("banned_by", str(operator))
+            await self._update("banned_at", int(time.time()))
 
     async def is_banned(self) -> bool:
         """
@@ -453,8 +458,11 @@ class UserConfig(Config):
         banned = await self._find("banned")
         return True if banned else False
 
-    async def unban(self) -> None:
+    async def unban(self, operator: str | None = None) -> None:
         await self._update("banned", False)
+        if operator:
+            await self._update("banned_by", str(operator))
+            await self._update("banned_at", int(time.time()))
 
 
 class TaskManager:

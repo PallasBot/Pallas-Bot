@@ -74,7 +74,7 @@ async def handle_blacklist_add(bot: Bot, event: GroupMessageEvent | PrivateMessa
         return
     if isinstance(event, PrivateMessageEvent):
         for uid in targets:
-            await UserConfig(uid).ban()
+            await UserConfig(uid).ban(operator=f"u:{event.user_id}")
             await patch_user_banned(uid, True)
         await invalidate_user_ban_gate_cache(targets)
         logger.info(
@@ -110,7 +110,7 @@ async def handle_blacklist_remove(bot: Bot, event: GroupMessageEvent | PrivateMe
         return
     if isinstance(event, PrivateMessageEvent):
         for uid in targets:
-            await UserConfig(uid).unban()
+            await UserConfig(uid).unban(operator=f"u:{event.user_id}")
             await patch_user_banned(uid, False)
         await invalidate_user_ban_gate_cache(targets)
         logger.info(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Header, HTTPException, Query
@@ -166,6 +167,7 @@ async def _apply_user_config_patch(user_id: int, body: _UserConfigPatch) -> dict
     fields = body.model_dump(exclude_none=True)
     await repo.upsert_fields(user_id, fields)
     if "banned" in fields:
+        await repo.upsert_fields(user_id, {"banned_by": "webui", "banned_at": int(time.time())})
         from packages.blacklist import apply_user_banned_change
 
         await apply_user_banned_change(user_id, bool(fields["banned"]))
