@@ -10,6 +10,7 @@
 
 * fix(blacklist): 命令拉黑同步 ACL 规则
 * fix(webui): 号主编辑同步 admin_members
+* fix(webui): 号主编辑同步失败显式报错，避免配置与 ACL 静默不一致
 * fix(acl): 启动迁移改用 repo 查询
 * fix(llm): 离线评测 judge 改用独立更大输出预算
 

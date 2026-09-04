@@ -314,29 +314,17 @@ async def sync_bot_admins_to_admin_members(bot_id: int, admins: list[int]) -> No
 
     admin_members 是 ACL 引擎 admin_bypass 的数据真相；WebUI 直接改 BotConfig.admins
     时若不镜像，ACL 层不认新增号主。diff 出新增/删除后逐条 upsert/remove。
+    查询或写入失败时抛错，让调用方感知同步未完成，避免配置与 ACL 静默不一致。
     """
     from pallas.core.foundation.db import make_admin_repository
 
     desired = {int(u) for u in admins if int(u) != int(bot_id)}
     admin_repo = make_admin_repository()
-    try:
-        current = {int(m.user_id) for m in await admin_repo.list_members(scope="bot", bot_id=int(bot_id))}
-    except Exception:
-        current = set()
+    current = {int(m.user_id) for m in await admin_repo.list_members(scope="bot", bot_id=int(bot_id))}
     for uid in desired - current:
-        try:
-            await admin_repo.upsert_member(user_id=uid, scope="bot", bot_id=int(bot_id))
-        except Exception as exc:
-            log_rate_limited(
-                logger, "warning", "config.sync_admins_upsert", "sync admin_members upsert failed: {}", exc
-            )
+        await admin_repo.upsert_member(user_id=uid, scope="bot", bot_id=int(bot_id))
     for uid in current - desired:
-        try:
-            await admin_repo.remove_member(user_id=uid, scope="bot", bot_id=int(bot_id))
-        except Exception as exc:
-            log_rate_limited(
-                logger, "warning", "config.sync_admins_remove", "sync admin_members remove failed: {}", exc
-            )
+        await admin_repo.remove_member(user_id=uid, scope="bot", bot_id=int(bot_id))
     if desired != current:
         from pallas.api.perm import clear_acl_cache
 
