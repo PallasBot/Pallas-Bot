@@ -11,6 +11,8 @@ from pallas.core.foundation.db import (
     make_acl_repository,
     make_admin_repository,
     make_bot_config_repository,
+    make_group_config_repository,
+    make_user_config_repository,
 )
 from pallas.core.perm.acl import ACL_TARGET_GROUP_BAN, group_block_target
 
@@ -35,10 +37,7 @@ async def migrate_bot_admins_to_admin_members_once() -> dict[str, int]:
     except Exception:
         pass
     try:
-        from pallas.core.foundation.db.modules import BotConfigModule
-
-        cursor = BotConfigModule.find_all()
-        async for doc in cursor:
+        for doc in await bot_config_repo.list_all():
             try:
                 bot_ids.append(int(doc.account))
             except Exception:
@@ -71,9 +70,10 @@ async def derive_acl_from_legacy() -> dict[str, int]:
     counts = {"user_banned": 0, "group_banned": 0, "group_blocked_users": 0}
 
     try:
-        from pallas.core.foundation.db.modules import UserConfigModule
-
-        async for doc in UserConfigModule.find(UserConfigModule.banned == True):  # noqa: E712
+        user_repo = make_user_config_repository()
+        for doc in await user_repo.list_all():
+            if not bool(getattr(doc, "banned", False)):
+                continue
             uid = int(getattr(doc, "user_id", 0))
             if not uid:
                 continue
@@ -92,33 +92,23 @@ async def derive_acl_from_legacy() -> dict[str, int]:
         pass
 
     try:
-        from pallas.core.foundation.db.modules import GroupConfigModule
-
-        async for doc in GroupConfigModule.find(GroupConfigModule.banned == True):  # noqa: E712
+        group_repo = make_group_config_repository()
+        for doc in await group_repo.list_all():
             gid = int(getattr(doc, "group_id", 0))
             if not gid:
                 continue
-            await acl_repo.upsert_rule(
-                role="群",
-                subject=f"g:{gid}",
-                action="event.receive",
-                target_scope="全局",
-                target=ACL_TARGET_GROUP_BAN,
-                effect="deny",
-                priority=2000,
-                source="system",
-            )
-            counts["group_banned"] += 1
-    except Exception:
-        pass
-
-    try:
-        from pallas.core.foundation.db.modules import GroupConfigModule
-
-        async for doc in GroupConfigModule.find_all():
-            gid = int(getattr(doc, "group_id", 0))
-            if not gid:
-                continue
+            if bool(getattr(doc, "banned", False)):
+                await acl_repo.upsert_rule(
+                    role="群",
+                    subject=f"g:{gid}",
+                    action="event.receive",
+                    target_scope="全局",
+                    target=ACL_TARGET_GROUP_BAN,
+                    effect="deny",
+                    priority=2000,
+                    source="system",
+                )
+                counts["group_banned"] += 1
             raw = getattr(doc, "blocked_user_ids", None) or []
             for uid in raw:
                 try:

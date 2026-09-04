@@ -332,12 +332,22 @@ async def run_configured_offline_quality_eval(
         )
         return str(response.get("content") or "")
 
+    async def judge_complete(messages: list[dict[str, str]]) -> str:
+        response = await complete_chat_message(
+            messages,
+            model="",
+            options={"temperature": 0, "max_tokens": 256},
+            tools=None,
+            task="llm_chat",
+        )
+        return str(response.get("content") or "")
+
     return [
         await evaluate_offline_case(
             case,
             base_system_prompt=base_system_prompt,
             complete=complete,
-            judge=complete if judge else None,
+            judge=judge_complete if judge else None,
         )
         for case in cases
     ]

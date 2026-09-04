@@ -295,6 +295,8 @@ class UserConfigRow(Base):
 
     user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     banned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    banned_by: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    banned_at: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     maa_devices: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=dict)
     maa_active_device: Mapped[str] = mapped_column(Text, nullable=False, default="")
     maa_stage_plan: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=list)
@@ -690,6 +692,18 @@ def _ensure_pg_user_config_maa_devices(connection) -> None:
         connection.execute(text("ALTER TABLE user_config ADD COLUMN plugin_storage JSONB NOT NULL DEFAULT '{}'::jsonb"))
 
 
+def _ensure_pg_user_config_ban_audit(connection) -> None:
+    """旧库 user_config 缺拉黑审计列时补列。"""
+    insp = inspect(connection)
+    if not insp.has_table("user_config"):
+        return
+    names = {c["name"] for c in insp.get_columns("user_config")}
+    if "banned_by" not in names:
+        connection.execute(text("ALTER TABLE user_config ADD COLUMN banned_by TEXT NOT NULL DEFAULT ''"))
+    if "banned_at" not in names:
+        connection.execute(text("ALTER TABLE user_config ADD COLUMN banned_at BIGINT NOT NULL DEFAULT 0"))
+
+
 def _ensure_pg_bot_config_plugin_storage(connection) -> None:
     insp = inspect(connection)
     if not insp.has_table("bot_config"):
@@ -990,6 +1004,7 @@ PG_SCHEMA_ENSURE_STEPS: list[tuple[str, Any]] = [
     ("ddl.bot_config_persona", _ensure_pg_bot_config_persona),
     ("ddl.bot_config_plugin_storage", _ensure_pg_bot_config_plugin_storage),
     ("ddl.user_config_maa_devices", _ensure_pg_user_config_maa_devices),
+    ("ddl.user_config_ban_audit", _ensure_pg_user_config_ban_audit),
     ("ddl.llm_memory_embedding_columns", _ensure_pg_llm_memory_embedding_columns),
     ("ddl.llm_memory_metadata_columns", _ensure_pg_llm_memory_metadata_columns),
     ("ddl.llm_memory_graph_columns", _ensure_pg_llm_memory_graph_columns),

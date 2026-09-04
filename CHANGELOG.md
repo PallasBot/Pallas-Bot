@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+* feat(blacklist): 拉黑操作审计记录与展示
+
+### Fixed
+
+* fix(blacklist): 命令拉黑同步 ACL 规则
+* fix(webui): 号主编辑同步 admin_members
+* fix(acl): 启动迁移改用 repo 查询
+* fix(llm): 离线评测 judge 改用独立更大输出预算
+
 ## [4.3.14] - 2026-09-03
 
 ### 更新公告

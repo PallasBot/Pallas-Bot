@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -109,9 +110,11 @@ async def _upsert_db_table_row(table: str, row_id: int, data: dict[str, Any]) ->
                 disabled_plugins=list(payload["disabled_plugins"] or []),
             )
         if "admins" in payload:
+            from pallas.core.foundation.config import sync_bot_admins_to_admin_members
             from pallas.core.foundation.config.bot_admins_cache import invalidate_bot_admins_cache
 
             await invalidate_bot_admins_cache(int(row_id))
+            await sync_bot_admins_to_admin_members(int(row_id), payload["admins"])
         got = await _get_db_table_row_public("bot_config", int(row_id))
         if got is None:
             raise ValueError("upsert 后回读失败")
@@ -165,6 +168,9 @@ async def _upsert_db_table_row(table: str, row_id: int, data: dict[str, Any]) ->
         await repo.get_or_create(int(row_id), banned=False)
         for k, v in payload.items():
             await repo.upsert_field(int(row_id), k, v)
+        if "banned" in payload:
+            await repo.upsert_field(int(row_id), "banned_by", "webui")
+            await repo.upsert_field(int(row_id), "banned_at", int(time.time()))
         await repo.invalidate_cache()
         if "banned" in payload:
             from packages.blacklist import apply_user_banned_change

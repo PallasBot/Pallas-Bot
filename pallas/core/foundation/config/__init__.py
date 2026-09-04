@@ -309,6 +309,40 @@ async def user_is_bot_admin(bot_id: int, user_id: int) -> bool:
     return False
 
 
+async def sync_bot_admins_to_admin_members(bot_id: int, admins: list[int]) -> None:
+    """把 BotConfig.admins 的最终列表同步到 admin_members（scope="bot"），并失效相关缓存。
+
+    admin_members 是 ACL 引擎 admin_bypass 的数据真相；WebUI 直接改 BotConfig.admins
+    时若不镜像，ACL 层不认新增号主。diff 出新增/删除后逐条 upsert/remove。
+    """
+    from pallas.core.foundation.db import make_admin_repository
+
+    desired = {int(u) for u in admins if int(u) != int(bot_id)}
+    admin_repo = make_admin_repository()
+    try:
+        current = {int(m.user_id) for m in await admin_repo.list_members(scope="bot", bot_id=int(bot_id))}
+    except Exception:
+        current = set()
+    for uid in desired - current:
+        try:
+            await admin_repo.upsert_member(user_id=uid, scope="bot", bot_id=int(bot_id))
+        except Exception as exc:
+            log_rate_limited(
+                logger, "warning", "config.sync_admins_upsert", "sync admin_members upsert failed: {}", exc
+            )
+    for uid in current - desired:
+        try:
+            await admin_repo.remove_member(user_id=uid, scope="bot", bot_id=int(bot_id))
+        except Exception as exc:
+            log_rate_limited(
+                logger, "warning", "config.sync_admins_remove", "sync admin_members remove failed: {}", exc
+            )
+    if desired != current:
+        from pallas.api.perm import clear_acl_cache
+
+        clear_acl_cache()
+
+
 async def user_is_admin_of_any_bot(user_id: int) -> bool:
     """
     判断 user_id 是否在 admin_members（任一 scope）之中。
@@ -440,11 +474,16 @@ class UserConfig(Config):
 
         self.user_id = user_id
 
-    async def ban(self) -> None:
+    async def ban(self, operator: str | None = None) -> None:
         """
         拉黑这个人
+
+        :param operator: 操作者标识（QQ 号 / webui / system:xxx），用于审计
         """
         await self._update("banned", True)
+        if operator:
+            await self._update("banned_by", str(operator))
+            await self._update("banned_at", int(time.time()))
 
     async def is_banned(self) -> bool:
         """
@@ -453,8 +492,11 @@ class UserConfig(Config):
         banned = await self._find("banned")
         return True if banned else False
 
-    async def unban(self) -> None:
+    async def unban(self, operator: str | None = None) -> None:
         await self._update("banned", False)
+        if operator:
+            await self._update("banned_by", str(operator))
+            await self._update("banned_at", int(time.time()))
 
 
 class TaskManager:
