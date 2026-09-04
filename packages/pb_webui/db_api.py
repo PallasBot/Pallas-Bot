@@ -110,9 +110,11 @@ async def _upsert_db_table_row(table: str, row_id: int, data: dict[str, Any]) ->
                 disabled_plugins=list(payload["disabled_plugins"] or []),
             )
         if "admins" in payload:
+            from pallas.core.foundation.config import sync_bot_admins_to_admin_members
             from pallas.core.foundation.config.bot_admins_cache import invalidate_bot_admins_cache
 
             await invalidate_bot_admins_cache(int(row_id))
+            await sync_bot_admins_to_admin_members(int(row_id), payload["admins"])
         got = await _get_db_table_row_public("bot_config", int(row_id))
         if got is None:
             raise ValueError("upsert 后回读失败")
