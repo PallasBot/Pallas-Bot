@@ -62,15 +62,18 @@ def env_key_to_section_label() -> dict[str, str]:
         pass
 
     try:
-        from pallas.console.webui.plugin_api import plugin_field_env_key
+        from pallas.console.webui.plugin_api import (
+            plugin_field_env_key,
+            plugin_nested_field_leaves,
+        )
         from pallas.console.webui.plugin_catalog import discover_plugin_packages, load_config_class_for_package
 
         for pkg in discover_plugin_packages():
             cfg_cls = load_config_class_for_package(pkg)
             if cfg_cls is None:
                 continue
-            for fname in cfg_cls.model_fields:
-                claim(plugin_field_env_key(pkg, fname), f"plugin.{pkg}")
+            for leaf in plugin_nested_field_leaves(cfg_cls):
+                claim(plugin_field_env_key(pkg, leaf["name"]), f"plugin.{pkg}")
     except Exception:
         pass
 
