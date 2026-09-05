@@ -350,6 +350,10 @@ def _load_plugin_module(
         loaded_short.add(slot)
         return True
     except Exception as e:
+        # 依赖插件已被 require 注册时 NoneBot 抛 "already exists"，视为已加载，非真实失败。
+        if "already exists" in str(e):
+            loaded_short.add(slot)
+            return True
         record_startup_plugin_load_failure(module_path)
         log = logger.error if _short_name(module_path) == _APSCHEDULER_MODULE else logger.warning
         log("加载 {} 失败: {}", module_path, e)
