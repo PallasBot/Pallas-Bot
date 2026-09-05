@@ -115,6 +115,22 @@ async def save_memory_entry_mongo(
             return False
     if not safe_content:
         return False
+    from pallas.product.message_scrub.vulgar_lexicon import memory_guidance_block_reason
+
+    block_hit = memory_guidance_block_reason(safe_content)
+    if block_hit:
+        from pallas.core.foundation.logging import log_rate_limited
+
+        log_rate_limited(
+            logger,
+            "warning",
+            "llm.memory.teach_blocked",
+            "记忆写入被教学注入审查拦截：命中下流词 [{}]，来源 [{}]，内容 [{}]",
+            block_hit,
+            normalized_source,
+            safe_content[:64],
+        )
+        return False
     scope_gid = normalize_group_scope(group_id)
     metadata = derive_memory_metadata(
         group_id=group_id,

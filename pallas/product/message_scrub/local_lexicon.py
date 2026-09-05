@@ -69,6 +69,10 @@ def _all_patterns_lower() -> list[str]:
             s = part.strip().lower()
             if s:
                 merged.append(s)
+    # 内置严格下流词表：恒在（与 WebUI 覆盖合并，避免落盘旧列表吃掉代码新增项）
+    from .vulgar_lexicon import load_vulgar_phrases
+
+    merged.extend(load_vulgar_phrases())
     seen: set[str] = set()
     out: list[str] = []
     for p in merged:

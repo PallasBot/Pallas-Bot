@@ -103,9 +103,12 @@ def phrases_for_profile(profile: OutputFilterProfile, tier: OutputFilterTier) ->
     cfg = get_llm_config()
     chat_hard = tuple(phrase for phrase in cfg.llm_output_filter_chat_hard_phrases if phrase)
     chat_soft = tuple(phrase for phrase in cfg.llm_output_filter_chat_soft_phrases if phrase)
-    # 内置硬拦词与 WebUI 覆盖合并，避免落盘旧列表吃掉代码新增项
+    # 内置硬拦词（含社区客服腔 + 下流词表）与 WebUI 覆盖合并，
+    # 避免落盘旧列表吃掉代码新增项
     if tier == "hard_block":
-        return _unique_phrases(CHAT_HARD_BLOCK_PHRASES, chat_hard)
+        from pallas.product.message_scrub.vulgar_lexicon import load_vulgar_phrases
+
+        return _unique_phrases(CHAT_HARD_BLOCK_PHRASES, chat_hard, load_vulgar_phrases())
     return _unique_phrases(CHAT_SOFT_RETRY_PHRASES, chat_soft)
 
 
