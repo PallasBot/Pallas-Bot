@@ -182,6 +182,26 @@ def classify_site_local_plugins(plugin_dirs: list[Path]) -> tuple[int, int]:
     return len(plugin_dirs) - community, community
 
 
+def check_loaded_plugin_dependencies(plugin_dirs: list[Path]) -> None:
+    """对 local/plugins 已加载插件做依赖缺失检测，缺失则警告并登记启动事实。"""
+    from pallas.core.foundation.startup_report import register_startup_warning
+    from pallas.core.platform.bot_runtime.plugin_deps import missing_dependencies, parse_plugin_dependencies
+
+    missing_by_plugin: dict[str, list[str]] = {}
+    for plugin_dir in plugin_dirs:
+        requirements = parse_plugin_dependencies(plugin_dir)
+        if not requirements:
+            continue
+        missing = missing_dependencies(requirements)
+        if missing:
+            missing_by_plugin[plugin_dir.name] = missing
+    if not missing_by_plugin:
+        return
+    detail = "、".join(f"{pid}（{' '.join(deps)}）" for pid, deps in missing_by_plugin.items())
+    logger.warning("启动：社区插件依赖缺失，请用 uv pip install 补装：{}", detail)
+    register_startup_warning("plugin_deps", detail)
+
+
 def _load_slot_key(module_path: str) -> str:
     from pallas.core.platform.bot_runtime.plugin_package_aliases import canonical_plugin_package
 
@@ -483,6 +503,7 @@ def load_extra_plugin_dirs_by_source(
         loaded_plugin_dirs=site_local_plugin_dirs,
     )
     local, community = classify_site_local_plugins(site_local_plugin_dirs)
+    check_loaded_plugin_dependencies(site_local_plugin_dirs)
     extra = _load_toml_extra_plugin_dirs(custom_dirs, role_label=role_label, loaded_short=loaded_short)
     return local, community, extra
 

@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from nonebot import logger
 
 from pallas.console.cli.bot_process import bot_lifecycle_available
+from pallas.console.webui.community_plugin_deps import install_missing_dependencies
 from pallas.core.foundation.paths import PROJECT_ROOT
 from pallas.core.shared.utils.git_mirror import (
     BUILTIN_MIRRORS,
@@ -261,6 +262,15 @@ async def install_community_plugin(
             shutil.rmtree(dest, ignore_errors=True)
             raise
         _write_install_meta(pid, {"layout": "subdir", "subdir": subdir.name, "plugin_id": pid})
+    _report(on_progress, 85, "安装依赖…")
+    installed_deps, still_missing, deps_error = await install_missing_dependencies(dest, on_progress=on_progress)
+    if still_missing:
+        shutil.rmtree(dest, ignore_errors=True)
+        raise CommunityPluginInstallError(
+            f"依赖安装失败：{deps_error}。请手动执行：uv pip install {' '.join(still_missing)}",
+            status_code=502,
+        )
+    _report(on_progress, 92, "依赖安装完成")
     dirs_ready = extra_plugin_dirs_ready()
     msg = f"已安装到 local/plugins/{pid}/。"
     if not dirs_ready:
@@ -273,6 +283,8 @@ async def install_community_plugin(
         "needs_restart": True,
         "extra_plugin_dirs_ready": dirs_ready,
         "restart_available": bot_lifecycle_available(),
+        "deps_installed": installed_deps,
+        "deps_missing": still_missing,
         "message": msg,
         "stdout_tail": tail_output(out),
     }
@@ -365,6 +377,14 @@ async def update_community_plugin(
             "更新后目录缺少 __init__.py，不是有效 NoneBot 插件包",
             status_code=502,
         )
+    _report(on_progress, 90, "安装依赖…")
+    installed_deps, still_missing, deps_error = await install_missing_dependencies(dest, on_progress=on_progress)
+    if still_missing:
+        raise CommunityPluginInstallError(
+            f"依赖安装失败：{deps_error}。请手动执行：uv pip install {' '.join(still_missing)}",
+            status_code=502,
+        )
+    _report(on_progress, 94, "依赖安装完成")
     dirs_ready = extra_plugin_dirs_ready()
     msg = f"已更新 local/plugins/{pid}/。"
     if not dirs_ready:
@@ -377,6 +397,8 @@ async def update_community_plugin(
         "needs_restart": True,
         "extra_plugin_dirs_ready": dirs_ready,
         "restart_available": bot_lifecycle_available(),
+        "deps_installed": installed_deps,
+        "deps_missing": still_missing,
         "message": msg,
         "stdout_tail": tail_output(out),
     }
