@@ -19,6 +19,7 @@ _VULGAR_LEXICON_PATH = "message_scrub/vulgar.txt"
 
 _lock = Lock()
 _cached_sig: tuple[int, int] | None = None
+_cached_negative: bool = False
 _cached_words: tuple[str, ...] = ()
 
 
@@ -44,8 +45,12 @@ def _read_phrases(path: str) -> list[str]:
 
 
 def load_vulgar_phrases() -> tuple[str, ...]:
-    """读取内置下流词表；文件缺失或读失败返回空元组（不阻断业务）。"""
-    global _cached_sig, _cached_words
+    """读取内置下流词表；文件缺失或读失败返回空元组（不阻断业务）。
+
+    缺失/读失败也缓存 negative（空 + 缺失标记），避免高频入站路径
+    每条消息重复 stat + open 失败 IO。
+    """
+    global _cached_sig, _cached_negative, _cached_words
     path = _vulgar_lexicon_path()
     try:
         stat = Path(path).stat()
@@ -55,7 +60,10 @@ def load_vulgar_phrases() -> tuple[str, ...]:
     with _lock:
         if _cached_sig == sig and _cached_words:
             return _cached_words
+        if _cached_negative and sig is None:
+            return _cached_words
         words = _read_phrases(path)
+        _cached_negative = not words
         _cached_sig = sig if words else None
         _cached_words = tuple(words)
         return _cached_words
@@ -122,7 +130,8 @@ _GUIDANCE_TEACH_SIGNALS = ("记住", "记得", "以后", "称呼", "他是", "�
 
 def clear_vulgar_lexicon_cache() -> None:
     """清空词表缓存（供 reload_message_scrub_caches 调用）。"""
-    global _cached_sig, _cached_words
+    global _cached_sig, _cached_negative, _cached_words
     with _lock:
         _cached_sig = None
+        _cached_negative = False
         _cached_words = ()
