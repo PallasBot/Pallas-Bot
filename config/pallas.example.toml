@@ -50,4 +50,8 @@ COMMAND_START = '["", "/"]'
 # [community_stats]
 # enabled = false                # 默认开启；仅关闭上报时取消注释
 
+# 渲染后端（nonebot-plugin-htmlrender）：框架已默认启用 playwright，无需配置。
+# 仅当其依赖缺失（未 `playwright install chromium`）时才需处理，启动会有告警。
+# 如需切换后可用其他后端，可在此用 RENDER_BACKEND = "playwright" 覆盖。
+
 # 多机协同、语料联邦、PG 连接池等进阶项见 docs/Config.md，一般无需写进 pallas.toml。

@@ -39,7 +39,39 @@ def plugin_field_env_key(plugin_name: str, field_name: str) -> str:
         return _REPEATER_FIELD_TO_ENV.get(field_name, field_name.upper())
     if canonical == "pb_stats":
         return _PB_STATS_FIELD_TO_ENV.get(field_name, field_name.upper())
+    # 点路径（嵌套叶，如 ``skland.github_proxy_url``）→ NoneBot 官方 ``__`` 分隔键。
+    if "." in field_name:
+        return field_name.replace(".", "__").upper()
     return field_name.upper()
+
+
+def _is_nested_model_field(field: Any) -> bool:
+    ann = getattr(field, "annotation", None)
+    return isinstance(ann, type) and issubclass(ann, BaseModel)
+
+
+def plugin_nested_field_leaves(
+    model_cls: type[BaseModel],
+    *,
+    prefix: str = "",
+) -> list[dict[str, Any]]:
+    """递归展开嵌套 BaseModel 字段为叶字段列表。
+
+    每个元素含 ``name``（点路径）、``env_key``（``__`` 分隔前缀）、``field``。
+    仅展开注解直接是 BaseModel 子类的字段；list/dict 等容器不展开（维持 json 编辑）。
+    """
+    leaves: list[dict[str, Any]] = []
+    for key, f in model_cls.model_fields.items():
+        name = f"{prefix}.{key}" if prefix else key
+        if _is_nested_model_field(f):
+            leaves.extend(plugin_nested_field_leaves(f.annotation, prefix=name))
+            continue
+        leaves.append({
+            "name": name,
+            "env_key": name.replace(".", "__").upper(),
+            "field": f,
+        })
+    return leaves
 
 
 def plugin_config_field_groups(plugin_name: str, fields: list[dict[str, Any]]) -> list[dict[str, Any]] | None:
@@ -229,6 +261,30 @@ def normalize_patch_value(field: Any, value: Any) -> Any:
     return value
 
 
+def _nested_get(data: Any, name: str, default: Any = None) -> Any:
+    """按点路径从 (dict/对象) 取值；路径缺失返回 default。"""
+    if data is None:
+        return default
+    cur = data
+    for part in name.split("."):
+        if isinstance(cur, dict):
+            if part not in cur:
+                return default
+            cur = cur[part]
+        else:
+            cur = getattr(cur, part, default)
+    return cur
+
+
+def _nested_set(data: dict[str, Any], name: str, value: Any) -> None:
+    """按点路径把 value 写入嵌套 dict。"""
+    parts = name.split(".")
+    target = data
+    for part in parts[:-1]:
+        target = target.setdefault(part, {})
+    target[parts[-1]] = value
+
+
 def plugin_config_payload(
     plugin_name: str,
     *,
@@ -244,22 +300,23 @@ def plugin_config_payload(
     if plugin_name == "draw":
         cfg_obj = maybe_migrate_draw_config(cfg_obj)
     fields: list[dict[str, Any]] = []
-    for key, f in cfg_cls.model_fields.items():
+    for leaf in plugin_nested_field_leaves(cfg_cls):
+        name = leaf["name"]
         if current_values is not None:
-            cur = current_values.get(key, getattr(cfg_obj, key, f.default))
+            cur = _nested_get(current_values, name, _nested_get(cfg_obj, name, leaf["field"].default))
         else:
-            cur = getattr(cfg_obj, key, f.default)
-        default_value = None if f.default is PydanticUndefined else f.default
+            cur = _nested_get(cfg_obj, name, leaf["field"].default)
+        default_value = None if leaf["field"].default is PydanticUndefined else leaf["field"].default
         from .field_meta import field_meta_for_model_field
 
         row = field_meta_for_model_field(
-            key=key,
-            field=f,
-            env_key=plugin_field_env_key(plugin_name, key),
+            key=name,
+            field=leaf["field"],
+            env_key=plugin_field_env_key(plugin_name, name),
             cur=cur,
             default_value=default_value,
         )
-        extra = getattr(f, "json_schema_extra", None)
+        extra = getattr(leaf["field"], "json_schema_extra", None)
         if isinstance(extra, dict) and extra.get("ui_hidden"):
             row["ui_hidden"] = True
         fields.append(row)
@@ -277,7 +334,7 @@ def plugin_config_payload(
 
 
 def plugin_config_env_keys(plugin_name: str, cfg_cls: type[BaseModel]) -> set[str]:
-    return {plugin_field_env_key(plugin_name, key) for key in cfg_cls.model_fields}
+    return {plugin_field_env_key(plugin_name, leaf["name"]) for leaf in plugin_nested_field_leaves(cfg_cls)}
 
 
 def plugin_unexpected_env_keys(plugin_name: str, cfg_cls: type[BaseModel]) -> list[dict[str, str]]:
@@ -308,8 +365,8 @@ def plugin_config_raw_toml(plugin_name: str) -> str:
 
     env = _load_webui_json_upper()
     lines = [f"# plugin: {plugin_name}", "", "[env]"]
-    for field_key in cfg_cls.model_fields:
-        env_key = plugin_field_env_key(plugin_name, field_key)
+    for leaf in plugin_nested_field_leaves(cfg_cls):
+        env_key = plugin_field_env_key(plugin_name, leaf["name"])
         if env_key in env:
             lines.append(f"{env_key} = {json.dumps(str(env[env_key]), ensure_ascii=False)}")
     for row in plugin_unexpected_env_keys(plugin_name, cfg_cls):
@@ -334,12 +391,12 @@ def apply_plugin_config_raw_toml(plugin_name: str, text: str) -> dict[str, Any]:
     if not isinstance(env_block, dict):
         raise ValueError("缺少 [env] 表")
     _, _, cfg_cls = plugin_config_model_by_name(plugin_name)
-    reverse = {plugin_field_env_key(plugin_name, key): key for key in cfg_cls.model_fields}
+    reverse = {plugin_field_env_key(plugin_name, leaf["name"]): leaf for leaf in plugin_nested_field_leaves(cfg_cls)}
     patch: dict[str, Any] = {}
     for env_key, value in env_block.items():
-        field_key = reverse.get(str(env_key).upper())
-        if field_key:
-            patch[field_key] = value
+        leaf = reverse.get(str(env_key).upper())
+        if leaf:
+            patch[leaf["name"]] = value
     if not patch:
         raise ValueError("没有可识别的插件配置键")
     return apply_plugin_config_patch(plugin_name, patch)
@@ -355,15 +412,24 @@ def apply_plugin_config_patch(
         return apply_pb_core_patch(patch)
     _, module_name, cfg_cls = plugin_config_model_by_name(plugin_name)
     current = read_current_plugin_config(module_name, cfg_cls).model_dump(mode="python")
-    allowed = set(cfg_cls.model_fields.keys())
+    leaves = plugin_nested_field_leaves(cfg_cls)
+    allowed = {leaf["name"]: leaf["field"] for leaf in leaves}
     normalized: dict[str, Any] = {}
+    nested_patch: dict[str, Any] = {}
     for k, v in patch.items():
-        if k not in allowed:
+        field = allowed.get(k)
+        if field is None:
             raise ValueError(
                 f"未知配置项: {k}（请确认 Bot 已更新并重启；WebUI 无需单独加字段表）",
             )
-        normalized[k] = normalize_patch_value(cfg_cls.model_fields[k], v)
-    merged = {**current, **normalized}
+        normalized[k] = normalize_patch_value(field, v)
+    # 点路径（嵌套叶）重建嵌套 dict；标量保留原名。
+    for k, v in normalized.items():
+        if "." in k:
+            _nested_set(nested_patch, k, v)
+        else:
+            nested_patch[k] = v
+    merged = {**current, **nested_patch}
     try:
         validated_obj = cfg_cls(**merged)
         if plugin_name == "draw":
@@ -371,7 +437,7 @@ def apply_plugin_config_patch(
         validated = validated_obj.model_dump(mode="python")
     except ValidationError as e:
         raise ValueError(format_validation_error(e)) from e
-    env_items = {plugin_field_env_key(plugin_name, k): env_value_to_str(validated[k]) for k in normalized}
+    env_items = {plugin_field_env_key(plugin_name, k): env_value_to_str(_nested_get(validated, k)) for k in normalized}
     upsert_repo_settings_items(env_items)
     try:
         reload_plugin_config(module_name)

@@ -99,4 +99,10 @@ def boot() -> nonebot.Driver:
         emit_startup_banner()
         emit_startup_summary()
 
+    @driver.on_startup
+    async def probe_htmlrender_backend_on_startup() -> None:
+        from pallas.core.platform.render.htmlrender_probe import probe_htmlrender_backend
+
+        await probe_htmlrender_backend()
+
     return driver

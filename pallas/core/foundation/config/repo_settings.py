@@ -408,6 +408,9 @@ def apply_repo_settings_to_environ() -> None:
     # NoneBot 默认仅 ``{"/"}``；发行缺省带上空前缀，中文命令无需斜杠。
     if "COMMAND_START" not in os.environ:
         os.environ["COMMAND_START"] = DEFAULT_COMMAND_START_JSON
+    # htmlrender 渲染后端（森空岛等出图插件及框架内渲染所需）；playwright 依赖随主依赖安装。
+    if "RENDER_BACKEND" not in os.environ:
+        os.environ["RENDER_BACKEND"] = "playwright"
 
 
 def _atomic_write_text(path: Path, text: str) -> None:

@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+* feat(core): 默认启用 htmlrender playwright 渲染后端
+* feat(webui): 支持解析 NoneBot 官方嵌套插件 Config（env 键 __ 分隔）
+
+### Fixed
+
+* fix(foundation): 依赖插件重复注册视为已加载，消除启动告警噪音
+
 ## [4.4.0] - 2026-09-05
 
 ### 更新公告
