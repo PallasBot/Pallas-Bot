@@ -240,6 +240,40 @@ async def _apply_rage_gate(bot: Bot, event: GroupMessageEvent) -> bool:
             affinity_delta_add=-min(0.15, 0.03 * token_count),
         )
         if next_state.silenced_until > now:
+            # 自动拉黑：本次攻击触发静默（怒气达标）→ 计入 24h 静默次数，≥2 次自动群拉黑。
+            # 静默仅在 to_me 攻击时触发，此处天然排除普通群聊/互骂误伤。
+            from pallas.product.llm.rage import (
+                attack_auto_ban_samples,
+                attack_auto_ban_threshold,
+                note_rage_silence_for_auto_ban,
+                reserve_attack_auto_ban,
+                rollback_attack_auto_ban,
+            )
+
+            key = (bot_id, group_id, user_id)
+            silence_count = note_rage_silence_for_auto_ban(key, text=text, now=float(now))
+            if silence_count >= attack_auto_ban_threshold() and reserve_attack_auto_ban(key):
+                from packages.blacklist import apply_group_blocked_users_change
+                from pallas.core.foundation.config import GroupConfig
+
+                try:
+                    ban_cfg = GroupConfig(group_id)
+                    await ban_cfg.add_blocked_users([user_id])
+                    await apply_group_blocked_users_change(group_id, await ban_cfg.blocked_user_ids())
+                    from pallas.core.shared.utils.ban_notify import notify_auto_ban
+
+                    await notify_auto_ban(
+                        bot,
+                        title="脏话攻击自动拉黑",
+                        reason="持续对 Bot 辱骂/脏话攻击（多次触发静默）",
+                        samples=attack_auto_ban_samples(key),
+                        group_id=group_id,
+                        user_id=user_id,
+                    )
+                except Exception:
+                    # 拉黑/通知失败：释放预留位允许后续重试
+                    rollback_attack_auto_ban(key)
+                    logger.exception("Auto-ban by rage gate failed for group [{}] user [{}]", group_id, user_id)
             await _capture_rage_suppressed_message(bot, event)
             return True
     except Exception:

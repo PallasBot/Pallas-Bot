@@ -15,7 +15,7 @@
 1. 读 [message_scrub README](../../../common/message_scrub/README.md) 的 hook / API
 2. 入库前走统一审查（`pallas.api.safety`）；勿复制词表
 3. 运维入口：WebUI **通用配置 → 消息审查与入站过滤**（**非** AI 配置）
-4. **V4 默认开启**；`PALLAS_MESSAGE_SCRUB_ENABLED=false` 可关
+4. **V4 默认开启**；内置下流词表（`resource/message_scrub/vulgar.txt`）默认生效；`PALLAS_MESSAGE_SCRUB_ENABLED=false` 可关
 
 分片下配置须各 worker 一致 → [分片部署](../../../maintainer/deploy/sharded.md)。
 

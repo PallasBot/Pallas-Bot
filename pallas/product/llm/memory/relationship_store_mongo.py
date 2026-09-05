@@ -67,9 +67,26 @@ async def upsert_relationship_profile_mongo(
     has_delta = warmth_delta_add != 0.0 or assertiveness_delta_add != 0.0 or affinity_delta_add != 0.0
     if not has_fact and not has_delta:
         return False
+    safe_source = sanitize_prompt_literal(source, max_len=16) or "auto"
+    if has_fact:
+        from pallas.product.message_scrub.vulgar_lexicon import memory_guidance_block_reason
+
+        block_hit = memory_guidance_block_reason(incoming)
+        if block_hit:
+            from pallas.core.foundation.logging import log_rate_limited
+
+            log_rate_limited(
+                logger,
+                "warning",
+                "llm.relationship.teach_blocked",
+                "关系备注写入被教学注入审查拦截：命中下流词 [{}]，来源 [{}]，内容 [{}]",
+                block_hit,
+                safe_source,
+                incoming[:64],
+            )
+            return False
     scope_gid = normalize_group_scope(group_id)
     now = int(time.time())
-    safe_source = sanitize_prompt_literal(source, max_len=16) or "auto"
     limit = _delta_limit(c)
     existing = await LlmRelationshipNote.find_one({
         "bot_id": int(bot_id),

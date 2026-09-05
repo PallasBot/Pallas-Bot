@@ -25,7 +25,7 @@ _MESSAGE_SCRUB_FIELDS = frozenset({
     "scrub_baidu_strategy_id",
     "scrub_baidu_block_suspected",
 })
-_MAIL_FIELDS = frozenset({"smtp_user", "smtp_password", "smtp_server", "smtp_port"})
+_MAIL_FIELDS = frozenset({"smtp_user", "smtp_password", "smtp_server", "smtp_port", "smtp_notice_email"})
 _COMMAND_START_FIELDS = frozenset({"command_start"})
 _INGRESS_FANOUT_FIELDS = frozenset({"greeting_fanout_texts"})
 _INGRESS_DISPATCH_FIELDS = frozenset({

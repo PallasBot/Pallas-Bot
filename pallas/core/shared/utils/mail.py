@@ -59,6 +59,13 @@ class SmtpConfig(BaseModel):
         default=_SSL_PORT,
         description=field_help("SMTP 端口", "465 多为 SSL，587 多为 STARTTLS"),
     )
+    smtp_notice_email: str = Field(
+        default="",
+        description=field_help(
+            "业务告警收件邮箱",
+            "自动拉黑等事件在 QQ 私聊通知失败时的邮件兜底收件人；留空不发邮件",
+        ),
+    )
 
 
 # 中性 env 名（凭据已下沉内核，不再隶属 bot_status 插件）。
@@ -67,6 +74,7 @@ _SMTP_FIELD_TO_ENV = {
     "smtp_password": "PALLAS_SMTP_PASSWORD",
     "smtp_server": "PALLAS_SMTP_SERVER",
     "smtp_port": "PALLAS_SMTP_PORT",
+    "smtp_notice_email": "PALLAS_SMTP_NOTICE_EMAIL",
 }
 
 _smtp_handle = install_hot_reload_config(
