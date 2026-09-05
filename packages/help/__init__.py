@@ -1,4 +1,9 @@
-from nonebot.plugin import PluginMetadata
+import os
+
+from nonebot.plugin import PluginMetadata, require
+
+if (os.environ.get("PALLAS_HELP_RENDERER") or "").strip().lower() == "html":
+    require("nonebot_plugin_htmlrender")
 
 from pallas.api.commands import command_limit_list, command_limit_row, command_perm_list, command_perm_row
 from pallas.api.metadata import (

@@ -69,3 +69,24 @@ def test_render_v3_image_bytes_uses_disk_cache(tmp_path, monkeypatch):
     assert first == second
     assert draw_calls["count"] == 1
     assert list((tmp_path / "42").glob("*.png"))
+
+
+def test_html_assets_revision_changes_with_template_and_theme_files(tmp_path, monkeypatch):
+    from packages.help import html_renderer, html_theme
+
+    template_path = tmp_path / "help.html"
+    theme_path = tmp_path / "html_theme.py"
+    template_path.write_text("template-a", encoding="utf-8")
+    theme_path.write_text("theme-a", encoding="utf-8")
+    monkeypatch.setattr(html_renderer, "HTML_TEMPLATE_PATH", template_path)
+    monkeypatch.setattr(html_theme, "HTML_THEME_PATH", theme_path)
+
+    first = html_renderer.html_assets_revision()
+
+    template_path.write_text("template-b", encoding="utf-8")
+    second = html_renderer.html_assets_revision()
+    assert second != first
+
+    theme_path.write_text("theme-b", encoding="utf-8")
+    third = html_renderer.html_assets_revision()
+    assert third != second

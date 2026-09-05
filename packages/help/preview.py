@@ -4,17 +4,10 @@ from __future__ import annotations
 
 from typing import Literal
 
-from .draw_function_detail import draw_function_detail_image
-from .draw_plugin_detail import draw_plugin_detail_image
-from .draw_plugin_menu import draw_plugin_menu_image
 from .menu_rows import build_help_menu_rows
 from .plugin_detail_data import build_function_detail_data, build_plugin_detail_data
 from .plugin_manager import find_plugin_by_identifier, is_plugin_disabled_for_help_display
-from .renderer import (
-    _function_detail_fingerprint,
-    _plugin_detail_fingerprint,
-    render_v3_image_bytes,
-)
+from .renderer import render_function_detail_to_image, render_plugin_detail_to_image, render_plugin_menu_to_image
 from .styles import load_config
 
 PreviewLevel = Literal["menu", "plugin", "function"]
@@ -34,14 +27,13 @@ async def render_help_preview_bytes(
     if level == "menu":
         all_rows = await build_help_menu_rows(bot_id=bot_id, group_id=group_id, show_ignored=show_ignored)
         enabled_count = sum(1 for row in all_rows if row.enabled)
-        image = draw_plugin_menu_image(
+        return await render_plugin_menu_to_image(
             all_rows,
             show_ignored=show_ignored,
+            group_id=group_id,
             total_plugin_count=len(all_rows),
             total_enabled_count=enabled_count,
         )
-        cache_key = f"preview_menu|n={len(all_rows)}|ignored={int(show_ignored)}"
-        return await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="menu_v4")
 
     plugin_name = (plugin or "").strip() or "help"
     plugin_config = load_config()
@@ -68,12 +60,7 @@ async def render_help_preview_bytes(
         if data is None or issue.value != "ok":
             data, _ = build_plugin_detail_data("help", plugin_enabled=True, show_ignored=show_ignored)
         assert data is not None
-        image = draw_plugin_detail_image(data)
-        cache_key = (
-            f"preview_plugin|{resolved}|enabled={data.enabled}|ignored={int(show_ignored)}"
-            f"|fp={_plugin_detail_fingerprint(data)}"
-        )
-        return await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="detail_v4")
+        return await render_plugin_detail_to_image(data, group_id=group_id)
 
     func_id = (function or "1").strip() or "1"
     data, issue = build_function_detail_data(resolved, func_id, show_ignored=show_ignored)
@@ -81,9 +68,4 @@ async def render_help_preview_bytes(
         data, _ = build_function_detail_data("help", "1", show_ignored=show_ignored)
     if data is None:
         raise ValueError("无法生成帮助预览")
-    image = draw_function_detail_image(data)
-    cache_key = (
-        f"preview_function|{resolved}|{func_id}|{data.index}|ignored={int(show_ignored)}"
-        f"|fp={_function_detail_fingerprint(data)}"
-    )
-    return await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="detail_v4")
+    return await render_function_detail_to_image(data, group_id=group_id)

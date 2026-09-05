@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <style>
+    :root { color-scheme: light; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; width: 920px; background: var(--canvas); }
+    body {
+      color: var(--text);
+      font-family: "Source Han Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+      font-size: 15px;
+      line-height: 1.55;
+      background-image:
+        radial-gradient(ellipse at 18% 22%, transparent 0 46px, var(--grid) 47px 48px, transparent 49px 72px, var(--grid) 73px 74px, transparent 75px),
+        radial-gradient(ellipse at 82% 76%, transparent 0 62px, var(--grid) 63px 64px, transparent 65px 92px, var(--grid) 93px 94px, transparent 95px);
+      background-size: 330px 260px, 410px 320px;
+    }
+    h1, h2, h3, p { margin: 0; }
+    code, .mono, .eyebrow, .header-code, .header-stat strong, .group-number, .card-index,
+    .section-kicker, .metric-label, .page-index, .nav-label { font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+    .document-shell {
+      width: 872px;
+      margin: 24px;
+      overflow: hidden;
+      border: 1px solid rgba(24, 33, 38, .45);
+      border-radius: 5px;
+      background: var(--content-background);
+      box-shadow: 0 8px 18px rgba(32, 39, 42, .13);
+    }
+    .dossier-header {
+      position: relative;
+      display: flex;
+      align-items: stretch;
+      justify-content: space-between;
+      gap: 24px;
+      min-height: 148px;
+      padding: 25px 30px 27px;
+      overflow: hidden;
+      background: var(--record-header);
+      background-image: repeating-linear-gradient(108deg, transparent 0 12px, rgba(255, 255, 255, .025) 13px 14px);
+    }
+    .dossier-header::before {
+      position: absolute;
+      right: 30px;
+      bottom: 11px;
+      left: 30px;
+      height: 2px;
+      background: var(--cyan);
+      content: "";
+    }
+    .dossier-header::after {
+      position: absolute;
+      right: 30px;
+      bottom: 11px;
+      width: 92px;
+      height: 2px;
+      background: var(--amber);
+      content: "";
+    }
+    .header-copy, .plugin-identity-copy, .card-main { min-width: 0; }
+    .header-copy { align-self: center; }
+    .eyebrow {
+      margin-bottom: 8px;
+      color: var(--header-muted);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .15em;
+      text-transform: uppercase;
+    }
+    .header-title-line { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+    h1 {
+      overflow-wrap: anywhere;
+      color: var(--header-fg);
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: -.035em;
+      line-height: 1.18;
+    }
+    .header-code {
+      flex: 0 0 auto;
+      color: var(--amber);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .1em;
+    }
+    .header-description {
+      max-width: 555px;
+      margin-top: 9px;
+      color: var(--header-muted);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .header-stats {
+      display: flex;
+      flex: 0 0 auto;
+      align-items: stretch;
+      align-self: center;
+      gap: 10px;
+    }
+    .header-stat, .page-index, .header-status {
+      border: 1px solid var(--line);
+      background: var(--record-header-alt);
+    }
+    .header-stat {
+      display: grid;
+      min-width: 142px;
+      align-content: center;
+      gap: 3px;
+      padding: 12px 14px;
+    }
+    .header-stat span, .header-stat small { color: var(--header-muted); }
+    .header-stat span { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+    .header-stat strong { color: var(--amber); font-size: 25px; letter-spacing: -.08em; line-height: 1; }
+    .header-stat small { font-size: 10px; }
+    .header-status { display: flex; align-items: center; align-self: stretch; min-height: 76px; }
+    .status-mark {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 7px;
+      border: 1px solid currentColor;
+      border-radius: 3px;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .status-mark i { font-family: "SFMono-Regular", Consolas, monospace; font-size: 10px; font-style: normal; }
+    .status-on { color: var(--success); }
+    .status-off { color: var(--danger); }
+    .header-status .status-mark { margin: 12px; color: var(--text-on-dark); }
+    .header-status .status-on { border-color: var(--success); }
+    .header-status .status-off { border-color: var(--danger); }
+    .header-status .status-mark i { color: var(--amber); }
+    .instruction-strip {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      min-height: 54px;
+      padding: 10px 30px;
+      border-bottom: 1px solid var(--line);
+      background: var(--header-panel);
+    }
+    .strip-title {
+      flex: 0 0 auto;
+      color: var(--cyan);
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .11em;
+    }
+    .instruction-list { display: flex; flex-wrap: wrap; gap: 7px 18px; min-width: 0; color: var(--header-muted); font-size: 12px; }
+    .instruction-item { display: inline-flex; align-items: baseline; gap: 6px; }
+    .instruction-item code { color: var(--text-on-dark); font-size: 11px; }
+    .document-body {
+      padding: 22px 30px 27px;
+      background: var(--content-background);
+      background-image:
+        radial-gradient(ellipse at 15% 30%, transparent 0 82px, rgba(24, 33, 38, .025) 83px 84px, transparent 85px),
+        radial-gradient(ellipse at 78% 68%, transparent 0 110px, rgba(24, 33, 38, .025) 111px 112px, transparent 113px);
+    }
+    .groups { display: grid; gap: 21px; }
+    .group { min-width: 0; }
+    .group-heading { display: flex; align-items: center; gap: 10px; padding: 4px 0 7px; border-bottom: 1px solid var(--line); }
+    .group-number {
+      color: var(--amber);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .group-heading h2 { color: var(--text); font-size: 18px; line-height: 1.25; }
+    .group-count { margin-left: auto; color: var(--text-muted); font-size: 11px; }
+    .group-rule { position: relative; display: block; width: 52px; height: 2px; margin-top: -2px; background: var(--cyan); }
+    .plugin-grid, .function-grid { display: grid; gap: 10px; }
+    .plugin-grid { padding-top: 11px; }
+    .plugin-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .function-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .plugin-card, .function-card, .doc-section, .metadata-cell {
+      border: 1px solid var(--line);
+      background: var(--record-body);
+    }
+    .plugin-card, .function-card { min-width: 0; box-shadow: none; }
+    .plugin-card { min-height: 112px; }
+    .plugin-card-bar, .function-card-bar {
+      display: flex;
+      align-items: center;
+      min-height: 30px;
+      gap: 7px;
+      padding: 6px 9px;
+      color: var(--text-on-dark);
+    }
+    .plugin-card-bar { justify-content: space-between; border-left: 3px solid var(--cyan); background: var(--record-header); }
+    .plugin-card-body { display: flex; min-height: 80px; gap: 10px; padding: 10px 10px 9px; background: var(--record-body); }
+    .plugin-card img, .plugin-identity img { flex: 0 0 auto; object-fit: cover; border-radius: 5px; }
+    .plugin-card img { width: 48px; height: 48px; }
+    .card-main { display: flex; flex: 1 1 auto; flex-direction: column; }
+    .card-title-line { display: flex; flex: 1 1 auto; align-items: flex-start; gap: 6px; min-width: 0; }
+    .card-index { flex: 0 0 auto; color: var(--cyan); font-size: 11px; font-weight: 700; }
+    .card-title-line strong {
+      display: -webkit-box;
+      overflow: hidden;
+      color: inherit;
+      font-size: 14px;
+      font-weight: 800;
+      line-height: 1.3;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+    .card-status { flex: 0 0 auto; }
+    .card-status .status-mark { padding: 3px 5px; border-color: currentColor; color: var(--text-on-dark); font-size: 8px; }
+    .card-status .status-on { border-color: var(--success); }
+    .card-status .status-off { border-color: var(--danger); }
+    .card-status .status-mark i { font-size: 9px; }
+    .card-description {
+      display: -webkit-box;
+      overflow: hidden;
+      margin-top: 0;
+      color: var(--ink);
+      font-size: 11px;
+      line-height: 1.4;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 2;
+    }
+    .card-command { margin-top: auto; padding-top: 5px; border-top: 1px solid var(--line); color: #147A91; font-size: 10px; overflow-wrap: anywhere; white-space: normal; }
+    .card-command code { color: inherit; font-size: inherit; }
+    .plugin-identity { display: flex; align-items: center; min-width: 0; gap: 16px; }
+    .plugin-identity img { width: 76px; height: 76px; border: 1px solid var(--cyan); }
+    .plugin-identity-copy h1 { max-width: 510px; }
+    .detail-header-stats { display: flex; flex: 0 0 auto; align-items: stretch; gap: 10px; }
+    .function-stat { min-width: 116px; }
+    .section-heading { display: flex; align-items: baseline; gap: 10px; margin-bottom: 11px; }
+    .section-heading::before { width: 5px; height: 18px; background: var(--cyan); content: ""; }
+    .section-heading h2 { color: var(--ink); font-size: 18px; }
+    .section-heading .group-count { color: var(--muted); }
+    .section-kicker { color: var(--muted); font-size: 10px; letter-spacing: .08em; }
+    .function-card { min-height: 0; }
+    .function-card-bar { align-items: flex-start; border-left: 3px solid var(--cyan); background: var(--record-header); color: var(--text-on-dark); }
+    .function-card-body { padding: 10px 12px 11px; }
+    .function-name { display: flex; flex: 1 1 auto; align-items: flex-start; gap: 7px; min-width: 0; color: var(--text-on-dark); font-size: 14px; font-weight: 800; line-height: 1.35; }
+    .function-name span:last-child { overflow-wrap: anywhere; }
+    .function-command { padding: 6px 8px; border-left: 3px solid var(--cyan); background: var(--record-body-alt); color: var(--text); }
+    .function-command code { display: block; color: inherit; font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .function-meta, .function-brief { overflow: hidden; margin-top: 6px; color: var(--muted); font-size: 10px; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+    .function-brief { color: var(--ink); }
+    .doc-section { margin-top: 16px; padding: 0; background: var(--record-body); }
+    .doc-section-heading { display: flex; align-items: baseline; gap: 9px; min-height: 36px; padding: 8px 12px; background: var(--record-header); }
+    .doc-section-heading h2 { color: var(--text-on-dark); font-size: 15px; }
+    .doc-section-heading .section-kicker { color: var(--header-muted); }
+    .doc-body { max-width: none; padding: 18px 20px 20px; color: var(--text); font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+    .doc-body p { margin: 0 0 11px; }
+    .doc-body p:last-child { margin-bottom: 0; }
+    .doc-body ul, .doc-body ol { margin: 0 0 11px; padding-left: 1.5em; }
+    .doc-body li + li { margin-top: 4px; }
+    .doc-body code { padding: 1px 3px; border: 0; background: var(--record-body-alt); color: var(--text); font-size: .9em; white-space: nowrap; overflow-wrap: anywhere; }
+    .doc-body pre { margin: 0 0 12px; padding: 10px 12px; border-left: 3px solid var(--cyan); background: var(--record-body-alt); overflow-x: auto; }
+    .doc-body pre:last-child { margin-bottom: 0; }
+    .doc-body pre code { padding: 0; background: transparent; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .doc-body blockquote { margin: 0 0 12px; padding: 8px 12px; border-left: 3px solid var(--amber); background: var(--record-body-alt); color: var(--muted); }
+    .doc-body blockquote:last-child { margin-bottom: 0; }
+    .metadata-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin-bottom: 16px; }
+    .metadata-cell { min-width: 0; padding: 9px 11px; border-top: 3px solid var(--cyan); background: var(--record-body-alt); }
+    .metric-label { color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .08em; }
+    .metric-title { margin-top: 3px; color: var(--muted); font-size: 10px; }
+    .metric-value { margin-top: 3px; overflow-wrap: anywhere; color: var(--text); font-size: 13px; font-weight: 700; }
+    .breadcrumb { margin-top: 8px; color: var(--header-muted); font-size: 12px; overflow-wrap: anywhere; }
+    .page-index { display: grid; min-width: 108px; align-content: center; align-self: center; gap: 4px; padding: 11px 13px; color: var(--header-fg); }
+    .page-index strong { color: var(--amber); font-family: "SFMono-Regular", Consolas, monospace; font-size: 24px; line-height: 1; }
+    .page-index small { color: var(--header-muted); font-family: "SFMono-Regular", Consolas, monospace; font-size: 9px; letter-spacing: .08em; }
+    .command-feature { margin-bottom: 16px; border: 1px solid var(--line); border-left: 4px solid var(--cyan); background: var(--record-header); }
+    .command-feature-header { padding: 9px 13px; border-bottom: 1px solid rgba(238, 238, 234, .18); color: var(--chartreuse); font-family: "SFMono-Regular", Consolas, monospace; font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+    .command-feature-body { padding: 12px 13px 14px; }
+    .command-feature code { display: block; color: var(--text-on-dark); font-family: "SFMono-Regular", Consolas, monospace; font-size: 16px; line-height: 1.55; overflow-wrap: anywhere; white-space: pre-wrap; }
+    .lead { margin-bottom: 15px; color: var(--text); font-size: 15px; line-height: 1.7; }
+    .command-navigation {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border-top: 1px solid var(--line);
+      background: var(--record-header);
+    }
+    .nav-item { min-width: 0; padding: 10px 13px 11px; border-right: 1px solid var(--line); }
+    .nav-item:last-child { border-right: 0; }
+    .nav-label { display: block; margin-bottom: 4px; color: var(--amber); font-size: 9px; letter-spacing: .06em; }
+    .nav-command { display: block; overflow: hidden; color: var(--text-on-dark); font-family: "SFMono-Regular", Consolas, monospace; font-size: 10px; line-height: 1.35; overflow-wrap: anywhere; }
+    @media (max-width: 700px) {
+      .plugin-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .dossier-header { flex-wrap: wrap; }
+      .header-stats, .detail-header-stats { width: 100%; }
+    }
+  </style>
+</head>
+<body style="{% for key, value in theme.items() %}--{{ key.replace('_', '-') }}: {{ value }}; {% endfor %}">
+{% macro status_mark(code, label) -%}
+  <span class="status-mark status-{{ code|lower }}"><i>{{ code }}</i><span>{{ label }}</span></span>
+{%- endmacro %}
+{% macro section_heading(number, title, count="") -%}
+  <div class="section-heading">
+    <span class="section-kicker">SECTION {{ number }}</span>
+    <h2>{{ title }}</h2>
+    {% if count %}<span class="group-count">{{ count }}</span>{% endif %}
+  </div>
+{%- endmacro %}
+{% macro document_section(section) -%}
+  <section class="doc-section">
+    <div class="doc-section-heading">
+      {% if section.number %}<span class="section-kicker">SECTION {{ section.number }}</span>{% endif %}
+      <h2>{{ section.title }}</h2>
+    </div>
+    <div class="doc-body">{{ section.body_html|safe }}</div>
+  </section>
+{%- endmacro %}
+{% macro command_navigation(items) -%}
+  {% if items %}
+      <footer class="command-navigation" style="grid-template-columns: repeat({{ items|length }}, minmax(0, 1fr));">
+      {% for item in items %}
+        <div class="nav-item">
+          <span class="nav-label">{{ item.label }}</span>
+          <span class="nav-command">{{ item.command }}</span>
+        </div>
+      {% endfor %}
+    </footer>
+  {% endif %}
+{%- endmacro %}
+  <main class="document-shell">
+    {% if kind == "menu" %}
+      <header class="dossier-header">
+        <div class="header-copy">
+          <div class="eyebrow">{{ eyebrow }}</div>
+          <div class="header-title-line"><h1>{{ title }}</h1><span class="header-code">PLUGIN INDEX</span></div>
+          <p class="header-description">按分类浏览当前可用能力，发送插件名或序号即可继续查看详细用法。</p>
+        </div>
+        <div class="header-stats">
+          <div class="header-stat">
+            <span>{{ stats_label }}</span>
+            <strong>{{ stats_value }}</strong>
+            <small>{{ stats_note }}</small>
+          </div>
+        </div>
+      </header>
+      <div class="instruction-strip">
+        <span class="strip-title">OPERATIONS / 操作</span>
+        <div class="instruction-list">
+          <span class="instruction-item"><code>牛牛帮助 + 序号/插件名</code> 查看功能</span>
+          <span class="instruction-item"><code>牛牛开启/关闭 + 插件名</code> 调整状态</span>
+        </div>
+      </div>
+      <div class="document-body groups">
+        {% for group in groups %}
+          <section class="group">
+            <div class="group-heading">
+              <span class="group-number">{{ group.number }}</span>
+              <h2>{{ group.label }}</h2>
+              <span class="group-count">{{ group.count }} 个插件</span>
+            </div>
+            <div class="group-rule"></div>
+            <div class="plugin-grid">
+              {% for row in group.rows %}
+                <article class="plugin-card">
+                  <div class="plugin-card-bar">
+                    <div class="card-title-line">
+                      <span class="card-index">{{ row.index_label }}</span>
+                      <strong>{{ row.display_name }}</strong>
+                    </div>
+                    <div class="card-status">{{ status_mark(row.status_code, row.status|replace(row.status_code + " ", "")) }}</div>
+                  </div>
+                  <div class="plugin-card-body">
+                    <img src="{{ row.icon }}" alt="{{ row.display_name }}">
+                    <div class="card-main">
+                      <div class="card-description">{{ row.description }}</div>
+                      <div class="card-command"><code>牛牛帮助 {{ row.display_name }}</code></div>
+                    </div>
+                  </div>
+                </article>
+              {% endfor %}
+            </div>
+          </section>
+        {% endfor %}
+      </div>
+      {{ command_navigation(footer_items) }}
+    {% elif kind == "plugin" %}
+      <header class="dossier-header">
+        <div class="plugin-identity">
+          <img src="{{ icon }}" alt="{{ title }}">
+          <div class="plugin-identity-copy">
+            <div class="eyebrow">{{ eyebrow }}</div>
+            <div class="header-title-line"><h1>{{ title }}</h1><span class="header-code">DOSSIER</span></div>
+            <p class="header-description">{{ description }}</p>
+          </div>
+        </div>
+        <div class="detail-header-stats">
+          {% if status %}<div class="header-status">{{ status_mark(status_code, status) }}</div>{% endif %}
+          <div class="header-stat function-stat">
+            <span>{{ function_count_label }}</span>
+            <strong>{{ function_count_value }}</strong>
+            <small>可用功能</small>
+          </div>
+        </div>
+      </header>
+      <div class="instruction-strip">
+        <span class="strip-title">OPERATIONS / 操作</span>
+        <div class="instruction-list"><span class="instruction-item"><code>{{ meta }}</code></span></div>
+      </div>
+      <div class="document-body">
+        {% if functions %}
+          {{ section_heading(function_section_number, "功能一览", function_count ~ " 项") }}
+          <div class="function-grid">
+            {% for row in functions %}
+              <article class="function-card">
+                <div class="function-card-bar">
+                  <div class="function-name"><span class="card-index">{{ row.index_label }}</span><span>{{ row.func }}</span></div>
+                </div>
+                <div class="function-card-body">
+                  <div class="function-command"><code>{{ row.say }}</code></div>
+                  {% if row.meta %}<div class="function-meta">{{ row.meta }}</div>{% endif %}
+                  {% if row.brief %}<div class="function-brief">{{ row.brief }}</div>{% endif %}
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+        {% endif %}
+        {% for section in sections %}{{ document_section(section) }}{% endfor %}
+      </div>
+      {{ command_navigation(footer_items) }}
+    {% else %}
+      <header class="dossier-header">
+        <div class="header-copy">
+          <div class="eyebrow">{{ eyebrow }}</div>
+          <div class="header-title-line"><h1>{{ title }}</h1><span class="header-code">COMMAND INDEX</span></div>
+          <div class="breadcrumb">{{ breadcrumb }}</div>
+        </div>
+        <div class="page-index"><strong>{{ index_label }} / {{ total_label }}</strong><small>COMMAND INDEX</small></div>
+      </header>
+      <div class="document-body">
+        {% if metadata %}
+          <div class="metadata-grid" style="grid-template-columns: repeat({{ metadata|length }}, minmax(0, 1fr));">
+            {% for item in metadata %}
+              <div class="metadata-cell">
+                <div class="metric-label">{{ item.label }}</div>
+                <div class="metric-title">{{ item.title }}</div>
+                <div class="metric-value">{{ item.value }}</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+        <section class="command-feature">
+          <div class="command-feature-header">{{ command_label }}</div>
+          <div class="command-feature-body"><code>{{ say }}</code></div>
+        </section>
+        {% if brief %}<p class="lead">{{ brief }}</p>{% endif %}
+        {% for section in sections %}{{ document_section(section) }}{% endfor %}
+      </div>
+      {{ command_navigation(footer_items) }}
+    {% endif %}
+  </main>
+</body>
+</html>

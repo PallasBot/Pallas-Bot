@@ -1,5 +1,6 @@
 import hashlib
 import io
+import os
 import time
 from pathlib import Path
 
@@ -19,6 +20,11 @@ apply_help_light_bold_patch()
 _STYLE_SUFFIX_TTL_SEC = 60.0
 _style_suffix_cache: tuple[float, str] = (0.0, "")
 _HELP_CACHE_FILES_PER_DIR_MAX = 20
+
+
+def help_renderer_mode() -> str:
+    """返回帮助图渲染模式；未知值和缺省值均使用 Pillow。"""
+    return "html" if (os.environ.get("PALLAS_HELP_RENDERER") or "").strip().lower() == "html" else "pillow"
 
 
 def invalidate_help_image_cache_suffix() -> None:
@@ -73,6 +79,7 @@ def _compute_help_image_cache_suffix() -> str:
         f"|ap={int(cfg.side_paint_auto_page)}"
         f"|enc=v5"
         f"|vis={help_visual_mode()}"
+        f"|renderer={help_renderer_mode()}"
         f"|rs={RENDER_SCALE}"
         f"|{font_part}"
         f"|sty={_help_style_files_revision()}"
@@ -80,6 +87,10 @@ def _compute_help_image_cache_suffix() -> str:
     from pallas.console.webui.plugin_package_assets import plugin_package_assets_revision
 
     base = f"{base}|{plugin_package_assets_revision()}"
+    if help_renderer_mode() == "html":
+        from .html_renderer import html_assets_revision
+
+        base = f"{base}|html={html_assets_revision()}"
     if not cfg.side_paint_enabled:
         return base
     paint_path = project_path("resource", "styles", "default", "imgs") / cfg.side_paint_filename
@@ -379,6 +390,32 @@ async def render_v3_image_bytes(
     return encoded
 
 
+async def render_help_html_image_bytes(
+    cache_key: str,
+    context: dict,
+    *,
+    group_id: int | None,
+    style_name: str,
+) -> bytes:
+    """渲染 HTML 帮助图并复用统一的磁盘缓存与上传压缩。"""
+    cached = load_cached_image(cache_key, style_name, group_id)
+    if cached:
+        if len(cached) > _HELP_IMAGE_MAX_SEND_BYTES:
+            with Image.open(io.BytesIO(cached)) as im:
+                fixed = encode_help_image_for_send(im.convert("RGBA"))
+            save_image_to_cache(fixed, cache_key, style_name, group_id)
+            return fixed
+        return cached
+
+    from .html_renderer import render_help_template
+
+    rendered = await render_help_template(context)
+    with Image.open(io.BytesIO(rendered)) as im:
+        encoded = encode_help_image_for_send(im.convert("RGBA"))
+    save_image_to_cache(encoded, cache_key, style_name, group_id)
+    return encoded
+
+
 async def send_plugin_menu_image(
     menu_rows: list,
     *,
@@ -408,7 +445,7 @@ def menu_image_cache_key(
         f"{row.index}:{row.display_name}:{int(row.enabled)}:{getattr(row, 'help_tag', '')}" for row in menu_rows
     ]
     parts = [
-        f"menu_v4|ignored={int(show_ignored)}|total={total_plugin_count}",
+        f"menu_v5|renderer={help_renderer_mode()}|ignored={int(show_ignored)}|total={total_plugin_count}",
         f"suffix={_help_image_cache_suffix()}",
         *row_parts,
     ]
@@ -434,13 +471,83 @@ async def render_plugin_menu_to_image(
         show_ignored=show_ignored,
         total_plugin_count=total_count,
     )
+    if help_renderer_mode() == "html":
+        try:
+            from .html_renderer import build_menu_context
+
+            context = build_menu_context(
+                menu_rows,
+                show_ignored=show_ignored,
+                total_plugin_count=total_count,
+                total_enabled_count=enabled_count,
+            )
+            return await render_help_html_image_bytes(
+                cache_key,
+                context,
+                group_id=group_id,
+                style_name="menu_html_v1",
+            )
+        except Exception:
+            logger.exception("HTML help menu rendering failed; falling back to Pillow")
+
     image = draw_plugin_menu_image(
         menu_rows,
         show_ignored=show_ignored,
         total_plugin_count=total_count,
         total_enabled_count=enabled_count,
     )
-    return await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="menu_v4")
+    fallback_key = f"{cache_key}|fallback=pillow" if help_renderer_mode() == "html" else cache_key
+    return await render_v3_image_bytes(fallback_key, image, group_id=group_id, style_name="menu_v4")
+
+
+async def render_plugin_detail_to_image(data, *, group_id: int | None = None) -> bytes:
+    from .draw_plugin_detail import draw_plugin_detail_image
+
+    cache_key = (
+        f"plugin_v6|renderer={help_renderer_mode()}|{data.display_name}|enabled={data.enabled}"
+        f"|fp={_plugin_detail_fingerprint(data)}|suffix={_help_image_cache_suffix()}"
+    )
+    if help_renderer_mode() == "html":
+        try:
+            from .html_renderer import build_plugin_context
+
+            return await render_help_html_image_bytes(
+                cache_key,
+                build_plugin_context(data),
+                group_id=group_id,
+                style_name="detail_html_v1",
+            )
+        except Exception:
+            logger.exception("HTML plugin detail rendering failed; falling back to Pillow")
+
+    image = draw_plugin_detail_image(data)
+    fallback_key = f"{cache_key}|fallback=pillow" if help_renderer_mode() == "html" else cache_key
+    return await render_v3_image_bytes(fallback_key, image, group_id=group_id, style_name="detail_v4")
+
+
+async def render_function_detail_to_image(data, *, group_id: int | None = None) -> bytes:
+    from .draw_function_detail import draw_function_detail_image
+
+    cache_key = (
+        f"function_v6|renderer={help_renderer_mode()}|{data.display_name}|{data.index}/{data.total}|{data.func_name}"
+        f"|fp={_function_detail_fingerprint(data)}|suffix={_help_image_cache_suffix()}"
+    )
+    if help_renderer_mode() == "html":
+        try:
+            from .html_renderer import build_function_context
+
+            return await render_help_html_image_bytes(
+                cache_key,
+                build_function_context(data),
+                group_id=group_id,
+                style_name="detail_html_v1",
+            )
+        except Exception:
+            logger.exception("HTML function detail rendering failed; falling back to Pillow")
+
+    image = draw_function_detail_image(data)
+    fallback_key = f"{cache_key}|fallback=pillow" if help_renderer_mode() == "html" else cache_key
+    return await render_v3_image_bytes(fallback_key, image, group_id=group_id, style_name="detail_v4")
 
 
 async def send_plugin_detail_image(
@@ -449,14 +556,7 @@ async def send_plugin_detail_image(
     matcher: Matcher,
     group_id: int | None = None,
 ) -> None:
-    from .draw_plugin_detail import draw_plugin_detail_image
-
-    cache_key = (
-        f"plugin_v5|{data.display_name}|enabled={data.enabled}"
-        f"|fp={_plugin_detail_fingerprint(data)}|suffix={_help_image_cache_suffix()}"
-    )
-    image = draw_plugin_detail_image(data)
-    image_data = await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="detail_v4")
+    image_data = await render_plugin_detail_to_image(data, group_id=group_id)
     await matcher.finish(MessageSegment.image(image_data))
 
 
@@ -466,14 +566,7 @@ async def send_function_detail_image(
     matcher: Matcher,
     group_id: int | None = None,
 ) -> None:
-    from .draw_function_detail import draw_function_detail_image
-
-    cache_key = (
-        f"function_v5|{data.display_name}|{data.index}/{data.total}|{data.func_name}"
-        f"|fp={_function_detail_fingerprint(data)}|suffix={_help_image_cache_suffix()}"
-    )
-    image = draw_function_detail_image(data)
-    image_data = await render_v3_image_bytes(cache_key, image, group_id=group_id, style_name="detail_v4")
+    image_data = await render_function_detail_to_image(data, group_id=group_id)
     await matcher.finish(MessageSegment.image(image_data))
 
 
