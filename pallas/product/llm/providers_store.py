@@ -241,7 +241,9 @@ def _normalize_registered_models(
     task_models: dict[str, str],
     model_pricing: dict[str, dict[str, float]],
 ) -> list[dict[str, Any]]:
-    rows = raw.get("models") if isinstance(raw.get("models"), list) else []
+    models_raw = raw.get("models")
+    has_registered_models = isinstance(models_raw, list)
+    rows = models_raw if has_registered_models else []
     out: list[dict[str, Any]] = []
     seen: set[str] = set()
 
@@ -267,11 +269,12 @@ def _normalize_registered_models(
     for row in rows:
         if isinstance(row, dict):
             add(row.get("name"), row)
-    add(default_model)
-    for name in task_models.values():
-        add(name)
-    for name in model_pricing:
-        add(name)
+    if not has_registered_models:
+        add(default_model)
+        for name in task_models.values():
+            add(name)
+        for name in model_pricing:
+            add(name)
     return out
 
 
