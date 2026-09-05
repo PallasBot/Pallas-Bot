@@ -34,6 +34,8 @@ Core 不按独立插件发行，随主仓版本。
 
 分发方式：索引收录、Git 直装、或拷入本地插件目录。
 
+Git 直装支持两种仓库结构：根目录即插件包（含 `__init__.py`），或插件包位于子目录（`pyproject.toml` 的 `[tool.nonebot] plugins` 声明，如 PyPI 分发仓库）；后者安装时自动提升到 `local/plugins/<id>/` 根目录。
+
 ## 本地插件
 
 | MUST | MUST NOT |
