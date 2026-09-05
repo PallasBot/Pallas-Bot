@@ -222,6 +222,9 @@ resource/*
 !resource/persona/**
 !resource/fonts/
 !resource/fonts/**
+# message_scrub 内置词表（政治/下流）需入库跟随发行
+!resource/message_scrub/
+!resource/message_scrub/**
 resource/styles/**/__pycache__/
 accounts
 mixed_data

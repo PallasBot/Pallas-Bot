@@ -190,6 +190,14 @@ def test_blocked_false_when_no_config(scrub_env_cleanup: None) -> None:
     assert not is_message_scrub_blocked_sync(plain_text="anything", raw_message="")
 
 
+def test_blocked_by_builtin_vulgar_lexicon_without_env(scrub_env_cleanup: None) -> None:
+    # 内置严格下流词表默认生效：即便无任何 env/词表配置，命中下流词也直接拦截
+    reload_message_scrub_caches()
+    assert is_message_scrub_blocked_sync(plain_text="你个傻逼玩意", raw_message="")
+    assert is_message_scrub_blocked_sync(plain_text="", raw_message="[CQ:at,qq=1] 操你妈")
+    assert not is_message_scrub_blocked_sync(plain_text="今天天气不错", raw_message="")
+
+
 def test_enabled_by_default_without_explicit_flag(scrub_env_cleanup: None) -> None:
     from pallas.product.message_scrub.config import is_message_scrub_enabled
 

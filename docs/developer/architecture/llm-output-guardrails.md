@@ -48,7 +48,7 @@ Provider 输出 / direct_candidate 直投
 
 **输出过滤 · `output_filter.py`**
 
-- 拦：语料污染片段、CQ 码、续写残片、垫词整句、客服设定腔（硬拦）；尬聊垫话（软拦）。
+- 拦：语料污染片段、CQ 码、续写残片、垫词整句、客服设定腔（硬拦）；尬聊垫话（软拦）；内置严格下流词表（`resource/message_scrub/vulgar.txt`，与入站 message_scrub 同源）兜底拦 Bot 自己的下流输出。
 - 命中：只降级不重试——换兜底文案，实在没有就静默。
 - 配置：`llm_output_filter_enabled`（默认 `true`）+ `llm_output_filter_chat_hard_phrases` / `llm_output_filter_chat_soft_phrases` 词表；只作用于 chat profile（`LEGACY_LLM_CHAT_TASK_TYPES + CHAT_DRUNK`）。
 
