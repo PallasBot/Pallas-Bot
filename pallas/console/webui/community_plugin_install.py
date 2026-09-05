@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import re
 import shutil
 from typing import TYPE_CHECKING
@@ -30,6 +31,9 @@ INSTALL_TIMEOUT_S = 300.0
 UNINSTALL_TIMEOUT_S = 60.0
 PLUGIN_ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 ALLOWED_GIT_HOSTS = ("github.com", "gitlab.com", "gitee.com", "codeberg.org")
+# 子目录插件包布局的安装元数据（放仓库壳外，避免被 git clean 误删）
+_INSTALL_META_DIR = ".pallas-install"
+_NON_PLUGIN_SUBDIRS = frozenset({"tests", "test"})
 
 
 def _report(on_progress: ProgressReporter | None, percent: int, message: str) -> None:
@@ -129,6 +133,68 @@ def local_plugin_installed(plugin_id: str) -> bool:
     return path.is_dir() and (path / "__init__.py").is_file()
 
 
+def _install_meta_path(plugin_id: str) -> Path:
+    return community_plugins_root() / _INSTALL_META_DIR / f"{validate_plugin_id(plugin_id)}.json"
+
+
+def _read_install_meta(plugin_id: str) -> dict[str, str] | None:
+    try:
+        data = json.loads(_install_meta_path(plugin_id).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def _write_install_meta(plugin_id: str, meta: dict[str, str]) -> None:
+    path = _install_meta_path(plugin_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _clear_install_meta(plugin_id: str) -> None:
+    try:
+        _install_meta_path(plugin_id).unlink()
+    except OSError:
+        pass
+
+
+def _find_subdir_plugin_package(dest: Path) -> Path | None:
+    """仓库根目录无 __init__.py 时，定位子目录插件包（pyproject 声明优先）。"""
+    from pallas.core.platform.bot_runtime.pyproject_plugins import parse_nonebot_plugin_config
+
+    modules, _dirs = parse_nonebot_plugin_config(dest / "pyproject.toml")
+    for mod in modules:
+        top = mod.split(".", 1)[0]
+        candidate = dest / top
+        if candidate.is_dir() and (candidate / "__init__.py").is_file():
+            return candidate
+    candidates = [
+        entry
+        for entry in dest.iterdir()
+        if entry.is_dir() and entry.name not in _NON_PLUGIN_SUBDIRS and (entry / "__init__.py").is_file()
+    ]
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _promote_subdir_plugin(dest: Path, subdir: Path) -> None:
+    """把子目录插件包内容提升到仓库根目录，使 local/plugins/<id>/__init__.py 直接存在。"""
+    for item in sorted(subdir.iterdir(), key=lambda p: p.name):
+        target = dest / item.name
+        if target.exists():
+            raise CommunityPluginInstallError(
+                f"插件包子目录 {subdir.name} 与仓库根目录存在同名文件 {item.name}，无法自动适配",
+                status_code=502,
+            )
+        try:
+            shutil.move(str(item), str(target))
+        except OSError as e:
+            raise CommunityPluginInstallError(
+                f"插件包子目录 {subdir.name} 提升失败：{e}",
+                status_code=502,
+            ) from e
+    shutil.rmtree(subdir)
+
+
 async def install_community_plugin(
     plugin_id: str,
     *,
@@ -182,11 +248,19 @@ async def install_community_plugin(
         )
     _report(on_progress, 80, "校验插件包…")
     if not (dest / "__init__.py").is_file():
-        shutil.rmtree(dest, ignore_errors=True)
-        raise CommunityPluginInstallError(
-            "clone 完成但目录缺少 __init__.py，不是有效 NoneBot 插件包",
-            status_code=502,
-        )
+        subdir = _find_subdir_plugin_package(dest)
+        if subdir is None:
+            shutil.rmtree(dest, ignore_errors=True)
+            raise CommunityPluginInstallError(
+                "clone 完成但目录缺少 __init__.py，不是有效 NoneBot 插件包",
+                status_code=502,
+            )
+        try:
+            _promote_subdir_plugin(dest, subdir)
+        except CommunityPluginInstallError:
+            shutil.rmtree(dest, ignore_errors=True)
+            raise
+        _write_install_meta(pid, {"layout": "subdir", "subdir": subdir.name, "plugin_id": pid})
     dirs_ready = extra_plugin_dirs_ready()
     msg = f"已安装到 local/plugins/{pid}/。"
     if not dirs_ready:
@@ -272,6 +346,20 @@ async def update_community_plugin(
             status_code=502,
         )
     _report(on_progress, 85, "校验插件包…")
+    meta = _read_install_meta(pid)
+    if meta and meta.get("layout") == "subdir":
+        subdir_name = str(meta.get("subdir") or "")
+        if subdir_name:
+            code, _out, _err = await run_git_command(
+                INSTALL_TIMEOUT_S,
+                "clean",
+                "-fdx",
+                cwd=str(dest),
+            )
+            if code == 0:
+                subdir = dest / subdir_name
+                if subdir.is_dir() and (subdir / "__init__.py").is_file():
+                    _promote_subdir_plugin(dest, subdir)
     if not (dest / "__init__.py").is_file():
         raise CommunityPluginInstallError(
             "更新后目录缺少 __init__.py，不是有效 NoneBot 插件包",
@@ -317,6 +405,7 @@ async def uninstall_community_plugin(
         shutil.rmtree(dest)
     except OSError as e:
         raise CommunityPluginInstallError(f"删除目录失败：{e}", status_code=502) from e
+    _clear_install_meta(pid)
     _report(on_progress, 95, "删除完成")
     return {
         "plugin_id": pid,
