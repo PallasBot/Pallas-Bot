@@ -12,8 +12,7 @@ from dataclasses import dataclass, field
 _JUDGE = Callable[[dict], "GuardVerdict"]
 
 _GATE_NOT_FOUND_SUGGESTION = (
-    "守卫链未注册 gate [{}]。请先 register_gate() 再 run()，"
-    "避免守卫静默跳过导致审计记录不完整。"
+    "守卫链未注册 gate [{}]。请先 register_gate() 再 run()，避免守卫静默跳过导致审计记录不完整。"
 )
 
 
