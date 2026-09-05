@@ -19,6 +19,7 @@ from pallas.core.platform.federate.config import (
     federate_prefer_local_owner,
     federate_redis_prefix,
 )
+from pallas.core.platform.federate.deployment import load_or_create_deployment_id
 from pallas.core.platform.federate.redis_settings import get_federate_redis_client
 from pallas.core.platform.ingress.fanout_bypass import GREETING_CALL_NAMES
 from pallas.core.platform.ingress.plugin_command_plaintext import (
@@ -39,7 +40,6 @@ from pallas.core.platform.multi_bot.group_online_cache import (
     NS_LOCAL_CONNECTED,
     get_cached_group_bot_ids,
 )
-from pallas.product.community_stats.store import load_or_create_deployment_id
 
 _PEER_KEY_SEGMENT = "peer_bots"
 _PRESENT_GROUPS_KEY_SEGMENT = "present_groups"

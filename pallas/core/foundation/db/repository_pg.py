@@ -49,7 +49,6 @@ from pallas.core.foundation.db.blob_store import (
     write_image_blob,
 )
 from pallas.core.platform.observability import slow_path_threshold_ms
-from pallas.product.llm.corpus_contamination import reject_corpus_learn_message
 
 if TYPE_CHECKING:
     from pallas.core.foundation.db.modules import Answer, Ban, BlackList, Context, ImageCache, Message
@@ -1659,6 +1658,8 @@ class PgContextRepository:
         khash = keywords_hash(keywords)
         ans_kw_s = _s(answer_keywords) or ""
         msg_s = _s(message) or ""
+        from pallas.product.llm.corpus_contamination import reject_corpus_learn_message
+
         if reject_corpus_learn_message(msg_s, source="upsert_answer"):
             return
 
@@ -1718,6 +1719,8 @@ class PgContextRepository:
         kw_s = _s(keywords) or ""
         ans_kw_s = _s(answer_keywords) or ""
         msg_s = _s(message) or ""
+        from pallas.product.llm.corpus_contamination import reject_corpus_learn_message
+
         if reject_corpus_learn_message(msg_s, source="learn_answer"):
             return False
 
