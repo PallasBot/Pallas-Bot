@@ -4,7 +4,7 @@ import asyncio
 import json
 from types import SimpleNamespace
 
-from tools import llm_persona_ab as tool
+from tools.experimental import llm_persona_ab as tool
 
 
 def test_build_parser_default_mode_is_direct(tmp_path) -> None:
