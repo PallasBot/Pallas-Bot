@@ -117,3 +117,55 @@ def test_teach_guidance_cooldown_expires() -> None:
     assert note_teach_guidance(key, now=3000.0) is False
     assert note_teach_guidance(key, now=3010.0) is False
     assert note_teach_guidance(key, now=3020.0) is True
+
+
+# ---- 脏话自动拉黑（rage 升级） ----
+
+
+def test_attack_auto_ban_count_and_samples() -> None:
+    from pallas.product.llm.rage import (
+        attack_auto_ban_samples,
+        attack_auto_ban_threshold,
+        is_attack_auto_banned,
+        mark_attack_auto_banned,
+        note_rage_silence_for_auto_ban,
+        reset_attack_auto_ban_state,
+    )
+
+    reset_attack_auto_ban_state()
+    key = (1, 2, 3)
+    assert attack_auto_ban_threshold() == 2
+    assert note_rage_silence_for_auto_ban(key, text="傻逼", now=1000.0) == 1
+    assert note_rage_silence_for_auto_ban(key, text="你妈死了", now=1100.0) == 2
+    samples = attack_auto_ban_samples(key)
+    assert "傻逼" in samples and "你妈死了" in samples
+    assert is_attack_auto_banned(key) is False
+    mark_attack_auto_banned(key)
+    assert is_attack_auto_banned(key) is True
+    reset_attack_auto_ban_state()
+    assert is_attack_auto_banned(key) is False
+
+
+def test_attack_auto_ban_window_slides() -> None:
+    from pallas.product.llm.rage import note_rage_silence_for_auto_ban, reset_attack_auto_ban_state
+
+    reset_attack_auto_ban_state()
+    key = (1, 2, 3)
+    assert note_rage_silence_for_auto_ban(key, now=100.0) == 1
+    assert note_rage_silence_for_auto_ban(key, now=86400.0) == 2  # 100 仍在 24h 窗内
+    assert note_rage_silence_for_auto_ban(key, now=172800.0) == 1  # 前两条滑出
+    reset_attack_auto_ban_state()
+
+
+def test_attack_auto_ban_teach_independent() -> None:
+    """教学注入与脏话拉黑互不影响（教学注入不触发拉黑）。"""
+    from pallas.product.llm.memory.teach import note_teach_guidance
+    from pallas.product.llm.rage import note_rage_silence_for_auto_ban, reset_attack_auto_ban_state
+
+    reset_attack_auto_ban_state()
+    note_teach_guidance((1, 2, 3), now=1000.0)
+    note_teach_guidance((1, 2, 3), now=1010.0)
+    note_teach_guidance((1, 2, 3), now=1020.0)
+    # 教学注入不产生静默（静默只在 to_me 脏话攻击时记）
+    assert note_rage_silence_for_auto_ban((1, 2, 3), text="你记住了哦", now=1030.0) == 1
+    reset_attack_auto_ban_state()

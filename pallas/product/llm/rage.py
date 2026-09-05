@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass, replace
 
 from pallas.product.llm.behavior import _DIRECT_ATTACK_TOKENS
@@ -10,6 +11,60 @@ RAGE_MAX = 100
 SILENCE_THRESHOLD = 75
 SILENCE_MIN_SEC = 60
 SILENCE_MAX_SEC = 600
+
+# 自动群拉黑：同 (bot, group, user) 24h 内被 rage 静默次数 ≥ 此值 → 自动群内拉黑
+# 静默本身需要多条 to_me 攻击累计怒气到 75，语义上「静默过 2 次还继续攻击」
+# 基本排除误伤（关系好的调侃不会持续对 bot 发攻击词到触发静默）。
+_AUTO_BAN_SILENCE_WINDOW_SEC = 86400
+_AUTO_BAN_SILENCE_THRESHOLD = 2
+
+_silence_ban_hits: dict[tuple[int, ...], list[float]] = {}
+_attack_ban_samples: dict[tuple[int, ...], list[str]] = {}
+_attack_banned_keys: set[tuple[int, ...]] = set()
+
+
+def note_rage_silence_for_auto_ban(
+    key: tuple[int, ...],
+    *,
+    text: str = "",
+    now: float | None = None,
+) -> int:
+    """记录一次对 bot 的攻击触发的静默，返回 24h 窗口内被静默次数；顺带缓存样例。"""
+    ts = time.time() if now is None else float(now)
+    hits = _silence_ban_hits.setdefault(key, [])
+    cutoff = ts - _AUTO_BAN_SILENCE_WINDOW_SEC
+    hits[:] = [h for h in hits if h > cutoff]
+    hits.append(ts)
+    sample = str(text or "").strip()
+    if sample:
+        samples = _attack_ban_samples.setdefault(key, [])
+        if sample not in samples:
+            samples.append(sample)
+            del samples[:-3]
+    return len(hits)
+
+
+def attack_auto_ban_samples(key: tuple[int, ...]) -> list[str]:
+    return list(_attack_ban_samples.get(key, []))
+
+
+def attack_auto_ban_threshold() -> int:
+    return int(_AUTO_BAN_SILENCE_THRESHOLD)
+
+
+def mark_attack_auto_banned(key: tuple[int, ...]) -> None:
+    """标记该键已自动拉黑（同键只拉黑一次）。"""
+    _attack_banned_keys.add(key)
+
+
+def is_attack_auto_banned(key: tuple[int, ...]) -> bool:
+    return key in _attack_banned_keys
+
+
+def reset_attack_auto_ban_state() -> None:
+    _silence_ban_hits.clear()
+    _attack_ban_samples.clear()
+    _attack_banned_keys.clear()
 
 
 @dataclass(frozen=True, slots=True)
