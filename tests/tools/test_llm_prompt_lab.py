@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-from tools.llm_prompt_lab import load_fixtures, score_fixture
+from tools.experimental.llm_prompt_lab import load_fixtures, score_fixture
 
 
 def test_prompt_lab_scores_fixture_rows(tmp_path) -> None:
