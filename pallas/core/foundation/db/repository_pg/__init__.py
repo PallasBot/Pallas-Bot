@@ -1,0 +1,130 @@
+"""PostgreSQL Repository 实现（拆分包）。
+
+对外保持模块路径 ``pallas.core.foundation.db.repository_pg`` 的导入面完整。
+"""
+
+from __future__ import annotations
+
+from sqlalchemy import inspect
+
+from pallas.core.foundation.db.repository_pg.admin_repo import (
+    PgAclRepository,
+    PgAdminRepository,
+    row_to_admin_member,
+    row_to_pallas_acl,
+)
+from pallas.core.foundation.db.repository_pg.blacklist_repo import (
+    PgBlackListRepository,
+    row_to_blacklist,
+)
+from pallas.core.foundation.db.repository_pg.config_repo import (
+    _CONFIG_TABLE_MAP,
+    PgConfigRepository,
+    _cfg_env,
+    _ConfigCache,
+    _get_config_cache,
+)
+from pallas.core.foundation.db.repository_pg.context_repo import (
+    _ANSWER_BATCH,
+    _BAN_BATCH,
+    _DELETE_ID_BATCH,
+    _LOAD_RELATED,
+    _LOAD_REPLY_CTX,
+    _MSG_BATCH,
+    PgContextRepository,
+    _insert_answers_batched,
+    _insert_bans_batched,
+    build_reply_context,
+    build_reply_message_query,
+    delete_context_answer_orphans,
+    keywords_hash,
+    row_to_context,
+)
+from pallas.core.foundation.db.repository_pg.image_cache_repo import (
+    PgImageCacheRepository,
+    image_cache_cleanup_blobs,
+    image_cache_fill_blob,
+    image_cache_has_blob_clause,
+    image_cache_persist_blob,
+    row_to_image_cache,
+)
+from pallas.core.foundation.db.repository_pg.lifecycle import (
+    _CONFIG_CACHES,
+    PG_SCHEMA_ENSURE_STEPS,
+    _engine,
+    _ensure_pg_background_job_delivery_claim_index,
+    _ensure_pg_background_job_lease_id,
+    _ensure_pg_background_job_pending_claim_index,
+    _ensure_pg_bot_config_community_roster_show_qq,
+    _ensure_pg_bot_config_disabled_plugins_audit,
+    _ensure_pg_bot_config_group_style_enabled,
+    _ensure_pg_bot_config_persona,
+    _ensure_pg_bot_config_plugin_storage,
+    _ensure_pg_context_answer_message_reply_index,
+    _ensure_pg_context_answer_reply_index,
+    _ensure_pg_group_config_blocked_user_ids,
+    _ensure_pg_group_config_disabled_plugins_audit,
+    _ensure_pg_group_config_plugin_storage,
+    _ensure_pg_group_config_style_profile,
+    _ensure_pg_image_cache_blob_data,
+    _ensure_pg_image_cache_blob_path,
+    _ensure_pg_image_cache_content_hash,
+    _ensure_pg_llm_memory_embedding_columns,
+    _ensure_pg_llm_memory_graph_columns,
+    _ensure_pg_llm_memory_metadata_columns,
+    _ensure_pg_llm_relationship_delta_columns,
+    _ensure_pg_message_group_time_index,
+    _ensure_pg_message_group_user_time_index,
+    _ensure_pg_message_timeline_metadata,
+    _ensure_pg_message_unique_anchor,
+    _ensure_pg_stat_statements_extension,
+    _ensure_pg_user_config_ban_audit,
+    _ensure_pg_user_config_maa_devices,
+    _reply_query_snapshot_cache,
+    _reply_query_snapshot_inflight,
+    _reply_query_snapshot_lock,
+    _s,
+    _session_factory,
+    _strip_null_deep,
+    cached_reply_query_snapshot,
+    clear_reply_query_snapshot_cache,
+    dispose_pg,
+    get_session,
+    init_pg,
+    is_pg_initialized,
+    pg_engine,
+    pg_pool_live_stats,
+    try_enable_pg_stat_statements,
+    vacuum_message_table,
+)
+from pallas.core.foundation.db.repository_pg.message_repo import (
+    PgMessageRepository,
+    row_to_message,
+)
+from pallas.core.foundation.db.repository_pg.schema import (
+    AdminMemberRow,
+    BackgroundJobRow,
+    Base,
+    BlackListRow,
+    BotConfigRow,
+    ContextAnswerMessageRow,
+    ContextAnswerRow,
+    ContextBanRow,
+    ContextRow,
+    GroupConfigRow,
+    ImageCacheRow,
+    LlmChatMessageRow,
+    LlmMemoryCategoryRow,
+    LlmMemoryEdgeRow,
+    LlmMemoryEntityRow,
+    LlmMemoryEntryRow,
+    LlmMemoryHierStatusRow,
+    LlmRelationshipNoteRow,
+    MessageRow,
+    PallasACLRow,
+    SchemaMigrationRow,
+    StickerLabelRow,
+    UserConfigRow,
+    UserStickerStatRow,
+    _JsonB,
+)
