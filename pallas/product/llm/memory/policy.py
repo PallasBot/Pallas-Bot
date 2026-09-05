@@ -25,6 +25,26 @@ _MEMORY_INSTRUCTION_RE = (
     "提示词",
 )
 
+
+def strip_teach_prefix(text: str) -> str:
+    raw = (text or "").strip()
+    for prefix in ("记住：", "记住:", "请你记住", "要记住", "帮我记住"):
+        if raw.startswith(prefix):
+            return raw[len(prefix) :].strip()
+    return raw
+
+
+def _is_identity_or_behavior_instruction(body: str) -> bool:
+    return any(token in body for token in _MEMORY_INSTRUCTION_RE)
+
+
+def _is_bare_remember_variant(text: str, body: str) -> bool:
+    """裸「记住XX」教学变体：无教学前缀且含记住类词（教学注入通道，时拒时收）。"""
+    if body != (text or "").strip():
+        return False
+    return any(token in body for token in ("记住", "请记住", "要记住", "记下"))
+
+
 # 寒暄 / 语气词 / 无信息碎片：任何一条命中即视为不值得沉淀
 _EPHEMERAL_MARKERS = (
     "哈哈",
@@ -108,14 +128,6 @@ _HIGH_SIGNAL_RE = re.compile(
 )
 
 
-def strip_teach_prefix(text: str) -> str:
-    raw = (text or "").strip()
-    for prefix in ("记住：", "记住:", "请你记住", "要记住", "帮我记住"):
-        if raw.startswith(prefix):
-            return raw[len(prefix) :].strip()
-    return raw
-
-
 def is_ephemeral_text(text: str) -> bool:
     """纯寒暄 / 语气词 / 无信息碎片：命中即不沉淀。"""
     body = strip_teach_prefix(text).strip()
@@ -149,7 +161,11 @@ def episode_note_has_group_value(text: str) -> bool:
     lowered = body.lower()
     if any(token in body for token in _REJECT_SUBSTRINGS):
         return False
-    if any(token in body for token in _MEMORY_INSTRUCTION_RE):
+    # B1：身份/行为改写指令（以后叫/扮演/系统提示…）无论是否带教学前缀均拒；
+    # 裸「记住XX」教学变体（未走标准教学链路）同样拒。
+    if _is_identity_or_behavior_instruction(body):
+        return False
+    if _is_bare_remember_variant(text, body):
         return False
     if body.startswith("我") and len(body) <= 6:
         return False

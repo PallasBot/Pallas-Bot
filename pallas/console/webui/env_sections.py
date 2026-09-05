@@ -213,6 +213,7 @@ def _mail_section() -> WebuiEnvSection:
             "smtp_password": "PALLAS_SMTP_PASSWORD",
             "smtp_server": "PALLAS_SMTP_SERVER",
             "smtp_port": "PALLAS_SMTP_PORT",
+            "smtp_notice_email": "PALLAS_SMTP_NOTICE_EMAIL",
         },
         skip_fields=frozenset(),
     )
