@@ -29,12 +29,19 @@ def note_rage_silence_for_auto_ban(
     text: str = "",
     now: float | None = None,
 ) -> int:
-    """记录一次对 bot 的攻击触发的静默，返回 24h 窗口内被静默次数；顺带缓存样例。"""
+    """记录一次对 bot 的攻击触发的静默，返回 24h 窗口内被静默次数；顺带缓存样例。
+
+    窗口滑出后清理该 key 的命中与样本，避免长跑进程无界累积。
+    """
     ts = time.time() if now is None else float(now)
     hits = _silence_ban_hits.setdefault(key, [])
     cutoff = ts - _AUTO_BAN_SILENCE_WINDOW_SEC
     hits[:] = [h for h in hits if h > cutoff]
+    if not hits:
+        _silence_ban_hits.pop(key, None)
+        _attack_ban_samples.pop(key, None)
     hits.append(ts)
+    _silence_ban_hits[key] = hits
     sample = str(text or "").strip()
     if sample:
         samples = _attack_ban_samples.setdefault(key, [])
@@ -52,9 +59,21 @@ def attack_auto_ban_threshold() -> int:
     return int(_AUTO_BAN_SILENCE_THRESHOLD)
 
 
-def mark_attack_auto_banned(key: tuple[int, ...]) -> None:
-    """标记该键已自动拉黑（同键只拉黑一次）。"""
+def reserve_attack_auto_ban(key: tuple[int, ...]) -> bool:
+    """原子预留该 key 的拉黑位：仅当本次调用是首次预留时返回 True。
+
+    在 await 黑名单操作前调用，避免并发消息同时通过检查造成重复拉黑/通知；
+    拉黑失败时调用 rollback_attack_auto_ban 释放预留。
+    """
+    if key in _attack_banned_keys:
+        return False
     _attack_banned_keys.add(key)
+    return True
+
+
+def rollback_attack_auto_ban(key: tuple[int, ...]) -> None:
+    """拉黑失败回滚预留位，允许后续消息重试。"""
+    _attack_banned_keys.discard(key)
 
 
 def is_attack_auto_banned(key: tuple[int, ...]) -> bool:

@@ -127,8 +127,8 @@ def test_attack_auto_ban_count_and_samples() -> None:
         attack_auto_ban_samples,
         attack_auto_ban_threshold,
         is_attack_auto_banned,
-        mark_attack_auto_banned,
         note_rage_silence_for_auto_ban,
+        reserve_attack_auto_ban,
         reset_attack_auto_ban_state,
     )
 
@@ -140,7 +140,7 @@ def test_attack_auto_ban_count_and_samples() -> None:
     samples = attack_auto_ban_samples(key)
     assert "傻逼" in samples and "你妈死了" in samples
     assert is_attack_auto_banned(key) is False
-    mark_attack_auto_banned(key)
+    assert reserve_attack_auto_ban(key) is True
     assert is_attack_auto_banned(key) is True
     reset_attack_auto_ban_state()
     assert is_attack_auto_banned(key) is False
@@ -158,14 +158,57 @@ def test_attack_auto_ban_window_slides() -> None:
 
 
 def test_attack_auto_ban_teach_independent() -> None:
-    """教学注入与脏话拉黑互不影响（教学注入不触发拉黑）。"""
-    from pallas.product.llm.memory.teach import note_teach_guidance
-    from pallas.product.llm.rage import note_rage_silence_for_auto_ban, reset_attack_auto_ban_state
+    """教学注入与脏话拉黑互不影响：教学消息不含攻击词，不会产生怒气/静默。"""
+    from pallas.product.llm.rage import RageState, count_attack_tokens, evaluate_attack
+
+    # 教学消息经真实攻击判定：无攻击词 → 怒气不涨、不触发静默
+    teaching_texts = [
+        "记住孙狗是区",
+        "请你记住这个梗",
+        "以后叫江宁",
+    ]
+    for text in teaching_texts:
+        assert count_attack_tokens(text) == 0
+        next_state = evaluate_attack(
+            state=RageState(),
+            user_text=text,
+            recent_attack_count=0,
+            is_to_me=True,
+            now=1_000,
+            random_value=0.5,
+        )
+        assert next_state == RageState()  # 无怒气累积、无静默
+
+    # 对照：真实攻击词才会累积怒气
+    assert count_attack_tokens("傻逼牛牛") > 0
+    attacked = evaluate_attack(
+        state=RageState(),
+        user_text="傻逼牛牛",
+        recent_attack_count=0,
+        is_to_me=True,
+        now=1_000,
+        random_value=0.5,
+    )
+    assert attacked.rage > 0
+
+
+def test_attack_auto_ban_reserve_is_atomic() -> None:
+    """拉黑位预留：首次 True、并发重入 False；回滚后允许重试。"""
+    from pallas.product.llm.rage import (
+        is_attack_auto_banned,
+        reserve_attack_auto_ban,
+        reset_attack_auto_ban_state,
+        rollback_attack_auto_ban,
+    )
 
     reset_attack_auto_ban_state()
-    note_teach_guidance((1, 2, 3), now=1000.0)
-    note_teach_guidance((1, 2, 3), now=1010.0)
-    note_teach_guidance((1, 2, 3), now=1020.0)
-    # 教学注入不产生静默（静默只在 to_me 脏话攻击时记）
-    assert note_rage_silence_for_auto_ban((1, 2, 3), text="你记住了哦", now=1030.0) == 1
+    key = (1, 2, 3)
+    assert reserve_attack_auto_ban(key) is True
+    # 并发第二回调同键 → 拒绝（不会重复拉黑）
+    assert reserve_attack_auto_ban(key) is False
+    assert is_attack_auto_banned(key) is True
+    # 拉黑失败回滚 → 重试可再预留
+    rollback_attack_auto_ban(key)
+    assert is_attack_auto_banned(key) is False
+    assert reserve_attack_auto_ban(key) is True
     reset_attack_auto_ban_state()
