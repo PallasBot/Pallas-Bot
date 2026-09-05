@@ -434,6 +434,7 @@ FIELD_LABELS: dict[str, str] = {
     "smtp_port": "SMTP 端口",
     "smtp_server": "SMTP 服务器",
     "smtp_user": "SMTP 发信账号",
+    "smtp_notice_email": "告警收件邮箱",
     "speak_continuously_max_len": "连说最多句数",
     "speak_continuously_probability": "连说概率",
     "speak_poke_probability": "发言戳一戳概率",

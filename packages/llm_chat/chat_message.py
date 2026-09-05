@@ -530,13 +530,12 @@ async def handle_llm_chat(
 
     teach_body = parse_memory_teach(plain or msg)
     # B3 教学注入相加热冷却：同 (bot, group, user) 短窗累计教学式消息，
-    # 越阈值进入递增冷却；冷却期间不再处理教学也不回复教学消息（含标准「记住：」形态）。
+    # 越阈值进入递增冷却；冷却期间静音教学消息（用户偶尔正常教学不受影响）。
     from pallas.product.llm.memory.teach import looks_like_teach_guidance, note_teach_guidance
 
     if looks_like_teach_guidance(plain or msg):
         key = (int(bot.self_id), int(group_id or 0), int(user_id or 0))
-        blocked = note_teach_guidance(key)
-        if blocked:
+        if note_teach_guidance(key):
             from pallas.product.llm.memory.teach import teach_guidance_cooldown_remaining
 
             logger.info(
