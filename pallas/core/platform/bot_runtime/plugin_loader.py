@@ -28,6 +28,7 @@ from pallas.core.foundation.paths import PROJECT_ROOT
 from pallas.core.foundation.startup_report import register_startup_fact
 from pallas.core.platform.bot_runtime.load_policy import merge_startup_skip_plugins
 from pallas.core.platform.bot_runtime.plugin_matrix import (
+    discover_installed_nonebot_plugin_modules,
     installed_extra_plugin_modules,
     resolve_hub_bundled_module_paths,
     should_load_bundled_plugin,
@@ -46,6 +47,7 @@ from pallas.core.platform.bot_runtime.roles import (
 _PLUGINS_ROOT = PROJECT_ROOT / "packages"
 _PYPROJECT = PROJECT_ROOT / "pyproject.toml"
 _APSCHEDULER_MODULE = "nonebot_plugin_apscheduler"
+_ALCONNA_MODULE = "nonebot_plugin_alconna"
 _BUNDLED_PLUGIN_ENTRY_SUBMODULES: dict[str, tuple[str, ...]] = {}
 _PLUGIN_LOAD_SLOW_SECONDS = 1.0
 _PLUGIN_LOAD_DIAGNOSTIC_LIMIT = 3
@@ -193,22 +195,30 @@ def _prioritize_scheduler_modules(module_paths: list[str]) -> list[str]:
     return sched + rest
 
 
-def clear_poisoned_apscheduler_import(*, role_label: str) -> bool:
-    """移除未通过 load_plugin 注册的提前 import，避免 NoneBot 拒绝加载。"""
-    existing = sys.modules.get(_APSCHEDULER_MODULE)
+def clear_poisoned_plugin_module(module_path: str) -> bool:
+    """移除未通过 load_plugin 注册的提前 import，避免 NoneBot 拒绝加载。
+
+    部分 NoneBot 依赖插件（如 apscheduler / alconna）被 Pallas 作为普通库直接
+    import，未注册 ``__plugin__``，导致第三方插件 ``require()`` 时无法解析。
+    """
+    existing = sys.modules.get(module_path)
     if existing is None or getattr(existing, "__plugin__", None) is not None:
         return False
     logger.warning(
-        "启动：{} 检测到 {} 被提前 import，清理后重试 load_plugin",
-        role_label,
-        _APSCHEDULER_MODULE,
+        "启动：检测到 {} 被提前 import，清理后重试 load_plugin",
+        module_path,
     )
-    del sys.modules[_APSCHEDULER_MODULE]
-    prefix = f"{_APSCHEDULER_MODULE}."
+    del sys.modules[module_path]
+    prefix = f"{module_path}."
     for name in list(sys.modules):
         if name.startswith(prefix):
             del sys.modules[name]
     return True
+
+
+def clear_poisoned_apscheduler_import(*, role_label: str) -> bool:
+    """移除未通过 load_plugin 注册的提前 import，避免 NoneBot 拒绝加载。"""
+    return clear_poisoned_plugin_module(_APSCHEDULER_MODULE)
 
 
 def load_apscheduler_plugin_first(*, role_label: str, loaded_short: set[str]) -> bool:
@@ -224,6 +234,19 @@ def load_apscheduler_plugin_first(*, role_label: str, loaded_short: set[str]) ->
         _APSCHEDULER_MODULE,
     )
     return False
+
+
+def load_required_dependency_plugin(*, role_label: str, loaded_short: set[str]) -> None:
+    """把 Pallas 作为普通库依赖的 NoneBot 插件注册为插件。
+
+    apscheduler 由 load_apscheduler_plugin_first 单独处理；此处处理 alconna：
+    它被 Pallas 直接 import（库用），但也需注册为插件，供第三方 require() 解析。
+    """
+    if _load_slot_key(_ALCONNA_MODULE) in loaded_short:
+        return
+    clear_poisoned_plugin_module(_ALCONNA_MODULE)
+    if _load_plugin_module(_ALCONNA_MODULE, role_label=role_label, loaded_short=loaded_short):
+        logger.debug("{} 已注册 {} 为插件", role_label, _ALCONNA_MODULE)
 
 
 def load_bundled_plugin_entry_submodules(module_path: str) -> None:
@@ -545,24 +568,32 @@ def load_plugins_for_role() -> None:
             skip_short=unified_skip,
             loaded_short=loaded_short,
         )
+        load_required_dependency_plugin(role_label="unified", loaded_short=loaded_short)
+        third_party = _load_discovered_plugin_modules(
+            role_label="unified",
+            module_paths=discover_installed_nonebot_plugin_modules(),
+            skip_short=unified_skip,
+            loaded_short=loaded_short,
+        )
         skip_sources = startup_plugin_skip_source_fact()
         register_startup_fact(
             "plugins",
             f"local={local_loaded + local_extra} src={loaded} official={pip_extra} "
             f"nonebot={nonebot_loaded + nonebot_extra} community={community_loaded + community_extra} "
-            f"extra={extra_dir_loaded + extra_extra} skip={len(unified_skip)}"
+            f"extra={extra_dir_loaded + extra_extra} third_party={third_party} skip={len(unified_skip)}"
             f"{f' skip_sources={skip_sources}' if skip_sources else ''}",
         )
         register_startup_plugin_load_diagnostics()
         logger.debug(
             "Unified plugin startup loaded local [{}], community [{}], source [{}], official [{}], "
-            "NoneBot [{}], extra directories [{}], and skipped [{}].",
+            "NoneBot [{}], extra directories [{}], third-party [{}], and skipped [{}].",
             local_loaded + local_extra,
             community_loaded,
             loaded,
             pip_extra,
             nonebot_extra,
             extra_dir_loaded + extra_extra,
+            third_party,
             sorted(unified_skip),
         )
         return

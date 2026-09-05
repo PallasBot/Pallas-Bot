@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import pkgutil
 import re
 from typing import Literal
 
@@ -381,6 +382,24 @@ def installed_extra_plugin_modules(*, hub: bool | None = None) -> list[str]:
             seen.add(mod)
             out.append(mod)
     return out
+
+
+def discover_installed_nonebot_plugin_modules(*, skip: set[str] | frozenset[str] | None = None) -> list[str]:
+    """自动发现已安装的第三方 NoneBot PyPI 插件模块（nonebot_plugin_*）。
+
+    返回所有已安装的 ``nonebot_plugin_*`` 顶层模块，供 NoneBot 注册（含依赖插件，
+    使 ``require()`` 依赖链可解析）。用 ``skip`` 排除不想启用的插件。
+    """
+    skip_names = set(skip or ())
+    out: list[str] = []
+    for mi in pkgutil.iter_modules():
+        name = mi.name
+        if not name.startswith("nonebot_plugin_"):
+            continue
+        if name in skip_names:
+            continue
+        out.append(name)
+    return sorted(out)
 
 
 def resolve_hub_bundled_module_paths(*, load_bundled_extra: bool | str | None = None) -> list[str]:

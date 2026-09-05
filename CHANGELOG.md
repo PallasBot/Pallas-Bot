@@ -1,10 +1,27 @@
 # Changelog
 
-## [Unreleased]
+## [4.4.0] - 2026-09-05
+
+### 更新公告
+
+- **插件安装**：
+  - 自动识别环境里已装的第三方 NoneBot 插件，装好即可用，不再需要改主仓配置
+  - 社区/已装插件的图片渲染兼容旧版渲染接口
+- **帮助菜单**：
+  - 场景列能识别社区插件的中文触发词（私聊/群聊/自动等）
+  - 插件运行时依赖（如 alconna/orm/user 等运行库）默认不出现在帮助里，菜单更清爽
+- **群管理与审计**：
+  - 拉黑/解禁操作有审计记录，可追溯
+- **稳定性**：
+  - 拉黑命令同步 ACL，屏蔽行为一致
+  - 号主设置同步失败会显式报错，避免配置静默不一致
+  - 启动迁移用仓库查询，避免不一致
+  - 离线评测改用独立更大输出预算
 
 ### Added
 
 * feat(blacklist): 拉黑操作审计记录与展示
+* feat(plugin): 提供已安装第三方 NoneBot 插件自动发现
 
 ### Changed
 
@@ -14,9 +31,12 @@
 * refactor(db): repository_pg 拆分为多子模块包
 * refactor(webui): plugin_catalog 拆分为多子模块包
 * refactor(llm): provider_client 拆分为多子模块包
+* fix(plugin): 接入自动发现并注册 alconna，锁 htmlrender<0.8
 
 ### Fixed
 
+* fix(help): 场景列兜底识别社区菜单中文触发词
+* fix(help): ignored_plugins 默认隐藏第三方运行依赖
 * fix(blacklist): 命令拉黑同步 ACL 规则
 * fix(webui): 号主编辑同步 admin_members
 * fix(webui): 号主编辑同步失败显式报错，避免配置与 ACL 静默不一致

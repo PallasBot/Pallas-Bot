@@ -28,6 +28,16 @@ _METHOD_SCENE_FALLBACK: dict[str, str] = {
     "event_preprocessor": "自动",
 }
 
+# 社区第三方插件（如 nonebot-plugin-PicMenu 的 menu_data）常把 `trigger_method`
+# 写成自由中文文本，其中私聊/群聊/自动等场景词可安全映射，其余语义保持不变。
+_SCENE_KEYWORDS: dict[str, str] = {
+    "私聊": "私聊",
+    "群聊": "群内",
+    "群内": "群内",
+    "自动": "自动",
+    "定时": "自动",
+}
+
 
 def is_user_help_menu_item(item: dict[str, Any]) -> bool:
     audience = str(item.get("help_audience", "user") or "user").strip().lower()
@@ -85,6 +95,18 @@ def help_say_phrase(item: dict[str, Any]) -> str:
     return text or raw
 
 
+def _scene_from_method(method: str) -> str | None:
+    """把单个 trigger_method 值映射为场景；无场景语义时返回 None（保持 —）。"""
+    lower = method.lower()
+    exact = _METHOD_SCENE_FALLBACK.get(lower)
+    if exact and exact != "—":
+        return exact
+    for kw, scene in _SCENE_KEYWORDS.items():
+        if kw in method:
+            return scene
+    return None
+
+
 def help_scene_text(item: dict[str, Any]) -> str:
     """帮助表「场景」列：私聊 / 群内 / 自动。"""
     explicit = str(item.get("trigger_scene", "") or "").strip()
@@ -95,10 +117,11 @@ def help_scene_text(item: dict[str, Any]) -> str:
     if m:
         word = m.group(1)
         return "群内" if word == "群聊" else word
-    method = str(item.get("trigger_method", "") or "").strip().lower()
+    method = str(item.get("trigger_method", "") or "").strip()
+    if not method:
+        return "—"
     if "/" in method:
-        parts = [_METHOD_SCENE_FALLBACK.get(p.strip(), "") for p in method.split("/")]
-        parts = [p for p in parts if p and p != "—"]
-        if parts:
-            return parts[0] if len(set(parts)) == 1 else "多种"
-    return _METHOD_SCENE_FALLBACK.get(method, "—")
+        parts = [_scene_from_method(p.strip()) for p in method.split("/")]
+        uniq = list(dict.fromkeys(p for p in parts if p))
+        return uniq[0] if len(uniq) == 1 else "多种"
+    return _scene_from_method(method) or "—"

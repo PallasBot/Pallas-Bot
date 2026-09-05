@@ -148,6 +148,16 @@ python -m pip install --no-deps -t local/plugins nonebot_plugin_example
 
 第一条会将插件运行依赖安装到 `.venv`；第二条的 `--no-deps` 不可省略，否则 pip 会将依赖也平铺到 `local/plugins/`，Bot 会把其中带有 `__init__.py` 的依赖目录误识别为插件。需要指定镜像时，在两条 `pip install` 命令后都追加相同的 `-i` 与 `--trusted-host` 参数。
 
+### 已装 PyPI 第三方插件自动加载
+
+自 4.4.0 起，Bot 会**自动发现当前环境已安装的第三方 NoneBot 插件**（模块名以 `nonebot_plugin_` 开头），无需在 `pyproject.toml` 登记即可加载：
+
+```bash
+uv pip install --python .venv/bin/python nonebot_plugin_example
+```
+
+装好后重启 Bot 即可识别。若不想自动加载某个已装插件，可将它加入帮助配置的 `ignored_plugins`（见 [帮助菜单](plugin-governance.md)）。依赖插件（如 `alconna`/`orm`/`user` 等运行库）会被自动注册但不展示在帮助菜单。
+
 ## 卸载
 
 可在控制台商店点 **卸载**，也可使用命令行：

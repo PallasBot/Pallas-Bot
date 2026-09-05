@@ -20,6 +20,36 @@ def test_help_scene_explicit() -> None:
     assert help_scene_text(item) == "私聊"
 
 
+def test_help_scene_std_method() -> None:
+    assert help_scene_text({"trigger_method": "on_cmd"}) == "发命令"
+    assert help_scene_text({"trigger_method": "on_message"}) == "发消息"
+    assert help_scene_text({"trigger_method": "scheduler"}) == "自动"
+    assert help_scene_text({"trigger_method": "on_notice"}) == "自动"
+
+
+def test_help_scene_chinese_method_keyword() -> None:
+    # 自由中文触发文本（社区 PicMenu 约定）：带场景词的归一，其余保持 —
+    assert help_scene_text({"trigger_method": "私聊"}) == "私聊"
+    assert help_scene_text({"trigger_method": "群聊"}) == "群内"
+    assert help_scene_text({"trigger_method": "群内"}) == "群内"
+    assert help_scene_text({"trigger_method": "自动签到"}) == "自动"
+    assert help_scene_text({"trigger_method": "定时任务"}) == "自动"
+
+
+def test_help_scene_chinese_non_scene_keeps_placeholder() -> None:
+    # 权限/触发方式语义（已绑定用户/超级用户/回复…/无限制）不映射场景
+    assert help_scene_text({"trigger_method": "已绑定用户"}) == "—"
+    assert help_scene_text({"trigger_method": "超级用户"}) == "—"
+    assert help_scene_text({"trigger_method": "回复一条战绩图片消息"}) == "—"
+    assert help_scene_text({"trigger_method": "无限制"}) == "—"
+
+
+def test_help_scene_multi_method_with_chinese() -> None:
+    assert help_scene_text({"trigger_method": "私聊/私聊"}) == "私聊"
+    assert help_scene_text({"trigger_method": "私聊/群聊"}) == "多种"
+    assert help_scene_text({"trigger_method": "on_cmd/on_notice"}) == "多种"
+
+
 def test_maintainer_filtered_from_user_menu() -> None:
     menu = [
         {"func": "用户功能", "trigger_condition": "牛牛帮助"},
