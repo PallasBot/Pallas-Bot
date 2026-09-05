@@ -213,3 +213,23 @@ def test_official_extension_visuals_use_official_repo_assets() -> None:
     assert visuals["avatar"] is None
     assert visuals["icon"] == visuals["cover"]
     assert visuals["cover"] == "https://raw.githubusercontent.com/PallasBot/Plugin-Draw/main/assets/brand-avatar.png"
+
+
+def test_discover_installed_nonebot_plugin_modules_lists_all_toplevel() -> None:
+    from pallas.core.platform.bot_runtime.plugin_matrix import discover_installed_nonebot_plugin_modules
+
+    mods = discover_installed_nonebot_plugin_modules()
+    # 结果都是 nonebot_plugin_* 顶层模块
+    assert all(m.startswith("nonebot_plugin_") and "." not in m for m in mods)
+    assert len(mods) == len(set(mods))
+
+
+def test_discover_installed_nonebot_plugin_modules_respects_skip() -> None:
+    from pallas.core.platform.bot_runtime.plugin_matrix import discover_installed_nonebot_plugin_modules
+
+    all_mods = discover_installed_nonebot_plugin_modules()
+    if not all_mods:
+        return  # 无第三方插件时跳过
+    first = all_mods[0]
+    filtered = discover_installed_nonebot_plugin_modules(skip={first})
+    assert first not in filtered
