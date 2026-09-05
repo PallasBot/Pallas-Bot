@@ -6,6 +6,15 @@
 
 * feat(blacklist): 拉黑操作审计记录与展示
 
+### Changed
+
+* refactor(tools): 实验性 A/B 脚本归拢到 tools/experimental
+* refactor(core): 收敛 core→product 模块级依赖倒置
+* refactor(llm): 新增输出守卫链骨架 GuardChain
+* refactor(db): repository_pg 拆分为多子模块包
+* refactor(webui): plugin_catalog 拆分为多子模块包
+* refactor(llm): provider_client 拆分为多子模块包
+
 ### Fixed
 
 * fix(blacklist): 命令拉黑同步 ACL 规则

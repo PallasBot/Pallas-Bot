@@ -21,20 +21,29 @@ from pallas.core.platform.ai_callback.task_types import (
     VOICE_TASK_TYPES,
 )
 from pallas.core.platform.shard.coord.ai_task_registry import claim_ai_task_record
-from pallas.product.llm.delivery import (
-    deliver_llm_callback_success,
-    deliver_llm_chat_result,
-    maybe_append_llm_repeater_feedback,
-    track_llm_callback,
-)
+from pallas.product.llm.delivery import deliver_llm_callback_success, track_llm_callback
 from pallas.product.llm.turn_telemetry import record_turn_event
 
+# 注意：runner 是协调 LLM 回调投递的平台执行层，与 product.llm 投递语义天然耦合，
+# 与 core/runtime/boot.py 同理属合理的产品-平台接线，不纳入 core→product 编译期依赖收敛目标。
+
 __all__ = [
-    "deliver_llm_chat_result",
-    "maybe_append_llm_repeater_feedback",
     "resolve_callback_task",
     "run_ai_callback",
 ]
+
+
+def __getattr__(name: str):
+    """惰性提供兼容性重导出符号（历史上曾列于 __all__，现无消费方），避免模块级导入。"""
+    if name == "deliver_llm_chat_result":
+        from pallas.product.llm.delivery import deliver_llm_chat_result
+
+        return deliver_llm_chat_result
+    if name == "maybe_append_llm_repeater_feedback":
+        from pallas.product.llm.delivery import maybe_append_llm_repeater_feedback
+
+        return maybe_append_llm_repeater_feedback
+    raise AttributeError(name)
 
 
 async def resolve_callback_task(task_id: str) -> dict | None:
@@ -65,7 +74,6 @@ async def run_ai_callback(
     task = await resolve_callback_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-
     parsed_agent_trace: dict | None = None
     if agent_trace:
         try:

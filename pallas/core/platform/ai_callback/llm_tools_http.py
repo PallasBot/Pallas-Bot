@@ -5,9 +5,6 @@ from __future__ import annotations
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
-from pallas.product.llm.tools.context import ToolInvokeContext
-from pallas.product.llm.tools.registry import execute_tool_async
-
 
 class LlmToolExecuteRequest(BaseModel):
     name: str = Field(min_length=1)
@@ -25,6 +22,9 @@ def register_llm_tools_http() -> None:
 
     @app.post("/pallas/api/internal/llm/tools/execute")
     async def llm_tool_execute_route(body: LlmToolExecuteRequest) -> dict:
+        from pallas.product.llm.tools.context import ToolInvokeContext
+        from pallas.product.llm.tools.registry import execute_tool_async
+
         if body.name.startswith("social."):
             raise HTTPException(status_code=403, detail="social_tools_require_task_context")
         ctx = ToolInvokeContext(

@@ -11,9 +11,9 @@ from pallas.core.platform.federate.config import (
     federate_ingress_active,
     federate_ingress_bypass_unified,
 )
+from pallas.core.platform.federate.deployment import load_or_create_deployment_id
 from pallas.core.platform.observability import SlowPathTimer, slow_path_threshold_ms
 from pallas.core.platform.shard import context as shard_ctx
-from pallas.product.community_stats.store import load_or_create_deployment_id
 
 if TYPE_CHECKING:
     from nonebot.adapters.onebot.v11 import GroupMessageEvent

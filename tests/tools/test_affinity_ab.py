@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 
-from tools import affinity_ab as tool
+from tools.experimental import affinity_ab as tool
 
 
 def test_result_row_includes_reply_diff_hash() -> None:

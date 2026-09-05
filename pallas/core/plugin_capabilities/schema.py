@@ -15,8 +15,6 @@ from pallas.core.platform.bot_runtime.plugin_matrix import activation_policy_for
 from pallas.core.platform.bot_runtime.plugin_package_aliases import canonical_plugin_package
 from pallas.core.plugin_reload import reload_policy_from_metadata
 from pallas.core.storage.schema import build_plugin_storage_ui
-from pallas.product.llm.knowledge.metadata import iter_loaded_plugin_knowledge_sources
-from pallas.product.llm.tools.metadata import iter_loaded_plugin_llm_tools
 
 
 def build_plugin_capabilities_ui() -> dict[str, Any]:
@@ -81,6 +79,8 @@ def build_plugin_capabilities_ui() -> dict[str, Any]:
             if not entry.get("label"):
                 entry["label"] = cmd.get("label") or cid
 
+    from pallas.product.llm.tools.metadata import iter_loaded_plugin_llm_tools
+
     for plugin_name, title, decl in iter_loaded_plugin_llm_tools():
         bucket = ensure_plugin(plugin_name, title)
         bucket["llm_tools"].append({
@@ -88,6 +88,8 @@ def build_plugin_capabilities_ui() -> dict[str, Any]:
             "command_id": decl.command_id,
             "description": decl.description,
         })
+
+    from pallas.product.llm.knowledge.metadata import iter_loaded_plugin_knowledge_sources
 
     for plugin_name, title, decl in iter_loaded_plugin_knowledge_sources():
         bucket = ensure_plugin(plugin_name, title)

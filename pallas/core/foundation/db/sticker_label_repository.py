@@ -9,10 +9,11 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from pallas.core.foundation.db.repository_pg import StickerLabelRow, get_session
-from pallas.product.llm.sticker_labels import StickerSemanticLabel
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    from pallas.product.llm.sticker_labels import StickerSemanticLabel
 
 
 class StickerLabelRepository:
@@ -52,6 +53,8 @@ class StickerLabelRepository:
         )
 
     async def get(self, content_hash: str) -> StickerSemanticLabel | None:
+        from pallas.product.llm.sticker_labels import StickerSemanticLabel
+
         async with self.session() as session:
             row = await session.get(StickerLabelRow, content_hash)
             if row is None:
@@ -65,6 +68,8 @@ class StickerLabelRepository:
             await session.commit()
 
     async def list_labels(self, *, limit: int = 100, offset: int = 0) -> list[StickerSemanticLabel]:
+        from pallas.product.llm.sticker_labels import StickerSemanticLabel
+
         async with self.session() as session:
             rows = (
                 await session.execute(
@@ -110,6 +115,8 @@ class StickerLabelRepository:
         current_prompt_version: int,
         limit: int = 200,
     ) -> list[StickerSemanticLabel]:
+        from pallas.product.llm.sticker_labels import StickerSemanticLabel
+
         async with self.session() as session:
             rows = (
                 await session.execute(
