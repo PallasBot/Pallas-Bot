@@ -154,6 +154,14 @@ def build_plugin_catalog_rows(
             module_name=module_name,
             top_level_distributions=top_level_distributions,
         )
+        deps_missing: list[str] = []
+        if plugin_source == "community" and root is not None:
+            from pallas.core.platform.bot_runtime.plugin_deps import (
+                missing_dependencies,
+                parse_plugin_dependencies,
+            )
+
+            deps_missing = missing_dependencies(parse_plugin_dependencies(root))
         rows.append({
             "name": resolved_plugin_id,
             "nb_plugin_name": nb_name,
@@ -177,6 +185,7 @@ def build_plugin_catalog_rows(
             "uninstallable": uninstall_info["uninstallable"],
             "uninstall_kind": uninstall_info["uninstall_kind"],
             "uninstall_target": uninstall_info["uninstall_target"],
+            "deps_missing": deps_missing,
             "avatar": visuals["avatar"],
             "icon": visuals["icon"],
             "cover": visuals["cover"],

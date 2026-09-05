@@ -31,6 +31,7 @@ _FACT_LABELS = {
 _WARNING_LABELS = {
     "llm": "LLM",
     "console": "控制台",
+    "plugin_deps": "插件依赖",
 }
 
 

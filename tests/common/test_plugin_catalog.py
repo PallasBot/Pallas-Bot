@@ -1,3 +1,4 @@
+import importlib.metadata
 from pathlib import Path
 
 import pytest
@@ -39,6 +40,34 @@ def test_catalog_plugin_source_marks_registered_local_plugin_as_community(monkey
     assert catalog_plugin_source("demo_local", "local") == "community"
     assert catalog_plugin_source("manual_local", "local") == "local"
     assert catalog_plugin_source("take_name", "bundled") == "bundled"
+
+
+def test_catalog_row_reports_community_deps_missing(tmp_path, monkeypatch) -> None:
+    pkg = tmp_path / "demo"
+    pkg.mkdir()
+    (pkg / "__init__.py").write_text("x = 1\n", encoding="utf-8")
+    (pkg / "pyproject.toml").write_text(
+        '[project]\nname = "demo"\ndependencies = ["httpx>=0.27.0"]\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "pallas.core.foundation.config.repo_settings.resolve_extra_plugin_dirs",
+        lambda: [str(tmp_path)],
+    )
+    monkeypatch.setattr(
+        "pallas.console.webui.plugin_catalog.community_plugin_row_for_plugin",
+        lambda plugin_id: {"plugin_id": plugin_id} if plugin_id == "demo" else None,
+    )
+    monkeypatch.setattr(
+        importlib.metadata,
+        "version",
+        lambda name: (_ for _ in ()).throw(importlib.metadata.PackageNotFoundError(name)),
+    )
+
+    rows = build_plugin_catalog_rows()
+    by_name = {r["name"]: r for r in rows}
+    assert by_name["demo"]["plugin_source"] == "community"
+    assert by_name["demo"]["deps_missing"] == ["httpx>=0.27.0"]
 
 
 def test_plugin_version_prefers_distribution_then_local_pyproject(tmp_path, monkeypatch) -> None:

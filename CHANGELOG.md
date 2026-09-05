@@ -7,6 +7,9 @@
 * feat(core): 默认启用 htmlrender playwright 渲染后端
 * feat(webui): 支持解析 NoneBot 官方嵌套插件 Config（env 键 __ 分隔）
 * feat(webui): 社区插件安装支持子目录插件包结构（pyproject 声明子目录）
+* feat(webui): 社区插件安装/更新自动装 pyproject 依赖，失败回滚并附手动命令
+* feat(webui): 启动时检测 local/plugins 插件依赖缺失并警告
+* feat(webui): 插件目录行暴露社区插件缺失依赖（deps_missing）
 
 ### Fixed
 

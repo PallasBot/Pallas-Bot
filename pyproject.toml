@@ -34,6 +34,7 @@ dependencies = [
     "nonebot-plugin-htmlrender>=0.7,<0.8",
     "githubkit>=0.13,<0.14",
     "mdit-py-emoji>=0.1",
+    "packaging>=24.0",
     # 4.0 默认 PostgreSQL；Mongo 站点仍可用 beanie，多装这两项无害
     "sqlalchemy[asyncio]>=2.0",
     "asyncpg>=0.29",
