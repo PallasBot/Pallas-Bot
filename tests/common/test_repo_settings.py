@@ -159,6 +159,32 @@ def test_apply_repo_settings_defaults_command_start(tmp_path: Path, monkeypatch:
         os.environ.pop("COMMAND_START", None)
 
 
+def test_apply_repo_settings_defaults_render_backend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(rs, "repo_config_path", lambda: tmp_path / "missing.toml")
+    monkeypatch.setattr(rs, "repo_webui_settings_path", lambda: tmp_path / "w.json")
+    monkeypatch.setattr(rs, "repo_env_path", lambda: tmp_path / "e.env")
+    monkeypatch.setattr(rs, "_REPO_ROOT", tmp_path)
+    os.environ.pop("RENDER_BACKEND", None)
+    try:
+        rs.apply_repo_settings_to_environ()
+        assert os.environ["RENDER_BACKEND"] == "playwright"
+    finally:
+        os.environ.pop("RENDER_BACKEND", None)
+
+
+def test_apply_repo_settings_keeps_explicit_render_backend(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(rs, "repo_config_path", lambda: tmp_path / "missing.toml")
+    monkeypatch.setattr(rs, "repo_webui_settings_path", lambda: tmp_path / "w.json")
+    monkeypatch.setattr(rs, "repo_env_path", lambda: tmp_path / "e.env")
+    monkeypatch.setattr(rs, "_REPO_ROOT", tmp_path)
+    os.environ["RENDER_BACKEND"] = "skia"
+    try:
+        rs.apply_repo_settings_to_environ()
+        assert os.environ["RENDER_BACKEND"] == "skia"
+    finally:
+        os.environ.pop("RENDER_BACKEND", None)
+
+
 def test_apply_repo_settings_keeps_explicit_command_start(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(rs, "repo_config_path", lambda: tmp_path / "missing.toml")
     monkeypatch.setattr(rs, "repo_webui_settings_path", lambda: tmp_path / "w.json")
