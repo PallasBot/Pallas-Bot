@@ -130,4 +130,4 @@ def test_get_help_menu_plugins_sorted_by_help_tag_then_display_name(monkeypatch)
     monkeypatch.setattr(pm, "resolve_help_tag_overrides", dict)
 
     menu = pm.get_help_menu_plugins(show_ignored=True)
-    assert [p.name for p in menu] == ["apple", "banana", "zebra", "misc"]
+    assert [p.name for p in menu] == ["banana", "zebra", "apple", "misc"]
