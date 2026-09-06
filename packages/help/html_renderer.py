@@ -222,19 +222,16 @@ def build_menu_context(
             }
             for row in rows
         ]
-        layout_rows: list[list[dict[str, Any]]] = []
-        cursor = 0
-        while cursor < len(row_contexts):
-            remaining = len(row_contexts) - cursor
-            width = 2 if remaining > 3 and remaining % 3 == 1 else min(3, remaining)
-            layout_rows.append(row_contexts[cursor : cursor + width])
-            cursor += width
+        count = len(row_contexts)
+        layout_columns = 1 if count <= 1 else 2
+        layout_rows = [row_contexts[index : index + layout_columns] for index in range(0, count, layout_columns)]
         groups.append({
             "number": f"{group_index:02d}",
             "label": help_tag_label(tag),
             "count": len(rows),
             "rows": row_contexts,
             "layout_rows": layout_rows,
+            "layout_columns": layout_columns,
         })
 
     context = _base_context("menu", title="牛牛帮助" if not show_ignored else "牛牛帮助（超级用户）")

@@ -67,10 +67,16 @@ def test_html_template_uses_dossier_layout_contract() -> None:
     assert 'class="hero"' in template
     assert 'class="quickstart"' in template
     assert 'class="command-navigation"' in template
-    assert 'class="plugin-group-card"' in template
+    assert 'class="plugin-group-card' in template
     assert 'class="plugin-row' in template
-    assert 'class="plugin-list-row"' in template
+    assert 'class="plugin-list-row' in template
+    assert 'class="plugin-list-row{% if plugin_row|length == 1 %} is-single{% endif %}"' in template
+    assert ".plugin-list-row.is-single" in template
     assert "group.layout_rows" in template
+    assert "group.layout_columns" in template
+    assert "group.layout_columns" in template
+    assert 'class="plugin-group-card{% if group.rows|length == 1 %} is-single{% endif %}"' in template
+    assert ".plugin-group-card.is-single" in template
     assert ".plugin-list-row + .plugin-list-row" in template
     assert 'class="plugin-icon"' in template
     assert 'class="terrain-contours"' in template
@@ -188,6 +194,44 @@ def test_build_menu_context_balances_incomplete_last_row(monkeypatch) -> None:
     )
 
     assert [len(row) for row in context["groups"][0]["layout_rows"]] == [2, 2]
+
+
+def test_build_menu_context_uses_stable_columns_for_large_groups(monkeypatch) -> None:
+    module = _load_html_renderer()
+    assert module is not None
+
+    plugin = SimpleNamespace(name="demo", module=SimpleNamespace(__file__=__file__), metadata=None)
+    monkeypatch.setattr(module, "load_help_plugin_icon", lambda *_args, **_kwargs: Image.new("RGBA", (64, 64)))
+    rows = [HelpMenuRow(i, plugin, f"插件 {i}", "示例功能", True, "fun") for i in range(1, 11)]
+
+    context = module.build_menu_context(
+        rows,
+        show_ignored=False,
+        total_plugin_count=10,
+        total_enabled_count=10,
+    )
+
+    assert context["groups"][0]["layout_columns"] == 2
+    assert [len(row) for row in context["groups"][0]["layout_rows"]] == [2, 2, 2, 2, 2]
+
+
+def test_build_menu_context_keeps_single_tail_row_full_width(monkeypatch) -> None:
+    module = _load_html_renderer()
+    assert module is not None
+
+    plugin = SimpleNamespace(name="demo", module=SimpleNamespace(__file__=__file__), metadata=None)
+    monkeypatch.setattr(module, "load_help_plugin_icon", lambda *_args, **_kwargs: Image.new("RGBA", (64, 64)))
+    rows = [HelpMenuRow(i, plugin, f"插件 {i}", "示例功能", True, "fun") for i in range(1, 4)]
+
+    context = module.build_menu_context(
+        rows,
+        show_ignored=False,
+        total_plugin_count=3,
+        total_enabled_count=3,
+    )
+
+    assert context["groups"][0]["layout_columns"] == 2
+    assert [len(row) for row in context["groups"][0]["layout_rows"]] == [2, 1]
     assert context["eyebrow"] == "PALLAS / HELP / INDEX"
     assert context["viewport_width"] == 1180
 

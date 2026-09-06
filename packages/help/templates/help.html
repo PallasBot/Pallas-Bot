@@ -218,6 +218,7 @@
       background: var(--record-body);
     }
     .plugin-group-card:first-child { margin-top: 0; }
+    .plugin-group-card.is-single .plugin-row { min-height: 122px; }
     .plugin-group-head {
       display: flex;
       align-items: center;
@@ -238,6 +239,7 @@
       display: grid;
       column-gap: 28px;
     }
+    .plugin-list-row.is-single { grid-template-columns: 1fr !important; }
     .plugin-list-row + .plugin-list-row { border-top: 1px solid var(--separator); }
     .plugin-row {
       display: flex;
@@ -586,14 +588,14 @@
   </section>
 {%- endmacro %}
 {% macro plugin_group(group) -%}
-  <section class="plugin-group-card">
+  <section class="plugin-group-card{% if group.rows|length == 1 %} is-single{% endif %}">
     <div class="plugin-group-head">
       <h2>{{ group.label }}</h2>
       <span>{{ group.rows|length }} 个插件</span>
     </div>
     <div class="plugin-list">
       {% for plugin_row in group.layout_rows %}
-        <div class="plugin-list-row" style="grid-template-columns: repeat({{ plugin_row|length }}, minmax(0, 1fr));">
+        <div class="plugin-list-row{% if plugin_row|length == 1 %} is-single{% endif %}" style="grid-template-columns: repeat({{ group.layout_columns }}, minmax(0, 1fr));">
           {% for row in plugin_row %}
             <article class="plugin-row{% if not row.enabled %} is-off{% endif %}">
               <img class="plugin-icon" src="{{ row.icon }}" alt="{{ row.display_name }}">
