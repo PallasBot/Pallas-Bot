@@ -53,7 +53,7 @@ COMMAND_START = '["", "/"]'
 # 渲染后端（nonebot-plugin-htmlrender）：框架已默认启用 playwright，无需配置。
 # 仅当其依赖缺失（未 `playwright install chromium`）时才需处理，启动会有告警。
 # 如需切换后可用其他后端，可在此用 RENDER_BACKEND = "playwright" 覆盖。
-# 帮助图默认用 Pillow；确认浏览器可用后可切换为 HTML 技术档案风格。
-# PALLAS_HELP_RENDERER = "html"
+# 帮助图默认用 HTML 技术档案风格；如需兼容模式可切换为 Pillow。
+# PALLAS_HELP_RENDERER = "pillow"
 
 # 多机协同、语料联邦、PG 连接池等进阶项见 docs/Config.md，一般无需写进 pallas.toml。

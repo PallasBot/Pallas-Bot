@@ -14,7 +14,7 @@ from packages.help.menu_rows import HelpMenuRow
 from packages.help.plugin_detail_data import FunctionDetailData, HelpFunctionRow, PluginDetailData
 
 
-def test_help_renderer_mode_defaults_to_pillow_and_accepts_html(monkeypatch) -> None:
+def test_help_renderer_mode_defaults_to_html_and_accepts_pillow(monkeypatch) -> None:
     from packages.help import renderer
 
     monkeypatch.setattr(
@@ -22,6 +22,9 @@ def test_help_renderer_mode_defaults_to_pillow_and_accepts_html(monkeypatch) -> 
         lambda key: os.environ.get(key),
     )
     monkeypatch.delenv("PALLAS_HELP_RENDERER", raising=False)
+    assert renderer.help_renderer_mode() == "html"
+
+    monkeypatch.setenv("PALLAS_HELP_RENDERER", "pillow")
     assert renderer.help_renderer_mode() == "pillow"
 
     monkeypatch.setenv("PALLAS_HELP_RENDERER", "html")
