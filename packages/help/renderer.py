@@ -22,11 +22,11 @@ _HELP_CACHE_FILES_PER_DIR_MAX = 20
 
 
 def help_renderer_mode() -> str:
-    """返回帮助图渲染模式；未知值和缺省值均使用 Pillow。"""
+    """返回帮助图渲染模式；缺省使用 HTML，未知值回退 Pillow。"""
     from pallas.core.foundation.config.repo_settings import repo_env_raw_value
 
-    value = repo_env_raw_value("PALLAS_HELP_RENDERER")
-    return "html" if (value or "").strip().lower() == "html" else "pillow"
+    value = (repo_env_raw_value("PALLAS_HELP_RENDERER") or "").strip().lower()
+    return "html" if value in ("", "html") else "pillow"
 
 
 def invalidate_help_image_cache_suffix() -> None:
