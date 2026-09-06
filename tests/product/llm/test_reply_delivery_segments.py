@@ -91,6 +91,55 @@ async def test_delivery_keeps_short_punctuated_reply_as_one_bubble(
 
 
 @pytest.mark.asyncio
+async def test_delivery_sends_all_overlength_bubbles_without_boundary_punctuation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sender = AsyncMock(
+        side_effect=[
+            type("Receipt", (), {"delivered": True, "message_id": 10})(),
+            type("Receipt", (), {"delivered": True, "message_id": 11})(),
+            type("Receipt", (), {"delivered": True, "message_id": 12})(),
+        ]
+    )
+    monkeypatch.setattr(
+        "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
+        sender,
+    )
+    monkeypatch.setattr(
+        llm_delivery,
+        "get_llm_config",
+        lambda: LlmConfig(llm_reply_trim_terminal_period_enabled=False),
+    )
+
+    reply_text, _text_delivered, _delivered = await llm_delivery.deliver_llm_callback_success(
+        "task-overlength-bubbles",
+        {
+            "task_type": "llm_chat",
+            "bot_id": 99,
+            "group_id": 42,
+            "user_id": 7,
+            "reply_max_length": 12,
+        },
+        bot=object(),
+        group_id=42,
+        bot_id=99,
+        bot_id_str="99",
+        text="今天先说第一件事。后面还有第二件事。最后还有第三件事。",
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+        sleeper=lambda _delay: None,
+    )
+
+    assert [call.args[2] for call in sender.await_args_list] == [
+        "今天先说第一件事",
+        "后面还有第二件事",
+        "最后还有第三件事",
+    ]
+    assert reply_text == "今天先说第一件事\n后面还有第二件事\n最后还有第三件事"
+
+
+@pytest.mark.asyncio
 async def test_drunk_reply_splits_into_bubbles_and_extracts_sticker(monkeypatch: pytest.MonkeyPatch) -> None:
     sender = AsyncMock(
         side_effect=[
