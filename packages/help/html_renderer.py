@@ -209,23 +209,32 @@ def build_menu_context(
 ) -> dict[str, Any]:
     groups: list[dict[str, Any]] = []
     for group_index, (tag, rows) in enumerate(group_rows_by_help_tag(menu_rows, tag_of=lambda row: row.help_tag), 1):
+        row_contexts = [
+            {
+                "index": row.index,
+                "index_label": f"{row.index:02d}",
+                "display_name": row.display_name,
+                "description": strip_help_markdown(row.description),
+                "enabled": row.enabled,
+                "status_code": "ON" if row.enabled else "OFF",
+                "status": "ON 已启用" if row.enabled else "OFF 已停用",
+                "icon": _plugin_icon(row.plugin, size=64, label=row.display_name),
+            }
+            for row in rows
+        ]
+        layout_rows: list[list[dict[str, Any]]] = []
+        cursor = 0
+        while cursor < len(row_contexts):
+            remaining = len(row_contexts) - cursor
+            width = 2 if remaining > 3 and remaining % 3 == 1 else min(3, remaining)
+            layout_rows.append(row_contexts[cursor : cursor + width])
+            cursor += width
         groups.append({
             "number": f"{group_index:02d}",
             "label": help_tag_label(tag),
             "count": len(rows),
-            "rows": [
-                {
-                    "index": row.index,
-                    "index_label": f"{row.index:02d}",
-                    "display_name": row.display_name,
-                    "description": strip_help_markdown(row.description),
-                    "enabled": row.enabled,
-                    "status_code": "ON" if row.enabled else "OFF",
-                    "status": "ON 已启用" if row.enabled else "OFF 已停用",
-                    "icon": _plugin_icon(row.plugin, size=64, label=row.display_name),
-                }
-                for row in rows
-            ],
+            "rows": row_contexts,
+            "layout_rows": layout_rows,
         })
 
     context = _base_context("menu", title="牛牛帮助" if not show_ignored else "牛牛帮助（超级用户）")

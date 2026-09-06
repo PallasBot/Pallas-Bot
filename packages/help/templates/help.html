@@ -209,41 +209,46 @@
     .group-rule { height: 1px; margin-bottom: 13px; background: var(--rule); }
     .group-rule i { display: block; width: 58px; height: 2px; margin-top: -1px; background: var(--accent); }
 
-    /* 一级：插件菜单 */
-    .menu-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-    .menu-card {
-      min-width: 0;
-      border: 1px solid var(--border);
+    /* 一级：分类档案卡；内部条目使用自适应列数，避免每个插件各自套深色卡片 */
+    .plugin-group-card {
+      margin-top: 18px;
+      overflow: hidden;
+      border: 1px solid var(--line);
       border-radius: 6px;
-      background: var(--card);
+      background: var(--record-body);
     }
-    .menu-card { min-height: 146px; overflow: hidden; }
-    .menu-card.is-off { background: var(--panel); }
-    .menu-card.is-off .mc-title strong { color: var(--text-muted); }
-    .menu-head {
+    .plugin-group-card:first-child { margin-top: 0; }
+    .plugin-group-head {
       display: flex;
       align-items: center;
-      gap: 8px;
-      min-height: 42px;
-      padding: 8px 11px;
-      border-left: 3px solid var(--accent);
+      gap: 10px;
+      min-height: 48px;
+      padding: 9px 14px;
+      border-left: 5px solid var(--accent);
       background: var(--record-header);
     }
-    .menu-card .idx {
-      flex: 0 0 auto;
-      color: var(--amber);
-      font-size: 15px;
-      font-weight: 800;
-    }
-    .mc-main {
+    .plugin-group-head h2 { color: var(--text-on-dark); font-size: 19px; font-weight: 800; }
+    .plugin-group-head span { margin-left: auto; color: var(--header-muted); font-size: 11px; }
+    .plugin-list {
       display: grid;
-      min-width: 0;
-      min-height: 104px;
-      grid-template-columns: 64px minmax(0, 1fr);
-      gap: 12px;
-      padding: 12px;
+      padding: 0 18px;
+      background: var(--record-body);
     }
-    .menu-icon {
+    .plugin-list-row {
+      display: grid;
+      column-gap: 28px;
+    }
+    .plugin-list-row + .plugin-list-row { border-top: 1px solid var(--separator); }
+    .plugin-row {
+      display: flex;
+      min-width: 0;
+      min-height: 148px;
+      gap: 13px;
+      padding: 14px 0;
+      background: var(--record-body);
+    }
+    .plugin-icon {
+      flex: 0 0 auto;
       width: 64px;
       height: 64px;
       margin-top: 1px;
@@ -252,14 +257,19 @@
       background: var(--record-body-alt);
       object-fit: cover;
     }
-    .mc-copy { display: flex; min-width: 0; flex-direction: column; }
-    .mc-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
-    .mc-title strong {
-      font-size: 19px;
-      font-weight: 800;
-      color: var(--text-on-dark);
-      overflow-wrap: anywhere;
+    .plugin-copy {
+      display: flex;
+      min-width: 0;
+      flex: 1 1 auto;
+      flex-direction: column;
+      padding-left: 14px;
+      border-left: 1px solid var(--separator);
     }
+    .plugin-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+    .plugin-title .idx { flex: 0 0 auto; color: var(--text); font-size: 16px; font-weight: 800; }
+    .plugin-title strong { color: var(--text); font-size: 18px; font-weight: 800; overflow-wrap: anywhere; }
+    .plugin-row.is-off { background: var(--panel); }
+    .plugin-row.is-off .plugin-title strong { color: var(--text-muted); }
     .badge-off {
       flex: 0 0 auto;
       padding: 0 7px;
@@ -270,13 +280,13 @@
       line-height: 16px;
       white-space: nowrap;
     }
-    .mc-desc {
+    .plugin-desc {
       color: var(--muted);
       font-size: 13px;
       line-height: 1.55;
       overflow-wrap: anywhere;
     }
-    .mc-cmd {
+    .plugin-command {
       display: flex;
       align-items: center;
       flex-wrap: wrap;
@@ -285,7 +295,7 @@
       padding-top: 8px;
       border-top: 1px solid var(--separator);
     }
-    .mc-cmd .cmd-label { color: var(--muted); font-size: 11px; }
+    .plugin-command .cmd-label { color: var(--muted); font-size: 11px; }
 
     /* 二级：每个分组一张大卡片，内部功能以分割线组织 */
     .function-group-card {
@@ -575,6 +585,37 @@
     </div>
   </section>
 {%- endmacro %}
+{% macro plugin_group(group) -%}
+  <section class="plugin-group-card">
+    <div class="plugin-group-head">
+      <h2>{{ group.label }}</h2>
+      <span>{{ group.rows|length }} 个插件</span>
+    </div>
+    <div class="plugin-list">
+      {% for plugin_row in group.layout_rows %}
+        <div class="plugin-list-row" style="grid-template-columns: repeat({{ plugin_row|length }}, minmax(0, 1fr));">
+          {% for row in plugin_row %}
+            <article class="plugin-row{% if not row.enabled %} is-off{% endif %}">
+              <img class="plugin-icon" src="{{ row.icon }}" alt="{{ row.display_name }}">
+              <div class="plugin-copy">
+                <div class="plugin-title">
+                  <span class="idx">{{ row.index_label }}</span>
+                  <strong>{{ row.display_name }}</strong>
+                  {% if not row.enabled %}<span class="badge-off">已关闭</span>{% endif %}
+                </div>
+                <div class="plugin-desc">{{ row.description }}</div>
+                <div class="plugin-command">
+                  <span class="cmd-label">详情</span>
+                  <code class="cmd">牛牛帮助 {{ row.display_name }}</code>
+                </div>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+{%- endmacro %}
 {% macro command_navigation(items) -%}
   {% if items %}
     <footer class="command-navigation">
@@ -634,36 +675,7 @@
       </div>
       <div class="document-body groups">
         {% for group in groups %}
-          <section class="group">
-            <div class="group-head">
-              <h2>{{ group.label }}</h2>
-              <span class="group-count">{{ group.count }} 项功能</span>
-            </div>
-            <div class="group-rule"><i></i></div>
-            <div class="menu-grid">
-              {% for row in group.rows %}
-                <article class="menu-card{% if not row.enabled %} is-off{% endif %}">
-                  <div class="menu-head">
-                    <span class="idx">{{ row.index_label }}</span>
-                    <div class="mc-title">
-                      <strong>{{ row.display_name }}</strong>
-                      {% if not row.enabled %}<span class="badge-off">已关闭</span>{% endif %}
-                    </div>
-                  </div>
-                  <div class="mc-main">
-                    <img class="menu-icon" src="{{ row.icon }}" alt="{{ row.display_name }}">
-                    <div class="mc-copy">
-                      <div class="mc-desc">{{ row.description }}</div>
-                      <div class="mc-cmd">
-                        <span class="cmd-label">查看</span>
-                        <code class="cmd">牛牛帮助 {{ row.display_name }}</code>
-                      </div>
-                    </div>
-                  </div>
-                </article>
-              {% endfor %}
-            </div>
-          </section>
+          {{ plugin_group(group) }}
         {% endfor %}
       </div>
       {{ command_navigation(footer_items) }}

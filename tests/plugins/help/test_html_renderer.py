@@ -67,16 +67,21 @@ def test_html_template_uses_dossier_layout_contract() -> None:
     assert 'class="hero"' in template
     assert 'class="quickstart"' in template
     assert 'class="command-navigation"' in template
-    assert 'class="menu-card' in template
-    assert 'class="menu-icon"' in template
+    assert 'class="plugin-group-card"' in template
+    assert 'class="plugin-row' in template
+    assert 'class="plugin-list-row"' in template
+    assert "group.layout_rows" in template
+    assert ".plugin-list-row + .plugin-list-row" in template
+    assert 'class="plugin-icon"' in template
     assert 'class="terrain-contours"' in template
-    assert ".menu-card { min-height: 146px;" in template
-    assert ".menu-head {" in template
-    assert ".menu-card .idx {" in template
-    assert ".menu-card .idx {\n      flex: 0 0 auto;\n      color: var(--amber);" in template
+    assert "padding: 0 18px" in template
+    assert "column-gap: 28px" in template
+    assert ".plugin-row {" in template
+    assert "border-left: 1px solid var(--separator)" in template
+    assert "border-top: 1px solid var(--separator)" in template
     assert '<span class="group-index">{{ group.number }}</span>' not in template
-    assert ".mc-title strong {" in template
-    assert ".mc-title strong {\n      font-size: 19px;" in template
+    assert ".plugin-title strong {" in template
+    assert ".plugin-title strong { color: var(--text); font-size: 18px;" in template
     assert ".function-index .idx {\n      color: var(--text);\n      font-size: 20px;" in template
     assert "--amber-ink" not in template
     assert ".nav-item.primary" not in template
@@ -103,7 +108,6 @@ def test_html_template_uses_dossier_layout_contract() -> None:
     assert "color: var(--amber)" in template
     assert "background: var(--content-background)" in template
     assert "background: var(--card)" in template
-    assert "grid-template-columns: repeat(3, minmax(0, 1fr))" in template
     assert 'class="function-group-card"' in template
     assert 'class="function-list"' in template
     assert ".function-row:nth-child(n + 3)" in template
@@ -164,6 +168,26 @@ def test_build_menu_context_preserves_groups_and_status(monkeypatch) -> None:
     assert context["groups"][0]["rows"][0]["status"] == "OFF 已停用"
     assert context["groups"][1]["rows"][0]["enabled"] is True
     assert context["groups"][1]["rows"][0]["icon"].startswith("data:image/png;base64,")
+    assert [len(row) for row in context["groups"][0]["layout_rows"]] == [1]
+    assert [len(row) for row in context["groups"][1]["layout_rows"]] == [1]
+
+
+def test_build_menu_context_balances_incomplete_last_row(monkeypatch) -> None:
+    module = _load_html_renderer()
+    assert module is not None
+
+    plugin = SimpleNamespace(name="demo", module=SimpleNamespace(__file__=__file__), metadata=None)
+    monkeypatch.setattr(module, "load_help_plugin_icon", lambda *_args, **_kwargs: Image.new("RGBA", (64, 64)))
+    rows = [HelpMenuRow(i, plugin, f"插件 {i}", "示例功能", True, "fun") for i in range(1, 5)]
+
+    context = module.build_menu_context(
+        rows,
+        show_ignored=False,
+        total_plugin_count=4,
+        total_enabled_count=4,
+    )
+
+    assert [len(row) for row in context["groups"][0]["layout_rows"]] == [2, 2]
     assert context["eyebrow"] == "PALLAS / HELP / INDEX"
     assert context["viewport_width"] == 1180
 
