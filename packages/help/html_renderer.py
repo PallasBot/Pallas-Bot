@@ -23,6 +23,7 @@ HTML_TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 HTML_TEMPLATE_NAME = "help.html"
 HTML_TEMPLATE_PATH = HTML_TEMPLATE_DIR / HTML_TEMPLATE_NAME
 HTML_VIEWPORT_WIDTH = 920
+HTML_WIDE_VIEWPORT_WIDTH = 1180
 HTML_DEVICE_SCALE_FACTOR = 2
 
 _UNORDERED_ITEM_RE = re.compile(r"^\s*[-*•·]\s+(.+)$")
@@ -193,6 +194,7 @@ def _base_context(kind: str, *, title: str) -> dict[str, Any]:
     return {
         "kind": kind,
         "title": title,
+        "viewport_width": HTML_VIEWPORT_WIDTH if kind == "function" else HTML_WIDE_VIEWPORT_WIDTH,
         "visual_mode": ht.help_visual_mode(),
         "theme": _theme_context(),
     }
@@ -220,6 +222,7 @@ def build_menu_context(
                     "enabled": row.enabled,
                     "status_code": "ON" if row.enabled else "OFF",
                     "status": "ON 已启用" if row.enabled else "OFF 已停用",
+                    "icon": _plugin_icon(row.plugin, size=64, label=row.display_name),
                 }
                 for row in rows
             ],
@@ -423,12 +426,17 @@ async def render_help_template(context: dict[str, Any]) -> bytes:
     """用项目统一的 htmlrender 后端渲染帮助模板。"""
     from nonebot_plugin_htmlrender.render import render_template
 
+    viewport_width = int(
+        context.get("viewport_width")
+        or (HTML_VIEWPORT_WIDTH if context.get("kind") == "function" else HTML_WIDE_VIEWPORT_WIDTH)
+    )
+
     return await render_template(
         str(HTML_TEMPLATE_DIR),
         template_name=HTML_TEMPLATE_NAME,
         templates=context,
         pages={
-            "viewport": {"width": HTML_VIEWPORT_WIDTH, "height": 10},
+            "viewport": {"width": viewport_width, "height": 10},
             "base_url": "about:blank",
         },
         image_type="png",
@@ -443,6 +451,7 @@ __all__ = [
     "HTML_TEMPLATE_NAME",
     "HTML_TEMPLATE_PATH",
     "HTML_VIEWPORT_WIDTH",
+    "HTML_WIDE_VIEWPORT_WIDTH",
     "build_function_context",
     "build_menu_context",
     "build_plugin_context",

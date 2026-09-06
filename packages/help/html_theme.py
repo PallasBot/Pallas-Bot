@@ -21,7 +21,7 @@ _FIXED: dict[str, str] = {
     "text_on_dark": "#EEEEEA",
     "line": "#969D99",
     "cyan": "#2DB9DD",
-    "chartreuse": "#C7CD00",
+    "chartreuse": "#E3D600",
     "status_on": "#2A8060",
     "status_off": "#A64E49",
 }

@@ -6,12 +6,13 @@
     :root {
       color-scheme: light;
       --accent-dark: var(--cyan, #2DB9DD);
-      --warn-dark: var(--amber, #C7CD00);
+      --warn-dark: var(--amber, #E3D600);
       --rule: var(--line, #969D99);
+      --separator: rgba(150, 157, 153, .52);
       --accent-soft: rgba(45, 185, 221, .14);
     }
     * { box-sizing: border-box; }
-    html, body { margin: 0; padding: 0; width: 920px; background: var(--canvas); }
+    html, body { margin: 0; padding: 0; width: {{ viewport_width }}px; background: var(--canvas); }
     body {
       color: var(--text);
       font-family: "Source Han Sans SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
@@ -30,7 +31,8 @@
       letter-spacing: .06em;
     }
     .document-shell {
-      width: 872px;
+      position: relative;
+      width: calc(100% - 48px);
       margin: 14px 24px 24px;
       overflow: hidden;
       border: 1px solid var(--border);
@@ -38,6 +40,19 @@
       background: var(--content-background);
       box-shadow: 0 8px 20px rgba(35, 45, 48, .1);
     }
+    .document-shell > *:not(.terrain-contours) { position: relative; z-index: 1; }
+    .terrain-contours {
+      position: absolute;
+      z-index: 0;
+      right: -55px;
+      bottom: 35px;
+      width: 980px;
+      height: 660px;
+      color: var(--text-muted);
+      opacity: .13;
+      pointer-events: none;
+    }
+    .terrain-contours path { fill: none; stroke: currentColor; stroke-width: 1.15; vector-effect: non-scaling-stroke; }
 
     /* ---------- 页头（深色带，内容底部收窄） ---------- */
     .hero {
@@ -189,47 +204,58 @@
       padding-left: 10px;
       border-left: 5px solid var(--accent);
     }
-    .group-index {
-      flex: 0 0 auto;
-      color: var(--amber);
-      font-size: 12px;
-      font-weight: 700;
-    }
-    .group-head h2 { color: var(--text); font-size: 18px; font-weight: 800; letter-spacing: -.01em; }
+    .group-head h2 { color: var(--text); font-size: 20px; font-weight: 800; letter-spacing: -.01em; }
     .group-count { margin-left: auto; color: var(--text-muted); font-size: 12px; }
     .group-rule { height: 1px; margin-bottom: 13px; background: var(--rule); }
     .group-rule i { display: block; width: 58px; height: 2px; margin-top: -1px; background: var(--accent); }
 
     /* 一级：插件菜单 */
-    .menu-grid, .function-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
-    .menu-card, .fn-card {
+    .menu-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .menu-card {
       min-width: 0;
       border: 1px solid var(--border);
       border-radius: 6px;
       background: var(--card);
     }
-    .menu-card { overflow: hidden; }
+    .menu-card { min-height: 146px; overflow: hidden; }
     .menu-card.is-off { background: var(--panel); }
     .menu-card.is-off .mc-title strong { color: var(--text-muted); }
     .menu-head {
       display: flex;
       align-items: center;
       gap: 8px;
-      min-height: 35px;
-      padding: 7px 10px;
+      min-height: 42px;
+      padding: 8px 11px;
       border-left: 3px solid var(--accent);
       background: var(--record-header);
     }
     .menu-card .idx {
       flex: 0 0 auto;
-      color: var(--accent);
-      font-size: 12px;
-      font-weight: 700;
+      color: var(--amber);
+      font-size: 15px;
+      font-weight: 800;
     }
-    .mc-main { min-width: 0; flex: 1 1 auto; padding: 10px 12px 11px; }
+    .mc-main {
+      display: grid;
+      min-width: 0;
+      min-height: 104px;
+      grid-template-columns: 64px minmax(0, 1fr);
+      gap: 12px;
+      padding: 12px;
+    }
+    .menu-icon {
+      width: 64px;
+      height: 64px;
+      margin-top: 1px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--record-body-alt);
+      object-fit: cover;
+    }
+    .mc-copy { display: flex; min-width: 0; flex-direction: column; }
     .mc-title { display: flex; align-items: center; gap: 8px; min-width: 0; }
     .mc-title strong {
-      font-size: 15px;
+      font-size: 19px;
       font-weight: 800;
       color: var(--text-on-dark);
       overflow-wrap: anywhere;
@@ -245,43 +271,79 @@
       white-space: nowrap;
     }
     .mc-desc {
-      margin-top: 3px;
       color: var(--muted);
-      font-size: 12.5px;
+      font-size: 13px;
       line-height: 1.55;
       overflow-wrap: anywhere;
     }
-    .mc-cmd { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+    .mc-cmd {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: auto;
+      padding-top: 8px;
+      border-top: 1px solid var(--separator);
+    }
     .mc-cmd .cmd-label { color: var(--muted); font-size: 11px; }
 
-    /* 二级：功能条目 */
-    .fn-section-title {
-      display: flex;
-      align-items: baseline;
-      gap: 9px;
-      margin: 22px 0 11px;
-      padding-left: 10px;
-      border-left: 5px solid var(--accent);
+    /* 二级：每个分组一张大卡片，内部功能以分割线组织 */
+    .function-group-card {
+      margin-top: 18px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--record-body);
     }
-    .fn-section-title:first-child { margin-top: 4px; }
-    .fn-section-title h3 { color: var(--text); font-size: 16px; font-weight: 800; }
-    .fn-section-title .kicker { color: var(--accent); font-size: 10px; letter-spacing: .12em; }
-    .fn-card { display: flex; flex-direction: column; overflow: hidden; }
-    .fn-head {
+    .function-group-card:first-child { margin-top: 0; }
+    .function-group-head {
       display: flex;
-      align-items: baseline;
-      gap: 8px;
-      min-width: 0;
-      min-height: 36px;
-      padding: 7px 10px;
-      border-left: 3px solid var(--accent);
+      align-items: center;
+      gap: 10px;
+      min-height: 44px;
+      padding: 9px 14px;
+      border-left: 5px solid var(--accent);
       background: var(--record-header);
     }
-    .fn-head .idx { color: var(--accent); font-size: 11px; font-weight: 700; }
-    .fn-name { font-size: 14.5px; font-weight: 800; color: var(--text-on-dark); overflow-wrap: anywhere; }
-    .fn-body { padding: 10px 12px 11px; }
+    .function-group-head h3 { color: var(--text-on-dark); font-size: 19px; font-weight: 800; }
+    .function-group-head span { margin-left: auto; color: var(--header-muted); font-size: 11px; }
+    .function-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      column-gap: 0;
+    }
+    .function-row {
+      display: grid;
+      grid-template-columns: 52px minmax(0, 1fr);
+      column-gap: 14px;
+      min-width: 0;
+      min-height: 112px;
+      padding: 13px 15px 14px;
+      border-top: 1px solid transparent;
+    }
+    .function-row:nth-child(n + 3) { border-top: 1px solid var(--separator); }
+    .function-row:nth-child(odd) { padding-right: 26px; }
+    .function-row:nth-child(even) { padding-left: 26px; }
+    .function-index {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: flex-start;
+      padding-right: 12px;
+      border-right: 1px solid var(--separator);
+    }
+    .function-index .idx {
+      color: var(--text);
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+    .function-row-content { display: flex; min-width: 0; min-height: 84px; flex-direction: column; }
+    .function-row-head { display: flex; align-items: baseline; gap: 9px; min-width: 0; }
+    .fn-name { font-size: 20px; font-weight: 800; color: var(--text); line-height: 1.35; overflow-wrap: anywhere; }
     .fn-brief {
-      margin-top: 3px;
+      margin-top: 5px;
       color: var(--muted);
       font-size: 12px;
       line-height: 1.5;
@@ -292,9 +354,8 @@
       align-items: center;
       flex-wrap: wrap;
       gap: 6px 12px;
-      margin-top: 8px;
-      padding-top: 8px;
-      border-top: 1px solid var(--line);
+      margin-top: auto;
+      padding-top: 6px;
     }
     .fn-action { display: inline-flex; align-items: baseline; gap: 5px; min-width: 0; }
     .fn-action-label { color: var(--muted); font-size: 10px; }
@@ -457,7 +518,6 @@
       color: var(--header-muted);
       font-size: 12px;
     }
-    .nav-item.primary { border-color: rgba(45, 185, 221, .4); background: rgba(45, 185, 221, .09); }
     .nav-label { color: var(--amber); font-size: 10px; letter-spacing: .08em; }
     .nav-command { overflow-wrap: anywhere; color: var(--header-fg); font-size: 12.5px; font-weight: 600; }
     .nav-item code.cmd.dark { font-size: 11.5px; }
@@ -482,16 +542,6 @@
     <span class="status-text{% if code == 'OFF' %} off{% endif %}">{{ label }}</span>
   </span>
 {%- endmacro %}
-{% macro section_heading(number, title, count="") -%}
-  <div class="group">
-    <div class="group-head">
-      <span class="group-index">{{ number }}</span>
-      <h2>{{ title }}</h2>
-      {% if count %}<span class="group-count">{{ count }}</span>{% endif %}
-    </div>
-    <div class="group-rule"><i></i></div>
-  </div>
-{%- endmacro %}
 {% macro document_section(section) -%}
   <section class="doc-section">
     <div class="doc-section-heading">
@@ -500,30 +550,36 @@
     <div class="doc-body">{{ section.body_html|safe }}</div>
   </section>
 {%- endmacro %}
-{% macro function_cards(rows, plugin_title) -%}
-  <div class="function-grid">
-    {% for row in rows %}
-      <article class="fn-card">
-        <div class="fn-head">
+{% macro function_group(group, plugin_title) -%}
+  <section class="function-group-card">
+    <div class="function-group-head">
+      <h3>{{ group.label }}</h3>
+      <span>{{ group.rows|length }} 项功能</span>
+    </div>
+    <div class="function-list">
+    {% for row in group.rows %}
+      <article class="function-row">
+        <div class="function-index">
           <span class="idx">{{ row.index_label }}</span>
-          <span class="fn-name">{{ row.func }}</span>
         </div>
-        <div class="fn-body">
+        <div class="function-row-content">
+          <div class="function-row-head"><span class="fn-name">{{ row.func }}</span></div>
           {% if row.brief %}<div class="fn-brief">{{ row.brief }}</div>{% endif %}
           <div class="fn-actions">
-                    {% if row.say_main %}<span class="fn-action"><span class="fn-action-label">触发</span><code class="cmd">{{ row.say_main }}</code></span>{% endif %}
-                    <span class="fn-action"><span class="fn-action-label">详情</span><code class="cmd">牛牛帮助 {{ plugin_title }} {{ row.index }}</code></span>
+            {% if row.say_main %}<span class="fn-action"><span class="fn-action-label">触发</span><code class="cmd">{{ row.say_main }}</code></span>{% endif %}
+            <span class="fn-action"><span class="fn-action-label">详情</span><code class="cmd">牛牛帮助 {{ plugin_title }} {{ row.index }}</code></span>
           </div>
         </div>
       </article>
     {% endfor %}
-  </div>
+    </div>
+  </section>
 {%- endmacro %}
 {% macro command_navigation(items) -%}
   {% if items %}
     <footer class="command-navigation">
       {% for item in items %}
-        <div class="nav-item{% if item.primary %} primary{% endif %}">
+        <div class="nav-item">
           <span class="nav-label">{{ item.label }}</span>
           <span class="nav-command">{{ item.command }}</span>
         </div>
@@ -533,12 +589,37 @@
 {%- endmacro %}
   {% if badge %}<div class="badge-note">{{ badge }}</div>{% endif %}
   <main class="document-shell">
+    {% if kind != "function" %}
+      <svg class="terrain-contours" viewBox="0 0 980 660" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M-40 610 C75 525 45 430 160 405 C280 378 258 278 390 258 C532 236 535 128 695 125 C820 122 875 52 1030 10"/>
+        <path d="M-35 632 C96 545 67 454 178 428 C301 399 287 301 411 280 C556 255 566 154 713 148 C842 143 899 78 1038 35"/>
+        <path d="M-28 653 C116 568 92 480 198 452 C321 420 316 326 435 304 C578 276 600 181 733 173 C864 165 922 104 1044 62"/>
+        <path d="M32 676 C142 596 119 509 220 478 C343 440 349 352 460 329 C597 299 633 209 753 199 C884 187 944 132 1055 91"/>
+        <path d="M100 687 C172 620 151 538 244 504 C365 459 383 380 486 354 C615 322 665 239 774 226 C905 210 969 160 1066 121"/>
+        <path d="M170 696 C202 645 188 568 270 532 C389 480 419 409 514 381 C634 345 698 271 797 255 C925 234 994 190 1078 153"/>
+        <path d="M260 700 C239 665 229 601 299 562 C412 500 457 441 544 409 C655 367 733 306 821 285 C943 256 1018 221 1090 188"/>
+        <path d="M355 704 C280 680 278 632 333 594 C438 521 495 475 577 438 C681 391 771 345 848 316 C962 274 1043 253 1102 225"/>
+        <path d="M455 708 C331 692 336 663 371 628 C464 540 537 512 613 468 C711 412 811 387 878 350 C981 294 1068 287 1115 264"/>
+        <path d="M548 712 C393 703 407 689 414 665 C484 558 581 550 652 499 C741 434 850 428 911 385 C1001 321 1094 322 1127 305"/>
+        <path d="M620 716 C466 712 480 704 472 686 C516 582 626 588 691 531 C770 461 887 469 945 422 C1020 351 1114 359 1140 348"/>
+        <path d="M675 720 C535 720 551 715 535 703 C552 614 666 624 731 564 C801 494 919 510 979 461 C1038 386 1132 397 1155 394"/>
+        <path d="M700 585 C754 519 823 532 856 485 C892 434 877 366 944 343 C1008 320 1013 251 1083 239"/>
+        <path d="M727 602 C780 545 841 556 879 513 C923 463 911 397 974 373 C1039 348 1043 285 1105 269"/>
+        <path d="M758 622 C807 572 862 581 903 543 C952 497 947 431 1006 405 C1071 377 1076 320 1128 302"/>
+        <path d="M650 640 C633 586 668 541 728 528 C798 513 835 546 841 592 C848 639 802 672 743 674 C699 675 663 663 650 640 Z"/>
+        <path d="M676 630 C665 594 690 563 733 554 C780 544 810 566 814 598 C818 630 786 651 746 652 C714 653 684 646 676 630 Z"/>
+        <path d="M702 620 C696 599 711 583 738 578 C766 573 786 585 788 604 C790 622 771 633 747 634 C726 634 707 630 702 620 Z"/>
+        <path d="M15 650 C-15 602 15 558 70 546 C129 533 175 559 184 600 C194 643 158 680 99 687 C58 692 29 675 15 650 Z"/>
+        <path d="M42 641 C23 610 42 582 78 574 C116 566 148 582 154 609 C160 637 136 659 99 663 C73 666 51 657 42 641 Z"/>
+        <path d="M68 631 C58 615 70 601 89 598 C108 594 125 603 128 617 C131 632 119 643 99 645 C85 647 74 641 68 631 Z"/>
+      </svg>
+    {% endif %}
     {% if kind == "menu" %}
       <header class="hero">
         <div class="hero-copy">
           <div class="eyebrow">{{ eyebrow }}</div>
           <h1 class="hero-title">{{ title }}</h1>
-          <p class="hero-sub">想玩什么？从下面选一个功能，发送「牛牛帮助 + 插件名」就能查看完整用法。</p>
+          <p class="hero-sub">发送「牛牛帮助 + 插件名」即可查看完整用法。</p>
         </div>
         <div class="hero-aside">
           <div class="stat-big">{{ stats_big }}</div>
@@ -555,7 +636,6 @@
         {% for group in groups %}
           <section class="group">
             <div class="group-head">
-              <span class="group-index">{{ group.number }}</span>
               <h2>{{ group.label }}</h2>
               <span class="group-count">{{ group.count }} 项功能</span>
             </div>
@@ -571,10 +651,13 @@
                     </div>
                   </div>
                   <div class="mc-main">
-                    <div class="mc-desc">{{ row.description }}</div>
-                    <div class="mc-cmd">
-                      <span class="cmd-label">查看</span>
-                      <code class="cmd">牛牛帮助 {{ row.display_name }}</code>
+                    <img class="menu-icon" src="{{ row.icon }}" alt="{{ row.display_name }}">
+                    <div class="mc-copy">
+                      <div class="mc-desc">{{ row.description }}</div>
+                      <div class="mc-cmd">
+                        <span class="cmd-label">查看</span>
+                        <code class="cmd">牛牛帮助 {{ row.display_name }}</code>
+                      </div>
                     </div>
                   </div>
                 </article>
@@ -604,11 +687,7 @@
       <div class="document-body">
         {% if function_groups %}
           {% for group in function_groups %}
-            <div class="fn-section-title">
-              <h3>{{ group.label }}</h3>
-              <span class="group-count" style="margin-left:auto;">{{ group.rows|length }} 项</span>
-            </div>
-            {{ function_cards(group.rows, title) }}
+            {{ function_group(group, title) }}
           {% endfor %}
         {% endif %}
         {% for section in sections %}{{ document_section(section) }}{% endfor %}

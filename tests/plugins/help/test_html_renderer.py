@@ -53,7 +53,7 @@ def test_html_theme_is_separate_from_pillow_theme(monkeypatch) -> None:
     assert light["header"] == "#343A3D"
     assert light["header_panel"] == "#42494C"
     assert light["cyan"] == "#2DB9DD"
-    assert light["amber"] == "#C7CD00"
+    assert light["amber"] == "#E3D600"
     assert help_theme.ACCENT == (124, 58, 237)
 
 
@@ -68,8 +68,27 @@ def test_html_template_uses_dossier_layout_contract() -> None:
     assert 'class="quickstart"' in template
     assert 'class="command-navigation"' in template
     assert 'class="menu-card' in template
-    assert 'class="fn-card"' in template
-    assert 'class="fn-section-title"' in template
+    assert 'class="menu-icon"' in template
+    assert 'class="terrain-contours"' in template
+    assert ".menu-card { min-height: 146px;" in template
+    assert ".menu-head {" in template
+    assert ".menu-card .idx {" in template
+    assert ".menu-card .idx {\n      flex: 0 0 auto;\n      color: var(--amber);" in template
+    assert '<span class="group-index">{{ group.number }}</span>' not in template
+    assert ".mc-title strong {" in template
+    assert ".mc-title strong {\n      font-size: 19px;" in template
+    assert ".function-index .idx {\n      color: var(--text);\n      font-size: 20px;" in template
+    assert "--amber-ink" not in template
+    assert ".nav-item.primary" not in template
+    assert ".fn-name { font-size: 20px;" in template
+    assert 'class="function-row"' in template
+    assert 'class="function-index"' in template
+    assert 'class="function-row-content"' in template
+    assert 'class="function-index-label"' not in template
+    assert ".function-index {" in template
+    assert "justify-content: flex-start;" in template
+    assert ".function-row {\n      display: grid;\n      grid-template-columns: 52px minmax(0, 1fr);" in template
+    assert ".function-group-head h3 { color: var(--text-on-dark); font-size: 19px;" in template
     assert 'class="command-feature"' in template
     assert ".command-feature {" in template
     assert "background: var(--record-body-alt)" in template
@@ -84,7 +103,12 @@ def test_html_template_uses_dossier_layout_contract() -> None:
     assert "color: var(--amber)" in template
     assert "background: var(--content-background)" in template
     assert "background: var(--card)" in template
-    assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in template
+    assert "grid-template-columns: repeat(3, minmax(0, 1fr))" in template
+    assert 'class="function-group-card"' in template
+    assert 'class="function-list"' in template
+    assert ".function-row:nth-child(n + 3)" in template
+    assert "border-top: 1px solid var(--separator)" in template
+    assert "column-gap: 0" in template
     assert ".doc-body pre" in template
     assert ".doc-body blockquote" in template
     assert "white-space: pre-wrap" in template
@@ -139,8 +163,9 @@ def test_build_menu_context_preserves_groups_and_status(monkeypatch) -> None:
     assert context["groups"][0]["rows"][0]["enabled"] is False
     assert context["groups"][0]["rows"][0]["status"] == "OFF 已停用"
     assert context["groups"][1]["rows"][0]["enabled"] is True
-    assert "icon" not in context["groups"][1]["rows"][0]
+    assert context["groups"][1]["rows"][0]["icon"].startswith("data:image/png;base64,")
     assert context["eyebrow"] == "PALLAS / HELP / INDEX"
+    assert context["viewport_width"] == 1180
 
 
 def test_build_plugin_context_contains_functions_and_sections(monkeypatch) -> None:
@@ -174,6 +199,7 @@ def test_build_plugin_context_contains_functions_and_sections(monkeypatch) -> No
     assert context["function_section_number"] == "01"
     assert context["sections"] == []
     assert context["eyebrow"] == "PALLAS / PLUGIN / DOSSIER"
+    assert context["viewport_width"] == 1180
 
 
 def test_build_plugin_context_keeps_long_description_and_numbers_sections(monkeypatch) -> None:
@@ -321,6 +347,7 @@ def test_build_function_context_contains_navigation_and_command() -> None:
         {"label": "COOLDOWN", "title": "冷却时间", "value": "冷却 3 秒"},
     ]
     assert context["eyebrow"] == "PALLAS / COMMAND / BRIEF"
+    assert context["viewport_width"] == 920
     assert context["breadcrumb"] == "帮助总览 / 示例插件 / 查看示例"
     assert context["footer_items"] == [
         {"label": "返回插件", "command": "牛牛帮助 示例插件", "primary": True},
@@ -426,6 +453,7 @@ async def test_render_help_template_uses_htmlrender_template_api(monkeypatch) ->
     assert kwargs["template_name"] == "help.html"
     assert kwargs["templates"] == {"kind": "menu"}
     assert kwargs["resolve_resources"] is False
+    assert kwargs["pages"]["viewport"]["width"] == 1180
 
 
 @pytest.mark.asyncio
