@@ -30,6 +30,8 @@ _ORDERED_ITEM_RE = re.compile(r"^\s*\d+[.)]\s+(.+)$")
 _INLINE_CODE_RE = re.compile(r"`([^`\n]+)`")
 _FENCED_CODE_RE = re.compile(r"^\s*```(?:[^\s`]*)?\s*$")
 _DESCRIPTION_SUMMARY_LIMIT = 96
+# 命令候选分隔（两侧带空白的竖线），避免切碎 <傀影|水月> 这类占位符
+_CMD_CANDIDATE_RE = re.compile(r"\s+\|\s+")
 
 
 def _theme_context() -> dict[str, str]:
@@ -57,6 +59,27 @@ def _inline_body_html(text: str) -> str:
 def _display_command(text: str) -> str:
     """返回帮助图中展示的命令，不显示 Markdown 行内代码标记。"""
     return _INLINE_CODE_RE.sub(r"\1", strip_help_markdown((text or "").strip()))
+
+
+def _split_say_candidates(text: str) -> tuple[str, list[str]]:
+    """把「主命令 | 别名」拆为 (主命令, [别名…])；无法拆分时整体作为主命令。"""
+    cleaned = _display_command(text)
+    parts = [part.strip() for part in _CMD_CANDIDATE_RE.split(cleaned) if part.strip()]
+    if len(parts) >= 2:
+        return parts[0], parts[1:]
+    return cleaned, []
+
+
+def _command_examples(detail: str, primary: str, func_name: str) -> list[str]:
+    candidates = re.findall(r"`([^`\n]+)`", detail or "")
+    examples: list[str] = []
+    for candidate in candidates:
+        command = candidate.strip()
+        if not command or (primary not in command and func_name not in command):
+            continue
+        if command not in examples:
+            examples.append(command)
+    return examples[:4]
 
 
 def _description_display(text: str) -> tuple[str, bool]:
@@ -197,19 +220,26 @@ def build_menu_context(
                     "enabled": row.enabled,
                     "status_code": "ON" if row.enabled else "OFF",
                     "status": "ON 已启用" if row.enabled else "OFF 已停用",
-                    "icon": _plugin_icon(row.plugin, size=56, label=row.display_name),
                 }
                 for row in rows
             ],
         })
 
     context = _base_context("menu", title="牛牛帮助" if not show_ignored else "牛牛帮助（超级用户）")
+    first_open = next(
+        (row["display_name"] for group in groups for row in group["rows"] if row["enabled"]),
+        None,
+    )
     context.update({
         "eyebrow": "PALLAS / HELP / INDEX",
         "stats": f"共 {total_plugin_count} 个 · 启用 {total_enabled_count}",
         "stats_label": "启用状态",
         "stats_value": f"{total_enabled_count} / {total_plugin_count}",
         "stats_note": "已启用 / 总插件",
+        "stats_big": str(total_enabled_count),
+        "stats_caption": "项功能开放",
+        "stats_sub": f"共 {total_plugin_count} 项 · 启用 {total_enabled_count}",
+        "try_command": f"牛牛帮助 {first_open}" if first_open else "牛牛帮助",
         "meta": "牛牛帮助 + 序号/插件名 → 功能；开关：牛牛开启/关闭 + 插件名",
         "groups": groups,
         "show_ignored": show_ignored,
@@ -290,6 +320,41 @@ def build_plugin_context(data: Any) -> dict[str, Any]:
     )
     footer_items = [{"label": "总览", "command": "牛牛帮助"}]
 
+    function_rows: list[dict[str, Any]] = [
+        {
+            "index": row.index,
+            "index_label": f"{row.index:02d}",
+            "func": strip_help_markdown(row.func),
+            "say": _display_command(row.say),
+            "say_main": _split_say_candidates(row.say)[0],
+            "scene": strip_help_markdown(row.scene),
+            "perm": strip_help_markdown(row.perm),
+            "meta": _function_meta(
+                strip_help_markdown(row.scene),
+                strip_help_markdown(row.perm),
+            ),
+            "brief": (
+                ""
+                if strip_help_markdown(row.brief) == strip_help_markdown(row.func)
+                else strip_help_markdown(row.brief)
+            ),
+            "group": str(getattr(row, "group", "") or "").strip(),
+        }
+        for row in data.functions
+    ]
+    default_group_label = "功能一览"
+    grouped_by: dict[str, list[dict[str, Any]]] = {}
+    for row in function_rows:
+        grouped_by.setdefault(row["group"] or default_group_label, []).append(row)
+    group_items = list(grouped_by.items())
+    if len(group_items) > 1:
+        group_items = [("其他功能" if label == default_group_label else label, rows) for label, rows in group_items]
+    function_groups: list[dict[str, Any]] = [{"label": label, "rows": rows} for label, rows in group_items]
+    footer_nav = [{"label": "返回总览", "command": "牛牛帮助", "primary": True}]
+    if data.enabled is not None:
+        verb = "关闭" if data.enabled else "开启"
+        footer_nav.append({"label": verb + "插件", "command": f"牛牛{verb} {data.display_name}"})
+
     context = _base_context("plugin", title=data.display_name)
     context.update({
         "eyebrow": "PALLAS / PLUGIN / DOSSIER",
@@ -302,29 +367,13 @@ def build_plugin_context(data: Any) -> dict[str, Any]:
         "function_count": len(data.functions),
         "function_count_value": f"{len(data.functions):02d}",
         "function_count_label": "FUNCTIONS",
-        "functions": [
-            {
-                "index": row.index,
-                "index_label": f"{row.index:02d}",
-                "func": strip_help_markdown(row.func),
-                "say": _display_command(row.say),
-                "scene": strip_help_markdown(row.scene),
-                "perm": strip_help_markdown(row.perm),
-                "meta": _function_meta(
-                    strip_help_markdown(row.scene),
-                    strip_help_markdown(row.perm),
-                ),
-                "brief": (
-                    ""
-                    if strip_help_markdown(row.brief) == strip_help_markdown(row.func)
-                    else strip_help_markdown(row.brief)
-                ),
-            }
-            for row in data.functions
-        ],
+        "functions": function_rows,
+        "function_groups": function_groups,
         "sections": sections,
         "footer_items": footer_items,
         "footer": _footer_text(footer_items),
+        "footer_nav": footer_nav,
+        "footer_text": " · ".join(f"{item['label']}：{item['command']}" for item in footer_nav),
     })
     return context
 
@@ -336,12 +385,14 @@ def build_function_context(data: Any) -> dict[str, Any]:
         _section_context(title, body, index)
         for index, (title, body) in enumerate(data.extra_sections, len(sections) + 1)
     )
-    navigation = [{"label": "插件", "command": f"牛牛帮助 {data.display_name}"}]
+    primary, aliases = _split_say_candidates(data.say)
+    examples = _command_examples(data.detail, primary, data.func_name)
+    navigation = [{"label": "返回插件", "command": f"牛牛帮助 {data.display_name}", "primary": True}]
     if data.index > 1:
         navigation.append({"label": "上一项", "command": f"牛牛帮助 {data.display_name} {data.index - 1}"})
     if data.index < data.total:
         navigation.append({"label": "下一项", "command": f"牛牛帮助 {data.display_name} {data.index + 1}"})
-    navigation.append({"label": "总览", "command": "牛牛帮助"})
+    navigation.append({"label": "返回总览", "command": "牛牛帮助", "primary": True})
 
     context = _base_context("function", title=data.func_name)
     context.update({
@@ -354,12 +405,16 @@ def build_function_context(data: Any) -> dict[str, Any]:
         "total_label": f"{data.total:02d}",
         "chips": chips,
         "metadata": _metadata_cells(data),
-        "command_label": "EXECUTE / 触发命令",
+        "command_label": "直接发送",
         "say": _display_command(data.say or "—"),
+        "primary_command": primary or "—",
+        "alias_commands": aliases,
+        "examples": examples,
         "brief": strip_help_markdown(data.brief),
         "sections": sections,
         "footer_items": navigation,
         "footer": _footer_text(navigation),
+        "footer_nav": navigation,
     })
     return context
 

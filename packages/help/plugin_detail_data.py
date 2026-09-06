@@ -74,6 +74,7 @@ class HelpFunctionRow:
     cooldown: str
     brief: str
     detail: str
+    group: str = ""
 
 
 @dataclass(slots=True)
@@ -151,6 +152,7 @@ def build_plugin_detail_data(
                     cooldown=cd_raw or "—",
                     brief=str(item.get("brief_des", "") or "").strip(),
                     detail=str(item.get("detail_des", "") or "").strip(),
+                    group=str(item.get("group", "") or "").strip(),
                 )
             )
 

@@ -40,7 +40,7 @@ def test_normalize_help_tag_blank() -> None:
 
 
 def test_help_tag_sort_rank_order() -> None:
-    assert help_tag_sort_rank("core") < help_tag_sort_rank("fun")
+    assert help_tag_sort_rank("fun") < help_tag_sort_rank("core")
     assert help_tag_sort_rank("fun") < help_tag_sort_rank("custom")
     assert help_tag_sort_rank("custom") < help_tag_sort_rank("other")
 
@@ -52,5 +52,5 @@ def test_group_rows_preserve_within_bucket_order() -> None:
         SimpleNamespace(name="c", help_tag="fun"),
     ]
     groups = group_rows_by_help_tag(rows, tag_of=lambda r: r.help_tag)
-    assert [tag for tag, _ in groups] == ["core", "fun"]
-    assert [r.name for r in groups[1][1]] == ["b", "c"]
+    assert [tag for tag, _ in groups] == ["fun", "core"]
+    assert [r.name for r in groups[0][1]] == ["b", "c"]

@@ -64,27 +64,30 @@ def test_html_template_uses_dossier_layout_contract() -> None:
     template = module.HTML_TEMPLATE_PATH.read_text(encoding="utf-8")
 
     assert 'class="document-shell"' in template
-    assert 'class="dossier-header"' in template
-    assert 'class="instruction-strip"' in template
+    assert 'class="hero"' in template
+    assert 'class="quickstart"' in template
     assert 'class="command-navigation"' in template
-    assert 'class="plugin-card-bar"' in template
-    assert 'class="function-card-bar"' in template
+    assert 'class="menu-card' in template
+    assert 'class="fn-card"' in template
+    assert 'class="fn-section-title"' in template
+    assert 'class="command-feature"' in template
+    assert ".command-feature {" in template
+    assert "background: var(--record-body-alt)" in template
+    assert ".command-feature .cf-command" in template
+    assert 'class="example-list"' in template
+    assert 'class="command-aliases"' in template
+    assert "触发" in template
+    assert "详情" in template
     assert 'class="doc-section-heading"' in template
     assert '<div class="eyebrow">{{ eyebrow }}</div>' in template
-    assert "PLUGIN INDEX" in template
-    assert "DOSSIER" in template
-    assert "COMMAND INDEX" in template
-    assert "background: var(--record-header)" in template
-    assert "background: var(--record-body)" in template
+    assert "var(--accent)" in template
+    assert "color: var(--amber)" in template
     assert "background: var(--content-background)" in template
-    assert ".function-card { min-height: 0; }" in template
-    assert ".doc-body { max-width: none;" in template
-    assert "white-space: nowrap; overflow-wrap: anywhere" in template
+    assert "background: var(--card)" in template
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr))" in template
     assert ".doc-body pre" in template
     assert ".doc-body blockquote" in template
-    assert "margin-top: auto" in template
-    assert "repeat({{ items|length }}, minmax(0, 1fr))" in template
-    assert "repeat({{ metadata|length }}, minmax(0, 1fr))" in template
+    assert "white-space: pre-wrap" in template
     assert "https://" not in template
 
 
@@ -131,11 +134,12 @@ def test_build_menu_context_preserves_groups_and_status(monkeypatch) -> None:
     assert context["stats"] == "共 2 个 · 启用 1"
     assert context["stats_label"] == "启用状态"
     assert context["stats_value"] == "1 / 2"
-    assert [group["label"] for group in context["groups"]] == ["内核", "娱乐"]
+    assert [group["label"] for group in context["groups"]] == ["娱乐", "内核"]
     assert [group["number"] for group in context["groups"]] == ["01", "02"]
-    assert context["groups"][0]["rows"][0]["enabled"] is True
-    assert context["groups"][1]["rows"][0]["status"] == "OFF 已停用"
-    assert context["groups"][0]["rows"][0]["icon"].startswith("data:image/png;base64,")
+    assert context["groups"][0]["rows"][0]["enabled"] is False
+    assert context["groups"][0]["rows"][0]["status"] == "OFF 已停用"
+    assert context["groups"][1]["rows"][0]["enabled"] is True
+    assert "icon" not in context["groups"][1]["rows"][0]
     assert context["eyebrow"] == "PALLAS / HELP / INDEX"
 
 
@@ -264,6 +268,30 @@ def test_build_function_context_removes_markdown_code_fences_from_display_comman
     assert context["say"] == "查看示例 | demo query <target>"
 
 
+def test_build_function_context_splits_primary_command_and_aliases() -> None:
+    module = _load_html_renderer()
+    assert module is not None
+
+    data = FunctionDetailData(
+        plugin=SimpleNamespace(name="demo"),
+        display_name="示例插件",
+        func_name="查看示例",
+        index=1,
+        total=1,
+        say="查看示例 | demo query",
+        scene="群内",
+        perm="所有人",
+        cooldown="—",
+        brief="查看示例",
+        detail="- 示例一：`查看示例 foo`\n- 示例二：`查看示例 bar`",
+    )
+
+    context = module.build_function_context(data)
+
+    assert context["primary_command"] == "查看示例"
+    assert context["alias_commands"] == ["demo query"]
+
+
 def test_build_function_context_contains_navigation_and_command() -> None:
     module = _load_html_renderer()
     assert module is not None
@@ -295,13 +323,13 @@ def test_build_function_context_contains_navigation_and_command() -> None:
     assert context["eyebrow"] == "PALLAS / COMMAND / BRIEF"
     assert context["breadcrumb"] == "帮助总览 / 示例插件 / 查看示例"
     assert context["footer_items"] == [
-        {"label": "插件", "command": "牛牛帮助 示例插件"},
+        {"label": "返回插件", "command": "牛牛帮助 示例插件", "primary": True},
         {"label": "上一项", "command": "牛牛帮助 示例插件 1"},
         {"label": "下一项", "command": "牛牛帮助 示例插件 3"},
-        {"label": "总览", "command": "牛牛帮助"},
+        {"label": "返回总览", "command": "牛牛帮助", "primary": True},
     ]
     assert context["footer"] == (
-        "插件：牛牛帮助 示例插件 · 上一项：牛牛帮助 示例插件 1 · 下一项：牛牛帮助 示例插件 3 · 总览：牛牛帮助"
+        "返回插件：牛牛帮助 示例插件 · 上一项：牛牛帮助 示例插件 1 · 下一项：牛牛帮助 示例插件 3 · 返回总览：牛牛帮助"
     )
 
 
@@ -327,8 +355,8 @@ def test_build_function_context_omits_missing_metadata_and_invalid_navigation() 
 
     assert context["metadata"] == [{"label": "SCENE", "title": "触发场景", "value": "群内"}]
     assert context["footer_items"] == [
-        {"label": "插件", "command": "牛牛帮助 示例插件"},
-        {"label": "总览", "command": "牛牛帮助"},
+        {"label": "返回插件", "command": "牛牛帮助 示例插件", "primary": True},
+        {"label": "返回总览", "command": "牛牛帮助", "primary": True},
     ]
 
 
