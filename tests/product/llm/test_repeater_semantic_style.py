@@ -752,6 +752,7 @@ def test_cached_semantic_style_resolution_falls_back_to_group_style_owner(tmp_pa
             bot_id=100,
             group_id=42,
             scene="group_chat",
+            style_anchor="短句轻怼。",
             direct_examples=["没救了"],
             direct_pairs=[
                 {
@@ -799,6 +800,7 @@ def test_cached_semantic_style_profile_is_shared_across_group_bots(tmp_path, mon
             bot_id=100,
             group_id=42,
             scene="group_chat",
+            style_anchor="短句轻怼。",
             direct_examples=["没救了"],
             direct_pairs=[
                 {
@@ -825,6 +827,7 @@ def test_cached_semantic_style_profile_is_shared_across_group_bots(tmp_path, mon
 
     assert profile is not None
     assert profile.bot_id == 200
+    assert profile.style_anchor == "短句轻怼。"
     assert [pair.reply_text for pair in profile.direct_pairs] == ["没救了"]
 
 

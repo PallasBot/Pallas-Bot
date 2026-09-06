@@ -1526,9 +1526,7 @@ def _cached_group_expression_profile(
         candidates = [
             profile
             for (bot_id, candidate_group_id, candidate_scene), profile in _profiles.items()
-            if candidate_group_id == int(group_id)
-            and candidate_scene == str(scene)
-            and profile.human_only
+            if candidate_group_id == int(group_id) and candidate_scene == str(scene) and profile.human_only
         ]
         if not candidates:
             return None
@@ -1539,6 +1537,7 @@ def _cached_group_expression_profile(
         examples: dict[str, None] = {}
         seeds: dict[str, None] = {}
         strategies: dict[tuple[str, str, str], BehaviorStrategy] = {}
+        style_anchor = ""
         bubble_counts: list[int] = []
         segment_lengths: list[int] = []
         rhythm_counts = {"single": 0, "multi": 0}
@@ -1548,6 +1547,8 @@ def _cached_group_expression_profile(
         recent_bot_style_sample_count = 0
         visual_sample_count = 0
         for profile in candidates:
+            if profile.style_anchor:
+                style_anchor = profile.style_anchor
             for pair in profile.direct_pairs:
                 key = pair.source_example_id or f"{pair.trigger_text}\x00{pair.reply_text}"
                 pair_map[key] = pair
@@ -1569,6 +1570,7 @@ def _cached_group_expression_profile(
         merged.direct_pairs = list(pair_map.values())[-_DIRECT_PAIR_LIMIT:]
         merged.direct_examples = list(examples)[-3:]
         merged.rewrite_seeds = list(seeds)[-3:]
+        merged.style_anchor = style_anchor or merged.style_anchor
         merged.behavior_strategies = list(strategies.values())[-_BEHAVIOR_STRATEGY_LIMIT:]
         merged.bubble_counts = bubble_counts[-100:]
         merged.segment_char_lengths = segment_lengths[-300:]
