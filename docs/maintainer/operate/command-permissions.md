@@ -45,7 +45,7 @@
 | 帮助与实鉴权不一致 | `menu_data.command_permission` 与 matcher 是否同一命令 ID |
 | 刚用过又失败 | 查冷却（非权限） |
 
-## 相关
+## 相关阅读
 
 - [cmd_perm 接入](/common/cmd_perm)
 - [command_limits](/common/command_limits)

@@ -57,7 +57,7 @@
 3. **分片**：社区插件在 worker 加载；优先重启 worker
 4. `extra_plugin_dirs` 未包含 `local/plugins` 时，安装后无法热加载，须先改配置再重启
 
-## 相关
+## 相关阅读
 
 - [Reload 与 Activation](/developer/plugin-development/reload-and-activation)
 - [Golden Plugin](/developer/plugin-development/golden-plugin)

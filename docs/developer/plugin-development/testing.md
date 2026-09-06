@@ -44,7 +44,7 @@ uv run ruff check pallas/ packages/
 
 流程：[environment](../environment.md)、[workflow](../workflow.md)。
 
-## 相关
+## 后续阅读
 
 - [Golden Plugin](golden-plugin.md)
 - [元数据](metadata.md)

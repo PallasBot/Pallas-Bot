@@ -80,7 +80,7 @@ class Config(BaseModel, extra="ignore"):
 
 保存可视化表单时仍只提交已知字段；raw TOML 模式可编辑 unexpected 键（见 OPT-WEB-014）。
 
-## 相关
+## 后续阅读
 
 - [配置与 WebUI](config-and-webui.md)
 - `pallas/console/webui/field_meta.py`

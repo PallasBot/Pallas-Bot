@@ -20,7 +20,7 @@
 | AI | 普通聊天用 Bot Provider；`Pallas-Bot-AI` 仅媒体 / RWKV |
 | 分片 | activation / claim 按 worker 设计 |
 
-## 相关
+## 后续阅读
 
 - [Developer](/developer/index)
 - [运维入口](/maintainer/quickstart)

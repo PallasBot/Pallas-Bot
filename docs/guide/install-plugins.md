@@ -156,7 +156,7 @@ python -m pip install --no-deps -t local/plugins nonebot_plugin_example
 uv pip install --python .venv/bin/python nonebot_plugin_example
 ```
 
-装好后重启 Bot 即可识别。若不想自动加载某个已装插件，可将它加入帮助配置的 `ignored_plugins`（见 [帮助菜单](plugin-governance.md)）。依赖插件（如 `alconna`/`orm`/`user` 等运行库）会被自动注册但不展示在帮助菜单。
+装好后重启 Bot 即可识别。若不想自动加载某个已装插件，可将它加入帮助配置的 `ignored_plugins`（见[帮助插件的过滤层次](../plugins/help/README.md#过滤层次)）。依赖插件（如 `alconna`/`orm`/`user` 等运行库）会被自动注册但不展示在帮助菜单。
 
 ## 卸载
 
