@@ -1,3 +1,5 @@
+from nonebot.adapters.onebot.v11 import Message, PrivateMessageEvent
+
 from packages.llm_chat import __plugin_meta__
 
 
@@ -41,3 +43,25 @@ def test_drunk_chat_menu_item_present():
     drunk = next(item for item in menu if item.get("func") == "酒后聊天")
     assert drunk.get("command_permission") == "llm_chat.chat"
     assert "醉酒" in str(drunk.get("trigger_condition") or "")
+
+
+def test_llm_chat_rule_rejects_private_message(monkeypatch):
+    from packages.llm_chat.chat_message import llm_chat_rule
+
+    monkeypatch.setattr("packages.llm_chat.chat_message.is_llm_chat_service_enabled", lambda: True)
+    event = PrivateMessageEvent(
+        time=1,
+        self_id=11,
+        post_type="message",
+        message_type="private",
+        sub_type="friend",
+        message_id=1,
+        user_id=22,
+        message=Message("牛牛"),
+        raw_message="牛牛",
+        font=0,
+        sender={"user_id": 22},
+        to_me=True,
+    )
+
+    assert llm_chat_rule(event) is False
