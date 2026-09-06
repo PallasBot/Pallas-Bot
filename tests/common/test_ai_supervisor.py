@@ -57,6 +57,7 @@ def test_ai_runtime_status_reads_pidfiles(tmp_path, monkeypatch) -> None:
     (root / "logs").mkdir()
     (root / "logs" / "api.pid").write_text("1\n", encoding="utf-8")
     (root / "logs" / "media.pid").write_text("1\n", encoding="utf-8")
+    (root / "logs" / "fast.pid").write_text("1\n", encoding="utf-8")
     monkeypatch.setattr(ai_supervisor, "_pid_alive", lambda pid: pid == 1)
     monkeypatch.setattr(
         ai_supervisor,
@@ -74,6 +75,7 @@ def test_ai_runtime_status_reads_pidfiles(tmp_path, monkeypatch) -> None:
     assert st["running"] is True
     assert st["services"]["api"]["running"] is True
     assert st["services"]["media"]["running"] is True
+    assert st["services"]["fast"]["running"] is True
     assert "llm" not in st["services"]
     assert st["health"]["ok"] is True
 
@@ -86,6 +88,7 @@ def test_ai_runtime_status_http_fallback_when_api_pid_stale(tmp_path, monkeypatc
     (root / "logs").mkdir()
     (root / "logs" / "api.pid").write_text("999001\n", encoding="utf-8")
     (root / "logs" / "media.pid").write_text("1\n", encoding="utf-8")
+    (root / "logs" / "fast.pid").write_text("1\n", encoding="utf-8")
     monkeypatch.setattr(ai_supervisor, "_pid_alive", lambda pid: pid == 1)
     monkeypatch.setattr(
         ai_supervisor,
@@ -102,6 +105,7 @@ def test_ai_runtime_status_http_fallback_when_api_pid_stale(tmp_path, monkeypatc
     assert st["health"]["ok"] is True
     assert st["services"]["api"]["running"] is True
     assert st["services"]["media"]["running"] is True
+    assert st["services"]["fast"]["running"] is True
     assert st["running"] is True
 
 
@@ -112,6 +116,7 @@ def test_ai_runtime_status_dead_api_without_health(tmp_path, monkeypatch) -> Non
     (root / "logs").mkdir()
     (root / "logs" / "api.pid").write_text("999001\n", encoding="utf-8")
     (root / "logs" / "media.pid").write_text("1\n", encoding="utf-8")
+    (root / "logs" / "fast.pid").write_text("1\n", encoding="utf-8")
     monkeypatch.setattr(ai_supervisor, "_pid_alive", lambda pid: pid == 1)
     monkeypatch.setattr(
         ai_supervisor,
@@ -149,17 +154,21 @@ def test_start_ai_runtime_calls_ctl(tmp_path, monkeypatch) -> None:
         lambda **_: {
             "running": True,
             "can_manage": True,
-            "services": {"api": {"running": True}, "media": {"running": True}},
+            "services": {
+                "api": {"running": True},
+                "media": {"running": True},
+                "fast": {"running": True},
+            },
             "health": {"ok": True},
         },
     )
     out = ai_supervisor.start_ai_runtime(ai_root=root, with_media=False)
     assert out["ok"] is True
     assert out["healed"] is False
-    assert calls == [("start", "media"), ("start", "api")]
+    assert calls == [("start", "media"), ("start", "api"), ("start", "fast")]
     again = ai_supervisor.start_ai_runtime(ai_root=root, with_media=True)
     assert again["ok"] is True
-    assert calls[-2:] == [("start", "media"), ("start", "api")]
+    assert calls[-3:] == [("start", "media"), ("start", "api"), ("start", "fast")]
 
 
 def test_start_ai_runtime_stops_unhealthy_before_start(tmp_path, monkeypatch) -> None:
@@ -176,13 +185,21 @@ def test_start_ai_runtime_stops_unhealthy_before_start(tmp_path, monkeypatch) ->
             return {
                 "running": True,
                 "can_manage": True,
-                "services": {"api": {"running": True}, "media": {"running": True}},
+                "services": {
+                    "api": {"running": True},
+                    "media": {"running": True},
+                    "fast": {"running": True},
+                },
                 "health": {"ok": False, "status_code": 502, "error": "HTTP Error 502"},
             }
         return {
             "running": True,
             "can_manage": True,
-            "services": {"api": {"running": True}, "media": {"running": True}},
+            "services": {
+                "api": {"running": True},
+                "media": {"running": True},
+                "fast": {"running": True},
+            },
             "health": {"ok": True, "status_code": 200},
         }
 
@@ -198,7 +215,7 @@ def test_start_ai_runtime_stops_unhealthy_before_start(tmp_path, monkeypatch) ->
     assert out["ok"] is True
     assert out["healed"] is True
     assert calls[0] == ("stop", "all")
-    assert calls[1:] == [("start", "media"), ("start", "api")]
+    assert calls[1:] == [("start", "media"), ("start", "api"), ("start", "fast")]
     assert out["runtime"]["health"]["ok"] is True
 
 
