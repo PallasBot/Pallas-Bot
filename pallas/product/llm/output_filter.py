@@ -313,6 +313,7 @@ def _split_reply_to_fit(
     text: str,
     *,
     max_len: int,
+    max_segments: int = 3,
 ) -> list[str] | None:
     """把超限回复完整拆成多个不超过上限的气泡，并去掉拆分边界标点。"""
     if not text or max_len <= 0 or len(text) <= max_len:
@@ -338,7 +339,7 @@ def _split_reply_to_fit(
     tail = remainder.strip(_REPLY_BOUNDARY_TRIM_CHARS)
     if tail:
         segments.append(tail)
-    if len(segments) < 2:
+    if len(segments) < 2 or len(segments) > max(1, int(max_segments)):
         return None
     return segments
 
@@ -431,9 +432,18 @@ def resolve_output_filtered_chat_reply(task: dict, reply: StructuredChatReply) -
         max_len = int(task.get("reply_max_length") or 0)
     except (TypeError, ValueError):
         max_len = 0
+    try:
+        max_bubbles = max(1, min(5, int(task.get("reply_max_bubbles") or 3)))
+    except (TypeError, ValueError):
+        max_bubbles = 3
     # 多泡回复：每个气泡各自都落在单点上限内，就保持分条投递，而不是把
     # 整串 join 后按一刀切压短/静默（否则合理的分段长回复会被整个吞掉）。
-    if max_len > 0 and filtered.reply_segments and all(len(seg) <= max_len for seg in filtered.reply_segments):
+    if (
+        max_len > 0
+        and len(filtered.reply_segments) <= max_bubbles
+        and filtered.reply_segments
+        and all(len(seg) <= max_len for seg in filtered.reply_segments)
+    ):
         log_rate_limited(
             logger,
             "info",
@@ -450,7 +460,7 @@ def resolve_output_filtered_chat_reply(task: dict, reply: StructuredChatReply) -
         split_done = False
         # 超限时完整拆成多个气泡，避免只保留第一段导致回复戛然而止。
         if max_len > 0 and len(text) > max_len:
-            split = _split_reply_to_fit(text, max_len=max_len)
+            split = _split_reply_to_fit(text, max_len=max_len, max_segments=max_bubbles)
             if split:
                 log_rate_limited(
                     logger,

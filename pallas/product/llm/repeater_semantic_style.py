@@ -1513,41 +1513,74 @@ def prune_semantic_style_examples(*, now: int | None = None) -> int:
 def cached_semantic_style_profile(bot_id: int, group_id: int | None, scene: str) -> SemanticStyleProfile | None:
     if group_id is None:
         return None
-    key = _profile_key(bot_id, group_id, scene)
-    with _profiles_lock:
-        exact = _profiles.get(key)
-        return exact.model_copy(deep=True) if exact is not None else None
-
-
-def _profile_has_expression_source(profile: SemanticStyleProfile | None) -> bool:
-    return bool(
-        profile
-        and profile.human_only
-        and (profile.direct_pairs or profile.direct_examples or profile.style_anchor or profile.behavior_strategies)
-    )
+    return _cached_group_expression_profile(bot_id, group_id, scene)
 
 
 def _cached_group_expression_profile(
+    bot_id: int,
     group_id: int,
     scene: str,
-    *,
-    exclude_bot_id: int,
 ) -> SemanticStyleProfile | None:
-    """读取群级语义采集 bot 的 profile，供协作 bot 共用。"""
+    """聚合群内各 bot 的有效语义 profile，供所有协作 bot 共用。"""
     with _profiles_lock:
         candidates = [
             profile
             for (bot_id, candidate_group_id, candidate_scene), profile in _profiles.items()
             if candidate_group_id == int(group_id)
             and candidate_scene == str(scene)
-            and bot_id != int(exclude_bot_id)
             and profile.human_only
-            and profile.direct_pairs
         ]
         if not candidates:
             return None
-        selected = max(candidates, key=lambda item: (len(item.direct_pairs), item.updated_at, item.bot_id))
-        return selected.model_copy(deep=True)
+        candidates.sort(key=lambda item: (item.updated_at, item.bot_id))
+        merged = candidates[-1].model_copy(deep=True)
+        merged.bot_id = int(bot_id)
+        pair_map: dict[str, SemanticStyleDirectPair] = {}
+        examples: dict[str, None] = {}
+        seeds: dict[str, None] = {}
+        strategies: dict[tuple[str, str, str], BehaviorStrategy] = {}
+        bubble_counts: list[int] = []
+        segment_lengths: list[int] = []
+        rhythm_counts = {"single": 0, "multi": 0}
+        sample_count = 0
+        common_style_sample_count = 0
+        bot_style_sample_count = 0
+        recent_bot_style_sample_count = 0
+        visual_sample_count = 0
+        for profile in candidates:
+            for pair in profile.direct_pairs:
+                key = pair.source_example_id or f"{pair.trigger_text}\x00{pair.reply_text}"
+                pair_map[key] = pair
+            for text in profile.direct_examples:
+                examples[text] = None
+            for text in profile.rewrite_seeds:
+                seeds[text] = None
+            for strategy in profile.behavior_strategies:
+                strategies[(strategy.learning_type, strategy.scene, strategy.action)] = strategy
+            bubble_counts.extend(profile.bubble_counts)
+            segment_lengths.extend(profile.segment_char_lengths)
+            for rhythm, count in profile.rhythm_counts.items():
+                rhythm_counts[rhythm] = rhythm_counts.get(rhythm, 0) + int(count or 0)
+            sample_count += profile.sample_count
+            common_style_sample_count += profile.common_style_sample_count
+            bot_style_sample_count += profile.bot_style_sample_count
+            recent_bot_style_sample_count += profile.recent_bot_style_sample_count
+            visual_sample_count += profile.visual_sample_count
+        merged.direct_pairs = list(pair_map.values())[-_DIRECT_PAIR_LIMIT:]
+        merged.direct_examples = list(examples)[-3:]
+        merged.rewrite_seeds = list(seeds)[-3:]
+        merged.behavior_strategies = list(strategies.values())[-_BEHAVIOR_STRATEGY_LIMIT:]
+        merged.bubble_counts = bubble_counts[-100:]
+        merged.segment_char_lengths = segment_lengths[-300:]
+        merged.rhythm_counts = rhythm_counts
+        merged.sample_count = sample_count
+        merged.common_style_sample_count = common_style_sample_count
+        merged.bot_style_sample_count = bot_style_sample_count
+        merged.recent_bot_style_sample_count = recent_bot_style_sample_count
+        merged.visual_sample_count = visual_sample_count
+        merged.bot_style_promoted = any(profile.bot_style_promoted for profile in candidates)
+        merged.updated_at = max(profile.updated_at for profile in candidates)
+        return merged
 
 
 def semantic_style_profile_summary(profile: SemanticStyleProfile | None) -> dict[str, Any] | None:
@@ -1649,19 +1682,17 @@ def resolve_cached_semantic_style(
     if not bypass_injection_gate and not semantic_style_injection_enabled(request_id, bot_id=bot_id, group_id=group_id):
         return SemanticStyleResolution()
     profile = cached_semantic_style_profile(bot_id, group_id, scene)
-    if not _profile_has_expression_source(profile) and group_id is not None:
-        profile = _cached_group_expression_profile(group_id, scene, exclude_bot_id=bot_id) or profile
     if profile is None or not profile.human_only:
         return SemanticStyleResolution()
     direct_pairs = filter_semantic_style_pairs_by_feedback(profile.direct_pairs, bot_id=bot_id, group_id=group_id)
     rewrite_seed = profile.rewrite_seeds[-1] if profile.rewrite_seeds else ""
-    if not rewrite_seed and profile.direct_examples:
-        rewrite_seed = profile.direct_examples[-1]
     direct_pair = select_semantic_style_direct_pair(
         direct_pairs,
         query_text=query_text,
         recent_assistant_replies=recent_assistant_replies,
     )
+    if not rewrite_seed and direct_pair is not None:
+        rewrite_seed = direct_pair.reply_text
     safe_matched = [
         pair
         for pair in select_semantic_style_matched_pairs(
