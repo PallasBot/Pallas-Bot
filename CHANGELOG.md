@@ -1,27 +1,61 @@
 # Changelog
 
-## [Unreleased]
+## [4.4.1] - 2026-09-06
 
 ### 更新公告
 
-- **帮助图**：
+- **帮助菜单**：
   - 可在 WebUI「牛牛帮助」配置中切换 Pillow 与 HTML / Playwright 渲染
-  - HTML 渲染失败时自动回退 Pillow
+  - 重做一级帮助图的层级、导航、双栏布局与卡片排版
+  - HTML 渲染失败时自动回退 Pillow，并兼容插件隐藏名单别名
+- **插件管理**：
+  - 自动发现已安装的第三方 NoneBot 插件
+  - 社区插件支持子目录结构与 pyproject 依赖安装，失败时自动回滚
+  - 启动时提示 local/plugins 缺失依赖，帮助图默认隐藏运行时依赖
+- **黑名单审计**：
+  - 记录用户、群及群内用户的拉黑 / 解禁历史
+  - 审计失败不再阻断黑名单状态同步
+- **智能对话**：
+  - 群内 bot 共享有效的语义风格 profile
+  - 修复协作 bot 样本识别、无关语义句式注入、已删除模型保存恢复与超长回复分段
+- **稳定性**：
+  - fast worker 纳入 WebUI 托管
+  - 默认启用 Playwright 渲染后端，并支持嵌套插件配置
+- 捆绑控制台 WebUI v0.9.21
 
 ### Added
 
-* feat(help): 支持在 WebUI 切换帮助图渲染器
 * feat(core): 默认启用 htmlrender playwright 渲染后端
-* feat(blacklist): 记录用户与群封禁操作历史
 * feat(webui): 支持解析 NoneBot 官方嵌套插件 Config（env 键 __ 分隔）
 * feat(webui): 社区插件安装支持子目录插件包结构（pyproject 声明子目录）
 * feat(webui): 社区插件安装/更新自动装 pyproject 依赖，失败回滚并附手动命令
 * feat(webui): 启动时检测 local/plugins 插件依赖缺失并警告
 * feat(webui): 插件目录行暴露社区插件缺失依赖（deps_missing）
+* feat(blacklist): 记录用户与群封禁历史
+* feat(help): 支持在 WebUI 切换帮助图渲染器
+* feat(help): 精修 HTML 帮助图排版
+* feat(help): 重设计帮助图层级与导航布局
+* feat(help): 优化帮助图卡片、分组布局与一级双栏布局
+
+### Changed
+
+* refactor(tools): 实验性 A/B 脚本归拢到 tools/experimental
+* refactor(core): 收敛 core→product 模块级依赖倒置
+* refactor(llm): 新增输出守卫链骨架 GuardChain
+* refactor(db): repository_pg 拆分为多子模块包
+* refactor(webui): plugin_catalog 拆分为多子模块包
+* refactor(llm): provider_client 拆分为多子模块包
 
 ### Fixed
 
 * fix(foundation): 依赖插件重复注册视为已加载，消除启动告警噪音
+* fix(help): 兼容插件隐藏名单别名
+* fix(llm): 修复已删除模型保存后被恢复
+* fix(llm): 超长回复保留后续气泡
+* fix(llm): 接通群级语义风格注入
+* fix(ai): 将 fast worker 纳入 WebUI 托管
+* fix(runtime): 收紧输出与状态边界
+* fix(llm): 共享群级语义 profile
 
 ## [4.4.0] - 2026-09-05
 
