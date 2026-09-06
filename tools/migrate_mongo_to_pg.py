@@ -2,7 +2,7 @@
 """
 MongoDB → PostgreSQL 迁移脚本
 
-迁移范围：Context、Message、BlackList、BotConfig、GroupConfig、UserConfig、ImageCache
+迁移范围：Context、Message、BlackList、BlacklistAudit、BotConfig、GroupConfig、UserConfig、ImageCache
 
 特性：
 - 基于 Mongo `_id` 游标流式读取，不走 skip/limit，千万级数据也不会退化成 O(n)
@@ -20,7 +20,8 @@ MongoDB → PostgreSQL 迁移脚本
     --dry-run       只统计数量，不写入 PostgreSQL
     --pg-db NAME    目标 PG 库名，覆盖 PG_DB 环境变量
     --mongo-db NAME 源 Mongo 库名，覆盖 MONGO_DB 环境变量（默认 PallasBot）
-    --tables TABLE  仅迁移指定表，可选：context message blacklist botconfig groupconfig userconfig imagecache
+    --tables TABLE  仅迁移指定表，可选：context message blacklist blacklist_audit botconfig
+                    groupconfig userconfig imagecache
     --restart       清空 pallas_migration_state 重新从头迁移
 
 示例：
@@ -78,6 +79,7 @@ ALL_TABLES = [
     "context",
     "message",
     "blacklist",
+    "blacklist_audit",
     "botconfig",
     "groupconfig",
     "userconfig",
@@ -91,6 +93,7 @@ _MONGO_COLLECTION = {
     "context": "context",
     "message": "message",
     "blacklist": "blacklist",
+    "blacklist_audit": "blacklist_audit",
     "botconfig": "config",
     "groupconfig": "group_config",
     "userconfig": "user_config",
@@ -103,6 +106,7 @@ _PG_COUNT_TABLE = {
     "context": "context",
     "message": "message",
     "blacklist": "blacklist",
+    "blacklist_audit": "blacklist_audit",
     "botconfig": "bot_config",
     "groupconfig": "group_config",
     "userconfig": "user_config",
@@ -672,6 +676,60 @@ async def _migrate_blacklist(db, sf, BLRow, ins, batch_size, dry_run) -> _TableS
     return stats
 
 
+async def _migrate_blacklist_audit(db, sf, audit_row, ins, batch_size, dry_run) -> _TableStats:
+    col = db["blacklist_audit"]
+    stats = _TableStats()
+    stats.total = await col.count_documents({})
+    print(f"\n[BlacklistAudit] total={stats.total}")
+
+    last_id_str: str | None = None
+    if not dry_run:
+        async with sf() as session:
+            last_id_str = await _get_state(session, "blacklist_audit")
+
+    async for batch in _stream_batches(col, last_id_str, batch_size):
+        rows: list[dict] = []
+        for doc in batch:
+            try:
+                raw_group_id = doc.get("group_id")
+                rows.append({
+                    "source_id": str(doc["_id"]),
+                    "target_type": _as_str(doc.get("target_type")),
+                    "target_id": _as_int(doc.get("target_id")),
+                    "group_id": _as_int(raw_group_id) if raw_group_id is not None else None,
+                    "action": _as_str(doc.get("action")),
+                    "reason": _strip_null(_as_str(doc.get("reason"))),
+                    "operator": _strip_null(_as_str(doc.get("operator"))),
+                    "created_at": _as_int(doc.get("created_at")),
+                })
+            except Exception as e:
+                stats.warn(f"blacklist_audit parse failed _id={doc.get('_id')}: {e}")
+
+        if rows and not dry_run:
+            async with sf() as session:
+                stmt = ins(audit_row).values(rows)
+                await session.execute(
+                    stmt.on_conflict_do_update(
+                        index_elements=["source_id"],
+                        set_={
+                            "target_type": stmt.excluded.target_type,
+                            "target_id": stmt.excluded.target_id,
+                            "group_id": stmt.excluded.group_id,
+                            "action": stmt.excluded.action,
+                            "reason": stmt.excluded.reason,
+                            "operator": stmt.excluded.operator,
+                            "created_at": stmt.excluded.created_at,
+                        },
+                    )
+                )
+                await _set_state(session, "blacklist_audit", str(batch[-1]["_id"]))
+                await session.commit()
+        stats.migrated += len(batch)
+
+    print(f"  [BlacklistAudit] {stats.migrated}/{stats.total} done (failed={stats.failed})")
+    return stats
+
+
 async def _migrate_bot_config(db, sf, BCRow, ins, batch_size, dry_run) -> _TableStats:
     col = db["config"]  # Mongo collection 名是 "config"
     stats = _TableStats()
@@ -817,6 +875,8 @@ async def _migrate_user_config(db, sf, UCRow, ins, batch_size, dry_run) -> _Tabl
                 rows.append({
                     "user_id": _as_int(raw.get("user_id")),
                     "banned": _as_bool(raw.get("banned")),
+                    "banned_by": _strip_null(_as_str(raw.get("banned_by"))),
+                    "banned_at": _as_int(raw.get("banned_at")),
                 })
             except Exception as e:
                 stats.warn(f"userconfig parse failed _id={raw.get('_id')}: {e}")
@@ -826,7 +886,14 @@ async def _migrate_user_config(db, sf, UCRow, ins, batch_size, dry_run) -> _Tabl
             async with sf() as session:
                 stmt = ins(UCRow).values(rows)
                 await session.execute(
-                    stmt.on_conflict_do_update(index_elements=["user_id"], set_={"banned": stmt.excluded.banned})
+                    stmt.on_conflict_do_update(
+                        index_elements=["user_id"],
+                        set_={
+                            "banned": stmt.excluded.banned,
+                            "banned_by": stmt.excluded.banned_by,
+                            "banned_at": stmt.excluded.banned_at,
+                        },
+                    )
                 )
                 await _set_state(session, "userconfig", str(batch[-1]["_id"]))
                 await session.commit()
@@ -1097,6 +1164,7 @@ async def migrate(
 
     from pallas.core.foundation.db.repository_pg import (
         AdminMemberRow,
+        BlacklistAuditRow,
         BlackListRow,
         BotConfigRow,
         ContextAnswerMessageRow,
@@ -1141,6 +1209,9 @@ async def migrate(
     if "blacklist" in tables:
         s = await _migrate_blacklist(db, sf, BlackListRow, pg_insert, batch_size, dry_run)
         summaries.append(("blacklist", s))
+    if "blacklist_audit" in tables:
+        s = await _migrate_blacklist_audit(db, sf, BlacklistAuditRow, pg_insert, batch_size, dry_run)
+        summaries.append(("blacklist_audit", s))
     if "botconfig" in tables:
         s = await _migrate_bot_config(db, sf, BotConfigRow, pg_insert, batch_size, dry_run)
         summaries.append(("botconfig", s))

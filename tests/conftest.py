@@ -43,6 +43,7 @@ async def beanie_fixture(monkeypatch: pytest.MonkeyPatch):
     from pallas.core.foundation.db.modules import (
         AdminMember,
         BlackList,
+        BlacklistAudit,
         BotConfigModule,
         Context,
         GroupConfigModule,
@@ -75,6 +76,7 @@ async def beanie_fixture(monkeypatch: pytest.MonkeyPatch):
         document_models=[
             AdminMember,
             BlackList,
+            BlacklistAudit,
             BotConfigModule,
             Context,
             GroupConfigModule,
@@ -100,6 +102,7 @@ async def beanie_fixture(monkeypatch: pytest.MonkeyPatch):
     await motor_db.drop_collection("message")
     await motor_db.drop_collection("context")
     await motor_db.drop_collection("blacklist")
+    await motor_db.drop_collection("blacklist_audit")
     await motor_db.drop_collection("image_cache")
     await motor_db.drop_collection("llm_chat_message")
     await motor_db.drop_collection("llm_memory_entry")

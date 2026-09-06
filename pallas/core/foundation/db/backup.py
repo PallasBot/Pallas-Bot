@@ -45,6 +45,7 @@ _TOOL_DOWNLOAD: dict[str, dict[str, str]] = {
 
 _MONGO_IMPORTANT_COLLECTIONS: tuple[str, ...] = (
     "blacklist",
+    "blacklist_audit",
     "config",
     "group_config",
     "user_config",

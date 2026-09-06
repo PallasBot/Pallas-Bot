@@ -144,6 +144,26 @@ class BlackListRow(Base):
     answers_reserve: Mapped[Any] = mapped_column(_JsonB, nullable=False, default=list)
 
 
+class BlacklistAuditRow(Base):
+    __tablename__ = "blacklist_audit"
+    __table_args__ = (
+        UniqueConstraint("source_id", name="uq_blacklist_audit_source_id"),
+        Index("ix_blacklist_audit_created_at", "created_at"),
+        Index("ix_blacklist_audit_target_created", "target_type", "target_id", "created_at"),
+        Index("ix_blacklist_audit_group_created", "group_id", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    target_type: Mapped[str] = mapped_column(Text, nullable=False)
+    target_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    group_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    operator: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    source_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
 class AdminMemberRow(Base):
     __tablename__ = "admin_members"
     __table_args__ = (

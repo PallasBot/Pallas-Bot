@@ -37,6 +37,9 @@ async def test_database_overview_pg_uses_estimates_for_large_tables(monkeypatch)
     class BlackListRow:
         pass
 
+    class BlacklistAuditRow:
+        pass
+
     class ImageCacheRow:
         pass
 
@@ -59,6 +62,7 @@ async def test_database_overview_pg_uses_estimates_for_large_tables(monkeypatch)
             GroupConfigRow: 22,
             UserConfigRow: 33,
             BlackListRow: 44,
+            BlacklistAuditRow: 45,
         }
         return values[model]
 
@@ -77,6 +81,7 @@ async def test_database_overview_pg_uses_estimates_for_large_tables(monkeypatch)
     monkeypatch.setattr(repo_pg, "ContextAnswerMessageRow", ContextAnswerMessageRow)
     monkeypatch.setattr(repo_pg, "ContextBanRow", ContextBanRow)
     monkeypatch.setattr(repo_pg, "BlackListRow", BlackListRow)
+    monkeypatch.setattr(repo_pg, "BlacklistAuditRow", BlacklistAuditRow)
     monkeypatch.setattr(repo_pg, "ImageCacheRow", ImageCacheRow)
 
     data = await mod.database_overview()
@@ -92,9 +97,10 @@ async def test_database_overview_pg_uses_estimates_for_large_tables(monkeypatch)
         {"table": "context_answer_message", "count": 1005, "count_estimated": True},
         {"table": "context_ban", "count": 1006, "count_estimated": True},
         {"table": "blacklist", "count": 44, "count_estimated": False},
+        {"table": "blacklist_audit", "count": 45, "count_estimated": False},
         {"table": "image_cache", "count": 1003, "count_estimated": True},
     ]
-    assert exact_models == [BotConfigRow, GroupConfigRow, UserConfigRow, BlackListRow]
+    assert exact_models == [BotConfigRow, GroupConfigRow, UserConfigRow, BlackListRow, BlacklistAuditRow]
     assert estimated_models == [
         MessageRow,
         ContextRow,

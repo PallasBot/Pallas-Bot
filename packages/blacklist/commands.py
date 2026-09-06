@@ -73,7 +73,7 @@ async def handle_blacklist_add(bot: Bot, event: GroupMessageEvent | PrivateMessa
         return
     if isinstance(event, PrivateMessageEvent):
         for uid in targets:
-            await UserConfig(uid).ban(operator=f"u:{event.user_id}")
+            await UserConfig(uid).ban(operator=f"u:{event.user_id}", reason="牛牛黑名单命令")
             await apply_user_banned_change(uid, True)
         logger.info(
             format_plugin_event(
@@ -85,7 +85,11 @@ async def handle_blacklist_add(bot: Bot, event: GroupMessageEvent | PrivateMessa
             f"米诺斯不再眷顾这 {len(targets)} 个灵魂（全局）：{', '.join(map(str, targets))}"
         )
         return
-    await GroupConfig(event.group_id).add_blocked_users(targets)
+    await GroupConfig(event.group_id).add_blocked_users(
+        targets,
+        operator=f"u:{event.user_id}",
+        reason="牛牛黑名单命令",
+    )
     await apply_group_blocked_users_change(event.group_id, await GroupConfig(event.group_id).blocked_user_ids())
     logger.info(
         format_plugin_event(
@@ -107,7 +111,7 @@ async def handle_blacklist_remove(bot: Bot, event: GroupMessageEvent | PrivateMe
         return
     if isinstance(event, PrivateMessageEvent):
         for uid in targets:
-            await UserConfig(uid).unban(operator=f"u:{event.user_id}")
+            await UserConfig(uid).unban(operator=f"u:{event.user_id}", reason="牛牛解禁命令")
             await apply_user_banned_change(uid, False)
         logger.info(
             format_plugin_event(
@@ -119,7 +123,11 @@ async def handle_blacklist_remove(bot: Bot, event: GroupMessageEvent | PrivateMe
             f"这 {len(targets)} 个灵魂又获得了米诺斯的眷顾（全局）：{', '.join(map(str, targets))}"
         )
         return
-    await GroupConfig(event.group_id).remove_blocked_users(targets)
+    await GroupConfig(event.group_id).remove_blocked_users(
+        targets,
+        operator=f"u:{event.user_id}",
+        reason="牛牛解禁命令",
+    )
     await apply_group_blocked_users_change(event.group_id, await GroupConfig(event.group_id).blocked_user_ids())
     logger.info(
         format_plugin_event(
@@ -144,7 +152,7 @@ async def handle_blacklist_add_group(bot: Bot, event: GroupMessageEvent | Privat
             await blacklist_add_group_cmd.finish("博士，哪些群将失去米诺斯的眷顾？")
             return
     for gid in targets:
-        await GroupConfig(gid).ban()
+        await GroupConfig(gid).ban(operator=f"u:{event.user_id}", reason="牛牛拉黑群命令")
         await apply_group_banned_change(gid, True)
     current_group = isinstance(event, GroupMessageEvent) and targets == [event.group_id]
     log_scope = "current group" if current_group else "global"
@@ -174,7 +182,7 @@ async def handle_blacklist_remove_group(bot: Bot, event: GroupMessageEvent | Pri
             await blacklist_remove_group_cmd.finish("博士，有哪些群又获得了米诺斯的眷顾？")
             return
     for gid in targets:
-        await GroupConfig(gid).unban()
+        await GroupConfig(gid).unban(operator=f"u:{event.user_id}", reason="牛牛解禁群命令")
         await apply_group_banned_change(gid, False)
     current_group = isinstance(event, GroupMessageEvent) and targets == [event.group_id]
     log_scope = "current group" if current_group else "global"

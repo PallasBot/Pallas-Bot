@@ -5,7 +5,7 @@
 | GET | `/db/overview` | | 表概览、行数、后端类型 |
 | GET | `/db/health` | | 健康状态、原因摘要、连接池摘要 |
 | GET | `/db/tables` | | 表白名单元数据与是否可分页浏览 |
-| GET | `/db/table-rows` | | 白名单表分页只读（`bot_config`/`group_config`/`user_config`/`blacklist`） |
+| GET | `/db/table-rows` | | 白名单表分页只读（`bot_config`/`group_config`/`user_config`/`blacklist`/`blacklist_audit`） |
 | GET | `/db/migrate/mongo-to-pg/info` | | Mongo→PG 向导元数据（表清单、schema 步骤） |
 | POST | `/db/migrate/mongo-to-pg` | 是 | 异步启动迁移（可 dry-run / 切后端 / 尝试热切换） |
 | GET | `/db/migrate/mongo-to-pg/jobs/active` | | 进行中迁移任务 |
@@ -24,7 +24,8 @@
 | PUT | `/db/table-row` | 是 | 更新 bot/group/user config 行 |
 | DELETE | `/db/table-row` | 是 | 删除行 |
 
-`table` 参数限定为 `bot_config` / `group_config` / `user_config`（与控制台数据库页一致）。
+`/db/table-rows` 的 `table` 参数支持 `bot_config` / `group_config` / `user_config` / `blacklist` / `blacklist_audit`；
+`/db/table-row` 的写入参数仍仅支持前三种 config 表，黑名单审计只读。
 
 备份为异步 job；大表读取有超时（WebUI 使用 `DB_HEAVY_READ_TIMEOUT_MS`）。
 
