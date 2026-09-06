@@ -46,7 +46,7 @@ curl -fsS -o pallas-logs.txt \
 
 容器侧也可用 `docker compose logs pallasbot` 看编排 stdout；完整落盘仍以卷内 `data/` 为准。
 
-## 相关
+## 相关阅读
 
 - [排障](troubleshooting.md)
 - [WebUI 运维](webui.md)

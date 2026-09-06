@@ -55,7 +55,7 @@ Pallas-Bot 多仓分工与主仓目录。
 3. 源码还是运行产物？
 4. 运维文档还是开发文档？
 
-## 相关
+## 相关链接
 
 - [架构总览](/developer/architecture/overview)
 - [Core 与扩展](/developer/architecture/core-vs-extensions)

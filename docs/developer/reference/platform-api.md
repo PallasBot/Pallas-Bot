@@ -41,7 +41,7 @@
 - 普通命令型插件仅为少写包装而跳过 L1
 - 把 Platform 当随意内部捷径
 
-## 相关
+## 相关链接
 
 - [Internal API](internal-api.md)
 - [pallas.api Cookbook](/developer/plugin-development/pallas-api-cookbook)

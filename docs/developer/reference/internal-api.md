@@ -40,7 +40,7 @@
 
 `tools/check_plugin_imports.py` 与 `community_plugin_author check` 校验社区边界。
 
-## 相关
+## 相关链接
 
 - [Platform API](platform-api.md)
 - [pallas.api Cookbook](/developer/plugin-development/pallas-api-cookbook)

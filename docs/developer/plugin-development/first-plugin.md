@@ -141,7 +141,7 @@ async def handle_hello(matcher: Matcher, event: GroupMessageEvent) -> None:
 | 帮助图无「何人可用」 | `menu_data` 未绑 `command_permission`，或 ID 与 matcher 不一致 |
 | 帮助里写死了「仅群管」等 | 违反 cmd_perm 约定；权限只走 metadata，文案不要写死角色 |
 
-## 相关
+## 后续阅读
 
 | 目标 | 文档 |
 | --- | --- |
