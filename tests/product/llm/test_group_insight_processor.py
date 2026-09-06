@@ -116,6 +116,24 @@ async def test_rebuild_pairs_known_bots_covers_peer_detection_gap(monkeypatch) -
 
 
 @pytest.mark.asyncio
+async def test_known_bots_in_group_includes_catalog_bots(monkeypatch) -> None:
+    from pallas.product.llm import group_insight_processor as mod
+
+    class Repo:
+        async def list_recent_bot_ids_for_group(self, group_id, *, since_time, limit):
+            assert group_id == 42
+            return [100]
+
+    monkeypatch.setattr(mod, "make_message_repository", lambda: Repo())
+    monkeypatch.setattr(
+        "pallas.core.platform.multi_bot.fleet.get_catalog_bot_ids",
+        lambda: {99, 100},
+    )
+
+    assert await mod._known_bots_in_group(42) == {99, 100}
+
+
+@pytest.mark.asyncio
 async def test_rebuild_pairs_keeps_candidates_after_persistent_cursor(monkeypatch) -> None:
     from pallas.product.llm import group_insight_processor as mod
 

@@ -235,6 +235,8 @@ async def _known_bots_in_group(group_id: int) -> set[int]:
     message 表的 ``bot_id`` 是记录者账号：任何在该群以 bot_id 出现过的账号，
     其 user_id 发言都应视为 bot 消息，而不是真人接话参考。
     """
+    from pallas.core.platform.multi_bot.fleet import get_catalog_bot_ids
+
     repo = make_message_repository()
     now_ts = int(time.time())
     cutoff = now_ts - _SEMANTIC_LOOKBACK_DAYS * 24 * 60 * 60
@@ -242,8 +244,12 @@ async def _known_bots_in_group(group_id: int) -> set[int]:
         bot_ids = await repo.list_recent_bot_ids_for_group(group_id, since_time=cutoff, limit=128)
     except Exception as exc:
         logger.warning("群洞察无法列出群 [{}] 的已知账号：{}", group_id, exc)
-        return set()
-    return {int(b) for b in bot_ids if int(b) > 0}
+        bot_ids = []
+    try:
+        catalog_bot_ids = get_catalog_bot_ids()
+    except Exception:
+        catalog_bot_ids = set()
+    return {int(b) for b in bot_ids if int(b) > 0} | {int(b) for b in catalog_bot_ids if int(b) > 0}
 
 
 async def _rebuild_pairs_from_messages(

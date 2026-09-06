@@ -122,6 +122,38 @@ def test_chat_prompt_assembler_renders_behavior_strategy_reference_and_baseline(
     assert prompt.index("【群表达指导】") < prompt.index("【真人接话参考】") < prompt.index("【回复形状与输出契约】")
 
 
+def test_chat_prompt_assembler_renders_cached_semantic_style_block() -> None:
+    prompt = ChatPromptAssembler().assemble(
+        core_persona="核心",
+        self_identity="自称",
+        turn_policy=TurnPolicy(
+            reply_target="answer",
+            seriousness="casual",
+            social_action="ANSWER",
+            allow_teasing=True,
+            allow_affection=True,
+            needs_tool=False,
+            needs_grounding=False,
+        ),
+        context=ChatContextBundle(),
+        group_expression=ResolvedGroupExpression(
+            prompt_block="【本群表达校准】\n可借鉴句式：没救了",
+        ),
+        reply_shape=ReplyShapePolicy(
+            preferred_bubbles=1,
+            max_bubbles=2,
+            target_chars_min=4,
+            target_chars_max=18,
+            total_length_band="short",
+            rhythm="single",
+            max_output_tokens=80,
+        ),
+    )
+
+    assert "【本群表达校准】" in prompt
+    assert "可借鉴句式：没救了" in prompt
+
+
 def test_chat_prompt_assembler_keeps_quote_replies_within_casual_shape() -> None:
     prompt = ChatPromptAssembler().assemble(
         core_persona="核心",

@@ -742,6 +742,53 @@ def test_cached_semantic_style_resolution_reads_prompt_block_and_direct_candidat
     assert [item.source_example_id for item in resolution.matched_example_sources] == ["source:legacy"]
 
 
+def test_cached_semantic_style_resolution_falls_back_to_group_style_owner(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    clear_semantic_style_cache_for_tests()
+    mod._write_profiles({
+        (100, 42, "group_chat"): mod.SemanticStyleProfile(
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            direct_examples=["没救了"],
+            direct_pairs=[
+                {
+                    "trigger_text": "又炸了",
+                    "reply_text": "没救了",
+                    "source_example_id": "semantic-owner",
+                }
+            ],
+            human_only=True,
+        ),
+        (200, 42, "group_chat"): mod.SemanticStyleProfile(
+            bot_id=200,
+            group_id=42,
+            scene="group_chat",
+            bubble_counts=[1, 1, 1, 1, 1],
+            segment_char_lengths=[3, 4, 5, 6, 7],
+            rhythm_counts={"single": 5, "multi": 0},
+            sample_count=5,
+            human_only=True,
+        ),
+    })
+    request_id = next(
+        item for item in (f"request-{index}" for index in range(100)) if mod.semantic_style_injection_enabled(item)
+    )
+
+    resolution = mod.resolve_cached_semantic_style(
+        200,
+        42,
+        "group_chat",
+        request_id=request_id,
+        query_text="怎么又炸了",
+    )
+
+    assert resolution.direct_candidate == "没救了"
+    assert resolution.source_example_id == "semantic-owner"
+
+
 def test_cached_semantic_style_resolution_excludes_source_at_negative_threshold(tmp_path, monkeypatch) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
     from pallas.product.llm.injection_feedback import apply_negative_outcome

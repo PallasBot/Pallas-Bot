@@ -22,6 +22,7 @@ class ResolvedGroupExpression:
     matched_examples: list[tuple[str, str]] = field(default_factory=list)
     baseline_note: str = ""
     behavior_strategies: list[BehaviorStrategy] = field(default_factory=list)
+    prompt_block: str = ""
 
 
 @dataclass(frozen=True)
@@ -159,6 +160,9 @@ class ChatPromptAssembler:
         baseline = sanitize_prompt_block(expression.baseline_note, max_len=120)
         if baseline:
             lines.append(f"- {baseline}")
+        prompt_block = sanitize_prompt_block(expression.prompt_block, max_len=240)
+        if prompt_block:
+            lines.append(prompt_block)
         return "\n".join(lines) if len(lines) > 2 else ""
 
     @staticmethod

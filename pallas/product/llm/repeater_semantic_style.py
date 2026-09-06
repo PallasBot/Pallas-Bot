@@ -1519,6 +1519,37 @@ def cached_semantic_style_profile(bot_id: int, group_id: int | None, scene: str)
         return exact.model_copy(deep=True) if exact is not None else None
 
 
+def _profile_has_expression_source(profile: SemanticStyleProfile | None) -> bool:
+    return bool(
+        profile
+        and profile.human_only
+        and (profile.direct_pairs or profile.direct_examples or profile.style_anchor or profile.behavior_strategies)
+    )
+
+
+def _cached_group_expression_profile(
+    group_id: int,
+    scene: str,
+    *,
+    exclude_bot_id: int,
+) -> SemanticStyleProfile | None:
+    """读取群级语义采集 bot 的 profile，供协作 bot 共用。"""
+    with _profiles_lock:
+        candidates = [
+            profile
+            for (bot_id, candidate_group_id, candidate_scene), profile in _profiles.items()
+            if candidate_group_id == int(group_id)
+            and candidate_scene == str(scene)
+            and bot_id != int(exclude_bot_id)
+            and profile.human_only
+            and profile.direct_pairs
+        ]
+        if not candidates:
+            return None
+        selected = max(candidates, key=lambda item: (len(item.direct_pairs), item.updated_at, item.bot_id))
+        return selected.model_copy(deep=True)
+
+
 def semantic_style_profile_summary(profile: SemanticStyleProfile | None) -> dict[str, Any] | None:
     if profile is None:
         return None
@@ -1618,6 +1649,8 @@ def resolve_cached_semantic_style(
     if not bypass_injection_gate and not semantic_style_injection_enabled(request_id, bot_id=bot_id, group_id=group_id):
         return SemanticStyleResolution()
     profile = cached_semantic_style_profile(bot_id, group_id, scene)
+    if not _profile_has_expression_source(profile) and group_id is not None:
+        profile = _cached_group_expression_profile(group_id, scene, exclude_bot_id=bot_id) or profile
     if profile is None or not profile.human_only:
         return SemanticStyleResolution()
     direct_pairs = filter_semantic_style_pairs_by_feedback(profile.direct_pairs, bot_id=bot_id, group_id=group_id)
