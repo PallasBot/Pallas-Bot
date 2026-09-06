@@ -33,7 +33,7 @@ def plugin_name_aliases(name: str) -> frozenset[str]:
 
 
 def is_plugin_name_in_set(name: str, names: frozenset[str] | set[str]) -> bool:
-    canonical_names = {canonical_plugin_id(str(item).strip()) for item in names if str(item).strip()}
+    canonical_names = {canonical_plugin_id(str(item).strip().replace("-", "_")) for item in names if str(item).strip()}
     return bool(plugin_name_aliases(name) & canonical_names)
 
 

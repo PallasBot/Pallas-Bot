@@ -245,6 +245,7 @@ async def database_overview() -> dict[str, Any]:
     if backend == "mongodb":
         from pallas.core.foundation.db.modules import (
             BlackList,
+            BlacklistAudit,
             BotConfigModule,
             Context,
             GroupConfigModule,
@@ -266,6 +267,7 @@ async def database_overview() -> dict[str, Any]:
             ("message", "Message", Message, True),
             ("context", "Context", Context, True),
             ("blacklist", "BlackList", BlackList, False),
+            ("blacklist_audit", "BlacklistAudit", BlacklistAudit, False),
             ("image_cache", "ImageCache", ImageCache, True),
         ]
         counts = await asyncio.gather(*(_cnt(m, estimated=est) for _, _, m, est in mongo_specs))
@@ -283,6 +285,7 @@ async def database_overview() -> dict[str, Any]:
         }
     if _is_pg_backend(backend):
         from pallas.core.foundation.db.repository_pg import (
+            BlacklistAuditRow,
             BlackListRow,
             BotConfigRow,
             ContextAnswerMessageRow,
@@ -305,6 +308,7 @@ async def database_overview() -> dict[str, Any]:
             ("context_answer_message", ContextAnswerMessageRow, True),
             ("context_ban", ContextBanRow, True),
             ("blacklist", BlackListRow, False),
+            ("blacklist_audit", BlacklistAuditRow, False),
             ("image_cache", ImageCacheRow, True),
         ]
 
@@ -323,7 +327,7 @@ async def database_overview() -> dict[str, Any]:
 
 
 # 控制台只读浏览白名单（大表仅概览，不做分页浏览）
-_BROWSEABLE_TABLES = frozenset({"bot_config", "group_config", "user_config", "blacklist"})
+_BROWSEABLE_TABLES = frozenset({"bot_config", "group_config", "user_config", "blacklist", "blacklist_audit"})
 _OVERVIEW_ONLY_TABLES = frozenset({
     "message",
     "context",
@@ -389,6 +393,7 @@ def normalize_console_table_name(table: str) -> str:
         "group_config": "group_config",
         "user_config": "user_config",
         "blacklist": "blacklist",
+        "blacklist_audit": "blacklist_audit",
     }
     if name not in aliases:
         raise ValueError(f"表不在只读白名单: {table}")
@@ -426,6 +431,8 @@ async def list_console_table_rows(
         return {"table": name, "offset": off, "limit": lim, "total": len(rows), "rows": page}
     if name == "blacklist":
         return await _list_blacklist_rows_public(offset=off, limit=lim, backend=backend)
+    if name == "blacklist_audit":
+        return await _list_blacklist_audit_rows_public(offset=off, limit=lim, backend=backend)
 
     raise ValueError(f"表不在只读白名单: {table}")
 
@@ -466,6 +473,50 @@ async def _list_blacklist_rows_public(*, offset: int, limit: int, backend: str) 
     return {"table": "blacklist", "offset": offset, "limit": limit, "total": total, "rows": rows}
 
 
+def _blacklist_audit_row_public(row: Any) -> dict[str, Any]:
+    audit_id = getattr(row, "id", None)
+    if isinstance(audit_id, int):
+        public_id: int | str = int(audit_id)
+    else:
+        public_id = str(audit_id) if audit_id is not None else ""
+    raw_group_id = getattr(row, "group_id", None)
+    return {
+        "id": public_id,
+        "target_type": str(getattr(row, "target_type", "") or ""),
+        "target_id": int(getattr(row, "target_id", 0) or 0),
+        "group_id": int(raw_group_id) if raw_group_id is not None else None,
+        "action": str(getattr(row, "action", "") or ""),
+        "operator": str(getattr(row, "operator", "") or ""),
+        "reason": str(getattr(row, "reason", "") or ""),
+        "created_at": int(getattr(row, "created_at", 0) or 0),
+    }
+
+
+async def _list_blacklist_audit_rows_public(*, offset: int, limit: int, backend: str) -> dict[str, Any]:
+    if _is_pg_backend(backend):
+        from sqlalchemy import func, select
+
+        from pallas.core.foundation.db.repository_pg import BlacklistAuditRow, get_session
+
+        async with get_session(read_only=True) as session:
+            total = int((await session.execute(select(func.count()).select_from(BlacklistAuditRow))).scalar_one())
+            result = await session.execute(
+                select(BlacklistAuditRow)
+                .order_by(BlacklistAuditRow.created_at.desc(), BlacklistAuditRow.id.desc())
+                .offset(offset)
+                .limit(limit)
+            )
+            rows = [_blacklist_audit_row_public(row) for row in result.scalars().all()]
+        return {"table": "blacklist_audit", "offset": offset, "limit": limit, "total": total, "rows": rows}
+
+    from pallas.core.foundation.db.modules import BlacklistAudit
+
+    total = int(await BlacklistAudit.find_all().count())
+    docs = await BlacklistAudit.find_all().sort([("created_at", -1), ("_id", -1)]).skip(offset).limit(limit).to_list()
+    rows = [_blacklist_audit_row_public(doc) for doc in docs]
+    return {"table": "blacklist_audit", "offset": offset, "limit": limit, "total": total, "rows": rows}
+
+
 _MONGO_AGG_COLLECTIONS: dict[str, type] = {}
 _SAFE_AGG_OPS = frozenset({"$match", "$project", "$sort", "$limit", "$skip"})
 
@@ -475,6 +526,7 @@ def _mongo_agg_models() -> dict[str, type]:
         return _MONGO_AGG_COLLECTIONS
     from pallas.core.foundation.db.modules import (
         BlackList,
+        BlacklistAudit,
         BotConfigModule,
         Context,
         GroupConfigModule,
@@ -490,6 +542,7 @@ def _mongo_agg_models() -> dict[str, type]:
         "message": Message,
         "context": Context,
         "blacklist": BlackList,
+        "blacklist_audit": BlacklistAudit,
         "image_cache": ImageCache,
     })
     return _MONGO_AGG_COLLECTIONS

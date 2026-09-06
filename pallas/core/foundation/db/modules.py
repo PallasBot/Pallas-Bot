@@ -224,6 +224,37 @@ class BlackList(Document):
 RepeaterReplyBan = BlackList
 
 
+class BlacklistAudit(Document):
+    """用户、群及群内用户黑名单操作历史。"""
+
+    target_type: str = Field(...)  # user | group | group_user
+    target_id: int = Field(...)
+    group_id: int | None = Field(default=None)
+    action: str = Field(...)  # ban | unban
+    reason: str = ""
+    operator: str = ""
+    created_at: int = Field(default_factory=lambda: int(time.time()))
+    source_id: str | None = Field(default=None)
+
+    class Settings:
+        name = "blacklist_audit"
+        collection = "blacklist_audit"
+        indexes = [
+            IndexModel([("created_at", pymongo.DESCENDING)], name="created_at_index"),
+            IndexModel(
+                [
+                    ("target_type", pymongo.ASCENDING),
+                    ("target_id", pymongo.ASCENDING),
+                    ("created_at", pymongo.DESCENDING),
+                ],
+                name="target_created_index",
+            ),
+            IndexModel(
+                [("group_id", pymongo.ASCENDING), ("created_at", pymongo.DESCENDING)], name="group_created_index"
+            ),
+        ]
+
+
 class SchemaMigration(Document):
     """启动期幂等的 schema 迁移步骤登记表；已应用的步骤不再重复执行。"""
 
@@ -608,6 +639,7 @@ __all__ = [
     "Context",
     "BlackList",
     "RepeaterReplyBan",
+    "BlacklistAudit",
     "SchemaMigration",
     "AdminMember",
     "PallasACL",

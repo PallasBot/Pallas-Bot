@@ -27,6 +27,9 @@ pallas.toml  →  .env / .env.{ENVIRONMENT}  →  webui.json
 
 读取：`merged_repo_settings_upper()` / `repo_env_raw_value()`（磁盘优先于 `os.environ`）。
 
+黑名单状态分别保存在 `user_config` / `group_config`；拉黑、解禁及群内用户屏蔽的操作历史统一追加到
+`blacklist_audit`，记录目标、动作、操作者、原因与时间，不参与配置合并。
+
 启动：`bot.py` / `bot_hub.py` / `bot_worker.py` 在 `nonebot.init()` 前调用 `apply_repo_settings_to_environ()`，仅填充环境中尚未存在的键（保留 Docker Compose 注入）。
 
 ## 读取入口

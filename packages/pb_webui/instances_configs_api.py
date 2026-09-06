@@ -116,10 +116,13 @@ async def _apply_bot_config_patch(account: int, body: _BotConfigPatch) -> dict[s
 
 async def _apply_group_config_patch(group_id: int, body: _GroupConfigPatch) -> dict[str, Any]:
     from pallas.core.foundation.db import make_group_config_repository
+    from pallas.core.foundation.db.blacklist_audit import record_blacklist_audit
     from pallas.core.foundation.db.pallas_console_data import group_config_to_public
 
     repo = make_group_config_repository()
-    await repo.get_or_create(group_id, disabled_plugins=[])
+    current, _created = await repo.get_or_create(group_id, disabled_plugins=[])
+    previous_banned = bool(getattr(current, "banned", False))
+    previous_blocked = {int(user_id) for user_id in (getattr(current, "blocked_user_ids", None) or [])}
     fields: dict[str, Any] = {}
     for field_name, raw in body.model_dump(exclude_none=True).items():
         if field_name == "disabled_plugins" and raw is not None:
@@ -134,7 +137,6 @@ async def _apply_group_config_patch(group_id: int, body: _GroupConfigPatch) -> d
     if "disabled_plugins" in fields:
         from pallas.core.foundation.db.modules import append_disabled_plugins_audit
 
-        current = await repo.get(group_id)
         fields["disabled_plugins_audit"] = append_disabled_plugins_audit(
             getattr(current, "disabled_plugins_audit", None) if current is not None else None,
             old_disabled=list(current.disabled_plugins) if current is not None else [],
@@ -142,6 +144,35 @@ async def _apply_group_config_patch(group_id: int, body: _GroupConfigPatch) -> d
             operator="webui",
         )
     await repo.upsert_fields(group_id, fields)
+    if "banned" in fields and bool(fields["banned"]) != previous_banned:
+        await record_blacklist_audit(
+            target_type="group",
+            target_id=group_id,
+            group_id=group_id,
+            action="ban" if bool(fields["banned"]) else "unban",
+            operator="webui",
+            reason="WebUI 修改群封禁",
+        )
+    if "blocked_user_ids" in fields:
+        next_blocked = set(fields["blocked_user_ids"])
+        for user_id in sorted(next_blocked - previous_blocked):
+            await record_blacklist_audit(
+                target_type="group_user",
+                target_id=user_id,
+                group_id=group_id,
+                action="ban",
+                operator="webui",
+                reason="WebUI 修改群内屏蔽名单",
+            )
+        for user_id in sorted(previous_blocked - next_blocked):
+            await record_blacklist_audit(
+                target_type="group_user",
+                target_id=user_id,
+                group_id=group_id,
+                action="unban",
+                operator="webui",
+                reason="WebUI 修改群内屏蔽名单",
+            )
     if "blocked_user_ids" in fields:
         from packages.blacklist import apply_group_blocked_users_change
 
@@ -162,14 +193,24 @@ async def _apply_group_config_patch(group_id: int, body: _GroupConfigPatch) -> d
 
 async def _apply_user_config_patch(user_id: int, body: _UserConfigPatch) -> dict[str, Any]:
     from pallas.core.foundation.db import make_user_config_repository
+    from pallas.core.foundation.db.blacklist_audit import record_blacklist_audit
     from pallas.core.foundation.db.pallas_console_data import user_config_to_public
 
     repo = make_user_config_repository()
-    await repo.get_or_create(user_id, banned=False)
+    current, _created = await repo.get_or_create(user_id, banned=False)
+    previous_banned = bool(getattr(current, "banned", False))
     fields = body.model_dump(exclude_none=True)
     await repo.upsert_fields(user_id, fields)
     if "banned" in fields:
         await repo.upsert_fields(user_id, {"banned_by": "webui", "banned_at": int(time.time())})
+        if bool(fields["banned"]) != previous_banned:
+            await record_blacklist_audit(
+                target_type="user",
+                target_id=user_id,
+                action="ban" if bool(fields["banned"]) else "unban",
+                operator="webui",
+                reason="WebUI 修改全局封禁",
+            )
         from packages.blacklist import apply_user_banned_change
 
         await apply_user_banned_change(user_id, bool(fields["banned"]))

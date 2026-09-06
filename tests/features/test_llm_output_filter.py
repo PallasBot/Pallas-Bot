@@ -153,12 +153,31 @@ def test_press_reply_to_limit_truncates_at_space_separator() -> None:
     assert pressed == "早上好"
 
 
-def test_resolve_output_filtered_reply_presses_overlength_short_band() -> None:
+def test_resolve_output_filtered_reply_splits_overlength_short_band() -> None:
     task = {"task_type": LLM_CHAT_TASK_TYPE, "reply_max_length": 12}
     reply = "哎呀这个我回头帮你查查。【我们吃个饭吧】。行了先这样。"
     filtered = resolve_output_filtered_reply(task, reply)
-    assert filtered == "哎呀这个我回头帮你查查。"
-    assert len(filtered) <= 12
+    assert filtered == "哎呀这个我回头帮你查查\n【我们吃个饭吧】\n行了先这样"
+    assert all(len(segment) <= 12 for segment in filtered.split("\n"))
+
+
+def test_resolve_output_filtered_reply_splits_overlength_reply_and_keeps_tail() -> None:
+    task = {"task_type": LLM_CHAT_TASK_TYPE, "reply_max_length": 12}
+    reply = "今天先说第一件事。后面还有第二件事。最后还有第三件事。"
+
+    filtered = resolve_output_filtered_reply(task, reply)
+
+    assert filtered == "今天先说第一件事\n后面还有第二件事\n最后还有第三件事"
+    assert all(len(segment) <= 12 for segment in filtered.split("\n"))
+
+
+def test_resolve_output_filtered_reply_splits_at_commas_without_boundary_punctuation() -> None:
+    task = {"task_type": LLM_CHAT_TASK_TYPE, "reply_max_length": 10}
+    reply = "先说第一件事，再说第二件事，最后再补一句"
+
+    filtered = resolve_output_filtered_reply(task, reply)
+
+    assert filtered == "先说第一件事\n再说第二件事\n最后再补一句"
 
 
 def test_resolve_output_filtered_reply_splits_recognition_answer_when_over_cap() -> None:
@@ -190,13 +209,13 @@ def test_resolve_output_filtered_reply_splits_recognition_multi_segment_over_cap
         assert len(segment) <= 26
 
 
-def test_resolve_output_filtered_reply_does_not_split_non_recognition_over_cap() -> None:
-    """非识别问句的超限单泡仍走压短/静默，不拆成多泡。"""
+def test_resolve_output_filtered_reply_splits_non_recognition_over_cap() -> None:
+    """非识别问句超限时也完整拆成多泡，不丢掉后续内容。"""
     task = {"task_type": LLM_CHAT_TASK_TYPE, "reply_max_length": 12}
     reply = "哎呀这个我回头帮你查查。【我们吃个饭吧】。行了先这样。"
     filtered = resolve_output_filtered_reply(task, reply)
-    assert filtered == "哎呀这个我回头帮你查查。"
-    assert len(filtered) <= 12
+    assert filtered == "哎呀这个我回头帮你查查\n【我们吃个饭吧】\n行了先这样"
+    assert all(len(segment) <= 12 for segment in filtered.split("\n"))
 
 
 def test_resolve_output_filtered_reply_keeps_multi_bubble_when_each_fits() -> None:

@@ -105,6 +105,7 @@ from pallas.core.foundation.db.repository_pg.schema import (
     AdminMemberRow,
     BackgroundJobRow,
     Base,
+    BlacklistAuditRow,
     BlackListRow,
     BotConfigRow,
     ContextAnswerMessageRow,

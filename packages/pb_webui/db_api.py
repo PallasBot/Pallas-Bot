@@ -120,6 +120,8 @@ async def _upsert_db_table_row(table: str, row_id: int, data: dict[str, Any]) ->
             raise ValueError("upsert 后回读失败")
         return got
     if t == "group_config":
+        from pallas.core.foundation.db.blacklist_audit import record_blacklist_audit
+
         repo = make_group_config_repository()
         allowed = {"disabled_plugins", "roulette_mode", "banned", "sing_progress", "blocked_user_ids"}
         for k in payload:
@@ -127,11 +129,42 @@ async def _upsert_db_table_row(table: str, row_id: int, data: dict[str, Any]) ->
                 raise ValueError(f"group_config 不允许字段: {k}")
         await repo.get_or_create(int(row_id), disabled_plugins=[])
         current = await repo.get(int(row_id))
+        previous_banned = bool(getattr(current, "banned", False))
+        previous_blocked = {int(user_id) for user_id in (getattr(current, "blocked_user_ids", None) or [])}
         old_disabled = list(current.disabled_plugins) if current is not None else []
         existing_audit = getattr(current, "disabled_plugins_audit", None) if current is not None else None
         for k, v in payload.items():
             await repo.upsert_field(int(row_id), k, v)
         await repo.invalidate_cache()
+        if "banned" in payload and bool(payload["banned"]) != previous_banned:
+            await record_blacklist_audit(
+                target_type="group",
+                target_id=int(row_id),
+                group_id=int(row_id),
+                action="ban" if bool(payload["banned"]) else "unban",
+                operator="webui",
+                reason="WebUI 修改群封禁",
+            )
+        if "blocked_user_ids" in payload:
+            next_blocked = {int(user_id) for user_id in payload["blocked_user_ids"]}
+            for user_id in sorted(next_blocked - previous_blocked):
+                await record_blacklist_audit(
+                    target_type="group_user",
+                    target_id=user_id,
+                    group_id=int(row_id),
+                    action="ban",
+                    operator="webui",
+                    reason="WebUI 修改群内屏蔽名单",
+                )
+            for user_id in sorted(previous_blocked - next_blocked):
+                await record_blacklist_audit(
+                    target_type="group_user",
+                    target_id=user_id,
+                    group_id=int(row_id),
+                    action="unban",
+                    operator="webui",
+                    reason="WebUI 修改群内屏蔽名单",
+                )
         if "blocked_user_ids" in payload:
             from packages.blacklist import apply_group_blocked_users_change
 
@@ -160,17 +193,29 @@ async def _upsert_db_table_row(table: str, row_id: int, data: dict[str, Any]) ->
             raise ValueError("upsert 后回读失败")
         return got
     if t == "user_config":
+        from pallas.core.foundation.db.blacklist_audit import record_blacklist_audit
+
         repo = make_user_config_repository()
         allowed = {"banned"}
         for k in payload:
             if k not in allowed:
                 raise ValueError(f"user_config 不允许字段: {k}")
         await repo.get_or_create(int(row_id), banned=False)
+        current = await repo.get(int(row_id))
+        previous_banned = bool(getattr(current, "banned", False))
         for k, v in payload.items():
             await repo.upsert_field(int(row_id), k, v)
         if "banned" in payload:
             await repo.upsert_field(int(row_id), "banned_by", "webui")
             await repo.upsert_field(int(row_id), "banned_at", int(time.time()))
+            if bool(payload["banned"]) != previous_banned:
+                await record_blacklist_audit(
+                    target_type="user",
+                    target_id=int(row_id),
+                    action="ban" if bool(payload["banned"]) else "unban",
+                    operator="webui",
+                    reason="WebUI 修改全局封禁",
+                )
         await repo.invalidate_cache()
         if "banned" in payload:
             from packages.blacklist import apply_user_banned_change

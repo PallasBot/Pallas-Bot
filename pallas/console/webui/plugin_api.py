@@ -32,6 +32,10 @@ _PB_STATS_FIELD_TO_ENV = {
     "corpus_hot_snapshot_interval_sec": "PALLAS_COMMUNITY_STATS_CORPUS_HOT_SNAPSHOT_INTERVAL_SEC",
 }
 
+_HELP_FIELD_TO_ENV = {
+    "renderer": "PALLAS_HELP_RENDERER",
+}
+
 
 def plugin_field_env_key(plugin_name: str, field_name: str) -> str:
     canonical = canonical_plugin_id((plugin_name or "").strip())
@@ -39,6 +43,8 @@ def plugin_field_env_key(plugin_name: str, field_name: str) -> str:
         return _REPEATER_FIELD_TO_ENV.get(field_name, field_name.upper())
     if canonical == "pb_stats":
         return _PB_STATS_FIELD_TO_ENV.get(field_name, field_name.upper())
+    if canonical == "help":
+        return _HELP_FIELD_TO_ENV.get(field_name, field_name.upper())
     # 点路径（嵌套叶，如 ``skland.github_proxy_url``）→ NoneBot 官方 ``__`` 分隔键。
     if "." in field_name:
         return field_name.replace(".", "__").upper()
@@ -415,7 +421,6 @@ def apply_plugin_config_patch(
     leaves = plugin_nested_field_leaves(cfg_cls)
     allowed = {leaf["name"]: leaf["field"] for leaf in leaves}
     normalized: dict[str, Any] = {}
-    nested_patch: dict[str, Any] = {}
     for k, v in patch.items():
         field = allowed.get(k)
         if field is None:
@@ -423,13 +428,13 @@ def apply_plugin_config_patch(
                 f"未知配置项: {k}（请确认 Bot 已更新并重启；WebUI 无需单独加字段表）",
             )
         normalized[k] = normalize_patch_value(field, v)
-    # 点路径（嵌套叶）重建嵌套 dict；标量保留原名。
+    # 点路径（嵌套叶）深合并，避免修改一个叶字段时覆盖同一模型的兄弟字段。
+    merged = dict(current)
     for k, v in normalized.items():
         if "." in k:
-            _nested_set(nested_patch, k, v)
+            _nested_set(merged, k, v)
         else:
-            nested_patch[k] = v
-    merged = {**current, **nested_patch}
+            merged[k] = v
     try:
         validated_obj = cfg_cls(**merged)
         if plugin_name == "draw":

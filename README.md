@@ -27,7 +27,7 @@
 
 <p align="center"><b>牛牛就是复读机</b>——群友说什么牛牛就说什么。</p>
 
-> 喜欢牛牛，就给牛牛点个 [**⭐**](https://github.com/PallasBot/Pallas-Bot/stargazers) 吧！
+> 喜欢牛牛，就给牛牛点个 **⭐** 吧！
 
 ## ✨ 特性
 

@@ -88,6 +88,49 @@ def test_providers_store_migrates_legacy_pricing_to_registered_models(tmp_path: 
     assert models[1]["pricing_rules"][0]["kind"] == "token"
 
 
+def test_providers_store_honors_explicit_registered_model_removal(tmp_path: Path, monkeypatch) -> None:
+    store = tmp_path / "llm_providers.json"
+    monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
+    monkeypatch.setattr("pallas.product.llm.providers_store._read_ai_providers_toml", lambda: None)
+    clear_providers_store_cache()
+
+    save_providers_document({
+        "providers": [
+            {
+                "id": "gateway",
+                "base_url": "https://example.test/v1",
+                "default_model": "keep-model",
+                "task_models": {"llm_chat": "delete-me"},
+                "models": [
+                    {"model_id": "keep", "name": "keep-model"},
+                    {"model_id": "delete", "name": "delete-me"},
+                ],
+                "model_pricing": {"delete-me": {"price_in": 1}},
+            }
+        ],
+        "routing": {"tasks": {"llm_chat": "gateway"}},
+    })
+
+    save_providers_document({
+        "providers": [
+            {
+                "id": "gateway",
+                "base_url": "https://example.test/v1",
+                "default_model": "keep-model",
+                "task_models": {"llm_chat": "delete-me"},
+                "models": [{"model_id": "keep", "name": "keep-model"}],
+                "model_pricing": {"delete-me": {"price_in": 1}},
+            }
+        ],
+        "routing": {"tasks": {"llm_chat": "gateway"}},
+    })
+
+    clear_providers_store_cache()
+    models = load_providers_document()["providers"][0]["models"]
+
+    assert [model["name"] for model in models] == ["keep-model"]
+
+
 def test_endpoint_uses_registered_model_capabilities_and_effort(tmp_path: Path, monkeypatch) -> None:
     store = tmp_path / "llm_providers.json"
     monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)

@@ -366,6 +366,51 @@ async def test_migrate_blacklist_rerun_idempotent(pg_env):
         assert rows[1].answers_reserve == ["x"]
 
 
+async def test_migrate_blacklist_audit_preserves_reason_and_is_idempotent(pg_env):
+    from bson import ObjectId
+    from sqlalchemy import select
+
+    from pallas.core.foundation.db.repository_pg import BlacklistAuditRow
+
+    migrate = pg_env["migrate"]
+    docs = [
+        {
+            "_id": ObjectId(),
+            "target_type": "group_user",
+            "target_id": 123456,
+            "group_id": 7001,
+            "action": "ban",
+            "operator": "system:rage",
+            "reason": "脏话自动拉黑",
+            "created_at": 100,
+        },
+    ]
+    db = _FakeDb({"blacklist_audit": docs})
+
+    await migrate._migrate_blacklist_audit(
+        db,
+        pg_env["sf"],
+        BlacklistAuditRow,
+        pg_env["pg_insert"],
+        batch_size=100,
+        dry_run=False,
+    )
+    await migrate._migrate_blacklist_audit(
+        db,
+        pg_env["sf"],
+        BlacklistAuditRow,
+        pg_env["pg_insert"],
+        batch_size=100,
+        dry_run=False,
+    )
+
+    async with pg_env["sf"]() as session:
+        rows = (await session.execute(select(BlacklistAuditRow))).scalars().all()
+    assert len(rows) == 1
+    assert rows[0].reason == "脏话自动拉黑"
+    assert rows[0].source_id == str(docs[0]["_id"])
+
+
 async def test_migrate_bot_config_handles_auto_accept_legacy(pg_env):
     """旧 schema 只有 auto_accept，迁移要能 fallback；admins 里非法项直接跳过。"""
     from bson import ObjectId

@@ -1277,6 +1277,7 @@ async def prepare_and_submit_llm_chat_turn(
         group_expression = ResolvedGroupExpression(
             matched_examples=semantic_examples,
             baseline_note=str(getattr(semantic_style, "baseline_note", "") or ""),
+            prompt_block=str(getattr(semantic_style, "prompt_block", "") or ""),
             behavior_strategies=[
                 item
                 for item in (getattr(semantic_style, "behavior_strategies", None) or [])[:2]
@@ -1439,6 +1440,7 @@ async def prepare_and_submit_llm_chat_turn(
                 "semantic_style_source_example_id": getattr(semantic_style, "source_example_id", "") or None,
                 "semantic_style_direct_candidate": semantic_style.direct_candidate or None,
                 "reply_max_length": int(reply_max_length or 0),
+                "reply_max_bubbles": int(reply_shape.max_bubbles or 1),
                 "reply_total_length_band": reply_shape.total_length_band,
                 "start_time": time.time(),
                 "self_aliases": self_aliases[:8],

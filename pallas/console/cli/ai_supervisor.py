@@ -16,7 +16,7 @@ from pallas.console.webui.ai_install_writeback import DEFAULT_AI_SERVER_PORT
 
 MANAGED_MARKER_NAME = ".pallas-managed"
 _CTL = "scripts/ctl.sh"
-_SERVICES = ("media", "api")
+_SERVICES = ("media", "api", "fast")
 
 
 def mark_ai_root_managed(ai_root: Path) -> None:
@@ -227,6 +227,7 @@ def ai_runtime_status(*, ai_root: Path | None = None) -> dict[str, Any]:
 
     api_up = bool(services["api"]["running"])
     media_up = bool(services["media"]["running"])
+    fast_up = bool(services["fast"]["running"])
     # 始终探活：Windows/Git Bash 下 ctl 用 $! 写入的 api.pid 常非原生 PID，
     # 仅信 pid 会误报「api 未运行」并跳过 HTTP（联通测试却能通）。
     health = probe_ai_health_sync(ai_root=root)
@@ -248,8 +249,8 @@ def ai_runtime_status(*, ai_root: Path | None = None) -> dict[str, Any]:
         "can_manage": ctl_ready,
         "ai_root": str(root),
         "layout": ai_root_layout(root),
-        # 媒体扩展：api + media；LLM 已内置 Bot 内核，不再托管 llm worker
-        "running": api_up and media_up,
+        # 媒体扩展：api + media + fast；LLM 已内置 Bot 内核，不再托管 llm worker
+        "running": api_up and media_up and fast_up,
         "endpoint": {"host": "127.0.0.1", "port": resolve_ai_listen_port(root)},
         "services": services,
         "health": health,
@@ -319,7 +320,7 @@ def _local_services_claim_running(status: dict[str, Any]) -> bool:
 
 
 def start_ai_runtime(*, ai_root: Path | None = None, with_media: bool = True) -> dict[str, Any]:
-    """启动媒体服务（media worker + API）。
+    """启动媒体服务（media/fast worker + API）。
 
     ``with_media`` 保留兼容旧调用，已忽略；聊天/画画不经本 Runtime。
     若本地服务宣称在跑但 ``/health`` 失败（僵死 pid / 空端口），先 stop 再 start，
@@ -337,7 +338,7 @@ def start_ai_runtime(*, ai_root: Path | None = None, with_media: bool = True) ->
         healed = True
         _code, out = run_ctl(root, "stop", "all")
         outputs.append(out)
-    for target in ("media", "api"):
+    for target in _SERVICES:
         code, out = run_ctl(root, "start", target)
         outputs.append(out)
         if code != 0:

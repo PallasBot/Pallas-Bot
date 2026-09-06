@@ -257,15 +257,20 @@ async def _apply_rage_gate(bot: Bot, event: GroupMessageEvent) -> bool:
                 from pallas.core.foundation.config import GroupConfig
 
                 try:
+                    auto_ban_reason = "持续对 Bot 辱骂/脏话攻击（多次触发静默）"
                     ban_cfg = GroupConfig(group_id)
-                    await ban_cfg.add_blocked_users([user_id])
+                    await ban_cfg.add_blocked_users(
+                        [user_id],
+                        operator="system:rage",
+                        reason=auto_ban_reason,
+                    )
                     await apply_group_blocked_users_change(group_id, await ban_cfg.blocked_user_ids())
                     from pallas.core.shared.utils.ban_notify import notify_auto_ban
 
                     await notify_auto_ban(
                         bot,
                         title="脏话攻击自动拉黑",
-                        reason="持续对 Bot 辱骂/脏话攻击（多次触发静默）",
+                        reason=auto_ban_reason,
                         samples=attack_auto_ban_samples(key),
                         group_id=group_id,
                         user_id=user_id,

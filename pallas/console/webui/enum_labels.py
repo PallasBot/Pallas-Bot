@@ -52,6 +52,10 @@ FIELD_CHOICE_LABELS: dict[str, dict[str, str]] = {
         "repeater_plus_decision": "语料 + 统一决策",
         "full_conversation_kernel": "决策 + 生成 + 反馈全链路",
     },
+    "renderer": {
+        "pillow": "Pillow（兼容）",
+        "html": "HTML / Playwright（新版）",
+    },
 }
 
 

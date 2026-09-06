@@ -659,7 +659,7 @@ def test_new_semantic_sample_defaults_to_rewrite_and_counts_llm_labels(tmp_path,
     assert SEMANTIC_STYLE_LABEL_VERSION >= 1
 
 
-def test_cached_style_block_is_scoped_to_bot_group_and_scene(tmp_path, monkeypatch) -> None:
+def test_cached_style_block_is_scoped_to_group_and_scene(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     clear_semantic_style_cache_for_tests()
     profile = persist_semantic_style_example(
@@ -685,7 +685,7 @@ def test_cached_style_block_is_scoped_to_bot_group_and_scene(tmp_path, monkeypat
     assert profile.direct_examples == ["没救了"]
     assert profile.direct_pairs[0].reply_text == "没救了"
     assert profile.rewrite_seeds == []
-    assert build_cached_semantic_style_block(101, 42, "group_chat") == ""
+    assert "可借鉴句式：没救了" in build_cached_semantic_style_block(101, 42, "group_chat")
     assert build_cached_semantic_style_block(100, 42, "other") == ""
 
 
@@ -740,6 +740,95 @@ def test_cached_semantic_style_resolution_reads_prompt_block_and_direct_candidat
     assert resolution.direct_candidate == "没救了"
     assert "本群表达校准" in resolution.prompt_block
     assert [item.source_example_id for item in resolution.matched_example_sources] == ["source:legacy"]
+
+
+def test_cached_semantic_style_resolution_falls_back_to_group_style_owner(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    clear_semantic_style_cache_for_tests()
+    mod._write_profiles({
+        (100, 42, "group_chat"): mod.SemanticStyleProfile(
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            style_anchor="短句轻怼。",
+            direct_examples=["没救了"],
+            direct_pairs=[
+                {
+                    "trigger_text": "又炸了",
+                    "reply_text": "没救了",
+                    "source_example_id": "semantic-owner",
+                }
+            ],
+            human_only=True,
+        ),
+        (200, 42, "group_chat"): mod.SemanticStyleProfile(
+            bot_id=200,
+            group_id=42,
+            scene="group_chat",
+            bubble_counts=[1, 1, 1, 1, 1],
+            segment_char_lengths=[3, 4, 5, 6, 7],
+            rhythm_counts={"single": 5, "multi": 0},
+            sample_count=5,
+            human_only=True,
+        ),
+    })
+    request_id = next(
+        item for item in (f"request-{index}" for index in range(100)) if mod.semantic_style_injection_enabled(item)
+    )
+
+    resolution = mod.resolve_cached_semantic_style(
+        200,
+        42,
+        "group_chat",
+        request_id=request_id,
+        query_text="怎么又炸了",
+    )
+
+    assert resolution.direct_candidate == "没救了"
+    assert resolution.source_example_id == "semantic-owner"
+
+
+def test_cached_semantic_style_profile_is_shared_across_group_bots(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    clear_semantic_style_cache_for_tests()
+    mod._write_profiles({
+        (100, 42, "group_chat"): mod.SemanticStyleProfile(
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            style_anchor="短句轻怼。",
+            direct_examples=["没救了"],
+            direct_pairs=[
+                {
+                    "trigger_text": "又炸了",
+                    "reply_text": "没救了",
+                    "source_example_id": "semantic-owner",
+                }
+            ],
+            human_only=True,
+        ),
+        (200, 42, "group_chat"): mod.SemanticStyleProfile(
+            bot_id=200,
+            group_id=42,
+            scene="group_chat",
+            bubble_counts=[1, 1, 1, 1, 1],
+            segment_char_lengths=[3, 4, 5, 6, 7],
+            rhythm_counts={"single": 5, "multi": 0},
+            sample_count=5,
+            human_only=True,
+        ),
+    })
+
+    profile = mod.cached_semantic_style_profile(200, 42, "group_chat")
+
+    assert profile is not None
+    assert profile.bot_id == 200
+    assert profile.style_anchor == "短句轻怼。"
+    assert [pair.reply_text for pair in profile.direct_pairs] == ["没救了"]
 
 
 def test_cached_semantic_style_resolution_excludes_source_at_negative_threshold(tmp_path, monkeypatch) -> None:

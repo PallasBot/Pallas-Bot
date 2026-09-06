@@ -400,7 +400,7 @@ async def handle_notice(event: _NoticeEvent):
 
     elif event.notice_type == "group_decrease" and event.sub_type == "kick_me":
         if plugin_config.enable_kick_ban:
-            await GroupConfig(event.group_id).ban()
-            await UserConfig(event.operator_id).ban(operator="system:kick_me")
+            await GroupConfig(event.group_id).ban(operator="system:kick_me", reason="Bot 被踢出群聊")
+            await UserConfig(event.operator_id).ban(operator="system:kick_me", reason="Bot 被踢出群聊")
             await apply_group_banned_change(event.group_id, True)
             await apply_user_banned_change(event.operator_id, True)

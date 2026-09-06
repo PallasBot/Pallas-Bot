@@ -98,7 +98,11 @@ def get_help_menu_plugins(
     else:
         ignored = set(ignored_plugins if ignored_plugins is not None else resolve_help_ignored_plugins())
         filtered = [
-            p for p in plugins if p.name not in ignored and is_user_help_plugin(p) and is_plugin_help_available(p.name)
+            p
+            for p in plugins
+            if not is_plugin_name_in_set(p.name, ignored)
+            and is_user_help_plugin(p)
+            and is_plugin_help_available(p.name)
         ]
     seen_canonical: set[str] = set()
     deduped: list[Any] = []

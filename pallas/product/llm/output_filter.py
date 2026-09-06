@@ -15,7 +15,6 @@ from pallas.core.platform.ai_callback.task_types import (
 )
 from pallas.product.llm import corpus_contamination as _corpus_contamination
 from pallas.product.llm.models import StructuredChatReply
-from pallas.product.llm.tools.select import is_recognition_question
 
 CHAT_HARD_BLOCK_PHRASES = _corpus_contamination.CHAT_HARD_BLOCK_PHRASES
 CHAT_SOFT_RETRY_PHRASES = _corpus_contamination.CHAT_SOFT_RETRY_PHRASES
@@ -306,74 +305,43 @@ def _press_reply_to_limit(text: str, *, max_len: int) -> str:
     return plain
 
 
-def _split_reply_to_fit(text: str, *, max_len: int, max_segments: int = 3) -> list[str] | None:
-    """把超限的单泡文本按句读断点切成「每段 ≤max_len」的多泡，尽量保住完整语义。
+_REPLY_SPLIT_PUNCTUATION = frozenset("。！？!?；;，,、\n")
+_REPLY_BOUNDARY_TRIM_CHARS = " \t\r\n。！？!?；;，,、"
 
-    只在能干净拆分（每个切出的段都不超上限、且确有拆分）时返回分段列表；
-    单句内部找不到可断点、或段数超出限制（再 fold 会重新超限）则返回 None，
-    交由调用方走压短/回落/静默。
-    """
+
+def _split_reply_to_fit(
+    text: str,
+    *,
+    max_len: int,
+    max_segments: int = 3,
+) -> list[str] | None:
+    """把超限回复完整拆成多个不超过上限的气泡，并去掉拆分边界标点。"""
     if not text or max_len <= 0 or len(text) <= max_len:
         return None
-    plain = str(text or "").strip()
-    hard_tokens: list[str] = []
-    start = 0
-    for index, ch in enumerate(plain):
-        if ch not in "。！？!?；;\n":
-            continue
-        token = plain[start : index + 1].strip()
-        if token:
-            hard_tokens.append(token)
-        start = index + 1
-    tail = plain[start:].strip()
-    if tail:
-        hard_tokens.append(tail)
-    units: list[str] = []
-    for token in hard_tokens:
-        if len(token) <= max_len:
-            units.append(token)
-            continue
-        sub = _soft_split_unit(token, max_len=max_len)
-        if sub is None:
-            return None
-        units.extend(sub)
-    if not units:
-        return None
+    remainder = str(text).strip()
     segments: list[str] = []
-    buffer = ""
-    for unit in units:
-        if buffer and len(buffer) + len(unit) > max_len:
-            segments.append(buffer)
-            buffer = unit
+    while len(remainder) > max_len:
+        cut_at = max(
+            (index for index, char in enumerate(remainder[:max_len]) if char in _REPLY_SPLIT_PUNCTUATION),
+            default=-1,
+        )
+        if cut_at <= 0:
+            cut_at = remainder.rfind(" ", 0, max_len)
+        if cut_at <= 0:
+            cut_at = max_len
+            next_start = cut_at
         else:
-            buffer += unit
-    if buffer:
-        segments.append(buffer)
-    segments = [seg.strip() for seg in segments if seg.strip()]
-    if len(segments) < 2 or len(segments) > max_segments:
+            next_start = cut_at + 1
+        segment = remainder[:cut_at].strip(_REPLY_BOUNDARY_TRIM_CHARS)
+        if segment:
+            segments.append(segment)
+        remainder = remainder[next_start:].lstrip(_REPLY_BOUNDARY_TRIM_CHARS)
+    tail = remainder.strip(_REPLY_BOUNDARY_TRIM_CHARS)
+    if tail:
+        segments.append(tail)
+    if len(segments) < 2 or len(segments) > max(1, int(max_segments)):
         return None
     return segments
-
-
-def _soft_split_unit(token: str, *, max_len: int) -> list[str] | None:
-    """单个句子超限时按中文逗号/空格软切到每段 ≤max_len，切不利落返回 None。"""
-    pieces: list[str] = []
-    remainder = token.strip()
-    while len(remainder) > max_len:
-        cut_at = remainder.rfind("，", 0, max_len)
-        if cut_at < 0:
-            for seps in ("、", " "):
-                candidate = remainder.rfind(seps, 0, max_len)
-                if candidate > 0:
-                    cut_at = candidate
-                    break
-        if cut_at < 1:
-            return None
-        pieces.append(remainder[:cut_at].strip())
-        remainder = remainder[cut_at + 1 :].strip()
-    if remainder:
-        pieces.append(remainder)
-    return [piece for piece in pieces if piece] or None
 
 
 def _enforce_max_length(text: str, *, task: dict, task_type: str) -> str:
@@ -464,9 +432,18 @@ def resolve_output_filtered_chat_reply(task: dict, reply: StructuredChatReply) -
         max_len = int(task.get("reply_max_length") or 0)
     except (TypeError, ValueError):
         max_len = 0
+    try:
+        max_bubbles = max(1, min(5, int(task.get("reply_max_bubbles") or 3)))
+    except (TypeError, ValueError):
+        max_bubbles = 3
     # 多泡回复：每个气泡各自都落在单点上限内，就保持分条投递，而不是把
     # 整串 join 后按一刀切压短/静默（否则合理的分段长回复会被整个吞掉）。
-    if max_len > 0 and filtered.reply_segments and all(len(seg) <= max_len for seg in filtered.reply_segments):
+    if (
+        max_len > 0
+        and len(filtered.reply_segments) <= max_bubbles
+        and filtered.reply_segments
+        and all(len(seg) <= max_len for seg in filtered.reply_segments)
+    ):
         log_rate_limited(
             logger,
             "info",
@@ -481,13 +458,9 @@ def resolve_output_filtered_chat_reply(task: dict, reply: StructuredChatReply) -
     else:
         enforced_text = text
         split_done = False
-        # 超限时：仅当是识别问句（这是谁/这是什么/啥梗）时，优先按句读切成每段
-        # 都 ≤max_len 的多泡投递，保住被硬截断的答案；闲聊短句保持精简短泡不拆分。
-        # 不限制单泡：识别问句模型常输出长描述或结构化多段（join 后含换行），
-        # 均可能整体超限，需按断点重切而非一刀切压短。
-        is_recognition = is_recognition_question(str(task.get("user_text") or ""))
-        if is_recognition and max_len > 0 and len(text) > max_len:
-            split = _split_reply_to_fit(text, max_len=max_len)
+        # 超限时完整拆成多个气泡，避免只保留第一段导致回复戛然而止。
+        if max_len > 0 and len(text) > max_len:
+            split = _split_reply_to_fit(text, max_len=max_len, max_segments=max_bubbles)
             if split:
                 log_rate_limited(
                     logger,

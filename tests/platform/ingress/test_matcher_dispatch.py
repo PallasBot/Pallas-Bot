@@ -248,6 +248,70 @@ async def test_rage_gate_captures_message_when_attack_enters_silence(monkeypatch
     capture.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_rage_auto_ban_persists_reason_and_operator(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import behavior, rage
+    from pallas.product.llm.memory import relationship_store
+
+    event = MagicMock(
+        group_id=42,
+        user_id=7,
+        message_id=11,
+        self_id="10001",
+        time=100,
+        to_me=True,
+        _pallas_llm_alias_hard_trigger=False,
+    )
+    event.get_plaintext.return_value = "脏话"
+    capture = AsyncMock()
+    blocked_calls: list[tuple[list[int], dict[str, object]]] = []
+
+    class FakeGroupConfig:
+        def __init__(self, group_id: int) -> None:
+            self.group_id = group_id
+
+        async def add_blocked_users(self, user_ids: list[int], **kwargs: object) -> None:
+            blocked_calls.append((user_ids, kwargs))
+
+        async def blocked_user_ids(self) -> list[int]:
+            return [7]
+
+    monkeypatch.setattr("pallas.core.foundation.config.GroupConfig", FakeGroupConfig)
+    monkeypatch.setattr(relationship_store, "retrieve_rage_state", AsyncMock(return_value=RageState(rage=70)))
+    monkeypatch.setattr(relationship_store, "update_rage_state", AsyncMock())
+    monkeypatch.setattr(relationship_store, "upsert_relationship_profile", AsyncMock())
+    monkeypatch.setattr(dispatch, "_capture_rage_suppressed_message", capture)
+    monkeypatch.setattr(
+        dispatch,
+        "make_message_repository",
+        lambda: MagicMock(find_recent_in_group=AsyncMock(return_value=[])),
+    )
+    monkeypatch.setattr(behavior, "attack_pressure_details", lambda **_kwargs: (1, 0))
+    monkeypatch.setattr(rage, "count_attack_tokens", lambda _text: 1)
+    monkeypatch.setattr(rage, "evaluate_attack", lambda **_kwargs: RageState(rage=100, silenced_until=500))
+    monkeypatch.setattr(rage, "attack_auto_ban_threshold", lambda: 2)
+    monkeypatch.setattr(rage, "note_rage_silence_for_auto_ban", lambda _key, **_kwargs: 2)
+    monkeypatch.setattr(rage, "reserve_attack_auto_ban", lambda _key: True)
+    monkeypatch.setattr(rage, "attack_auto_ban_samples", lambda _key: ["脏话"])
+    monkeypatch.setattr(rage, "rollback_attack_auto_ban", lambda _key: None)
+    monkeypatch.setattr("packages.blacklist.apply_group_blocked_users_change", AsyncMock())
+    notify = AsyncMock()
+    monkeypatch.setattr("pallas.core.shared.utils.ban_notify.notify_auto_ban", notify)
+
+    assert await dispatch._apply_rage_gate(MagicMock(self_id="10001"), event) is True
+    assert blocked_calls == [
+        (
+            [7],
+            {
+                "operator": "system:rage",
+                "reason": "持续对 Bot 辱骂/脏话攻击（多次触发静默）",
+            },
+        )
+    ]
+    assert notify.await_args.kwargs["reason"] == "持续对 Bot 辱骂/脏话攻击（多次触发静默）"
+    capture.assert_awaited_once()
+
+
 class _CommandMatcher:
     rule = Rule(command("foo"))
 

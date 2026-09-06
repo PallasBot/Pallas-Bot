@@ -90,6 +90,7 @@ PROTECTED_OBJECTS = frozenset({
     "acl_rules",
     "admin_members",
     "blacklist",
+    "blacklist_audit",
     "bot_config",
     "config",
     "group_config",

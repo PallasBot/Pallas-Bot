@@ -23,13 +23,12 @@ HELP_TAG_LABELS: dict[str, str] = {
 
 # 分组排序；未列入的 tag 按首次出现插在「其他」前
 DEFAULT_HELP_TAG_ORDER: tuple[str, ...] = (
-    "core",
     "chat",
-    "ai",
     "fun",
+    "ai",
     "tool",
     "admin",
-    "other",
+    "core",
 )
 
 

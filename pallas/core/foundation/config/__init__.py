@@ -376,14 +376,41 @@ class GroupConfig(Config):
         """
         await self._update("roulette_mode", mode)
 
-    async def ban(self) -> None:
+    async def ban(self, operator: str | None = None, reason: str = "") -> None:
         """
         拉黑该群
+
+        :param operator: 操作者标识（QQ 号 / webui / system:xxx），用于审计
+        :param reason: 拉黑原因
         """
         await self._update("banned", True)
 
-    async def unban(self) -> None:
+        if operator:
+            from pallas.core.foundation.db.blacklist_audit import record_blacklist_audit
+
+            await record_blacklist_audit(
+                target_type="group",
+                target_id=self.group_id,
+                group_id=self.group_id,
+                action="ban",
+                operator=operator,
+                reason=reason,
+            )
+
+    async def unban(self, operator: str | None = None, reason: str = "") -> None:
         await self._update("banned", False)
+
+        if operator:
+            from pallas.core.foundation.db.blacklist_audit import record_blacklist_audit
+
+            await record_blacklist_audit(
+                target_type="group",
+                target_id=self.group_id,
+                group_id=self.group_id,
+                action="unban",
+                operator=operator,
+                reason=reason,
+            )
 
     async def is_banned(self) -> bool:
         """
@@ -404,17 +431,64 @@ class GroupConfig(Config):
                 continue
         return sorted(set(out))
 
-    async def set_blocked_user_ids(self, uids: list[int]) -> None:
-        await self._update("blocked_user_ids", sorted({int(u) for u in uids}))
+    async def set_blocked_user_ids(
+        self,
+        uids: list[int],
+        *,
+        operator: str | None = None,
+        reason: str = "",
+    ) -> None:
+        previous = set(await self.blocked_user_ids())
+        desired = {int(u) for u in uids}
+        await self._update("blocked_user_ids", sorted(desired))
+        if not operator:
+            return
 
-    async def add_blocked_users(self, uids: list[int]) -> None:
+        from pallas.core.foundation.db.blacklist_audit import record_blacklist_audit
+
+        for user_id in sorted(desired - previous):
+            await record_blacklist_audit(
+                target_type="group_user",
+                target_id=user_id,
+                group_id=self.group_id,
+                action="ban",
+                operator=operator,
+                reason=reason,
+            )
+        for user_id in sorted(previous - desired):
+            await record_blacklist_audit(
+                target_type="group_user",
+                target_id=user_id,
+                group_id=self.group_id,
+                action="unban",
+                operator=operator,
+                reason=reason,
+            )
+
+    async def add_blocked_users(
+        self,
+        uids: list[int],
+        *,
+        operator: str | None = None,
+        reason: str = "",
+    ) -> None:
         cur = set(await self.blocked_user_ids())
         cur.update(int(u) for u in uids)
-        await self.set_blocked_user_ids(sorted(cur))
+        await self.set_blocked_user_ids(sorted(cur), operator=operator, reason=reason)
 
-    async def remove_blocked_users(self, uids: list[int]) -> None:
+    async def remove_blocked_users(
+        self,
+        uids: list[int],
+        *,
+        operator: str | None = None,
+        reason: str = "",
+    ) -> None:
         rm = {int(u) for u in uids}
-        await self.set_blocked_user_ids([u for u in await self.blocked_user_ids() if u not in rm])
+        await self.set_blocked_user_ids(
+            [u for u in await self.blocked_user_ids() if u not in rm],
+            operator=operator,
+            reason=reason,
+        )
 
     async def is_user_blocked_in_group(self, user_id: int) -> bool:
         return user_id in set(await self.blocked_user_ids())
@@ -462,16 +536,26 @@ class UserConfig(Config):
 
         self.user_id = user_id
 
-    async def ban(self, operator: str | None = None) -> None:
+    async def ban(self, operator: str | None = None, reason: str = "") -> None:
         """
         拉黑这个人
 
         :param operator: 操作者标识（QQ 号 / webui / system:xxx），用于审计
+        :param reason: 拉黑原因
         """
         await self._update("banned", True)
         if operator:
             await self._update("banned_by", str(operator))
             await self._update("banned_at", int(time.time()))
+            from pallas.core.foundation.db.blacklist_audit import record_blacklist_audit
+
+            await record_blacklist_audit(
+                target_type="user",
+                target_id=self.user_id,
+                action="ban",
+                operator=operator,
+                reason=reason,
+            )
 
     async def is_banned(self) -> bool:
         """
@@ -480,11 +564,20 @@ class UserConfig(Config):
         banned = await self._find("banned")
         return True if banned else False
 
-    async def unban(self, operator: str | None = None) -> None:
+    async def unban(self, operator: str | None = None, reason: str = "") -> None:
         await self._update("banned", False)
         if operator:
             await self._update("banned_by", str(operator))
             await self._update("banned_at", int(time.time()))
+            from pallas.core.foundation.db.blacklist_audit import record_blacklist_audit
+
+            await record_blacklist_audit(
+                target_type="user",
+                target_id=self.user_id,
+                action="unban",
+                operator=operator,
+                reason=reason,
+            )
 
 
 class TaskManager:
