@@ -1,4 +1,6 @@
 # 帮助图 Markdown 渲染
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from pallas.console.webui import install_hot_reload_config, plugin_config_proxy
@@ -26,6 +28,15 @@ class StyleConfig(BaseModel):
 class Config(BaseModel, extra="ignore"):
     """帮助插件配置"""
 
+    renderer: Literal["pillow", "html"] = Field(
+        default="pillow",
+        description=field_help(
+            "帮助图使用哪种渲染方式",
+            "Pillow 兼容性最好；HTML / Playwright 使用新版档案排版",
+            "HTML 渲染失败时会自动回退 Pillow",
+        ),
+        json_schema_extra=_ui("渲染", 10),
+    )
     default_style: str = Field(
         default="pallas_default",
         description=field_help(
@@ -139,6 +150,7 @@ def on_help_config_reload(cfg: Config) -> None:
 plugin_webui = install_hot_reload_config(
     Config,
     config_module=__name__,
+    field_to_env={"renderer": "PALLAS_HELP_RENDERER"},
     on_reload=on_help_config_reload,
 )
 get_help_config = plugin_webui.get

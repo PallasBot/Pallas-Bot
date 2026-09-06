@@ -54,6 +54,10 @@ def test_plugin_field_env_key_repeater_learn() -> None:
     assert plugin_field_env_key("sing", "sing_enable") == "SING_ENABLE"
 
 
+def test_plugin_field_env_key_help_renderer() -> None:
+    assert plugin_field_env_key("help", "renderer") == "PALLAS_HELP_RENDERER"
+
+
 def test_nested_field_leaves_flattens_nested_model() -> None:
     """嵌套 BaseModel 字段应展开为叶字段，env 键用 ``__`` 分隔前缀。"""
     leaves = plugin_nested_field_leaves(NestedConfig)

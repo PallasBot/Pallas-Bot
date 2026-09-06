@@ -32,6 +32,10 @@ _PB_STATS_FIELD_TO_ENV = {
     "corpus_hot_snapshot_interval_sec": "PALLAS_COMMUNITY_STATS_CORPUS_HOT_SNAPSHOT_INTERVAL_SEC",
 }
 
+_HELP_FIELD_TO_ENV = {
+    "renderer": "PALLAS_HELP_RENDERER",
+}
+
 
 def plugin_field_env_key(plugin_name: str, field_name: str) -> str:
     canonical = canonical_plugin_id((plugin_name or "").strip())
@@ -39,6 +43,8 @@ def plugin_field_env_key(plugin_name: str, field_name: str) -> str:
         return _REPEATER_FIELD_TO_ENV.get(field_name, field_name.upper())
     if canonical == "pb_stats":
         return _PB_STATS_FIELD_TO_ENV.get(field_name, field_name.upper())
+    if canonical == "help":
+        return _HELP_FIELD_TO_ENV.get(field_name, field_name.upper())
     # 点路径（嵌套叶，如 ``skland.github_proxy_url``）→ NoneBot 官方 ``__`` 分隔键。
     if "." in field_name:
         return field_name.replace(".", "__").upper()

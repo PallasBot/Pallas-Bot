@@ -127,6 +127,7 @@ FIELD_LABELS: dict[str, str] = {
     "send_queue_min_interval_ms": "同一只牛最短发送间隔（毫秒）",
     "send_queue_workers": "发送消息的工作线程数",
     "ignored_plugins": "隐藏插件列表",
+    "renderer": "帮助图渲染器",
     "help_tag_overrides": "帮助图分组覆盖",
     "inbound_filter_api_fail_open": "审查失败时放行",
     "inbound_filter_api_key": "审查接口密钥",

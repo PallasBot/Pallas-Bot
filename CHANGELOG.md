@@ -2,8 +2,15 @@
 
 ## [Unreleased]
 
+### 更新公告
+
+- **帮助图**：
+  - 可在 WebUI「牛牛帮助」配置中切换 Pillow 与 HTML / Playwright 渲染
+  - HTML 渲染失败时自动回退 Pillow
+
 ### Added
 
+* feat(help): 支持在 WebUI 切换帮助图渲染器
 * feat(core): 默认启用 htmlrender playwright 渲染后端
 * feat(webui): 支持解析 NoneBot 官方嵌套插件 Config（env 键 __ 分隔）
 * feat(webui): 社区插件安装支持子目录插件包结构（pyproject 声明子目录）

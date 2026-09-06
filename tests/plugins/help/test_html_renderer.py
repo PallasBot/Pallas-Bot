@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 import sys
 from importlib import import_module
 from types import SimpleNamespace
@@ -16,10 +17,26 @@ from packages.help.plugin_detail_data import FunctionDetailData, HelpFunctionRow
 def test_help_renderer_mode_defaults_to_pillow_and_accepts_html(monkeypatch) -> None:
     from packages.help import renderer
 
+    monkeypatch.setattr(
+        "pallas.core.foundation.config.repo_settings.repo_env_raw_value",
+        lambda key: os.environ.get(key),
+    )
     monkeypatch.delenv("PALLAS_HELP_RENDERER", raising=False)
     assert renderer.help_renderer_mode() == "pillow"
 
     monkeypatch.setenv("PALLAS_HELP_RENDERER", "html")
+    assert renderer.help_renderer_mode() == "html"
+
+
+def test_help_renderer_mode_reads_repo_settings(monkeypatch) -> None:
+    from packages.help import renderer
+
+    monkeypatch.delenv("PALLAS_HELP_RENDERER", raising=False)
+    monkeypatch.setattr(
+        "pallas.core.foundation.config.repo_settings.repo_env_raw_value",
+        lambda key: "html" if key == "PALLAS_HELP_RENDERER" else None,
+    )
+
     assert renderer.help_renderer_mode() == "html"
 
 
