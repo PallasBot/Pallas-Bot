@@ -53,6 +53,20 @@ def test_get_help_menu_plugins_hidden_matches_pip_module_name(monkeypatch):
     assert "pallas_plugin_sing" in names
 
 
+def test_get_help_menu_plugins_ignored_matches_package_name_alias(monkeypatch):
+    from packages.help import plugin_manager as pm
+
+    alconna = SimpleNamespace(name="nonebot_plugin_alconna", metadata=SimpleNamespace(name="Alconna 插件", extra={}))
+
+    monkeypatch.setattr(pm, "get_loaded_plugins", lambda: [alconna])
+    monkeypatch.setattr(pm, "is_plugin_help_available", lambda _name: True)
+    monkeypatch.setattr(pm, "is_user_help_plugin", lambda _plugin: True)
+
+    menu = pm.get_help_menu_plugins(show_ignored=False, ignored_plugins=["nonebot-plugin-alconna"])
+
+    assert menu == []
+
+
 def test_get_help_menu_plugins_always_excludes_hidden(monkeypatch):
     from packages.help import plugin_manager as pm
 
