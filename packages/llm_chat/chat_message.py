@@ -276,6 +276,8 @@ async def load_recent_bot_plain_replies(bot_id: int, group_id: int, *, limit: in
 def llm_chat_rule(event: Event) -> bool:
     if not is_llm_chat_service_enabled():
         return False
+    if not isinstance(event, GroupMessageEvent):
+        return False
     is_to_me = bool(getattr(event, "to_me", False) or getattr(event, "_pallas_llm_alias_hard_trigger", False))
     plain_text = str(getattr(event, "get_plaintext", lambda: "")() or "").strip()
     raw_message = str(getattr(event, "raw_message", "") or "").strip()
