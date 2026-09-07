@@ -9,10 +9,16 @@
   -> message 表
   -> 主进程低频 sweep
   -> group.insight work job
-  -> message 去重与真人序列取对
-  -> LLM 批量标注
-  -> examples.jsonl / profiles.json
-  -> llm_chat 注入群表达指导与接话策略
+  -> 消息去重与真人序列取对
+  -> 本地确定性分类 + LLM 批量受控标注
+  -> examples.jsonl / profiles.json (schema v3)
+  -> llm_chat 注入群表达指导 / 受控行为模式 / 续句习惯
+
+低风险游戏协议
+  -> 同一消息窗口收集「Bot 提示 → 真人短命令」
+  -> protocol_examples.jsonl / protocol_patterns.json
+  -> 定向判定 + 10 分钟冷却
+  -> 协议命令直投
 ```
 
 回复形状是旁边的一条确定性链路：
@@ -94,8 +100,10 @@ work aux 消费 `group.insight` 后，按该 `(bot_id, group_id)` 的持久化�
 
 回复端不再强制要求是真人：
 
-- 真人接真人：可以进入 `direct_pairs`，作为群表达指导。
-- 真人接 Bot：可以进入 `self_reflection`，只沉淀 Bot 自己的接话策略，不进入真人措辞样本。
+- 真人接真人：`conversation_pair`，可进入 `direct_pairs` 与受控行为聚合。
+- 真人接 Bot：`self_reflection` 候选，只沉淀行为策略；本期不注入群级指导。
+- 同一真人的相邻前后句：`continuation_pair`，只聚合表达结构，不作两人对话。
+- Bot 提示 → 真人短命令（quoted）：进入独立协议采集，不混入群表达画像。
 
 消息正文在送入标注前会折叠空白并截断；CQ 图片、表情和其它媒体码分别替换为 `[图片]`、`[表情]`、`[媒体]`。语义风格只需要知道存在媒体，不需要在这一环节理解图片细节。
 
@@ -128,9 +136,10 @@ work aux 消费 `group.insight` 后，按该 `(bot_id, group_id)` 的持久化�
 - `is_reply_pair`：是否确实在回应前句
 - `transferable`：脱离临时人名、局部梗和临时事实后是否仍可复用
 - 接话动作、语义关系、强度、表达形式
-- 可选的 `behavior_strategy`
 
 只有 `is_reply_pair=true` 且 `transferable=true` 的结果才写入语义样本。完整标注完成后，才推进该群的持久化游标。
+
+送标注前先做确定性清洗：纯媒体 trigger、机器人菜单/欢迎话术、CQ 原码、URL、长数字与内部 token 元数据在本地直接跳过，不消耗预算，也不进入样本。
 
 语义标注预算配置为 `llm_semantic_style_realtime_daily_limit`，默认每天 600 次。预算计数文件位于：
 
@@ -161,14 +170,69 @@ data/pb_webui/repeater_semantic_style/profiles.json
 
 落盘过程使用进程锁和跨进程文件锁，并按 `example_id` 去重。写入样本后会重建 profile；缓存进程启动时加载，之后按周期刷新。
 
-`llm_chat` 需要明确唤醒并通过当前回合决策后，才会读取对应的语义 profile。可消费的内容包括：
+每个 example 按 `pair_kind` 区分两类来源：
 
-- `direct_pairs`：群表达指导中的历史措辞参考
-- `observed` 行为策略：`【真人接话参考】`
-- `self_reflection` 行为策略：`【接话复盘】`
-- 经过约束的 `direct_candidate`
+- `conversation`：两个不同真人的前句→接话，可进入具体措辞参考和受控行为聚合。
+- `continuation`：同一说话者的连续发言，只聚合表达结构（补充/转折/追问），不作两人对话，也永不直投。
+
+旧样本读取时自动按「同作者连续发言」推导 `pair_kind`，无需重新标注。
+
+画像使用 schema_version 3，样本聚合到三种模式：
+
+- `direct_pairs`：具体真人前句→接话对，作为 `【群表达指导】` 的措辞参考。
+- `behavior_patterns`：受控 `action + relation + form + intensity` 聚合，含代表 trigger；达到 3 次且至少 2 名回复者才允许注入，渲染成 `【真人接话模式】` 中文指导。
+- `continuation_patterns`：同人续句的结构模式，达到 3 次且至少 2 名说话者才注入，渲染成 `【本群续句习惯】`。
+
+`llm_chat` 需要明确唤醒并通过当前回合决策后，才会读取对应的语义 profile。prompt 注入优先级：
+
+1. 命中的具体 `direct_pairs` 最多 2 条（此时不再追加旧 `rewrite_seed`/“可借鉴句式”）。
+2. 无具体样本时，命中的受控行为模式最多 2 条。
+3. injectable 续句习惯最多 1 条。
+
+普通直投只对少数低风险受控 action（`agree`/`support`）发送代码内固定安全短句；需要同类 action 至少 2 次、来自至少 2 名回复者并命中代表 trigger。其它 action 只进 Provider prompt，不绕过模型复刻真人原句。
+
+节奏基线（单气泡占比、段长中位数）已从语义 prompt 移除，生成节奏统一由 `reply_shape` 控制；画像中仍保留相应统计供审计。
 
 语义样本不是强制回复模板。人设、关系和当前回合决策优先，群级样本只提供局部表达差异。
+
+## 6a. 迁移与回滚
+
+`profiles.json` 首次以 v3 写入前会自动备份旧版到：
+
+```text
+data/pb_webui/repeater_semantic_style/backups/profiles-v2-<时间戳>.json
+```
+
+settings 记录 `active_pipeline`（默认 `v3`）。回滚只切换读取与注入到最近一份 v2 备份，不停止 v3 采集，也不改写主文件；WebUI 语义风格页提供「回滚 v2 读管线」维护操作。v2 备份保留 14 天，确认稳定后删除。
+
+## 6b. 实验治理与熔断
+
+注入位按 `bot × group × 北京自然日` 稳定分桶建立 10% 对照组：同一群当天体验一致，次日可换桶。
+
+投递成功后记录 exposure（request、bucket、注入类型、source id、delivery source），后台约每 60 秒结算一次：
+
+- 目标用户在 90 秒或后续 3 条真人消息内继续回应/引用 Bot：`target_followup=true`。
+- 高置信纠正/拒绝短语（如“别回”“答非所问”）：`negative=true`；现有“不可以”、撤回等显式 outcome 也计入。
+
+实验至少累计 200 回合、对照至少 20 回合后，若实验负反馈率比对照高至少 3 个百分点且达到 1.5 倍，自动停用语义注入但继续采集；`experiment_governance` 状态暴露熔断原因与两组计数，WebUI 可人工确认恢复。
+
+## 6c. 低风险游戏协议
+
+协议独立于群表达画像，从语义游标窗口收集「Bot 提示 → 真人短命令」的 quoted 对。仅当：
+
+- real 回复与 trigger 中显式候选（`发送「X」`/`回复「X」`）完全一致；
+- 命令 2–16 字，不含管理、权限、付费、转账、登录、验证码、删除、退群、禁言等风险词；
+- 同模板+命令累计 3 次且来自至少 2 名真人；
+
+才允许自动回复。运行时定向满足明确 @、引用当前 Bot、账号标识之一，或「文本含别名且当前 Bot 是最近 3 分钟该群最后发言的本地 Bot」；无最近 Bot 不兜底。协议使用独立 `bot × group` 10 分钟冷却，不占普通直投配额。
+
+数据文件：
+
+```text
+data/pb_webui/repeater_semantic_style/protocol_examples.jsonl
+data/pb_webui/repeater_semantic_style/protocol_patterns.json
+data/pb_webui/repeater_semantic_style/protocol_cooldowns.json
+```
 
 日常 Repeater 接话仍直接投递 Repeater 语料，不调用语义标注 LLM，也不经过 LLM 选句或润色。
 
@@ -231,7 +295,7 @@ graph extract 实体与关系
 - 人物事实：归属到具体 `(bot, group, user)`
 - 好感度：单用户即时触发，有独立冷却和预算
 - session summary：会压缩或删除旧会话历史，副作用不同
-- 群表达语义标注：输入是前句→接话对，输出是迁移性和接话策略
+- 群表达语义标注：输入是前句→接话对，输出是迁移性与受控标签（动作/关系/形式/强度）
 
 禁止跨 Bot、跨群、私聊与群聊混批。共同使用 Provider、预算工具或 work aux，不等于可以共同使用同一次模型提交。
 
@@ -244,12 +308,16 @@ graph extract 实体与关系
 | 样例摘要为空 | WebUI scope 是否选择了实际有 profile 的 Bot，检查 `profiles.json` |
 | 回复形态全为 0 | `group_config.style_profile` 更新时间、`group_style_refresh` dirty 刷新及 message 去重取数 |
 | 预算快速耗尽 | `semantic_style_label_budget.json`、批量请求失败比例、fallback/retry 日志 |
+| 实验注入未生效 | `active_pipeline` 是否 v2 回滚、`experiment_governance` 是否已熔断、群日是否命中对照桶 |
+| 协议未响应 | 命令是否在显式候选、模板次数/真人门槛、冷却时间、最近发言 Bot 判定 |
 
 代码入口：
 
 - `pallas/core/platform/ingress/message_recorder.py`
 - `pallas/product/llm/group_insight_processor.py`
 - `pallas/product/llm/repeater_semantic_style.py`
+- `pallas/product/llm/semantic_protocol.py`
+- `pallas/product/llm/semantic_style_experiment.py`
 - `pallas/product/persona/group_profiler.py`
 - `pallas/product/persona/group_style_refresh.py`
 - `packages/llm_chat/chat_message.py`
