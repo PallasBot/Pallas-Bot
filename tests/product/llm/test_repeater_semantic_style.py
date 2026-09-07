@@ -44,6 +44,40 @@ def test_prompt_safe_expression_sample_keeps_short_chinese_reply() -> None:
     assert prompt_safe_expression_sample("roleplay 一下也行") == "roleplay 一下也行"
 
 
+def test_semantic_style_candidate_rejected_filters_system_and_dirty_text() -> None:
+    from pallas.product.llm.repeater_semantic_style import semantic_style_candidate_rejected
+
+    # 机器人菜单/欢迎话术
+    assert semantic_style_candidate_rejected(
+        trigger_text="欢迎3位新成员加入本群，期待在群里看到你们的活跃。 签到 | 随机老婆 | 关闭 | 设置",
+        reply_text="很死的",
+    )
+    assert semantic_style_candidate_rejected(
+        trigger_text="功能开关",
+        reply_text="请让管理员或群主点击开启功能 @萌卡喵发送「功能开关」来到此选项",
+    )
+    # 纯媒体 trigger（无任何文字）
+    assert semantic_style_candidate_rejected(trigger_text="[图片]", reply_text="完了")
+    # 内部 token 元数据
+    assert semantic_style_candidate_rejected(
+        trigger_text="你好啊",
+        reply_text="你好呀！(completion_tokens:32 prompt_tokens:26388",
+    )
+    # URL / CQ 原码 / 长数字
+    assert semantic_style_candidate_rejected(trigger_text="看这个", reply_text="https://example.com/a")
+    assert semantic_style_candidate_rejected(trigger_text="[CQ:image,url=x] 图", reply_text="好看")
+    assert semantic_style_candidate_rejected(trigger_text="群号", reply_text="12345678901")
+    # 超长 reply
+    assert semantic_style_candidate_rejected(trigger_text="前句", reply_text="接" * 200)
+    # 空文本
+    assert semantic_style_candidate_rejected(trigger_text="", reply_text="接话")
+    # 正常真人对话放行
+    assert not semantic_style_candidate_rejected(trigger_text="今天好热", reply_text="确实")
+    assert not semantic_style_candidate_rejected(trigger_text="你吃饭了吗", reply_text="还没呢")
+    # 正常 [表情] 文字化接话放行（表情不算纯媒体空壳）
+    assert not semantic_style_candidate_rejected(trigger_text="来啦", reply_text="[表情]")
+
+
 def test_list_semantic_style_examples_filters_scope_and_limits_results(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 

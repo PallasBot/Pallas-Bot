@@ -99,6 +99,7 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
         labeled_semantic_style_reply_ids,
         mark_semantic_style_group_processed,
         persist_semantic_style_examples,
+        semantic_style_candidate_rejected,
         semantic_style_collection_enabled,
     )
 
@@ -132,6 +133,10 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
     # 跳过已落库样本的接话、已处理过的旧窗口，避免同一批消息反复送 LLM 标注。
     labeled_ids = labeled_semantic_style_reply_ids(bot_id=bot_id, group_id=group_id)
     pairs = [pair for pair in pairs if pair[5] not in labeled_ids]
+    if not pairs:
+        return
+    # 媒体空壳、机器人菜单和内部元数据不送 LLM，节省预算并避免污染样本。
+    pairs = [pair for pair in pairs if not semantic_style_candidate_rejected(trigger_text=pair[0], reply_text=pair[1])]
     if not pairs:
         return
 

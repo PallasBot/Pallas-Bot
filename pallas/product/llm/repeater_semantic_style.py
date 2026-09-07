@@ -602,6 +602,48 @@ def is_human_semantic_style_pair(
     return trigger_id != self_id and reply_id != self_id and not is_peer_bot(trigger_id) and not is_peer_bot(reply_id)
 
 
+# 机器人菜单/欢迎卡/管理提示等系统叙事，不能作为真人接话措辞样本。
+_SYSTEM_TEMPLATE_RE = re.compile(
+    r"(发送[「\"']|请在\s*\d+\s*秒内|管理员|群主点击|功能开关|领取|签到|"
+    r"欢迎.{0,6}(加入本群|入群|新人)|群公告|点击开启|邀请码|兑换码|口令|"
+    r"\bcompletion_tokens\b|\bprompt_tokens\b|\bfinish_reason\b|\btoken_usage\b)",
+    re.IGNORECASE,
+)
+_MEDIA_PLACEHOLDER_RE = re.compile(r"\[(?:图片|媒体)\]")
+_KNOWN_TOKEN_KEYS = frozenset({
+    "completion_tokens",
+    "prompt_tokens",
+    "finish_reason",
+    "token_usage",
+    "message_id",
+    "request_id",
+})
+
+
+def semantic_style_candidate_rejected(*, trigger_text: str, reply_text: str) -> bool:
+    """确定性拒绝信号：媒体空壳、机器人菜单/欢迎话术、内部 token 元数据、超长 reply。"""
+    trigger = str(trigger_text or "").strip()
+    reply = str(reply_text or "").strip()
+    if not trigger or not reply:
+        return True
+    if len(reply) > _MAX_SEED_LEN:
+        return True
+    if not _MEDIA_PLACEHOLDER_RE.sub("", trigger) and trigger:
+        return True
+    combined = f"{trigger}\n{reply}"
+    if re.search(r"\[CQ:", combined, re.IGNORECASE) or re.search(r"https?://", combined, re.IGNORECASE):
+        return True
+    if re.search(r"\d{7,}", combined):
+        return True
+    if any(key in combined for key in _KNOWN_TOKEN_KEYS):
+        return True
+    if _SYSTEM_TEMPLATE_RE.search(combined):
+        return True
+    if combined.count("|") >= 3 or combined.count("｜") >= 3:
+        return True
+    return False
+
+
 async def collect_semantic_style_backfill_candidates(
     *,
     now: int | None = None,
@@ -2317,12 +2359,10 @@ async def label_semantic_style_batch_with_llm(
 def _label_semantic_style_batch_prompt(count: int) -> str:
     return (
         f"判断 {count} 组群聊前后句，只输出长度为 {count} 的 JSON 数组。字段："
-        "is_reply_pair、transferable、interaction_actions、semantic_relations、intensity、forms、behavior_strategy。"
+        "is_reply_pair、transferable、interaction_actions、semantic_relations、intensity、forms。"
         "确实回应前句才 is_reply_pair=true；脱离人名、局部梗、临时事实仍可复用才 transferable=true，"
         "否则均为 false。intensity 只能 quiet/soft/neutral/sharp/strong，数组字段只能用受控英文词。"
-        "behavior_strategy 仅在能提炼出可复用行为模式时输出对象，否则为 null；对象为 "
-        '{"scene":"可泛化场景","action":"实际接话动作","outcome":"可观察变化",'
-        '"learning_type":"observed"}。不抄原话，不带人名或临时梗。严格按输入顺序输出。'
+        "不抄原话，不带人名或临时梗。严格按输入顺序输出。"
     )
 
 
