@@ -1090,6 +1090,11 @@ def semantic_style_status(*, bot_id: int | None = None, group_id: int | None = N
     )
     backups = sorted(semantic_style_profiles_backup_dir().glob("profiles-v*.json"))
     backup = backups[0] if backups else None
+    experiment: dict[str, Any] = {}
+    if scope is None:
+        from pallas.product.llm.semantic_style_experiment import experiment_status
+
+        experiment = experiment_status()
     return {
         "enabled": settings.enabled,
         "collection_enabled": settings.collection_enabled,
@@ -1102,6 +1107,7 @@ def semantic_style_status(*, bot_id: int | None = None, group_id: int | None = N
         "injectable_behavior_patterns": injectable_behavior,
         "injectable_continuation_patterns": injectable_continuation,
         "v2_backup": backup.name if backup is not None else None,
+        "experiment_governance": experiment,
         "backfill_cursor": load_semantic_style_backfill_cursor(bot_id=bot_id, group_id=group_id).model_dump(
             mode="json"
         ),

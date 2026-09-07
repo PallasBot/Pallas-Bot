@@ -125,6 +125,7 @@ class _SemanticStyleStatusData(BaseModel):
     injectable_behavior_patterns: int = 0
     injectable_continuation_patterns: int = 0
     v2_backup: str | None = None
+    experiment_governance: dict[str, Any] = Field(default_factory=dict)
     backfill_cursor: dict[str, Any] = Field(default_factory=dict)
     profile_summary: _SemanticStyleProfileSummaryData | None = None
 

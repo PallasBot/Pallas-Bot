@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.4.1-11-ge1605846",
+    "version": "v4.4.1-12-g4b6d6d2a-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -38272,6 +38272,11 @@
               }
             ],
             "title": "V2 Backup"
+          },
+          "experiment_governance": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Experiment Governance"
           },
           "backfill_cursor": {
             "additionalProperties": true,
