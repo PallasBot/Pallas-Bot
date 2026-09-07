@@ -22,6 +22,8 @@ class ResolvedGroupExpression:
     matched_examples: list[tuple[str, str]] = field(default_factory=list)
     baseline_note: str = ""
     behavior_strategies: list[BehaviorStrategy] = field(default_factory=list)
+    behavior_patterns: list[object] = field(default_factory=list)
+    continuation_patterns: list[object] = field(default_factory=list)
     prompt_block: str = ""
 
 
@@ -150,16 +152,13 @@ class ChatPromptAssembler:
     def _group_expression_block(expression: ResolvedGroupExpression | None) -> str:
         if expression is None:
             return ""
-        lines = ["【群表达指导】", "- 仅作措辞参考，不能覆盖核心人格、账号气质或本轮策略。"]
+        lines = ["【群表达指导】", "- 以下是本群真人接话参考，只借鉴接法，不照抄原句。"]
         for trigger, reply in expression.matched_examples[:4]:
             safe_trigger = sanitize_prompt_block(trigger, max_len=80)
             safe_reply = sanitize_prompt_block(reply, max_len=120)
             if safe_reply:
                 prefix = f"触发「{safe_trigger}」时" if safe_trigger else "可借鉴"
                 lines.append(f"- {prefix}：{safe_reply}")
-        baseline = sanitize_prompt_block(expression.baseline_note, max_len=120)
-        if baseline:
-            lines.append(f"- {baseline}")
         prompt_block = sanitize_prompt_block(expression.prompt_block, max_len=240)
         if prompt_block:
             lines.append(prompt_block)
@@ -169,41 +168,24 @@ class ChatPromptAssembler:
     def _group_behavior_reference_block(expression: ResolvedGroupExpression | None) -> str:
         if expression is None:
             return ""
-        grouped: dict[str, list[BehaviorStrategy]] = {
-            "observed": [],
-            "self_reflection": [],
-        }
-        for strategy in expression.behavior_strategies[:3]:
-            if not str(strategy.scene or "").strip() or not str(strategy.action or "").strip():
-                continue
-            grouped.setdefault(str(getattr(strategy, "learning_type", "observed") or "observed"), []).append(strategy)
-
-        observed = grouped.get("observed", [])
-        reflection = grouped.get("self_reflection", [])
         lines: list[str] = []
-        if observed:
+        if expression.behavior_patterns:
+            from pallas.product.llm.repeater_semantic_style import behavior_pattern_prompt_line
+
             lines.extend([
-                "【真人接话参考】",
-                "- 以下来自本群真人互动的节奏与接话结构，只借鉴什么时候说短/长、怎么接，"
-                "不要复刻原话或语气；语气态度保持你自己的底色。",
+                "【真人接话模式】",
+                "- 以下是本群真人互动中反复出现的接话方式，只借鉴怎么接，不要复刻原话。",
             ])
-            for strategy in observed[:3]:
-                scene = sanitize_prompt_block(strategy.scene, max_len=80)
-                action = sanitize_prompt_block(strategy.action, max_len=120)
-                if scene and action:
-                    tail = f"，结果{sanitize_prompt_block(strategy.outcome, max_len=80)}" if strategy.outcome else ""
-                    lines.append(f"- 类似「{scene}」时，真人会{action}{tail}。")
-        if reflection:
+            for pattern in expression.behavior_patterns[:3]:
+                representative = pattern.representative_triggers[-1] if pattern.representative_triggers else ""
+                if not representative:
+                    continue
+                lines.append(behavior_pattern_prompt_line(pattern, representative))
+        if expression.continuation_patterns:
             lines.extend([
-                "【接话复盘】",
-                "- 以下是你之前自己接话的例子，只参考每次接得怎么样，别照搬原话或当时的用词。",
+                "【本群续句习惯】",
+                "- 补充或转折内容常另起一条短句；不要把这种续句误当成两个人对话。",
             ])
-            for strategy in reflection[:3]:
-                scene = sanitize_prompt_block(strategy.scene, max_len=80)
-                action = sanitize_prompt_block(strategy.action, max_len=120)
-                if scene and action:
-                    tail = f"，结果{sanitize_prompt_block(strategy.outcome, max_len=80)}" if strategy.outcome else ""
-                    lines.append(f"- 类似「{scene}」时，我之前是这样接的：{action}{tail}。")
         return "\n".join(lines)
 
     @staticmethod

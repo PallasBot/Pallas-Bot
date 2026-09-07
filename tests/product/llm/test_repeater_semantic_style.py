@@ -1698,7 +1698,7 @@ def test_behavior_strategy_retrieval_ranks_by_trigger_similarity() -> None:
     assert select_behavior_strategies(strategies, query_text="今天吃什么")[0].action == "直接给具体建议"
 
 
-def test_cached_semantic_style_resolution_injects_strategy_and_baseline(tmp_path, monkeypatch) -> None:
+def test_cached_semantic_style_resolution_injects_controlled_patterns(tmp_path, monkeypatch) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
 
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
@@ -1713,12 +1713,15 @@ def test_cached_semantic_style_resolution_injects_strategy_and_baseline(tmp_path
             segment_char_lengths=[5, 6, 7] * 10,
             rhythm_counts={"single": 25, "multi": 5},
             human_only=True,
-            behavior_strategies=[
-                mod.BehaviorStrategy(
-                    scene="对方吐槽工作压力",
-                    action="先短句接住情绪，再问一句具体的事",
-                    outcome="对方愿意多讲",
-                    trigger="好烦，又要加班",
+            behavior_patterns=[
+                mod.ControlledBehaviorPattern(
+                    interaction_action="agree",
+                    semantic_relation="agree",
+                    form="short",
+                    intensity="soft",
+                    count=3,
+                    responder_ids=[11, 12],
+                    representative_triggers=["好烦，又要加班"],
                 )
             ],
         )
@@ -1734,9 +1737,9 @@ def test_cached_semantic_style_resolution_injects_strategy_and_baseline(tmp_path
         query_text="好烦啊，天天加班",
     )
 
-    assert resolution.baseline_note.startswith("本群真人单条短气泡为主")
-    assert len(resolution.behavior_strategies) == 1
-    assert resolution.behavior_strategies[0].action == "先短句接住情绪，再问一句具体的事"
+    assert resolution.baseline_note == ""
+    assert len(resolution.behavior_patterns) == 1
+    assert resolution.behavior_patterns[0].interaction_action == "agree"
 
 
 def test_matched_examples_rank_by_similarity_and_strategy_is_fallback(tmp_path, monkeypatch) -> None:

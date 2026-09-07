@@ -1278,13 +1278,15 @@ async def prepare_and_submit_llm_chat_turn(
             )
         group_expression = ResolvedGroupExpression(
             matched_examples=semantic_examples,
-            baseline_note=str(getattr(semantic_style, "baseline_note", "") or ""),
+            baseline_note="",
             prompt_block=str(getattr(semantic_style, "prompt_block", "") or ""),
             behavior_strategies=[
                 item
                 for item in (getattr(semantic_style, "behavior_strategies", None) or [])[:2]
                 if str(getattr(item, "scene", "") or "").strip() and str(getattr(item, "action", "") or "").strip()
             ],
+            behavior_patterns=list(getattr(semantic_style, "behavior_patterns", None) or [])[:2],
+            continuation_patterns=list(getattr(semantic_style, "continuation_patterns", None) or [])[:1],
         )
         core_persona = system_prompt
         if persona_bundle is not None:

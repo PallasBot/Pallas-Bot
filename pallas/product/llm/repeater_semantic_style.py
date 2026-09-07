@@ -218,6 +218,41 @@ _CONTINUATION_PATTERN_MIN_SPEAKERS = 2
 _PATTERN_MAX_REPRESENTATIVE_TRIGGERS = 3
 _PATTERN_MAX_SOURCE_IDS = 8
 _PATTERN_MAX_RESPONDER_IDS = 8
+_CONTINUATION_PATTERN_MAX_HITS = 1
+
+_CONTROLLED_ACTION_ZH = {
+    "agree": "认同",
+    "challenge": "反问",
+    "comfort": "安抚",
+    "confront": "顶回去",
+    "dismiss": "一笔带过",
+    "echo": "顺着接",
+    "insult": "损一句",
+    "mock": "调侃",
+    "question": "追问",
+    "support": "撑一句",
+    "tease": "逗趣",
+}
+_CONTROLLED_RELATION_ZH = {
+    "agree": "表示赞同",
+    "clarify": "澄清疑问",
+    "derail": "顺势带开话题",
+    "disagree": "表示不认同",
+    "echo": "重复接应",
+    "escalate": "把情绪往上抬一层",
+    "follow_up": "追问下去",
+    "joke": "开个玩笑",
+    "nonsense": "说句不着边际的",
+    "topic_shift": "把话题引开",
+}
+_CONTROLLED_FORM_ZH = {
+    "call_response": "呼应对答",
+    "emoji": "带图/表情",
+    "fragment": "零散短句",
+    "question": "疑问句式",
+    "short": "短句",
+    "template": "固定句式",
+}
 
 
 class SemanticStyleProfile(BaseModel):
@@ -261,6 +296,8 @@ class SemanticStyleResolution(BaseModel):
     source_example_id: str = ""
     baseline_note: str = ""
     behavior_strategies: list[BehaviorStrategy] = Field(default_factory=list)
+    behavior_patterns: list[ControlledBehaviorPattern] = Field(default_factory=list)
+    continuation_patterns: list[ContinuationPattern] = Field(default_factory=list)
     style_profile: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -2001,14 +2038,11 @@ def resolve_cached_semantic_style(
     if profile is None or not profile.human_only:
         return SemanticStyleResolution()
     direct_pairs = filter_semantic_style_pairs_by_feedback(profile.direct_pairs, bot_id=bot_id, group_id=group_id)
-    rewrite_seed = profile.rewrite_seeds[-1] if profile.rewrite_seeds else ""
     direct_pair = select_semantic_style_direct_pair(
         direct_pairs,
         query_text=query_text,
         recent_assistant_replies=recent_assistant_replies,
     )
-    if not rewrite_seed and direct_pair is not None:
-        rewrite_seed = direct_pair.reply_text
     safe_matched = [
         pair
         for pair in select_semantic_style_matched_pairs(
@@ -2024,7 +2058,6 @@ def resolve_cached_semantic_style(
         for pair in safe_matched
     ]
     safe_anchor = prompt_safe_expression_sample(profile.style_anchor)
-    safe_seed = prompt_safe_expression_sample(rewrite_seed)
     safe_direct_candidate = prompt_safe_expression_sample(direct_pair.reply_text) if direct_pair is not None else ""
     behavior_strategies = (
         []
@@ -2035,17 +2068,47 @@ def resolve_cached_semantic_style(
             if prompt_safe_expression_sample(strategy.scene) and prompt_safe_expression_sample(strategy.action)
         ]
     )
+    behavior_patterns = [
+        pattern
+        for pattern in profile.behavior_patterns
+        if behavioral_pattern_injectable(pattern)
+        and select_behavior_pattern_representative(pattern, query_text=query_text) is not None
+    ][:_BEHAVIOR_STRATEGY_MAX_HITS]
+    continuation_patterns = [
+        pattern for pattern in profile.continuation_patterns if continuation_pattern_injectable(pattern)
+    ][:_CONTINUATION_PATTERN_MAX_HITS]
     return SemanticStyleResolution(
         style_anchor=safe_anchor,
-        prompt_block=append_cached_semantic_style_block("", safe_anchor, safe_seed),
+        prompt_block=append_cached_semantic_style_block("", safe_anchor, ""),
         matched_examples=matched_examples,
         matched_example_sources=safe_matched,
         direct_candidate=safe_direct_candidate,
         source_example_id=semantic_style_source_example_id(direct_pair) if direct_pair is not None else "",
-        baseline_note=build_rhythm_baseline_note(profile),
+        baseline_note="",
         behavior_strategies=behavior_strategies[:_BEHAVIOR_STRATEGY_MAX_HITS],
+        behavior_patterns=behavior_patterns,
+        continuation_patterns=continuation_patterns,
         style_profile=semantic_style_profile_summary(profile) or {},
     )
+
+
+def select_behavior_pattern_representative(pattern: ControlledBehaviorPattern, *, query_text: str) -> str:
+    """受控行为模式按代表 trigger 召回；无命中返回空串。"""
+    for trigger in pattern.representative_triggers:
+        if semantic_style_text_similarity(query_text, trigger) >= _DIRECT_TRIGGER_SIMILARITY:
+            return str(trigger or "")
+    return ""
+
+
+def behavior_pattern_prompt_line(pattern: ControlledBehaviorPattern, representative: str) -> str:
+    """把受控行为模式渲染成一句中文接话指导。"""
+    action_label = _CONTROLLED_ACTION_ZH.get(pattern.interaction_action, pattern.interaction_action or "回应")
+    relation_label = _CONTROLLED_RELATION_ZH.get(pattern.semantic_relation, pattern.semantic_relation or "回应")
+    form_label = _CONTROLLED_FORM_ZH.get(pattern.form, pattern.form or "")
+    line = f"- 类似「{representative}」时，本群真人常用{action_label}的方式{relation_label}"
+    if form_label:
+        line += f"，表述偏{form_label}"
+    return f"{line}。"
 
 
 def prompt_safe_expression_sample(value: str) -> str:
