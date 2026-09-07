@@ -226,6 +226,7 @@ class SemanticStyleProfile(BaseModel):
     bot_id: int
     group_id: int
     scene: str
+    schema_version: int = 3
     style_anchor: str = ""
     direct_examples: list[str] = Field(default_factory=list)
     direct_pairs: list[SemanticStyleDirectPair] = Field(default_factory=list)
@@ -267,6 +268,7 @@ class SemanticStyleSettings(BaseModel):
     collection_enabled: bool = True
     injection_enabled: bool = True
     direct_enabled: bool = True
+    active_pipeline: Literal["v3", "v2"] = "v3"
 
     @model_validator(mode="before")
     @classmethod
@@ -808,6 +810,33 @@ def semantic_style_profiles_path() -> Path:
     return semantic_style_base_dir() / "profiles.json"
 
 
+def semantic_style_profiles_backup_dir() -> Path:
+    return semantic_style_base_dir() / "backups"
+
+
+def semantic_style_active_read_profiles_path() -> Path:
+    """读取画像的入口：v2 回滚期间读最近一份备份，v3 默认读主文件。
+
+    回滚只切换读取与注入，不停止 v3 采集；主文件继续由标注重建写入。
+    """
+    settings = load_semantic_style_settings()
+    if settings.active_pipeline == "v2":
+        backups = sorted(semantic_style_profiles_backup_dir().glob("profiles-v*.json"))
+        if backups:
+            return backups[-1]
+    return semantic_style_profiles_path()
+
+
+def set_semantic_style_active_pipeline(pipeline: Literal["v2", "v3"]) -> dict[str, Any]:
+    """维护操作：在 v2 备份与 v3 之间切换读取/注入管线，不修改 examples 与 v3 主文件。"""
+    if pipeline == "v2" and not _has_v2_backup():
+        raise ValueError("没有可用的 v2 备份，无法回滚")
+    settings = load_semantic_style_settings().model_copy(update={"active_pipeline": pipeline})
+    _save_semantic_style_settings(settings)
+    refresh_semantic_style_cache(force=True)
+    return semantic_style_status()
+
+
 def semantic_style_data_lock_path() -> Path:
     return semantic_style_base_dir() / "semantic_style_data.lock"
 
@@ -1001,16 +1030,32 @@ def semantic_style_status(*, bot_id: int | None = None, group_id: int | None = N
     scope = _semantic_style_scope(bot_id, group_id)
     settings = load_semantic_style_settings(bot_id=bot_id, group_id=group_id)
     examples = _load_semantic_style_examples(semantic_style_examples_path())
-    profiles = _load_profiles(semantic_style_profiles_path())
+    profiles = _load_profiles(semantic_style_active_read_profiles_path())
     scoped_examples = [example for example in examples if _in_semantic_style_scope(example, scope)]
     scoped_profiles = [profile for profile in profiles.values() if _in_semantic_style_scope(profile, scope)]
+    schema_version = (
+        2 if settings.active_pipeline == "v2" else max((int(p.schema_version) for p in scoped_profiles), default=3)
+    )
+    injectable_behavior = sum(
+        1 for p in scoped_profiles for pattern in p.behavior_patterns if behavioral_pattern_injectable(pattern)
+    )
+    injectable_continuation = sum(
+        1 for p in scoped_profiles for pattern in p.continuation_patterns if continuation_pattern_injectable(pattern)
+    )
+    backups = sorted(semantic_style_profiles_backup_dir().glob("profiles-v*.json"))
+    backup = backups[0] if backups else None
     return {
         "enabled": settings.enabled,
         "collection_enabled": settings.collection_enabled,
         "injection_enabled": settings.injection_enabled,
         "direct_enabled": settings.direct_enabled,
+        "active_pipeline": settings.active_pipeline,
         "example_count": len(scoped_examples),
         "profile_count": len(scoped_profiles),
+        "schema_version": schema_version,
+        "injectable_behavior_patterns": injectable_behavior,
+        "injectable_continuation_patterns": injectable_continuation,
+        "v2_backup": backup.name if backup is not None else None,
         "backfill_cursor": load_semantic_style_backfill_cursor(bot_id=bot_id, group_id=group_id).model_dump(
             mode="json"
         ),
@@ -1149,7 +1194,7 @@ def _load_profiles(path: Path) -> dict[tuple[int, int, str], SemanticStyleProfil
 
 def refresh_semantic_style_cache(*, force: bool = False) -> None:
     global _profiles_revision, _profiles
-    path = semantic_style_profiles_path()
+    path = semantic_style_active_read_profiles_path()
     revision = _revision(path)
     with _profiles_lock:
         if not force and _profiles_revision == revision:
@@ -1177,12 +1222,32 @@ def _write_profiles(profiles: dict[tuple[int, int, str], SemanticStyleProfile]) 
         "schema_version": 3,
         "profiles": [item.model_dump(mode="json") for item in profiles.values()],
     }
+    # 首次从 v2 迁移到 v3 前保留旧 profiles，供 14 天内人工回滚；
+    # 只备份一次，避免每次落盘都复制大文件。
+    try:
+        prior = json.loads(path.read_text(encoding="utf-8"))
+        prior_version = int(prior.get("schema_version") or 0) if isinstance(prior, dict) else 0
+        if prior_version < 3 and not _has_v2_backup():
+            backup_dir = semantic_style_profiles_backup_dir()
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
+            backup = backup_dir / f"profiles-v{prior_version}-{timestamp}.json"
+            backup.write_text(path.read_text(encoding="utf-8"), encoding="utf-8")
+    except OSError:
+        pass
     tmp = path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     tmp.replace(path)
     with _profiles_lock:
         _profiles = dict(profiles)
         _profiles_revision = _revision(path)
+
+
+def _has_v2_backup() -> bool:
+    backup_dir = semantic_style_profiles_backup_dir()
+    if not backup_dir.exists():
+        return False
+    return any(backup.name.startswith("profiles-v") for backup in backup_dir.iterdir() if backup.is_file())
 
 
 def _popular(values: list[str], limit: int = 3) -> list[str]:
@@ -1465,6 +1530,21 @@ def persist_semantic_style_example(example: SemanticStyleExample) -> SemanticSty
         profiles = _rebuild_profiles(examples, now=int(time.time()))
         _write_profiles(profiles)
         return profiles.get(_profile_key(example.bot_id, example.group_id, example.scene))
+
+
+def behavioral_pattern_injectable(pattern: ControlledBehaviorPattern) -> bool:
+    """受控行为模式达到「3 次且 2 名回复者」门槛才允许注入。"""
+    return (
+        pattern.count >= _BEHAVIOR_PATTERN_MIN_COUNT and len(pattern.responder_ids) >= _BEHAVIOR_PATTERN_MIN_RESPONDERS
+    )
+
+
+def continuation_pattern_injectable(pattern: ContinuationPattern) -> bool:
+    """续句模式达到「3 次且 2 名说话者」门槛才允许注入。"""
+    return (
+        pattern.count >= _CONTINUATION_PATTERN_MIN_COUNT
+        and len(pattern.speaker_ids) >= _CONTINUATION_PATTERN_MIN_SPEAKERS
+    )
 
 
 def is_positive_bot_style_outcome(

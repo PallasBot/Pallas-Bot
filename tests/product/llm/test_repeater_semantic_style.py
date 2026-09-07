@@ -1928,7 +1928,7 @@ def test_semantic_style_settings_dump_keeps_split_bits_without_stale_enabled(tmp
     monkeypatch.setattr(mod, "semantic_style_settings_path", lambda **_: path)
     mod.set_semantic_style_governance(collection_enabled=False, injection_enabled=True, bot_id=100, group_id=42)
     dumped = json.loads(path.read_text(encoding="utf-8"))
-    assert set(dumped) == {"collection_enabled", "injection_enabled", "direct_enabled"}
+    assert set(dumped) == {"collection_enabled", "injection_enabled", "direct_enabled", "active_pipeline"}
     assert dumped["collection_enabled"] is False
     assert dumped["injection_enabled"] is True
 
@@ -1937,6 +1937,105 @@ def test_semantic_style_backfill_is_enabled_by_default():
     from pallas.product.llm import repeater_semantic_style as mod
 
     assert mod.SEMANTIC_STYLE_BACKFILL_ENABLED is True
+
+
+def test_first_v3_write_backs_up_legacy_profiles(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    path = mod.semantic_style_profiles_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    # 模拟旧版 v2 profiles 文件（无 schema_version）
+    path.write_text(
+        json.dumps({
+            "profiles": [
+                {
+                    "bot_id": 100,
+                    "group_id": 42,
+                    "scene": "group_chat",
+                    "sample_count": 1,
+                    "human_only": True,
+                }
+            ],
+        }),
+        encoding="utf-8",
+    )
+    mod.clear_semantic_style_cache_for_tests()
+
+    mod.persist_semantic_style_example(
+        mod.SemanticStyleExample(
+            example_id="42:11:100",
+            created_at=100,
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            trigger_text="前句",
+            reply_text="接话",
+            label=mod.parse_semantic_style_label({}),
+            source_kind="human_pair",
+            trigger_user_id=11,
+            reply_user_id=12,
+        )
+    )
+
+    backups = sorted(mod.semantic_style_profiles_backup_dir().glob("profiles-v*.json"))
+    assert len(backups) == 1
+    raw = json.loads(backups[0].read_text(encoding="utf-8"))
+    assert "schema_version" not in raw
+    payload = json.loads(mod.semantic_style_profiles_path().read_text(encoding="utf-8"))
+    assert payload["schema_version"] == 3
+
+
+def test_rollback_v2_switches_read_pipeline_without_touching_v3_write(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    path = mod.semantic_style_profiles_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({
+            "profiles": [
+                {
+                    "bot_id": 100,
+                    "group_id": 42,
+                    "scene": "group_chat",
+                    "sample_count": 1,
+                    "human_only": True,
+                }
+            ],
+        }),
+        encoding="utf-8",
+    )
+    mod.clear_semantic_style_cache_for_tests()
+
+    # 触发 v3 写入并产生 v2 备份
+    mod.persist_semantic_style_example(
+        mod.SemanticStyleExample(
+            example_id="42:12:100",
+            created_at=100,
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            trigger_text="前句",
+            reply_text="接话",
+            label=mod.parse_semantic_style_label({}),
+            source_kind="human_pair",
+            trigger_user_id=11,
+            reply_user_id=12,
+        )
+    )
+    assert mod.semantic_style_status()["active_pipeline"] == "v3"
+
+    mod.set_semantic_style_active_pipeline("v2")
+
+    status = mod.semantic_style_status()
+    assert status["active_pipeline"] == "v2"
+    assert status["schema_version"] < 3
+    # v3 主文件仍在，采集照常写入
+    assert json.loads(mod.semantic_style_profiles_path().read_text(encoding="utf-8"))["schema_version"] == 3
+
+    mod.set_semantic_style_active_pipeline("v3")
+    assert mod.semantic_style_status()["active_pipeline"] == "v3"
 
 
 def test_legacy_unknown_accumulates_rhythm_statistics(tmp_path, monkeypatch) -> None:
