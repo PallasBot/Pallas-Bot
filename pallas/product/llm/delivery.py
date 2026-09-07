@@ -878,6 +878,31 @@ async def deliver_llm_callback_success(
                 f"Bot [{bot_id}] delivered a reply in group [{group_id}], length [{len(reply_text)}]",
             )
         )
+    if task_type == LLM_CHAT_TASK_TYPE and text_delivered and bot_message_id:
+        try:
+            from pallas.product.llm.semantic_style_experiment import (
+                record_semantic_exposure,
+                semantic_style_bucket,
+            )
+
+            record_semantic_exposure(
+                request_id=str(task.get("request_id") or task_id),
+                bot_id=int(bot_id) if bot_id is not None else 0,
+                group_id=int(group_id) if group_id is not None else 0,
+                user_id=int(task.get("user_id") or 0) or 0,
+                bucket=semantic_style_bucket(
+                    int(bot_id) if bot_id is not None else 0,
+                    int(group_id) if group_id is not None else 0,
+                ),
+                injection_types=[
+                    str(item) for item in list(task.get("semantic_injection_types") or []) if str(item).strip()
+                ],
+                source_ids=[str(item) for item in list(task.get("semantic_source_ids") or []) if str(item).strip()],
+                delivery_source=str(task.get("delivery_source") or "provider"),
+                bot_message_id=bot_message_id,
+            )
+        except Exception:
+            logger.debug("semantic exposure record skipped for task [{}]", task_id)
     return reply_text, text_delivered, delivered
 
 

@@ -1979,11 +1979,21 @@ def semantic_style_profile_summary(profile: SemanticStyleProfile | None) -> dict
 def semantic_style_injection_enabled(
     request_id: str, *, bot_id: int | None = None, group_id: int | None = None
 ) -> bool:
-    """只读注入位，保留稳定的 10% 对照组。"""
+    """只读注入位：群日稳定 10% 对照组 + 统计熔断。"""
     if bot_id is not None and group_id is not None and (int(bot_id) <= 0 or int(group_id) <= 0):
         return False
     if not load_semantic_style_settings(bot_id=bot_id, group_id=group_id).injection_enabled:
         return False
+    if bot_id is not None and group_id is not None:
+        from pallas.product.llm.semantic_style_experiment import (
+            semantic_style_circuit_disabled,
+            semantic_style_in_control,
+        )
+
+        if semantic_style_circuit_disabled():
+            return False
+        if semantic_style_in_control(int(bot_id), int(group_id)):
+            return False
     digest = hashlib.blake2b(str(request_id).encode("utf-8"), digest_size=8).digest()
     return int.from_bytes(digest, "big") % 10 != 0
 

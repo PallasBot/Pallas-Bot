@@ -185,6 +185,30 @@ def emit_turn_telemetry(
     )
 
 
+def _semantic_injection_types(semantic_style: object) -> list[str]:
+    """汇总本轮实际注入的语义来源类型，供 exposure 观测。"""
+    types: list[str] = []
+    if getattr(semantic_style, "matched_examples", None):
+        types.append("direct_example")
+    if getattr(semantic_style, "behavior_patterns", None):
+        types.append("behavior_pattern")
+    if getattr(semantic_style, "continuation_patterns", None):
+        types.append("continuation_pattern")
+    if getattr(semantic_style, "direct_candidate", None):
+        types.append("semantic_direct")
+    return types
+
+
+def _semantic_source_ids(semantic_style: object) -> list[str]:
+    """本轮注入样本的稳定 source id，供负反馈归因。"""
+    ids: list[str] = []
+    for pair in list(getattr(semantic_style, "matched_example_sources", None) or [])[:8]:
+        source_id = str(getattr(pair, "source_example_id", "") or "").strip()
+        if source_id:
+            ids.append(source_id)
+    return ids
+
+
 def build_injection_snapshot(
     *,
     ambient_turns: list[dict[str, object]],
@@ -1443,6 +1467,8 @@ async def prepare_and_submit_llm_chat_turn(
                 "behavior_hint": behavior_hint,
                 "semantic_style_source_example_id": getattr(semantic_style, "source_example_id", "") or None,
                 "semantic_style_direct_candidate": semantic_style.direct_candidate or None,
+                "semantic_injection_types": _semantic_injection_types(semantic_style),
+                "semantic_source_ids": _semantic_source_ids(semantic_style),
                 "recent_group_bot_speaker": recent_group_bot_speaker(group_id=group_id) if group_id else None,
                 "reply_max_length": int(reply_max_length or 0),
                 "reply_max_bubbles": int(reply_shape.max_bubbles or 1),
