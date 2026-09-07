@@ -118,6 +118,8 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
         )
         return
 
+    await _collect_protocol_observations(bot_id=bot_id, group_id=group_id)
+
     cursor_time, cursor_message_id = get_semantic_style_group_cursor(bot_id=bot_id, group_id=group_id)
     known_bots = await _known_bots_in_group(group_id)
     pairs = await _rebuild_pairs_from_messages(
@@ -218,6 +220,76 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
         processed_at=max_processed_key[0],
         processed_message_id=max_processed_key[1],
     )
+
+
+async def _collect_protocol_observations(*, bot_id: int, group_id: int) -> None:
+    """从语义游标窗口里收集「Bot 提示 → 真人短命令」观察，独立于群表达画像。
+
+    复用语义游标避免重复扫描；record_protocol_observation 按 observation_id
+    幂等，重复窗口不会重复计数。不推进语义游标，也不消耗 LLM 预算。
+    """
+    from pallas.product.llm.repeater_semantic_style import get_semantic_style_group_cursor
+    from pallas.product.llm.semantic_protocol import record_protocol_observation
+
+    cursor_time, cursor_message_id = get_semantic_style_group_cursor(bot_id=bot_id, group_id=group_id)
+    known_bots = await _known_bots_in_group(group_id)
+    repo = make_message_repository()
+    now_ts = int(time.time())
+    before_time = now_ts + 1
+    before_message_id: int | None = None
+    after_key = (int(cursor_time), int(cursor_message_id or 0))
+    unique_map: dict[int, object] = {}
+    for _ in range(_PAIR_PAGE_LIMIT):
+        batch = await repo.find_recent_in_group(
+            group_id, before_time=before_time, before_message_id=before_message_id, limit=32
+        )
+        if not batch:
+            break
+        earliest_key: tuple[int, int] | None = None
+        for item in batch:
+            mid = int(getattr(item, "message_id", 0) or 0)
+            if mid <= 0:
+                continue
+            unique_map.setdefault(mid, item)
+            key = (int(getattr(item, "time", 0) or 0), mid)
+            if earliest_key is None or key < earliest_key:
+                earliest_key = key
+        if earliest_key is None:
+            break
+        if earliest_key <= after_key:
+            break
+        before_time, before_message_id = earliest_key
+
+    by_message_id = {int(getattr(item, "message_id", 0) or 0): item for item in unique_map.values()}
+    for reply in unique_map.values():
+        reply_user_id = int(getattr(reply, "user_id", 0) or 0)
+        if _is_bot_sender(user_id=reply_user_id, self_bot_id=bot_id, known_bots=known_bots):
+            continue
+        replied_id = int(getattr(reply, "reply_to_message_id", 0) or 0)
+        if replied_id <= 0:
+            continue
+        trigger = by_message_id.get(replied_id)
+        if trigger is None:
+            continue
+        trigger_user_id = int(getattr(trigger, "user_id", 0) or 0)
+        if not _is_bot_sender(user_id=trigger_user_id, self_bot_id=bot_id, known_bots=known_bots):
+            continue
+        trigger_text = _text(getattr(trigger, "plain_text", "") or getattr(trigger, "raw_message", ""))
+        reply_text = _text(getattr(reply, "plain_text", "") or getattr(reply, "raw_message", ""))
+        if not trigger_text or not reply_text:
+            continue
+        try:
+            record_protocol_observation(
+                bot_id=bot_id,
+                group_id=group_id,
+                trigger_text=trigger_text,
+                reply_text=reply_text,
+                responder_id=reply_user_id,
+                source_message_id=int(getattr(reply, "message_id", 0) or 0),
+                created_at=int(getattr(reply, "time", 0) or 0),
+            )
+        except Exception as exc:
+            logger.warning("群洞察协议观察记录失败，群 [{}]：{}", group_id, exc)
 
 
 def _is_bot_sender(*, user_id: int, self_bot_id: int, known_bots: set[int]) -> bool:

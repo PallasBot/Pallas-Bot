@@ -38,6 +38,28 @@ async def run_kernel_chat_job(
     started = time.monotonic()
     task = str(metadata.get("task") or "llm_chat").strip() or "llm_chat"
     try:
+        from pallas.product.llm.semantic_protocol import (
+            mark_protocol_sent,
+            resolve_protocol_candidate,
+        )
+
+        protocol_candidate = resolve_protocol_candidate(
+            bot_id=metadata.get("bot_id"),
+            group_id=metadata.get("group_id"),
+            trigger_text=str(metadata.get("user_text") or ""),
+            recent_bot_id=metadata.get("recent_group_bot_speaker"),
+        )
+        if protocol_candidate:
+            from pallas.product.llm.runtime_debug import append_runtime_trace
+
+            append_runtime_trace(
+                request_id=request_id,
+                trace={"status": "success", "semantic_protocol_direct": True, "agent_trace": None},
+            )
+            mark_protocol_sent(bot_id=metadata.get("bot_id"), group_id=metadata.get("group_id"))
+            await deliver_llm_chat_result(request_id, status="success", text=protocol_candidate)
+            return
+
         from pallas.product.llm.repeater_semantic_style import should_deliver_semantic_style_direct_candidate
 
         direct_candidate = str(metadata.get("semantic_style_direct_candidate") or "").strip()

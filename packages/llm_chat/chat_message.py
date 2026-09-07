@@ -36,7 +36,7 @@ from pallas.product.llm.behavior import (
     select_behavior_patterns,
 )
 from pallas.product.llm.behavior_store import ensure_default_behavior_patterns
-from pallas.product.llm.bot_reply_context import lookup_bot_reply_context
+from pallas.product.llm.bot_reply_context import lookup_bot_reply_context, recent_group_bot_speaker
 from pallas.product.llm.budget import trim_messages_to_char_budget
 from pallas.product.llm.chat_queue import (
     begin_chat_turn,
@@ -1443,6 +1443,7 @@ async def prepare_and_submit_llm_chat_turn(
                 "behavior_hint": behavior_hint,
                 "semantic_style_source_example_id": getattr(semantic_style, "source_example_id", "") or None,
                 "semantic_style_direct_candidate": semantic_style.direct_candidate or None,
+                "recent_group_bot_speaker": recent_group_bot_speaker(group_id=group_id) if group_id else None,
                 "reply_max_length": int(reply_max_length or 0),
                 "reply_max_bubbles": int(reply_shape.max_bubbles or 1),
                 "reply_total_length_band": reply_shape.total_length_band,

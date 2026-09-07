@@ -788,6 +788,58 @@ async def test_kernel_delivers_approved_semantic_style_direct_candidate_without_
 
 
 @pytest.mark.asyncio
+async def test_kernel_delivers_qualified_protocol_candidate_without_provider(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm import kernel_runner
+    from pallas.product.llm import semantic_protocol as proto
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    proto.clear_protocol_data_for_tests()
+    trigger = "请在 60 秒内发送「接受老婆赠送」，或发送「拒绝老婆赠送」"
+    for mid, responder in ((1, 11), (2, 12), (3, 13)):
+        proto.record_protocol_observation(
+            bot_id=99,
+            group_id=42,
+            trigger_text=trigger,
+            reply_text="接受老婆赠送",
+            responder_id=responder,
+            source_message_id=mid,
+            created_at=mid * 100,
+        )
+
+    delivered: list[tuple[str, str, str]] = []
+
+    async def provider_must_not_run(**_kwargs):
+        raise AssertionError("protocol candidate must bypass provider")
+
+    async def fake_deliver(task_id, *, status, text=None, **_kwargs):
+        delivered.append((task_id, status, text or ""))
+        return {"message": "ok"}
+
+    monkeypatch.setattr(kernel_runner, "complete_with_tool_loop", provider_must_not_run)
+    monkeypatch.setattr(kernel_runner, "deliver_llm_chat_result", fake_deliver)
+    monkeypatch.setattr("pallas.product.llm.runtime_debug.append_runtime_trace", lambda **_kwargs: None)
+
+    await kernel_runner.run_kernel_chat_job(
+        "protocol-candidate-task",
+        system_prompt="sys",
+        messages=[{"role": "user", "content": trigger}],
+        metadata={
+            "bot_id": 99,
+            "group_id": 42,
+            "user_text": trigger,
+            "recent_group_bot_speaker": 99,
+        },
+        cfg=LlmConfig(llm_persona_output_firewall={"enabled": False}),
+    )
+
+    assert delivered == [("protocol-candidate-task", "success", "接受老婆赠送")]
+    proto.clear_protocol_data_for_tests()
+
+
+@pytest.mark.asyncio
 async def test_kernel_does_not_deliver_unsafe_cached_semantic_direct_candidate(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
