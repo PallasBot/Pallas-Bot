@@ -178,6 +178,7 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
         if example_id in accepted_ids:
             continue
         accepted_ids.add(example_id)
+        pair_kind = "continuation" if trigger_user_id == reply_user_id else "conversation"
         accepted.append(
             SemanticStyleExample(
                 example_id=example_id,
@@ -195,6 +196,7 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
                 annotation_source="llm_v2",
                 behavior_strategy=strategy,
                 reply_is_bot=is_bot_reply,
+                pair_kind=pair_kind,
             )
         )
     if accepted:

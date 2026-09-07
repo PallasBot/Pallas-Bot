@@ -2168,3 +2168,123 @@ def test_merge_bot_reply_only_teaches_behavior_strategy(tmp_path, monkeypatch) -
     assert profile.direct_examples == []
     assert len(profile.behavior_strategies) == 1
     assert profile.behavior_strategies[0].learning_type == "self_reflection"
+
+
+def test_new_semantic_example_defaults_pair_kind_conversation() -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    example = mod.SemanticStyleExample(
+        example_id="42:8:100",
+        created_at=100,
+        bot_id=100,
+        group_id=42,
+        scene="group_chat",
+        trigger_text="前句",
+        reply_text="接话",
+        label=mod.parse_semantic_style_label({}),
+        trigger_user_id=11,
+        reply_user_id=12,
+    )
+
+    assert example.pair_kind == "conversation"
+
+
+def test_legacy_same_user_example_loads_as_continuation(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    path = mod.semantic_style_examples_path()
+    path.write_text(
+        '{"example_id":"42:9:100","created_at":100,"bot_id":100,"group_id":42,'
+        '"scene":"group_chat","trigger_text":"前句","reply_text":"补充一句",'
+        '"source_kind":"human_pair","trigger_user_id":11,"reply_user_id":11,'
+        '"label":{"version":2,"is_reply_pair":true,"transferable":true}}\n',
+        encoding="utf-8",
+    )
+
+    examples = mod._load_semantic_style_examples(path)
+
+    assert examples[0].pair_kind == "continuation"
+
+
+def test_v3_profile_accumulates_controlled_patterns_with_threshold_fields() -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    label = mod.parse_semantic_style_label({
+        "interaction_actions": ["agree"],
+        "semantic_relations": ["echo"],
+        "forms": ["short"],
+        "intensity": "soft",
+    })
+
+    def example(example_id: str, *, reply_user: int, trigger: str, reply: str) -> mod.SemanticStyleExample:
+        return mod.SemanticStyleExample(
+            example_id=example_id,
+            created_at=100,
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            trigger_text=trigger,
+            reply_text=reply,
+            label=label,
+            source_kind="human_pair",
+            trigger_user_id=11,
+            reply_user_id=reply_user,
+        )
+
+    profile = mod._build_profile(example("e1", reply_user=12, trigger="太热了", reply="确实"), None)
+    profile = mod._build_profile(example("e2", reply_user=13, trigger="又堵车", reply="确实是"), profile)
+    profile = mod._build_profile(example("e3", reply_user=12, trigger="下雨了", reply="确实"), profile)
+
+    assert len(profile.behavior_patterns) == 1
+    pattern = profile.behavior_patterns[0]
+    assert pattern.count == 3
+    assert sorted(pattern.responder_ids) == [12, 13]
+    assert len(pattern.representative_triggers) <= 3
+
+    # 同人续句：进入 continuation_patterns，不进入 behavior_patterns
+    continuation = mod.SemanticStyleExample(
+        example_id="e4",
+        created_at=101,
+        bot_id=100,
+        group_id=42,
+        scene="group_chat",
+        trigger_text="太热了",
+        reply_text="真的热",
+        label=label,
+        source_kind="human_pair",
+        trigger_user_id=12,
+        reply_user_id=12,
+        pair_kind="continuation",
+    )
+    profile = mod._build_profile(continuation, profile)
+
+    assert len(profile.continuation_patterns) == 1
+    assert profile.continuation_patterns[0].count == 1
+    assert profile.behavior_patterns[0].count == 3
+
+
+def test_profiles_payload_writes_schema_version(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    mod.persist_semantic_style_example(
+        mod.SemanticStyleExample(
+            example_id="42:10:100",
+            created_at=100,
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            trigger_text="前句",
+            reply_text="接话",
+            label=mod.parse_semantic_style_label({}),
+            source_kind="human_pair",
+            trigger_user_id=11,
+            reply_user_id=12,
+        )
+    )
+
+    payload = json.loads(mod.semantic_style_profiles_path().read_text(encoding="utf-8"))
+
+    assert payload["schema_version"] == 3
+    assert isinstance(payload["profiles"], list)

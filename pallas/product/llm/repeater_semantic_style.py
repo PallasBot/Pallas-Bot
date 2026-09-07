@@ -171,12 +171,53 @@ class SemanticStyleExample(BaseModel):
     legacy_style_anchor: str = ""
     legacy_persona_affinities: list[str] = Field(default_factory=list)
     behavior_strategy: BehaviorStrategy | None = None
+    pair_kind: Literal["conversation", "continuation"] = "conversation"
 
 
 class SemanticStyleDirectPair(BaseModel):
     trigger_text: str
     reply_text: str
     source_example_id: str = ""
+
+
+class ControlledBehaviorPattern(BaseModel):
+    """真人接话的受控行为模式：action+relation+form+intensity 聚合，保留代表 trigger。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    interaction_action: str = "agree"
+    semantic_relation: str = "echo"
+    form: str = "short"
+    intensity: str = "neutral"
+    count: int = 0
+    responder_ids: list[int] = Field(default_factory=list)
+    representative_triggers: list[str] = Field(default_factory=list)
+    source_example_ids: list[str] = Field(default_factory=list)
+
+
+class ContinuationPattern(BaseModel):
+    """同人连续发言的表达结构模式；不作为两个人之间的接话对。"""
+
+    model_config = ConfigDict(extra="ignore")
+
+    semantic_relation: str = "echo"
+    form: str = "short"
+    intensity: str = "neutral"
+    count: int = 0
+    speaker_ids: list[int] = Field(default_factory=list)
+    representative_triggers: list[str] = Field(default_factory=list)
+    source_example_ids: list[str] = Field(default_factory=list)
+
+
+# v3 profile 行为模式注入门槛：同类模式至少 3 次且来自至少 2 名回复者。
+_BEHAVIOR_PATTERN_MIN_COUNT = 3
+_BEHAVIOR_PATTERN_MIN_RESPONDERS = 2
+# continuation 同样要求 3 次且 2 名说话者，证明是群习惯而非个人口癖。
+_CONTINUATION_PATTERN_MIN_COUNT = 3
+_CONTINUATION_PATTERN_MIN_SPEAKERS = 2
+_PATTERN_MAX_REPRESENTATIVE_TRIGGERS = 3
+_PATTERN_MAX_SOURCE_IDS = 8
+_PATTERN_MAX_RESPONDER_IDS = 8
 
 
 class SemanticStyleProfile(BaseModel):
@@ -204,6 +245,8 @@ class SemanticStyleProfile(BaseModel):
     bot_style_promoted: bool = False
     visual_sample_count: int = 0
     behavior_strategies: list[BehaviorStrategy] = Field(default_factory=list)
+    behavior_patterns: list[ControlledBehaviorPattern] = Field(default_factory=list)
+    continuation_patterns: list[ContinuationPattern] = Field(default_factory=list)
     human_only: bool = False
     updated_at: int = 0
 
@@ -1088,7 +1131,10 @@ def clear_semantic_style_direct_quota_for_tests() -> None:
 def _write_profiles(profiles: dict[tuple[int, int, str], SemanticStyleProfile]) -> None:
     global _profiles_revision, _profiles
     path = semantic_style_profiles_path()
-    payload = {"profiles": [item.model_dump(mode="json") for item in profiles.values()]}
+    payload = {
+        "schema_version": 3,
+        "profiles": [item.model_dump(mode="json") for item in profiles.values()],
+    }
     tmp = path.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     tmp.replace(path)
@@ -1177,6 +1223,37 @@ def _build_profile(
         if not merged:
             strategies.append(strategy)
         strategies = strategies[-_BEHAVIOR_STRATEGY_LIMIT:]
+
+    behavior_patterns = list(existing.behavior_patterns) if existing else []
+    continuation_patterns = list(existing.continuation_patterns) if existing else []
+    clean_trigger = _short_text(example.trigger_text, _MAX_SEED_LEN)
+    if example.pair_kind == "continuation" and example.reply_user_id > 0:
+        continuation_patterns = _accumulate_continuation_pattern(
+            continuation_patterns,
+            relation=label.semantic_relations[0] if label.semantic_relations else _PATTERN_DEFAULT_RELATION,
+            form=label.forms[0] if label.forms else _PATTERN_DEFAULT_FORM,
+            intensity=label.intensity,
+            speaker_id=example.reply_user_id,
+            trigger=clean_trigger,
+            source_example_id=example.example_id,
+        )
+    elif (
+        example.pair_kind == "conversation"
+        and not is_bot_reply
+        and not example.bot_style_positive
+        and label.interaction_actions
+        and example.reply_user_id > 0
+    ):
+        behavior_patterns = _accumulate_behavior_pattern(
+            behavior_patterns,
+            action=label.interaction_actions[0],
+            relation=label.semantic_relations[0] if label.semantic_relations else _PATTERN_DEFAULT_RELATION,
+            form=label.forms[0] if label.forms else _PATTERN_DEFAULT_FORM,
+            intensity=label.intensity,
+            responder_id=example.reply_user_id,
+            trigger=clean_trigger,
+            source_example_id=example.example_id,
+        )
     return SemanticStyleProfile(
         bot_id=example.bot_id,
         group_id=example.group_id,
@@ -1201,9 +1278,116 @@ def _build_profile(
         bot_style_promoted=bot_style_promoted,
         visual_sample_count=(existing.visual_sample_count if existing else 0) + int(label.visual is not None),
         behavior_strategies=strategies,
+        behavior_patterns=behavior_patterns,
+        continuation_patterns=continuation_patterns,
         human_only=True,
         updated_at=example.created_at,
     )
+
+
+_PATTERN_DEFAULT_ACTION = "agree"
+_PATTERN_DEFAULT_RELATION = "echo"
+_PATTERN_DEFAULT_FORM = "short"
+
+
+def _pattern_key(*, action: str, relation: str, form: str, intensity: str) -> tuple[str, str, str, str]:
+    return (
+        action or _PATTERN_DEFAULT_ACTION,
+        relation or _PATTERN_DEFAULT_RELATION,
+        form or _PATTERN_DEFAULT_FORM,
+        intensity or "neutral",
+    )
+
+
+def _accumulate_behavior_pattern(
+    patterns: list[ControlledBehaviorPattern],
+    *,
+    action: str,
+    relation: str,
+    form: str,
+    intensity: str,
+    responder_id: int,
+    trigger: str,
+    source_example_id: str,
+) -> list[ControlledBehaviorPattern]:
+    """合并一次真人接话到受控行为模式：同 key 计数，记录回复者与代表 trigger。"""
+    merged = False
+    for pattern in patterns:
+        if _pattern_key(
+            action=pattern.interaction_action,
+            relation=pattern.semantic_relation,
+            form=pattern.form,
+            intensity=pattern.intensity,
+        ) == _pattern_key(action=action, relation=relation, form=form, intensity=intensity):
+            if responder_id not in pattern.responder_ids:
+                pattern.responder_ids = [*pattern.responder_ids, responder_id][-_PATTERN_MAX_RESPONDER_IDS:]
+            if trigger and trigger not in pattern.representative_triggers:
+                pattern.representative_triggers = [*pattern.representative_triggers, trigger][
+                    -_PATTERN_MAX_REPRESENTATIVE_TRIGGERS:
+                ]
+            if source_example_id and source_example_id not in pattern.source_example_ids:
+                pattern.source_example_ids = [*pattern.source_example_ids, source_example_id][-_PATTERN_MAX_SOURCE_IDS:]
+            pattern.count += 1
+            merged = True
+            break
+    if not merged:
+        patterns.append(
+            ControlledBehaviorPattern(
+                interaction_action=action,
+                semantic_relation=relation,
+                form=form,
+                intensity=intensity,
+                count=1,
+                responder_ids=[responder_id],
+                representative_triggers=[trigger] if trigger else [],
+                source_example_ids=[source_example_id] if source_example_id else [],
+            )
+        )
+    return patterns
+
+
+def _accumulate_continuation_pattern(
+    patterns: list[ContinuationPattern],
+    *,
+    relation: str,
+    form: str,
+    intensity: str,
+    speaker_id: int,
+    trigger: str,
+    source_example_id: str,
+) -> list[ContinuationPattern]:
+    """合并一次同人续句到表达结构模式；不作两个人之间的接话对。"""
+    merged = False
+    for pattern in patterns:
+        if (
+            pattern.semantic_relation,
+            pattern.form,
+            pattern.intensity,
+        ) == (relation or _PATTERN_DEFAULT_RELATION, form or _PATTERN_DEFAULT_FORM, intensity or "neutral"):
+            if speaker_id not in pattern.speaker_ids:
+                pattern.speaker_ids = [*pattern.speaker_ids, speaker_id][-_PATTERN_MAX_RESPONDER_IDS:]
+            if trigger and trigger not in pattern.representative_triggers:
+                pattern.representative_triggers = [*pattern.representative_triggers, trigger][
+                    -_PATTERN_MAX_REPRESENTATIVE_TRIGGERS:
+                ]
+            if source_example_id and source_example_id not in pattern.source_example_ids:
+                pattern.source_example_ids = [*pattern.source_example_ids, source_example_id][-_PATTERN_MAX_SOURCE_IDS:]
+            pattern.count += 1
+            merged = True
+            break
+    if not merged:
+        patterns.append(
+            ContinuationPattern(
+                semantic_relation=relation or _PATTERN_DEFAULT_RELATION,
+                form=form or _PATTERN_DEFAULT_FORM,
+                intensity=intensity or "neutral",
+                count=1,
+                speaker_ids=[speaker_id],
+                representative_triggers=[trigger] if trigger else [],
+                source_example_ids=[source_example_id] if source_example_id else [],
+            )
+        )
+    return patterns
 
 
 def persist_semantic_style_examples(
@@ -1337,6 +1521,14 @@ def _load_semantic_style_examples(path: Path) -> list[SemanticStyleExample]:
             # delivery feedback 的正面回应样本 reply_user_id != bot_id，不受影响。
             if example.bot_style_positive and example.reply_user_id == example.bot_id:
                 example = example.model_copy(update={"reply_is_bot": True})
+            # 迁移：旧样本没有 pair_kind；同一作者连续发言不是「别人说 X→我回 Y」，
+            # 统一归为 continuation，不能作为真人接话对进入 direct_pairs。
+            if (
+                "pair_kind" not in raw
+                and example.trigger_user_id > 0
+                and example.trigger_user_id == example.reply_user_id
+            ):
+                example = example.model_copy(update={"pair_kind": "continuation"})
         except (json.JSONDecodeError, ValueError, TypeError):
             continue
         examples.append(example.model_copy(update={"label": parse_semantic_style_label(example.label.model_dump())}))
