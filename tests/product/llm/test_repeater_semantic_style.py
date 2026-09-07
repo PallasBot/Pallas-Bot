@@ -771,9 +771,62 @@ def test_cached_semantic_style_resolution_reads_prompt_block_and_direct_candidat
 
     assert resolution.style_anchor == "短句轻怼。"
     assert resolution.source_example_id == "source:legacy"
-    assert resolution.direct_candidate == "没救了"
+    # 普通直投不再复刻真人原句：无受控行为模式证据时返回空
+    assert resolution.direct_candidate == ""
     assert "本群表达校准" in resolution.prompt_block
     assert [item.source_example_id for item in resolution.matched_example_sources] == ["source:legacy"]
+
+
+def test_safe_direct_candidate_requires_qualified_pattern_and_returns_fixed_text() -> None:
+    from pallas.product.llm.repeater_semantic_style import (
+        ControlledBehaviorPattern,
+        select_safe_direct_candidate,
+    )
+
+    def pattern(action: str, *, count: int, responders: list[int], triggers: list[str]) -> ControlledBehaviorPattern:
+        return ControlledBehaviorPattern(
+            interaction_action=action,
+            semantic_relation="agree",
+            form="short",
+            intensity="soft",
+            count=count,
+            responder_ids=responders,
+            representative_triggers=triggers,
+        )
+
+    # 未达 2 次/2 人：不直投
+    assert (
+        select_safe_direct_candidate(
+            [pattern("agree", count=1, responders=[11], triggers=["好烦"])],
+            query_text="好烦啊",
+        )
+        == ""
+    )
+    # 达到门槛且命中代表 trigger：返回固定安全短句
+    assert (
+        select_safe_direct_candidate(
+            [pattern("agree", count=2, responders=[11, 12], triggers=["好烦啊，天天加班"])],
+            query_text="好烦啊，天天加班",
+        )
+        == "确实"
+    )
+    # 非安全 action：不直投
+    assert (
+        select_safe_direct_candidate(
+            [pattern("mock", count=5, responders=[11, 12, 13], triggers=["好烦啊，天天加班"])],
+            query_text="好烦啊，天天加班",
+        )
+        == ""
+    )
+    # 命中但最近已回复过相同文本：去重跳过
+    assert (
+        select_safe_direct_candidate(
+            [pattern("agree", count=2, responders=[11, 12], triggers=["好烦啊，天天加班"])],
+            query_text="好烦啊，天天加班",
+            recent_assistant_replies=["确实"],
+        )
+        == ""
+    )
 
 
 def test_cached_semantic_style_resolution_falls_back_to_group_style_owner(tmp_path, monkeypatch) -> None:
@@ -820,7 +873,7 @@ def test_cached_semantic_style_resolution_falls_back_to_group_style_owner(tmp_pa
         query_text="怎么又炸了",
     )
 
-    assert resolution.direct_candidate == "没救了"
+    assert resolution.direct_candidate == ""
     assert resolution.source_example_id == "semantic-owner"
 
 

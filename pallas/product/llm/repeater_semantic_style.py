@@ -220,6 +220,15 @@ _PATTERN_MAX_SOURCE_IDS = 8
 _PATTERN_MAX_RESPONDER_IDS = 8
 _CONTINUATION_PATTERN_MAX_HITS = 1
 
+# 普通直投只允许少数自包含、低风险动作，发送代码内固定短句，不随机复刻真人原句。
+SAFE_DIRECT_ACTION_TEXT = {
+    "agree": "确实",
+    "support": "对",
+}
+# 普通直投证据门槛：同类受控 action 至少 2 次且来自至少 2 名回复者。
+_DIRECT_PATTERN_MIN_COUNT = 2
+_DIRECT_PATTERN_MIN_RESPONDERS = 2
+
 _CONTROLLED_ACTION_ZH = {
     "agree": "认同",
     "challenge": "反问",
@@ -2058,7 +2067,6 @@ def resolve_cached_semantic_style(
         for pair in safe_matched
     ]
     safe_anchor = prompt_safe_expression_sample(profile.style_anchor)
-    safe_direct_candidate = prompt_safe_expression_sample(direct_pair.reply_text) if direct_pair is not None else ""
     behavior_strategies = (
         []
         if matched_examples
@@ -2077,12 +2085,17 @@ def resolve_cached_semantic_style(
     continuation_patterns = [
         pattern for pattern in profile.continuation_patterns if continuation_pattern_injectable(pattern)
     ][:_CONTINUATION_PATTERN_MAX_HITS]
+    direct_candidate = select_safe_direct_candidate(
+        profile.behavior_patterns,
+        query_text=query_text,
+        recent_assistant_replies=recent_assistant_replies,
+    )
     return SemanticStyleResolution(
         style_anchor=safe_anchor,
         prompt_block=append_cached_semantic_style_block("", safe_anchor, ""),
         matched_examples=matched_examples,
         matched_example_sources=safe_matched,
-        direct_candidate=safe_direct_candidate,
+        direct_candidate=direct_candidate,
         source_example_id=semantic_style_source_example_id(direct_pair) if direct_pair is not None else "",
         baseline_note="",
         behavior_strategies=behavior_strategies[:_BEHAVIOR_STRATEGY_MAX_HITS],
@@ -2090,6 +2103,29 @@ def resolve_cached_semantic_style(
         continuation_patterns=continuation_patterns,
         style_profile=semantic_style_profile_summary(profile) or {},
     )
+
+
+def select_safe_direct_candidate(
+    patterns: Iterable[ControlledBehaviorPattern],
+    *,
+    query_text: str,
+    recent_assistant_replies: Iterable[str] = (),
+) -> str:
+    """普通直投：仅当受控 action 达到 2 次/2 人且命中代表 trigger 时，返回固定安全短句。"""
+    recent = [reply for reply in recent_assistant_replies if normalize_semantic_style_match_text(reply)]
+    for pattern in patterns:
+        if pattern.interaction_action not in SAFE_DIRECT_ACTION_TEXT:
+            continue
+        if pattern.count < _DIRECT_PATTERN_MIN_COUNT or len(pattern.responder_ids) < _DIRECT_PATTERN_MIN_RESPONDERS:
+            continue
+        representative = select_behavior_pattern_representative(pattern, query_text=query_text)
+        if not representative:
+            continue
+        text = SAFE_DIRECT_ACTION_TEXT[pattern.interaction_action]
+        if any(semantic_style_text_similarity(text, previous) >= _DIRECT_REPLY_DEDUP_SIMILARITY for previous in recent):
+            continue
+        return text
+    return ""
 
 
 def select_behavior_pattern_representative(pattern: ControlledBehaviorPattern, *, query_text: str) -> str:
