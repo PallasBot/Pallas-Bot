@@ -61,6 +61,7 @@ __plugin_meta__ = PluginMetadata(
         "menu_data": [
             {
                 "func": "运行状态",
+                "group": "状态与查看",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_BOTH,
                 "trigger_condition": "#pallas",
@@ -73,6 +74,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "牛牛控制台",
+                "group": "管理操作",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_BOTH,
                 "trigger_condition": "牛牛控制台",
@@ -83,6 +85,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "牛牛插件",
+                "group": "状态与查看",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_BOTH,
                 "trigger_condition": "牛牛插件",
@@ -93,6 +96,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "牛牛更新",
+                "group": "管理操作",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_PRIVATE,
                 "trigger_condition": "牛牛更新",
@@ -108,6 +112,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "牛牛重启",
+                "group": "管理操作",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_BOTH,
                 "trigger_condition": "牛牛重启",
@@ -118,6 +123,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "牛牛添加号主",
+                "group": "管理操作",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_PRIVATE,
                 "trigger_condition": "牛牛添加号主",

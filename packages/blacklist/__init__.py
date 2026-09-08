@@ -74,6 +74,7 @@ __plugin_meta__ = PluginMetadata(
         "menu_data": [
             {
                 "func": "查看名单",
+                "group": "名单操作",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_BOTH,
                 "trigger_condition": "牛牛黑名单 / 牛牛查看黑名单",
@@ -83,6 +84,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "拉黑与解禁",
+                "group": "名单操作",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_BOTH,
                 "trigger_condition": "牛牛拉黑 / 牛牛屏蔽 / 牛牛解禁 + QQ 或 @",
@@ -92,6 +94,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "群拉黑与解禁",
+                "group": "名单操作",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_BOTH,
                 "trigger_condition": "牛牛拉黑群 / 牛牛屏蔽群 / 牛牛解禁群 + 群号",
@@ -101,6 +104,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "事件门禁",
+                "group": "系统拦截",
                 "trigger_method": "event_preprocessor",
                 "help_audience": "superuser",
                 "trigger_condition": "被拉黑用户的消息与通知",

@@ -126,6 +126,7 @@ __plugin_meta__ = PluginMetadata(
         "menu_data": [
             {
                 "func": "智能对话",
+                "group": "聊天与会话",
                 "trigger_method": "on_message",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "群内 @牛牛 发消息",
@@ -135,6 +136,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "酒后聊天",
+                "group": "聊天与会话",
                 "trigger_method": "on_message",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "醉酒时 @牛牛 / 牛牛 + 文本",
@@ -148,6 +150,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "清空和牛牛的记录",
+                "group": "聊天与会话",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "@牛牛 clear",
@@ -157,6 +160,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "重置表达风格",
+                "group": "聊天与会话",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "@牛牛 重置表达",
@@ -169,6 +173,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "LLM 状态",
+                "group": "管理与测试",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_PRIVATE,
                 "trigger_condition": "LLM状态 / llm状态",
@@ -179,6 +184,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "测试缓存表情",
+                "group": "管理与测试",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "牛牛测试缓存表情",
@@ -189,6 +195,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "测试 LLM 表情",
+                "group": "管理与测试",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "牛牛测试LLM表情 + 待匹配文本",
@@ -199,6 +206,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "换模型",
+                "group": "管理与测试",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_PRIVATE,
                 "trigger_condition": "换模型 / 牛牛换模型 [模型名]",
@@ -209,6 +217,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "卸模型",
+                "group": "管理与测试",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_PRIVATE,
                 "trigger_condition": "卸模型 / 牛牛卸模型",
