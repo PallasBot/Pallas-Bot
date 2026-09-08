@@ -52,7 +52,6 @@ def schedule_startup_bot_count_report() -> None:
     _startup_count_scheduled = True
     loop = asyncio.get_running_loop()
     loop.call_later(3.0, _report_startup_bot_count)
-    loop.call_later(6.0, _report_startup_bot_count)
 
 
 def _report_startup_bot_count() -> None:
