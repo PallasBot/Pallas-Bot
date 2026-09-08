@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+* fix(core): 避免启动连接数量重复播报
+* fix(message_scrub): 移除过宽入站拦截词
+
 ## [4.4.1] - 2026-09-06
 
 ### 更新公告
