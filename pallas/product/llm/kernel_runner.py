@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 from nonebot import logger
 
+from pallas.core.foundation.config import TaskManager
 from pallas.product.llm.execution_budget import (
     LlmExecutionSlot,
     release_llm_execution_slot,
@@ -26,6 +27,12 @@ if TYPE_CHECKING:
 from pallas.product.llm.delivery import deliver_llm_chat_result
 
 
+async def _mark_delivery_source(request_id: str, source: str) -> None:
+    task = await TaskManager.get_task(request_id)
+    if task is not None:
+        task["delivery_source"] = source
+
+
 async def run_kernel_chat_job(
     request_id: str,
     *,
@@ -38,9 +45,39 @@ async def run_kernel_chat_job(
     started = time.monotonic()
     task = str(metadata.get("task") or "llm_chat").strip() or "llm_chat"
     try:
+        from pallas.product.llm.semantic_protocol import claim_protocol_candidate
+
+        protocol_candidate = ""
+        if task == "llm_chat" and int(metadata.get("bot_id") or 0) > 0 and int(metadata.get("group_id") or 0) > 0:
+            protocol_candidate = claim_protocol_candidate(
+                bot_id=int(metadata["bot_id"]),
+                group_id=int(metadata["group_id"]),
+                trigger_text=str(metadata.get("user_text") or ""),
+                recent_bot_id=metadata.get("recent_group_bot_speaker"),
+                explicitly_targeted=bool(metadata.get("protocol_explicit_target")),
+                nickname_targeted=bool(metadata.get("protocol_nickname_target")),
+            )
+        if protocol_candidate:
+            from pallas.product.llm.runtime_debug import append_runtime_trace
+
+            append_runtime_trace(
+                request_id=request_id,
+                trace={"status": "success", "semantic_protocol_direct": True, "agent_trace": None},
+            )
+            await _mark_delivery_source(request_id, "protocol_direct")
+            await deliver_llm_chat_result(request_id, status="success", text=protocol_candidate)
+            return
+
         from pallas.product.llm.repeater_semantic_style import should_deliver_semantic_style_direct_candidate
 
         direct_candidate = str(metadata.get("semantic_style_direct_candidate") or "").strip()
+        if direct_candidate:
+            from pallas.product.llm.repeater_semantic_style import SAFE_DIRECT_ACTION_TEXT
+            from pallas.product.llm.semantic_style_experiment import trip_semantic_channel_circuit
+
+            if direct_candidate not in SAFE_DIRECT_ACTION_TEXT.values():
+                trip_semantic_channel_circuit("semantic_direct", "candidate_not_in_safe_map")
+                direct_candidate = ""
         if should_deliver_semantic_style_direct_candidate(
             bot_id=metadata.get("bot_id"),
             group_id=metadata.get("group_id"),
@@ -52,6 +89,7 @@ async def run_kernel_chat_job(
                 request_id=request_id,
                 trace={"status": "success", "semantic_style_direct": True, "agent_trace": None},
             )
+            await _mark_delivery_source(request_id, "semantic_direct")
             await deliver_llm_chat_result(request_id, status="success", text=direct_candidate)
             return
         content, assistant_message = await complete_with_tool_loop(

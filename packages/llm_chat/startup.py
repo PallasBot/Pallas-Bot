@@ -3,9 +3,11 @@ from pallas.product.llm.behavior_feedback import register_behavior_feedback_loop
 from pallas.product.llm.group_insight_processor import register_group_insight_startup_hook
 from pallas.product.llm.repeater_semantic_style import register_semantic_style_cache_startup_hook
 from pallas.product.llm.runtime_api import register_llm_tools_startup_hook
+from pallas.product.llm.semantic_style_experiment import register_semantic_experiment_loop
 
 register_llm_tools_startup_hook()
 register_semantic_style_cache_startup_hook()
 register_group_insight_startup_hook()
 register_behavior_feedback_loop()
+register_semantic_experiment_loop()
 register_arknights_kb_startup_hook()

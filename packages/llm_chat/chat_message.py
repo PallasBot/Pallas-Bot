@@ -36,7 +36,7 @@ from pallas.product.llm.behavior import (
     select_behavior_patterns,
 )
 from pallas.product.llm.behavior_store import ensure_default_behavior_patterns
-from pallas.product.llm.bot_reply_context import lookup_bot_reply_context
+from pallas.product.llm.bot_reply_context import lookup_bot_reply_context, recent_group_bot_speaker
 from pallas.product.llm.budget import trim_messages_to_char_budget
 from pallas.product.llm.chat_queue import (
     begin_chat_turn,
@@ -185,6 +185,31 @@ def emit_turn_telemetry(
     )
 
 
+def _semantic_injection_types(semantic_style: object) -> list[str]:
+    """汇总本轮实际注入的语义来源类型，供 exposure 观测。"""
+    types: list[str] = []
+    if getattr(semantic_style, "matched_examples", None):
+        types.append("direct_example")
+    if getattr(semantic_style, "behavior_patterns", None):
+        types.append("behavior_pattern")
+    if getattr(semantic_style, "continuation_patterns", None):
+        types.append("continuation_pattern")
+    return types
+
+
+def _semantic_source_ids(semantic_style: object) -> list[str]:
+    """本轮注入样本的稳定 source id，供负反馈归因。"""
+    ids: list[str] = []
+    for pair in list(getattr(semantic_style, "matched_example_sources", None) or [])[:8]:
+        source_id = str(getattr(pair, "source_example_id", "") or "").strip()
+        if source_id:
+            ids.append(source_id)
+    direct_source_id = str(getattr(semantic_style, "source_example_id", "") or "").strip()
+    if direct_source_id and direct_source_id not in ids:
+        ids.append(direct_source_id)
+    return ids
+
+
 def build_injection_snapshot(
     *,
     ambient_turns: list[dict[str, object]],
@@ -276,6 +301,9 @@ async def load_recent_bot_plain_replies(bot_id: int, group_id: int, *, limit: in
 def llm_chat_rule(event: Event) -> bool:
     if not is_llm_chat_service_enabled():
         return False
+    # 联邦别名命中器可能传入未实例化为 OneBot Event 的轻量事件对象。
+    if bool(getattr(event, "_pallas_llm_alias_hard_trigger", False)):
+        return True
     if not isinstance(event, GroupMessageEvent):
         return False
     is_to_me = bool(getattr(event, "to_me", False) or getattr(event, "_pallas_llm_alias_hard_trigger", False))
@@ -1127,6 +1155,9 @@ async def prepare_and_submit_llm_chat_turn(
             query_text=focus_text,
             recent_assistant_replies=recent_reply_texts[:6],
         )
+        from pallas.product.llm.semantic_style_experiment import semantic_style_bucket
+
+        semantic_bucket = semantic_style_bucket(int(bot.self_id), int(group_id)) if group_id else -1
         direct_context_started = time.perf_counter()
         group_timeline = ""
         group_timeline_images: list[dict[str, str]] = []
@@ -1278,13 +1309,19 @@ async def prepare_and_submit_llm_chat_turn(
             )
         group_expression = ResolvedGroupExpression(
             matched_examples=semantic_examples,
-            baseline_note=str(getattr(semantic_style, "baseline_note", "") or ""),
-            prompt_block=str(getattr(semantic_style, "prompt_block", "") or ""),
+            baseline_note="",
+            prompt_block=(
+                str(getattr(semantic_style, "prompt_block", "") or "")
+                if getattr(semantic_style, "active_pipeline", "v3") == "v2"
+                else ""
+            ),
             behavior_strategies=[
                 item
                 for item in (getattr(semantic_style, "behavior_strategies", None) or [])[:2]
                 if str(getattr(item, "scene", "") or "").strip() and str(getattr(item, "action", "") or "").strip()
             ],
+            behavior_patterns=list(getattr(semantic_style, "behavior_patterns", None) or [])[:2],
+            continuation_patterns=list(getattr(semantic_style, "continuation_patterns", None) or [])[:1],
         )
         core_persona = system_prompt
         if persona_bundle is not None:
@@ -1441,6 +1478,10 @@ async def prepare_and_submit_llm_chat_turn(
                 "behavior_hint": behavior_hint,
                 "semantic_style_source_example_id": getattr(semantic_style, "source_example_id", "") or None,
                 "semantic_style_direct_candidate": semantic_style.direct_candidate or None,
+                "semantic_injection_types": _semantic_injection_types(semantic_style),
+                "semantic_source_ids": _semantic_source_ids(semantic_style),
+                "semantic_bucket": semantic_bucket,
+                "recent_group_bot_speaker": recent_group_bot_speaker(group_id=group_id) if group_id else None,
                 "reply_max_length": int(reply_max_length or 0),
                 "reply_max_bubbles": int(reply_shape.max_bubbles or 1),
                 "reply_total_length_band": reply_shape.total_length_band,
@@ -1498,6 +1539,15 @@ async def prepare_and_submit_llm_chat_turn(
                     "pre_submit_context_durations_ms": pre_submit_context_durations_ms,
                     "semantic_style_direct_candidate": semantic_style.direct_candidate or None,
                     "semantic_style_source_example_id": getattr(semantic_style, "source_example_id", "") or None,
+                    "user_text": llm_user_text,
+                    "recent_group_bot_speaker": recent_group_bot_speaker(group_id=group_id) if group_id else None,
+                    "protocol_explicit_target": bool(replied_message_id)
+                    or (
+                        bool(getattr(event, "to_me", False))
+                        and not bool(getattr(event, "_pallas_llm_alias_hard_trigger", False))
+                    ),
+                    "protocol_nickname_target": bool(getattr(event, "_pallas_llm_alias_hard_trigger", False))
+                    or speak_trigger == "mention",
                     "turn_id": turn_id,
                     "speak_trigger": speak_trigger or "to_me",
                 },
