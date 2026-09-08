@@ -779,12 +779,12 @@ async def test_kernel_delivers_approved_semantic_style_direct_candidate_without_
         metadata={
             "bot_id": 99,
             "group_id": 42,
-            "semantic_style_direct_candidate": "没救了",
+            "semantic_style_direct_candidate": "确实",
         },
         cfg=LlmConfig(llm_persona_output_firewall={"enabled": False}),
     )
 
-    assert delivered == [("direct-candidate-task", "success", "没救了")]
+    assert delivered == [("direct-candidate-task", "success", "确实")]
 
 
 @pytest.mark.asyncio
@@ -831,6 +831,7 @@ async def test_kernel_delivers_qualified_protocol_candidate_without_provider(
             "group_id": 42,
             "user_text": trigger,
             "recent_group_bot_speaker": 99,
+            "protocol_nickname_target": True,
         },
         cfg=LlmConfig(llm_persona_output_firewall={"enabled": False}),
     )

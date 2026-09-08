@@ -11,6 +11,7 @@ import time
 import unicodedata
 from collections import Counter, deque
 from contextlib import contextmanager
+from operator import itemgetter
 from pathlib import Path
 from threading import RLock
 from typing import TYPE_CHECKING, Any, Literal
@@ -191,7 +192,11 @@ class ControlledBehaviorPattern(BaseModel):
     intensity: str = "neutral"
     count: int = 0
     responder_ids: list[int] = Field(default_factory=list)
+    quoted_count: int = -1
+    quoted_responder_ids: list[int] = Field(default_factory=list)
     representative_triggers: list[str] = Field(default_factory=list)
+    # 仅由 quoted 证据积累出的代表 trigger；普通直投只允许命中这里。
+    quoted_triggers: list[str] = Field(default_factory=list)
     source_example_ids: list[str] = Field(default_factory=list)
 
 
@@ -212,6 +217,8 @@ class ContinuationPattern(BaseModel):
 # v3 profile 行为模式注入门槛：同类模式至少 3 次且来自至少 2 名回复者。
 _BEHAVIOR_PATTERN_MIN_COUNT = 3
 _BEHAVIOR_PATTERN_MIN_RESPONDERS = 2
+# 行为模式代表 trigger 召回阈值：低于直投的 0.6，允许措辞不同的同场景命中。
+_BEHAVIOR_PATTERN_MIN_SIMILARITY = 0.4
 # continuation 同样要求 3 次且 2 名说话者，证明是群习惯而非个人口癖。
 _CONTINUATION_PATTERN_MIN_COUNT = 3
 _CONTINUATION_PATTERN_MIN_SPEAKERS = 2
@@ -1348,7 +1355,7 @@ def _build_profile(
         bot_style_sample_count >= BOT_STYLE_PROMOTION_SAMPLE_COUNT
         and recent_bot_style_sample_count >= BOT_STYLE_PROMOTION_RECENT_SAMPLE_COUNT
     )
-    if example.source_kind == "human_pair" and reply_text and not is_bot_reply:
+    if example.source_kind == "human_pair" and example.pair_kind == "conversation" and reply_text and not is_bot_reply:
         direct_examples = [item for item in direct_examples if item != reply_text]
         direct_examples.append(reply_text)
         pair = SemanticStyleDirectPair(
@@ -1410,6 +1417,7 @@ def _build_profile(
             form=label.forms[0] if label.forms else _PATTERN_DEFAULT_FORM,
             intensity=label.intensity,
             responder_id=example.reply_user_id,
+            pair_relation=example.pair_relation,
             trigger=clean_trigger,
             source_example_id=example.example_id,
         )
@@ -1466,6 +1474,7 @@ def _accumulate_behavior_pattern(
     form: str,
     intensity: str,
     responder_id: int,
+    pair_relation: str,
     trigger: str,
     source_example_id: str,
 ) -> list[ControlledBehaviorPattern]:
@@ -1480,13 +1489,27 @@ def _accumulate_behavior_pattern(
         ) == _pattern_key(action=action, relation=relation, form=form, intensity=intensity):
             if responder_id not in pattern.responder_ids:
                 pattern.responder_ids = [*pattern.responder_ids, responder_id][-_PATTERN_MAX_RESPONDER_IDS:]
-            if trigger and trigger not in pattern.representative_triggers:
-                pattern.representative_triggers = [*pattern.representative_triggers, trigger][
-                    -_PATTERN_MAX_REPRESENTATIVE_TRIGGERS:
-                ]
+            if pair_relation == "quoted":
+                pattern.quoted_count += 1
+                if responder_id not in pattern.quoted_responder_ids:
+                    pattern.quoted_responder_ids = [*pattern.quoted_responder_ids, responder_id][
+                        -_PATTERN_MAX_RESPONDER_IDS:
+                    ]
             if source_example_id and source_example_id not in pattern.source_example_ids:
                 pattern.source_example_ids = [*pattern.source_example_ids, source_example_id][-_PATTERN_MAX_SOURCE_IDS:]
             pattern.count += 1
+            # 代表 trigger 只保留来自 quoted 证据的样本，adjacent 命中不进入直投参考。
+            if pair_relation == "quoted" and trigger:
+                if trigger not in pattern.quoted_triggers:
+                    pattern.quoted_triggers = [
+                        *pattern.quoted_triggers,
+                        trigger,
+                    ][-_PATTERN_MAX_REPRESENTATIVE_TRIGGERS:]
+                if trigger not in pattern.representative_triggers:
+                    pattern.representative_triggers = [
+                        *pattern.representative_triggers,
+                        trigger,
+                    ][-_PATTERN_MAX_REPRESENTATIVE_TRIGGERS:]
             merged = True
             break
     if not merged:
@@ -1498,7 +1521,10 @@ def _accumulate_behavior_pattern(
                 intensity=intensity,
                 count=1,
                 responder_ids=[responder_id],
-                representative_triggers=[trigger] if trigger else [],
+                quoted_count=1 if pair_relation == "quoted" else 0,
+                quoted_responder_ids=[responder_id] if pair_relation == "quoted" else [],
+                representative_triggers=[trigger] if trigger and pair_relation == "quoted" else [],
+                quoted_triggers=[trigger] if trigger and pair_relation == "quoted" else [],
                 source_example_ids=[source_example_id] if source_example_id else [],
             )
         )
@@ -1841,6 +1867,8 @@ def _rebuild_profiles(
             continue
         if example.source_kind != "human_pair":
             continue
+        if semantic_style_candidate_rejected(trigger_text=example.trigger_text, reply_text=example.reply_text):
+            continue
         reply_is_bot = _example_reply_is_bot(example)
         if not reply_is_bot and not is_human_semantic_style_pair(
             trigger_user_id=example.trigger_user_id,
@@ -1903,6 +1931,8 @@ def _cached_group_expression_profile(
         examples: dict[str, None] = {}
         seeds: dict[str, None] = {}
         strategies: dict[tuple[str, str, str], BehaviorStrategy] = {}
+        behavior_patterns: dict[tuple[str, str, str, str], ControlledBehaviorPattern] = {}
+        continuation_patterns: dict[tuple[str, str, str], ContinuationPattern] = {}
         style_anchor = ""
         bubble_counts: list[int] = []
         segment_lengths: list[int] = []
@@ -1924,6 +1954,50 @@ def _cached_group_expression_profile(
                 seeds[text] = None
             for strategy in profile.behavior_strategies:
                 strategies[(strategy.learning_type, strategy.scene, strategy.action)] = strategy
+            for pattern in profile.behavior_patterns:
+                key = _pattern_key(
+                    action=pattern.interaction_action,
+                    relation=pattern.semantic_relation,
+                    form=pattern.form,
+                    intensity=pattern.intensity,
+                )
+                prior = behavior_patterns.get(key)
+                if prior is None:
+                    behavior_patterns[key] = pattern.model_copy(deep=True)
+                    continue
+                prior.count += pattern.count
+                prior.quoted_count += pattern.quoted_count
+                prior.responder_ids = list(dict.fromkeys([*prior.responder_ids, *pattern.responder_ids]))[
+                    -_PATTERN_MAX_RESPONDER_IDS:
+                ]
+                prior.quoted_responder_ids = list(
+                    dict.fromkeys([*prior.quoted_responder_ids, *pattern.quoted_responder_ids])
+                )[-_PATTERN_MAX_RESPONDER_IDS:]
+                prior.representative_triggers = list(
+                    dict.fromkeys([*prior.representative_triggers, *pattern.representative_triggers])
+                )[-_PATTERN_MAX_REPRESENTATIVE_TRIGGERS:]
+                prior.quoted_triggers = list(dict.fromkeys([*prior.quoted_triggers, *pattern.quoted_triggers]))[
+                    -_PATTERN_MAX_REPRESENTATIVE_TRIGGERS:
+                ]
+                prior.source_example_ids = list(
+                    dict.fromkeys([*prior.source_example_ids, *pattern.source_example_ids])
+                )[-_PATTERN_MAX_SOURCE_IDS:]
+            for pattern in profile.continuation_patterns:
+                key = (pattern.semantic_relation, pattern.form, pattern.intensity)
+                prior = continuation_patterns.get(key)
+                if prior is None:
+                    continuation_patterns[key] = pattern.model_copy(deep=True)
+                    continue
+                prior.count += pattern.count
+                prior.speaker_ids = list(dict.fromkeys([*prior.speaker_ids, *pattern.speaker_ids]))[
+                    -_PATTERN_MAX_RESPONDER_IDS:
+                ]
+                prior.representative_triggers = list(
+                    dict.fromkeys([*prior.representative_triggers, *pattern.representative_triggers])
+                )[-_PATTERN_MAX_REPRESENTATIVE_TRIGGERS:]
+                prior.source_example_ids = list(
+                    dict.fromkeys([*prior.source_example_ids, *pattern.source_example_ids])
+                )[-_PATTERN_MAX_SOURCE_IDS:]
             bubble_counts.extend(profile.bubble_counts)
             segment_lengths.extend(profile.segment_char_lengths)
             for rhythm, count in profile.rhythm_counts.items():
@@ -1933,22 +2007,24 @@ def _cached_group_expression_profile(
             bot_style_sample_count += profile.bot_style_sample_count
             recent_bot_style_sample_count += profile.recent_bot_style_sample_count
             visual_sample_count += profile.visual_sample_count
-        merged.direct_pairs = list(pair_map.values())[-_DIRECT_PAIR_LIMIT:]
-        merged.direct_examples = list(examples)[-3:]
-        merged.rewrite_seeds = list(seeds)[-3:]
-        merged.style_anchor = style_anchor or merged.style_anchor
-        merged.behavior_strategies = list(strategies.values())[-_BEHAVIOR_STRATEGY_LIMIT:]
-        merged.bubble_counts = bubble_counts[-100:]
-        merged.segment_char_lengths = segment_lengths[-300:]
-        merged.rhythm_counts = rhythm_counts
-        merged.sample_count = sample_count
-        merged.common_style_sample_count = common_style_sample_count
-        merged.bot_style_sample_count = bot_style_sample_count
-        merged.recent_bot_style_sample_count = recent_bot_style_sample_count
-        merged.visual_sample_count = visual_sample_count
-        merged.bot_style_promoted = any(profile.bot_style_promoted for profile in candidates)
-        merged.updated_at = max(profile.updated_at for profile in candidates)
-        return merged
+    merged.direct_pairs = list(pair_map.values())[-_DIRECT_PAIR_LIMIT:]
+    merged.direct_examples = list(examples)[-3:]
+    merged.rewrite_seeds = list(seeds)[-3:]
+    merged.style_anchor = style_anchor or merged.style_anchor
+    merged.behavior_strategies = list(strategies.values())[-_BEHAVIOR_STRATEGY_LIMIT:]
+    merged.behavior_patterns = list(behavior_patterns.values())
+    merged.continuation_patterns = list(continuation_patterns.values())
+    merged.bubble_counts = bubble_counts[-100:]
+    merged.segment_char_lengths = segment_lengths[-300:]
+    merged.rhythm_counts = rhythm_counts
+    merged.sample_count = sample_count
+    merged.common_style_sample_count = common_style_sample_count
+    merged.bot_style_sample_count = bot_style_sample_count
+    merged.recent_bot_style_sample_count = recent_bot_style_sample_count
+    merged.visual_sample_count = visual_sample_count
+    merged.bot_style_promoted = any(profile.bot_style_promoted for profile in candidates)
+    merged.updated_at = max(profile.updated_at for profile in candidates)
+    return merged
 
 
 def semantic_style_profile_summary(profile: SemanticStyleProfile | None) -> dict[str, Any] | None:
@@ -2000,6 +2076,7 @@ def semantic_style_injection_enabled(
             return False
         if semantic_style_in_control(int(bot_id), int(group_id)):
             return False
+        return True
     digest = hashlib.blake2b(str(request_id).encode("utf-8"), digest_size=8).digest()
     return int.from_bytes(digest, "big") % 10 != 0
 
@@ -2062,6 +2139,14 @@ def resolve_cached_semantic_style(
     profile = cached_semantic_style_profile(bot_id, group_id, scene)
     if profile is None or not profile.human_only:
         return SemanticStyleResolution()
+    if load_semantic_style_settings().active_pipeline == "v2":
+        return _resolve_cached_semantic_style_v2(
+            profile,
+            bot_id=bot_id,
+            group_id=group_id,
+            query_text=query_text,
+            recent_assistant_replies=recent_assistant_replies,
+        )
     direct_pairs = filter_semantic_style_pairs_by_feedback(profile.direct_pairs, bot_id=bot_id, group_id=group_id)
     direct_pair = select_semantic_style_direct_pair(
         direct_pairs,
@@ -2092,27 +2177,41 @@ def resolve_cached_semantic_style(
             if prompt_safe_expression_sample(strategy.scene) and prompt_safe_expression_sample(strategy.action)
         ]
     )
-    behavior_patterns = [
-        pattern
-        for pattern in profile.behavior_patterns
-        if behavioral_pattern_injectable(pattern)
-        and select_behavior_pattern_representative(pattern, query_text=query_text) is not None
-    ][:_BEHAVIOR_STRATEGY_MAX_HITS]
+    matched_patterns: list[tuple[float, ControlledBehaviorPattern]] = []
+    for pattern in profile.behavior_patterns:
+        if not behavioral_pattern_injectable(pattern):
+            continue
+        representative = select_behavior_pattern_representative(pattern, query_text=query_text)
+        if not representative:
+            continue
+        matched_patterns.append((
+            semantic_style_text_similarity(query_text, representative),
+            pattern.model_copy(update={"representative_triggers": [representative]}),
+        ))
+    matched_patterns.sort(key=itemgetter(0), reverse=True)
+    behavior_patterns = [item[1] for item in matched_patterns[:_BEHAVIOR_STRATEGY_MAX_HITS]]
     continuation_patterns = [
         pattern for pattern in profile.continuation_patterns if continuation_pattern_injectable(pattern)
     ][:_CONTINUATION_PATTERN_MAX_HITS]
-    direct_candidate = select_safe_direct_candidate(
+    direct_pattern = select_safe_direct_pattern(
         profile.behavior_patterns,
         query_text=query_text,
         recent_assistant_replies=recent_assistant_replies,
     )
+    direct_candidate = SAFE_DIRECT_ACTION_TEXT[direct_pattern.interaction_action] if direct_pattern is not None else ""
     return SemanticStyleResolution(
         style_anchor=safe_anchor,
         prompt_block=append_cached_semantic_style_block("", safe_anchor, ""),
         matched_examples=matched_examples,
         matched_example_sources=safe_matched,
         direct_candidate=direct_candidate,
-        source_example_id=semantic_style_source_example_id(direct_pair) if direct_pair is not None else "",
+        source_example_id=(
+            direct_pattern.source_example_ids[-1]
+            if direct_pattern is not None and direct_pattern.source_example_ids
+            else semantic_style_source_example_id(direct_pair)
+            if direct_pair is not None
+            else ""
+        ),
         baseline_note="",
         behavior_strategies=behavior_strategies[:_BEHAVIOR_STRATEGY_MAX_HITS],
         behavior_patterns=behavior_patterns,
@@ -2121,35 +2220,121 @@ def resolve_cached_semantic_style(
     )
 
 
+def _resolve_cached_semantic_style_v2(
+    profile: SemanticStyleProfile,
+    *,
+    bot_id: int,
+    group_id: int | None,
+    query_text: str,
+    recent_assistant_replies: Iterable[str],
+) -> SemanticStyleResolution:
+    direct_pairs = filter_semantic_style_pairs_by_feedback(profile.direct_pairs, bot_id=bot_id, group_id=group_id)
+    direct_pair = select_semantic_style_direct_pair(
+        direct_pairs,
+        query_text=query_text,
+        recent_assistant_replies=recent_assistant_replies,
+    )
+    rewrite_seed = profile.rewrite_seeds[-1] if profile.rewrite_seeds else ""
+    if not rewrite_seed and direct_pair is not None:
+        rewrite_seed = direct_pair.reply_text
+    safe_matched = [
+        pair
+        for pair in select_semantic_style_matched_pairs(
+            direct_pairs,
+            query_text=query_text,
+            recent_assistant_replies=recent_assistant_replies,
+            limit=_MATCHED_EXAMPLE_LIMIT,
+        )
+        if prompt_safe_expression_sample(pair.trigger_text) and prompt_safe_expression_sample(pair.reply_text)
+    ]
+    matched_examples = [
+        (_short_text(pair.trigger_text, _MAX_SEED_LEN), _short_text(pair.reply_text, _MAX_SEED_LEN))
+        for pair in safe_matched
+    ]
+    behavior_strategies = (
+        []
+        if matched_examples
+        else [
+            strategy
+            for strategy in select_behavior_strategies(profile.behavior_strategies, query_text=query_text)
+            if prompt_safe_expression_sample(strategy.scene) and prompt_safe_expression_sample(strategy.action)
+        ]
+    )
+    safe_anchor = prompt_safe_expression_sample(profile.style_anchor)
+    safe_seed = prompt_safe_expression_sample(rewrite_seed)
+    return SemanticStyleResolution(
+        style_anchor=safe_anchor,
+        prompt_block=append_cached_semantic_style_block("", safe_anchor, safe_seed),
+        matched_examples=matched_examples,
+        matched_example_sources=safe_matched,
+        direct_candidate=prompt_safe_expression_sample(direct_pair.reply_text) if direct_pair is not None else "",
+        source_example_id=semantic_style_source_example_id(direct_pair) if direct_pair is not None else "",
+        baseline_note=build_rhythm_baseline_note(profile),
+        behavior_strategies=behavior_strategies[:_BEHAVIOR_STRATEGY_MAX_HITS],
+        style_profile=semantic_style_profile_summary(profile) or {},
+    )
+
+
+def select_safe_direct_pattern(
+    patterns: Iterable[ControlledBehaviorPattern],
+    *,
+    query_text: str,
+    recent_assistant_replies: Iterable[str] = (),
+) -> ControlledBehaviorPattern | None:
+    """普通直投：仅返回满足 quoted 证据门槛且命中代表 trigger 的安全 action pattern。"""
+    recent = [reply for reply in recent_assistant_replies if normalize_semantic_style_match_text(reply)]
+    for pattern in patterns:
+        if pattern.interaction_action not in SAFE_DIRECT_ACTION_TEXT:
+            continue
+        has_legacy_evidence = pattern.quoted_count < 0 and not pattern.quoted_responder_ids
+        if not has_legacy_evidence and (
+            pattern.quoted_count < _DIRECT_PATTERN_MIN_COUNT
+            or len(pattern.quoted_responder_ids) < _DIRECT_PATTERN_MIN_RESPONDERS
+        ):
+            continue
+        representative = select_behavior_pattern_representative(pattern, query_text=query_text, quoted_only=True)
+        if not representative:
+            continue
+        text = SAFE_DIRECT_ACTION_TEXT[pattern.interaction_action]
+        if any(semantic_style_text_similarity(text, previous) >= _DIRECT_REPLY_DEDUP_SIMILARITY for previous in recent):
+            continue
+        return pattern
+    return None
+
+
 def select_safe_direct_candidate(
     patterns: Iterable[ControlledBehaviorPattern],
     *,
     query_text: str,
     recent_assistant_replies: Iterable[str] = (),
 ) -> str:
-    """普通直投：仅当受控 action 达到 2 次/2 人且命中代表 trigger 时，返回固定安全短句。"""
-    recent = [reply for reply in recent_assistant_replies if normalize_semantic_style_match_text(reply)]
-    for pattern in patterns:
-        if pattern.interaction_action not in SAFE_DIRECT_ACTION_TEXT:
-            continue
-        if pattern.count < _DIRECT_PATTERN_MIN_COUNT or len(pattern.responder_ids) < _DIRECT_PATTERN_MIN_RESPONDERS:
-            continue
-        representative = select_behavior_pattern_representative(pattern, query_text=query_text)
-        if not representative:
-            continue
-        text = SAFE_DIRECT_ACTION_TEXT[pattern.interaction_action]
-        if any(semantic_style_text_similarity(text, previous) >= _DIRECT_REPLY_DEDUP_SIMILARITY for previous in recent):
-            continue
-        return text
-    return ""
+    pattern = select_safe_direct_pattern(
+        patterns,
+        query_text=query_text,
+        recent_assistant_replies=recent_assistant_replies,
+    )
+    return SAFE_DIRECT_ACTION_TEXT[pattern.interaction_action] if pattern is not None else ""
 
 
-def select_behavior_pattern_representative(pattern: ControlledBehaviorPattern, *, query_text: str) -> str:
-    """受控行为模式按代表 trigger 召回；无命中返回空串。"""
-    for trigger in pattern.representative_triggers:
-        if semantic_style_text_similarity(query_text, trigger) >= _DIRECT_TRIGGER_SIMILARITY:
-            return str(trigger or "")
-    return ""
+def select_behavior_pattern_representative(
+    pattern: ControlledBehaviorPattern,
+    *,
+    query_text: str,
+    quoted_only: bool = False,
+) -> str:
+    """受控行为模式按代表 trigger 召回；无命中返回空串。
+
+    ``quoted_only`` 用于普通直投：只允许命中 quoted 证据积累出的代表 trigger。
+    """
+    best: tuple[float, str] | None = None
+    candidates = pattern.quoted_triggers if quoted_only else pattern.representative_triggers
+    for trigger in candidates:
+        score = semantic_style_text_similarity(query_text, trigger)
+        if score < _BEHAVIOR_PATTERN_MIN_SIMILARITY:
+            continue
+        if best is None or score > best[0]:
+            best = (score, str(trigger or ""))
+    return best[1] if best is not None else ""
 
 
 def behavior_pattern_prompt_line(pattern: ControlledBehaviorPattern, representative: str) -> str:
@@ -2189,11 +2374,19 @@ def semantic_style_text_similarity(left: str, right: str) -> float:
         return 0.0
     if normalized_left == normalized_right:
         return 1.0
-    if min(len(normalized_left), len(normalized_right)) < 2:
+    if min(len(normalized_left), len(normalized_right)) < 3:
         return 0.0
+    if normalized_left in normalized_right or normalized_right in normalized_left:
+        return 1.0
     left_pairs = {normalized_left[index : index + 2] for index in range(len(normalized_left) - 1)}
     right_pairs = {normalized_right[index : index + 2] for index in range(len(normalized_right) - 1)}
-    return len(left_pairs & right_pairs) / min(len(left_pairs), len(right_pairs))
+    overlap = len(left_pairs & right_pairs)
+    if overlap < 2:
+        return 0.0
+    return max(
+        overlap / min(len(left_pairs), len(right_pairs)),
+        2 * overlap / (len(left_pairs) + len(right_pairs)),
+    )
 
 
 def select_semantic_style_direct_candidate(
@@ -2324,6 +2517,10 @@ def should_deliver_semantic_style_direct_candidate(
     """按群维护最近 100 次内核任务的直投占比。"""
     settings = load_semantic_style_settings(bot_id=bot_id, group_id=group_id)
     if not settings.injection_enabled or not settings.direct_enabled:
+        return False
+    from pallas.product.llm.semantic_style_experiment import semantic_channel_circuit_disabled
+
+    if semantic_channel_circuit_disabled("semantic_direct"):
         return False
     key = (int(bot_id or 0), int(group_id or 0))
     text = _short_text(candidate, _MAX_SEED_LEN)

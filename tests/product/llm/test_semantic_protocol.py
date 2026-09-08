@@ -26,6 +26,8 @@ def test_protocol_command_safe_rejects_risk_and_length() -> None:
     assert not proto.protocol_command_safe("管理员踢人")
     assert not proto.protocol_command_safe("x")
     assert not proto.protocol_command_safe("命令" * 20)
+    assert not proto.protocol_command_safe("[CQ:at,qq=1]")
+    assert not proto.protocol_command_safe("接受 老婆")
 
 
 def test_record_observation_requires_explicit_command_and_aggregates(tmp_path, monkeypatch) -> None:
@@ -105,6 +107,7 @@ def test_resolve_protocol_candidate_gates_on_threshold_cooldown_and_recent_bot(t
             group_id=42,
             trigger_text=trigger,
             recent_bot_id=100,
+            nickname_targeted=True,
             now=1000,
         )
         == "接受老婆赠送"
@@ -116,6 +119,7 @@ def test_resolve_protocol_candidate_gates_on_threshold_cooldown_and_recent_bot(t
             group_id=42,
             trigger_text=trigger,
             recent_bot_id=200,
+            nickname_targeted=True,
             now=1000,
         )
         == ""
@@ -128,6 +132,7 @@ def test_resolve_protocol_candidate_gates_on_threshold_cooldown_and_recent_bot(t
             group_id=42,
             trigger_text=trigger,
             recent_bot_id=100,
+            nickname_targeted=True,
             now=1000 + 60,
         )
         == ""
@@ -139,6 +144,7 @@ def test_resolve_protocol_candidate_gates_on_threshold_cooldown_and_recent_bot(t
             group_id=42,
             trigger_text=trigger,
             recent_bot_id=100,
+            nickname_targeted=True,
             now=1000 + proto._PROTOCOL_COOLDOWN_SEC + 1,
         )
         == "接受老婆赠送"
@@ -162,6 +168,7 @@ def test_resolve_protocol_candidate_ignores_below_threshold(tmp_path, monkeypatc
             group_id=42,
             trigger_text=trigger,
             recent_bot_id=100,
+            nickname_targeted=True,
             now=200,
         )
         == ""
@@ -174,3 +181,40 @@ def test_protocol_status_counts_eligible_patterns(tmp_path, monkeypatch) -> None
         "pattern_count": 0,
         "eligible_pattern_count": 0,
     }
+
+
+def test_protocol_requires_explicit_or_recent_nickname_target() -> None:
+    trigger = "回复「签到」即可"
+    for mid, responder in ((1, 11), (2, 12), (3, 13)):
+        proto.record_protocol_observation(
+            bot_id=100,
+            group_id=42,
+            trigger_text=trigger,
+            reply_text="签到",
+            responder_id=responder,
+            source_message_id=mid,
+            created_at=mid,
+        )
+
+    assert not proto.resolve_protocol_candidate(
+        bot_id=100,
+        group_id=42,
+        trigger_text=trigger,
+        recent_bot_id=None,
+    )
+    assert not proto.resolve_protocol_candidate(
+        bot_id=100,
+        group_id=42,
+        trigger_text=trigger,
+        recent_bot_id=None,
+        nickname_targeted=True,
+    )
+    assert (
+        proto.resolve_protocol_candidate(
+            bot_id=100,
+            group_id=42,
+            trigger_text=trigger,
+            explicitly_targeted=True,
+        )
+        == "签到"
+    )

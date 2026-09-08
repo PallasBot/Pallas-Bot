@@ -890,7 +890,9 @@ async def deliver_llm_callback_success(
                 bot_id=int(bot_id) if bot_id is not None else 0,
                 group_id=int(group_id) if group_id is not None else 0,
                 user_id=int(task.get("user_id") or 0) or 0,
-                bucket=semantic_style_bucket(
+                bucket=int(task.get("semantic_bucket") or 0)
+                if int(task.get("semantic_bucket") or 0) >= 0
+                else semantic_style_bucket(
                     int(bot_id) if bot_id is not None else 0,
                     int(group_id) if group_id is not None else 0,
                 ),

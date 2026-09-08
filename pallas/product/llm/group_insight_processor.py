@@ -106,6 +106,8 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
     if not semantic_style_collection_enabled(bot_id=bot_id, group_id=group_id):
         return
 
+    await _collect_protocol_observations(bot_id=bot_id, group_id=group_id)
+
     from pallas.product.llm.repeater_semantic_style import semantic_label_budget_ok
 
     if not semantic_label_budget_ok():
@@ -117,8 +119,6 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
             group_id,
         )
         return
-
-    await _collect_protocol_observations(bot_id=bot_id, group_id=group_id)
 
     cursor_time, cursor_message_id = get_semantic_style_group_cursor(bot_id=bot_id, group_id=group_id)
     known_bots = await _known_bots_in_group(group_id)
@@ -138,8 +138,21 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
     if not pairs:
         return
     # 媒体空壳、机器人菜单和内部元数据不送 LLM，节省预算并避免污染样本。
+    rejected_keys = [
+        (int(pair[6]), int(pair[5]))
+        for pair in pairs
+        if semantic_style_candidate_rejected(trigger_text=pair[0], reply_text=pair[1])
+    ]
     pairs = [pair for pair in pairs if not semantic_style_candidate_rejected(trigger_text=pair[0], reply_text=pair[1])]
     if not pairs:
+        if rejected_keys:
+            processed_at, processed_message_id = max(rejected_keys)
+            mark_semantic_style_group_processed(
+                bot_id=bot_id,
+                group_id=group_id,
+                processed_at=processed_at,
+                processed_message_id=processed_message_id,
+            )
         return
 
     # 一次 LLM 提交标注多个候选对，降低调用成本；预算中途耗尽时返回长度
@@ -214,11 +227,12 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
             group_id,
             bot_id,
         )
+    final_processed_key = max([max_processed_key, *(key for key in rejected_keys if key <= max_processed_key)])
     mark_semantic_style_group_processed(
         bot_id=bot_id,
         group_id=group_id,
-        processed_at=max_processed_key[0],
-        processed_message_id=max_processed_key[1],
+        processed_at=final_processed_key[0],
+        processed_message_id=final_processed_key[1],
     )
 
 
@@ -229,7 +243,7 @@ async def _collect_protocol_observations(*, bot_id: int, group_id: int) -> None:
     幂等，重复窗口不会重复计数。不推进语义游标，也不消耗 LLM 预算。
     """
     from pallas.product.llm.repeater_semantic_style import get_semantic_style_group_cursor
-    from pallas.product.llm.semantic_protocol import record_protocol_observation
+    from pallas.product.llm.semantic_protocol import extract_protocol_commands, record_protocol_observation
 
     cursor_time, cursor_message_id = get_semantic_style_group_cursor(bot_id=bot_id, group_id=group_id)
     known_bots = await _known_bots_in_group(group_id)
@@ -271,12 +285,9 @@ async def _collect_protocol_observations(*, bot_id: int, group_id: int) -> None:
         trigger = by_message_id.get(replied_id)
         if trigger is None:
             continue
-        trigger_user_id = int(getattr(trigger, "user_id", 0) or 0)
-        if not _is_bot_sender(user_id=trigger_user_id, self_bot_id=bot_id, known_bots=known_bots):
-            continue
         trigger_text = _text(getattr(trigger, "plain_text", "") or getattr(trigger, "raw_message", ""))
         reply_text = _text(getattr(reply, "plain_text", "") or getattr(reply, "raw_message", ""))
-        if not trigger_text or not reply_text:
+        if not trigger_text or not reply_text or not extract_protocol_commands(trigger_text):
             continue
         try:
             record_protocol_observation(

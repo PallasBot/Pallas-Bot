@@ -181,6 +181,22 @@ class ChatPromptAssembler:
                 if not representative:
                     continue
                 lines.append(behavior_pattern_prompt_line(pattern, representative))
+        elif expression.behavior_strategies:
+            observed = [
+                strategy
+                for strategy in expression.behavior_strategies[:3]
+                if str(strategy.scene or "").strip() and str(strategy.action or "").strip()
+            ]
+            if observed:
+                lines.extend([
+                    "【真人接话参考】",
+                    "- 以下来自旧版群表达画像，只借鉴接话结构，不要复刻原话或语气。",
+                ])
+                for strategy in observed:
+                    scene = sanitize_prompt_block(strategy.scene, max_len=80)
+                    action = sanitize_prompt_block(strategy.action, max_len=120)
+                    if scene and action:
+                        lines.append(f"- 类似「{scene}」时，真人会{action}。")
         if expression.continuation_patterns:
             lines.extend([
                 "【本群续句习惯】",

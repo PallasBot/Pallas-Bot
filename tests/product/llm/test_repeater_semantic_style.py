@@ -791,7 +791,10 @@ def test_safe_direct_candidate_requires_qualified_pattern_and_returns_fixed_text
             intensity="soft",
             count=count,
             responder_ids=responders,
+            quoted_count=count,
+            quoted_responder_ids=responders,
             representative_triggers=triggers,
+            quoted_triggers=triggers,
         )
 
     # 未达 2 次/2 人：不直投
@@ -827,6 +830,97 @@ def test_safe_direct_candidate_requires_qualified_pattern_and_returns_fixed_text
         )
         == ""
     )
+
+
+def test_safe_direct_candidate_requires_quoted_evidence() -> None:
+    from pallas.product.llm.repeater_semantic_style import (
+        ControlledBehaviorPattern,
+        select_safe_direct_candidate,
+    )
+
+    pattern = ControlledBehaviorPattern(
+        interaction_action="agree",
+        semantic_relation="agree",
+        form="short",
+        intensity="soft",
+        count=3,
+        responder_ids=[11, 12],
+        quoted_count=0,
+        quoted_responder_ids=[],
+        representative_triggers=["好烦，又加班"],
+    )
+    assert select_safe_direct_candidate([pattern], query_text="好烦，又加班") == ""
+
+
+def test_v3_rebuild_excludes_continuation_and_rejected_text_from_direct_pairs() -> None:
+    from pallas.product.llm.repeater_semantic_style import (
+        SemanticStyleLabel,
+        _rebuild_profiles,
+    )
+
+    clean_label = SemanticStyleLabel(
+        is_reply_pair=True,
+        transferable=True,
+        interaction_actions=["agree"],
+        semantic_relations=["follow_up"],
+        forms=["short"],
+    )
+    examples = [
+        SemanticStyleExample(
+            example_id="continuation",
+            created_at=1,
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            trigger_text="我先看看",
+            reply_text="等会再说",
+            label=clean_label,
+            source_kind="human_pair",
+            trigger_user_id=11,
+            reply_user_id=11,
+            pair_kind="continuation",
+        ),
+        SemanticStyleExample(
+            example_id="dirty",
+            created_at=2,
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            trigger_text="[图片]",
+            reply_text="看笑了",
+            label=clean_label,
+            source_kind="human_pair",
+            trigger_user_id=11,
+            reply_user_id=12,
+            pair_kind="conversation",
+        ),
+        SemanticStyleExample(
+            example_id="clean",
+            created_at=3,
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            trigger_text="怎么又下雨了",
+            reply_text="又来了",
+            label=clean_label,
+            source_kind="human_pair",
+            trigger_user_id=11,
+            reply_user_id=12,
+            pair_relation="quoted",
+            pair_kind="conversation",
+        ),
+    ]
+
+    profile = _rebuild_profiles(examples, now=3)[(100, 42, "group_chat")]
+    assert [pair.source_example_id for pair in profile.direct_pairs] == ["clean"]
+    assert profile.continuation_patterns[0].source_example_ids == ["continuation"]
+
+
+def test_similarity_rejects_single_bigram_overlap_and_keeps_real_match() -> None:
+    from pallas.product.llm.repeater_semantic_style import semantic_style_text_similarity
+
+    assert semantic_style_text_similarity("这是什么", "其实这是我的本性") == 0
+    assert semantic_style_text_similarity("好烦，又要加班", "好烦，又要加班") == 1
 
 
 def test_cached_semantic_style_resolution_falls_back_to_group_style_owner(tmp_path, monkeypatch) -> None:
@@ -871,6 +965,7 @@ def test_cached_semantic_style_resolution_falls_back_to_group_style_owner(tmp_pa
         "group_chat",
         request_id=request_id,
         query_text="怎么又炸了",
+        bypass_injection_gate=True,
     )
 
     assert resolution.direct_candidate == ""
@@ -1902,13 +1997,17 @@ def test_semantic_style_governance_sets_bits_independently(tmp_path, monkeypatch
     assert mod.semantic_style_injection_enabled("request", bot_id=100, group_id=42) is False
 
 
-def test_semantic_style_injection_keeps_ten_percent_control_group(tmp_path, monkeypatch) -> None:
+def test_semantic_style_injection_uses_only_stable_group_day_control(tmp_path, monkeypatch) -> None:
     from pallas.product.llm import repeater_semantic_style as mod
+    from pallas.product.llm import semantic_style_experiment as experiment
 
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     mod.set_semantic_style_governance(collection_enabled=True, injection_enabled=True, bot_id=100, group_id=42)
+    monkeypatch.setattr(experiment, "semantic_style_in_control", lambda *_args, **_kwargs: False)
     assert mod.semantic_style_injection_enabled("request", bot_id=100, group_id=42) is True
-    assert mod.semantic_style_injection_enabled("ctl-27", bot_id=100, group_id=42) is False
+    assert mod.semantic_style_injection_enabled("ctl-27", bot_id=100, group_id=42) is True
+    monkeypatch.setattr(experiment, "semantic_style_in_control", lambda *_args, **_kwargs: True)
+    assert mod.semantic_style_injection_enabled("request", bot_id=100, group_id=42) is False
 
 
 def test_set_semantic_style_enabled_disable_turns_off_both_bits(tmp_path, monkeypatch) -> None:

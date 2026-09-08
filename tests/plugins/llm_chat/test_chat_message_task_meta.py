@@ -1022,6 +1022,7 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     )
     reply_context_lookup = Mock(return_value="复读的原话")
     monkeypatch.setattr(mod, "lookup_bot_reply_context", reply_context_lookup, raising=False)
+    monkeypatch.setattr(mod, "recent_group_bot_speaker", lambda **_kwargs: 10001, raising=False)
     monkeypatch.setattr(
         mod,
         "classify_behavior_scene",
@@ -1121,6 +1122,10 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     reply_context_lookup.assert_called_once_with(group_id=20002, bot_id=10001, message_id=70001)
     assert payload["reply_total_length_band"] == "complete"
     submit_request = submit_mock.await_args.args[0]
+    assert submit_request.llm_rewrite_metadata["user_text"] == "你还在吗"
+    assert submit_request.llm_rewrite_metadata["recent_group_bot_speaker"] == 10001
+    assert submit_request.llm_rewrite_metadata["protocol_explicit_target"] is True
+    assert submit_request.llm_rewrite_metadata["protocol_nickname_target"] is False
     assert submit_request.group_timeline_images == [
         {"speaker": "兔兔", "text": "还是笨蛋欸", "url": "https://example.com/a.png"},
     ]

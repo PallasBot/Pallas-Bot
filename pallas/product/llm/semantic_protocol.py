@@ -50,6 +50,7 @@ _PROTOCOL_RISK_WORDS = (
 )
 # 显式命令候选：发送/回复「X」。
 _PROTOCOL_COMMAND_RE = re.compile(r"(?:发送|回复)[「\"']([^「\"']{1,24})[」\"']")
+_PROTOCOL_COMMAND_SAFE_RE = re.compile(r"[\u4e00-\u9fffA-Za-z0-9_+\-]+")
 # 昵称定向窗口：最近 3 分钟在该群发过消息的本地 Bot 才可响应昵称协议。
 _PROTOCOL_RECENT_BOT_SEC = 3 * 60
 
@@ -110,7 +111,7 @@ def protocol_command_safe(command: str) -> bool:
     text = str(command or "").strip()
     if not (_PROTOCOL_COMMAND_MIN_LEN <= len(text) <= _PROTOCOL_COMMAND_MAX_LEN):
         return False
-    if re.search(r"[\r\n\0]", text):
+    if _PROTOCOL_COMMAND_SAFE_RE.fullmatch(text) is None:
         return False
     lowered = text.casefold()
     return not any(risk in lowered for risk in _PROTOCOL_RISK_WORDS)
@@ -160,7 +161,12 @@ def _write_patterns(patterns: dict[tuple[int, str, str], ProtocolPattern]) -> No
 
 def _normalize_template(text: str) -> str:
     """模板归一化：折叠空白、去掉命令候选占位，便于跨群聚合。"""
-    normalized = re.sub(r"(?:发送|回复)[「\"'][^「\"']{1,24}[」\"']", "发送「命令」", str(text or ""))
+    normalized = str(text or "")
+    instruction = re.search(r"(?:请在|请发送|请回复|发送|回复)", normalized)
+    if instruction is not None:
+        normalized = normalized[instruction.start() :]
+    normalized = re.sub(r"\d+", "{n}", normalized)
+    normalized = re.sub(r"(?:发送|回复)[「\"'][^「\"']{1,24}[」\"']", "发送「命令」", normalized)
     return re.sub(r"\s+", " ", normalized).strip()
 
 
@@ -270,6 +276,8 @@ def resolve_protocol_candidate(
     group_id: int,
     trigger_text: str,
     recent_bot_id: int | None = None,
+    explicitly_targeted: bool = False,
+    nickname_targeted: bool = False,
     now: int | None = None,
 ) -> str:
     """运行时判定：当前 Bot 提示是否命中合格协议模板，返回可自动回复的命令。
@@ -277,6 +285,10 @@ def resolve_protocol_candidate(
     ``recent_bot_id`` 为最近 3 分钟内该群最后发言的本地 Bot；昵称定向时仅
     当前 Bot 是最近发言者才允许响应。明确 @/引用由调用方在定向判定中处理。
     """
+    if not explicitly_targeted and not (
+        nickname_targeted and recent_bot_id is not None and int(recent_bot_id) == int(bot_id)
+    ):
+        return ""
     commands = extract_protocol_commands(trigger_text)
     if not commands:
         return ""
@@ -294,10 +306,44 @@ def resolve_protocol_candidate(
             continue
         if pattern.count < _PROTOCOL_MIN_COUNT or len(pattern.responder_ids) < _PROTOCOL_MIN_RESPONDERS:
             continue
-        if recent_bot_id is not None and int(recent_bot_id) != int(bot_id):
-            continue
         return command
     return ""
+
+
+def claim_protocol_candidate(
+    *,
+    bot_id: int,
+    group_id: int,
+    trigger_text: str,
+    recent_bot_id: int | None = None,
+    explicitly_targeted: bool = False,
+    nickname_targeted: bool = False,
+    now: int | None = None,
+) -> str:
+    """原子检查并占用协议冷却，避免多个 worker 同时直投。"""
+    from pallas.product.llm.semantic_style_experiment import semantic_channel_circuit_disabled
+
+    if semantic_channel_circuit_disabled("protocol_direct"):
+        return ""
+    current = int(time.time()) if now is None else int(now)
+    with interprocess_file_lock(protocol_cooldowns_path().with_suffix(".lock")):
+        cooldowns = _load_cooldowns()
+        if current - cooldowns.get((int(bot_id), int(group_id)), 0) < _PROTOCOL_COOLDOWN_SEC:
+            return ""
+        candidate = resolve_protocol_candidate(
+            bot_id=bot_id,
+            group_id=group_id,
+            trigger_text=trigger_text,
+            recent_bot_id=recent_bot_id,
+            explicitly_targeted=explicitly_targeted,
+            nickname_targeted=nickname_targeted,
+            now=current + _PROTOCOL_COOLDOWN_SEC,
+        )
+        if not candidate:
+            return ""
+        cooldowns[(int(bot_id), int(group_id))] = current
+        _write_cooldowns(cooldowns)
+        return candidate
 
 
 def protocol_status() -> dict[str, Any]:
