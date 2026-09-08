@@ -110,6 +110,8 @@ def test_html_template_uses_dossier_layout_contract() -> None:
     assert 'class="example-list"' in template
     assert 'class="command-aliases"' in template
     assert "触发" in template
+    assert "权限" in template
+    assert 'row.perm != "—"' in template
     assert "详情" in template
     assert 'class="doc-section-heading"' in template
     assert '<div class="eyebrow">{{ eyebrow }}</div>' in template

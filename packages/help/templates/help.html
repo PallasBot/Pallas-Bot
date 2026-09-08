@@ -579,6 +579,7 @@
           {% if row.brief %}<div class="fn-brief">{{ row.brief }}</div>{% endif %}
           <div class="fn-actions">
             {% if row.say_main %}<span class="fn-action"><span class="fn-action-label">触发</span><code class="cmd">{{ row.say_main }}</code></span>{% endif %}
+            {% if row.perm and row.perm != "—" %}<span class="fn-action"><span class="fn-action-label">权限</span><code class="cmd">{{ row.perm }}</code></span>{% endif %}
             <span class="fn-action"><span class="fn-action-label">详情</span><code class="cmd">牛牛帮助 {{ plugin_title }} {{ row.index }}</code></span>
           </div>
         </div>
