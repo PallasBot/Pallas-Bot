@@ -72,6 +72,7 @@ class ProtocolPattern(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     bot_id: int
+    group_id: int
     trigger_template: str
     response_command: str
     count: int = 0
@@ -132,7 +133,7 @@ def _load_observations() -> list[ProtocolObservation]:
     return observations
 
 
-def _load_patterns() -> dict[tuple[int, str, str], ProtocolPattern]:
+def _load_patterns() -> dict[tuple[int, int, str, str], ProtocolPattern]:
     try:
         raw = json.loads(protocol_patterns_path().read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -140,17 +141,17 @@ def _load_patterns() -> dict[tuple[int, str, str], ProtocolPattern]:
     rows = raw.get("patterns") if isinstance(raw, dict) else raw
     if not isinstance(rows, list):
         return {}
-    patterns: dict[tuple[int, str, str], ProtocolPattern] = {}
+    patterns: dict[tuple[int, int, str, str], ProtocolPattern] = {}
     for item in rows:
         try:
             pattern = ProtocolPattern.model_validate(item)
         except Exception:
             continue
-        patterns[(pattern.bot_id, pattern.trigger_template, pattern.response_command)] = pattern
+        patterns[(pattern.bot_id, pattern.group_id, pattern.trigger_template, pattern.response_command)] = pattern
     return patterns
 
 
-def _write_patterns(patterns: dict[tuple[int, str, str], ProtocolPattern]) -> None:
+def _write_patterns(patterns: dict[tuple[int, int, str, str], ProtocolPattern]) -> None:
     path = protocol_patterns_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"patterns": [item.model_dump(mode="json") for item in patterns.values()]}
@@ -212,11 +213,12 @@ def record_protocol_observation(
                 json.dumps(observations[-1].model_dump(mode="json"), ensure_ascii=False, separators=(",", ":")) + "\n"
             )
         patterns = _load_patterns()
-        key = (int(bot_id), template, reply)
+        key = (int(bot_id), int(group_id), template, reply)
         existing = patterns.get(key)
         if existing is None:
             existing = ProtocolPattern(
                 bot_id=int(bot_id),
+                group_id=int(group_id),
                 trigger_template=template,
                 response_command=reply,
                 updated_at=now,
@@ -301,7 +303,7 @@ def resolve_protocol_candidate(
     for command in commands:
         if not protocol_command_safe(command):
             continue
-        pattern = patterns.get((int(bot_id), template, command))
+        pattern = patterns.get((int(bot_id), int(group_id), template, command))
         if pattern is None:
             continue
         if pattern.count < _PROTOCOL_MIN_COUNT or len(pattern.responder_ids) < _PROTOCOL_MIN_RESPONDERS:

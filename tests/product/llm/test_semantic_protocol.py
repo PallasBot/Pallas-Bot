@@ -183,6 +183,45 @@ def test_protocol_status_counts_eligible_patterns(tmp_path, monkeypatch) -> None
     }
 
 
+def test_protocol_patterns_are_scoped_per_group(tmp_path, monkeypatch) -> None:
+    """群 A 积累的证据不得让群 B 相同模板直接响应。"""
+    trigger = "请在 60 秒内发送「接受老婆赠送」"
+    for mid, responder in ((1, 11), (2, 12), (3, 13)):
+        proto.record_protocol_observation(
+            bot_id=100,
+            group_id=42,
+            trigger_text=trigger,
+            reply_text="接受老婆赠送",
+            responder_id=responder,
+            source_message_id=mid,
+            created_at=mid * 100,
+        )
+    # 群 42 达到门槛：可响应
+    assert (
+        proto.resolve_protocol_candidate(
+            bot_id=100,
+            group_id=42,
+            trigger_text=trigger,
+            recent_bot_id=100,
+            nickname_targeted=True,
+            now=1000,
+        )
+        == "接受老婆赠送"
+    )
+    # 群 43 无任何观察：不得复用群 42 的证据
+    assert (
+        proto.resolve_protocol_candidate(
+            bot_id=100,
+            group_id=43,
+            trigger_text=trigger,
+            recent_bot_id=100,
+            nickname_targeted=True,
+            now=1000,
+        )
+        == ""
+    )
+
+
 def test_protocol_requires_explicit_or_recent_nickname_target() -> None:
     trigger = "回复「签到」即可"
     for mid, responder in ((1, 11), (2, 12), (3, 13)):

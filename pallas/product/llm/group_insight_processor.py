@@ -285,6 +285,9 @@ async def _collect_protocol_observations(*, bot_id: int, group_id: int) -> None:
         trigger = by_message_id.get(replied_id)
         if trigger is None:
             continue
+        trigger_user_id = int(getattr(trigger, "user_id", 0) or 0)
+        if not _is_bot_sender(user_id=trigger_user_id, self_bot_id=bot_id, known_bots=known_bots):
+            continue
         trigger_text = _text(getattr(trigger, "plain_text", "") or getattr(trigger, "raw_message", ""))
         reply_text = _text(getattr(reply, "plain_text", "") or getattr(reply, "raw_message", ""))
         if not trigger_text or not reply_text or not extract_protocol_commands(trigger_text):
