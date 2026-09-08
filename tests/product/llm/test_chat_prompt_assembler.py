@@ -3,7 +3,6 @@ from pallas.product.llm.assembler.chat_prompt import (
     ResolvedGroupExpression,
 )
 from pallas.product.llm.assembler.context import ChatContextBundle
-from pallas.product.llm.repeater_semantic_style import BehaviorStrategy
 from pallas.product.llm.reply_shape import ReplyShapePolicy
 from pallas.product.llm.turn_policy import TurnPolicy
 
@@ -65,7 +64,9 @@ def test_chat_prompt_assembler_uses_fixed_order_without_aliases_or_duplicates() 
     assert "回顶" not in prompt
 
 
-def test_chat_prompt_assembler_renders_behavior_strategy_reference_and_baseline() -> None:
+def test_chat_prompt_assembler_renders_controlled_patterns_and_continuation() -> None:
+    from pallas.product.llm.repeater_semantic_style import ContinuationPattern, ControlledBehaviorPattern
+
     prompt = ChatPromptAssembler().assemble(
         core_persona="【核心人格】\n有主见的小姑娘。",
         self_identity="【自称】\n牛牛指自己，使用第一人称。",
@@ -81,23 +82,26 @@ def test_chat_prompt_assembler_renders_behavior_strategy_reference_and_baseline(
         context=ChatContextBundle(),
         group_expression=ResolvedGroupExpression(
             matched_examples=[("你又来了", "我一直都在呀")],
-            baseline_note="本群真人单条短气泡为主（占比约 83%），单段中位约 6 字。",
-            behavior_strategies=[
-                BehaviorStrategy(
-                    scene="对方吐槽工作压力",
-                    action="先短句接住情绪，再问一句具体的事",
-                    outcome="对方愿意多讲",
-                ),
-                BehaviorStrategy(
-                    scene="群里问吃什么",
-                    action="直接给具体建议",
-                ),
-                BehaviorStrategy(
-                    scene="对方拿我开玩笑",
-                    action="笑着怼回去再反问一句",
-                    outcome="气氛不错",
-                    learning_type="self_reflection",
-                ),
+            behavior_patterns=[
+                ControlledBehaviorPattern(
+                    interaction_action="agree",
+                    semantic_relation="agree",
+                    form="short",
+                    intensity="soft",
+                    count=3,
+                    responder_ids=[11, 12],
+                    representative_triggers=["好烦，又加班了"],
+                )
+            ],
+            continuation_patterns=[
+                ContinuationPattern(
+                    semantic_relation="follow_up",
+                    form="question",
+                    intensity="neutral",
+                    count=3,
+                    speaker_ids=[11, 13],
+                    representative_triggers=["今天好热"],
+                )
             ],
         ),
         reply_shape=ReplyShapePolicy(
@@ -111,15 +115,16 @@ def test_chat_prompt_assembler_renders_behavior_strategy_reference_and_baseline(
         ),
     )
 
-    assert "【真人接话参考】" in prompt
-    assert "只借鉴什么时候说短/长、怎么接，不要复刻原话" in prompt
-    assert "类似「对方吐槽工作压力」时，真人会先短句接住情绪，再问一句具体的事，结果对方愿意多讲。" in prompt
-    assert "类似「群里问吃什么」时，真人会直接给具体建议。" in prompt
-    assert "【接话复盘】" in prompt
-    assert "类似「对方拿我开玩笑」时，我之前是这样接的：笑着怼回去再反问一句，结果气氛不错。" in prompt
-    assert "本群真人单条短气泡为主" in prompt
-    # 段序按变化频率排布：群表达指导（低频缓存）在前，逐轮变化的输出契约靠后。
-    assert prompt.index("【群表达指导】") < prompt.index("【真人接话参考】") < prompt.index("【回复形状与输出契约】")
+    assert "【真人接话模式】" in prompt
+    assert "类似「好烦，又加班了」时，本群真人常用认同的方式表示赞同，表述偏短句。" in prompt
+    assert "【本群续句习惯】" in prompt
+    assert "不要把这种续句误当成两个人对话" in prompt
+    # 节奏基线不再由语义指导器注入，生成节奏统一交回 reply_shape
+    assert "本群真人单条短气泡为主" not in prompt
+    assert "【真人接话参考】" not in prompt
+    assert "【接话复盘】" not in prompt
+    # 段序按变化频率排布：群表达指导在前，逐轮变化的输出契约靠后。
+    assert prompt.index("【群表达指导】") < prompt.index("【真人接话模式】") < prompt.index("【回复形状与输出契约】")
 
 
 def test_chat_prompt_assembler_renders_cached_semantic_style_block() -> None:
