@@ -102,6 +102,7 @@ __plugin_meta__ = PluginMetadata(
         "menu_data": [
             {
                 "func": "总列表",
+                "group": "帮助查看",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_BOTH,
                 "trigger_condition": "牛牛帮助",
@@ -111,6 +112,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "插件详情",
+                "group": "帮助查看",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_BOTH,
                 "trigger_condition": "牛牛帮助 〈插件名或序号〉",
@@ -120,6 +122,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "功能详情",
+                "group": "帮助查看",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_BOTH,
                 "trigger_condition": "牛牛帮助 〈插件〉 〈功能序号或名称〉 或 牛牛帮助 〈命令〉",
@@ -129,6 +132,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "插件开关",
+                "group": "插件开关",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "牛牛开启 / 牛牛关闭 〈插件名或序号〉",
@@ -138,6 +142,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "批量开关",
+                "group": "插件开关",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "牛牛开启全部功能 / 牛牛关闭全部功能",

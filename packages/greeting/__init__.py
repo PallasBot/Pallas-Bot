@@ -49,6 +49,7 @@ __plugin_meta__ = PluginMetadata(
         "menu_data": [
             {
                 "func": "入群欢迎",
+                "group": "自动欢迎",
                 "trigger_method": "on_notice",
                 "trigger_scene": SCENE_AUTO,
                 "trigger_condition": "新人入群",
@@ -57,6 +58,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "好友欢迎",
+                "group": "自动欢迎",
                 "trigger_method": "on_notice",
                 "trigger_scene": SCENE_AUTO,
                 "trigger_condition": "新好友添加",
@@ -65,6 +67,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "设置好友欢迎",
+                "group": "欢迎内容",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_PRIVATE,
                 "trigger_condition": "设置好友欢迎",
@@ -74,6 +77,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "清除好友欢迎",
+                "group": "欢迎内容",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_PRIVATE,
                 "trigger_condition": "清除好友欢迎",
@@ -83,6 +87,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "设置群欢迎",
+                "group": "欢迎内容",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "设置群欢迎",
@@ -92,6 +97,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "清除群欢迎",
+                "group": "欢迎内容",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "清除群欢迎",
