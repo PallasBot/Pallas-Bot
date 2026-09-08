@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.3.13-35-g11895f8e",
+    "version": "v4.4.1-12-g4b6d6d2a-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -38014,7 +38014,8 @@
               "recover",
               "disable",
               "enable",
-              "set_governance"
+              "set_governance",
+              "rollback_v2"
             ],
             "title": "Action"
           },
@@ -38231,6 +38232,11 @@
             ],
             "title": "Direct Enabled"
           },
+          "active_pipeline": {
+            "type": "string",
+            "title": "Active Pipeline",
+            "default": "v3"
+          },
           "example_count": {
             "type": "integer",
             "title": "Example Count",
@@ -38240,6 +38246,37 @@
             "type": "integer",
             "title": "Profile Count",
             "default": 0
+          },
+          "schema_version": {
+            "type": "integer",
+            "title": "Schema Version",
+            "default": 3
+          },
+          "injectable_behavior_patterns": {
+            "type": "integer",
+            "title": "Injectable Behavior Patterns",
+            "default": 0
+          },
+          "injectable_continuation_patterns": {
+            "type": "integer",
+            "title": "Injectable Continuation Patterns",
+            "default": 0
+          },
+          "v2_backup": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "V2 Backup"
+          },
+          "experiment_governance": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Experiment Governance"
           },
           "backfill_cursor": {
             "additionalProperties": true,

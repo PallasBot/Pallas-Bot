@@ -73,6 +73,7 @@ __plugin_meta__ = PluginMetadata(
         "menu_data": [
             {
                 "func": "查看待处理申请",
+                "group": "查看与快捷处理",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_PRIVATE,
                 "trigger_condition": "查看好友申请 / 查看入群申请",
@@ -82,6 +83,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "快捷同意最近申请",
+                "group": "查看与快捷处理",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_PRIVATE,
                 "trigger_condition": "同意",
@@ -91,6 +93,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "快捷拒绝最近申请",
+                "group": "查看与快捷处理",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_PRIVATE,
                 "trigger_condition": "拒绝",
@@ -100,6 +103,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "引用审批消息快捷操作",
+                "group": "查看与快捷处理",
                 "trigger_method": "on_message",
                 "trigger_scene": SCENE_PRIVATE,
                 "trigger_condition": "引用审批提醒：同意 / 好 / 留空，或 拒绝 / 不要 / 否",
@@ -113,6 +117,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "好友申请审批",
+                "group": "按对象处理",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_PRIVATE,
                 "trigger_condition": "同意好友 <QQ号>",
@@ -122,6 +127,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "好友申请拒绝",
+                "group": "按对象处理",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_PRIVATE,
                 "trigger_condition": "拒绝好友 <QQ号>",
@@ -131,6 +137,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "批量审批",
+                "group": "批量与自动化",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_PRIVATE,
                 "trigger_condition": "同意所有好友 / 拒绝所有好友 / 同意所有入群 / 拒绝所有入群",
@@ -145,6 +152,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "入群申请审批",
+                "group": "按对象处理",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_PRIVATE,
                 "trigger_condition": "同意入群 / 拒绝入群 <群号>",
@@ -154,6 +162,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "通知开关",
+                "group": "批量与自动化",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_PRIVATE,
                 "trigger_condition": "牛牛开启 / 牛牛关闭 申请管理",
@@ -163,6 +172,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "自动同意开关",
+                "group": "批量与自动化",
                 "trigger_method": "on_cmd",
                 "trigger_scene": SCENE_PRIVATE,
                 "trigger_condition": "查看自动同意 / 开启或关闭自动同意好友 / 入群",

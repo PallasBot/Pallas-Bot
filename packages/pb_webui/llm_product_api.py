@@ -85,6 +85,7 @@ class _SemanticStyleManageBody(BaseModel):
         "disable",
         "enable",
         "set_governance",
+        "rollback_v2",
     ]
     bot_id: int | None = None
     group_id: int | None = None
@@ -117,8 +118,14 @@ class _SemanticStyleStatusData(BaseModel):
     collection_enabled: bool = True
     injection_enabled: bool = True
     direct_enabled: bool | None = None
+    active_pipeline: str = "v3"
     example_count: int = 0
     profile_count: int = 0
+    schema_version: int = 3
+    injectable_behavior_patterns: int = 0
+    injectable_continuation_patterns: int = 0
+    v2_backup: str | None = None
+    experiment_governance: dict[str, Any] = Field(default_factory=dict)
     backfill_cursor: dict[str, Any] = Field(default_factory=dict)
     profile_summary: _SemanticStyleProfileSummaryData | None = None
 
@@ -289,6 +296,8 @@ def register_llm_product_router(
                     if scope
                     else semantic_style.set_semantic_style_enabled(True)
                 )
+            elif action == "rollback_v2":
+                data = semantic_style.set_semantic_style_active_pipeline("v2")
             else:
                 data = (
                     semantic_style.set_semantic_style_enabled(False, **scope)

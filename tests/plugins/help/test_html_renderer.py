@@ -80,7 +80,7 @@ def test_html_template_uses_dossier_layout_contract() -> None:
     assert "group.layout_columns" in template
     assert 'class="plugin-group-card{% if group.rows|length == 1 %} is-single{% endif %}"' in template
     assert ".plugin-group-card.is-single" in template
-    assert ".plugin-list-row + .plugin-list-row" in template
+    assert ".plugin-list-row + .plugin-list-row" not in template
     assert 'class="plugin-icon"' in template
     assert 'class="terrain-contours"' in template
     assert "padding: 0 18px" in template
@@ -95,6 +95,7 @@ def test_html_template_uses_dossier_layout_contract() -> None:
     assert "--amber-ink" not in template
     assert ".nav-item.primary" not in template
     assert ".fn-name { font-size: 20px;" in template
+    assert ".fn-action-row" in template
     assert 'class="function-row"' in template
     assert 'class="function-index"' in template
     assert 'class="function-row-content"' in template
@@ -110,6 +111,10 @@ def test_html_template_uses_dossier_layout_contract() -> None:
     assert 'class="example-list"' in template
     assert 'class="command-aliases"' in template
     assert "触发" in template
+    assert 'class="fn-action-row fn-trigger-row"' in template
+    assert "权限" in template
+    assert 'row.perm != "—"' in template
+    assert 'class="fn-action-row fn-meta-row"' in template
     assert "详情" in template
     assert 'class="doc-section-heading"' in template
     assert '<div class="eyebrow">{{ eyebrow }}</div>' in template

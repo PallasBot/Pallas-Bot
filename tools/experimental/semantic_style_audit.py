@@ -19,11 +19,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from operator import itemgetter
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -36,14 +37,20 @@ from pallas.product.llm.repeater_semantic_style import (  # noqa: E402
 )
 
 
-def load_profiles() -> list[SemanticStyleProfile]:
-    path = REPO_ROOT / "data" / "pb_webui" / "repeater_semantic_style" / "profiles.json"
+def _load_json_rows(path: Path) -> list[dict]:
     if not path.exists():
-        raise SystemExit(f"profiles.json not found: {path}")
+        raise SystemExit(f"file not found: {path}")
     raw = json.loads(path.read_text(encoding="utf-8"))
-    rows = raw.get("profiles") if isinstance(raw, dict) else raw
+    rows = raw.get("profiles") if isinstance(raw, dict) and isinstance(raw.get("profiles"), list) else raw
+    if not isinstance(rows, list):
+        raise SystemExit(f"invalid rows shape: {path}")
+    return rows
+
+
+def load_profiles(path: Path | None = None) -> list[SemanticStyleProfile]:
+    rows = _load_json_rows(path or REPO_ROOT / "data" / "pb_webui" / "repeater_semantic_style" / "profiles.json")
     items: list[SemanticStyleProfile] = []
-    for item in rows or []:
+    for item in rows:
         try:
             items.append(SemanticStyleProfile.model_validate(item))
         except Exception:
@@ -116,10 +123,66 @@ def audit_profile(profile: SemanticStyleProfile) -> dict[str, object]:
     return entries
 
 
+def audit_examples(path: Path) -> dict[str, object]:
+    """审计 examples.jsonl 的样本来源组成，供 v3 分类前后对比。"""
+    if not path.exists():
+        raise SystemExit(f"file not found: {path}")
+    rows = 0
+    total = 0
+    same_user = 0
+    media_trigger = 0
+    template_hits = 0
+    token_meta = 0
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        rows += 1
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        total += 1
+        trigger_uid = int(item.get("trigger_user_id") or 0)
+        reply_uid = int(item.get("reply_user_id") or 0)
+        if trigger_uid > 0 and trigger_uid == reply_uid:
+            same_user += 1
+        trigger = str(item.get("trigger_text") or "")
+        reply = str(item.get("reply_text") or "")
+        stripped_trigger = re.sub(r"\[(?:图片|媒体|表情)\]", "", trigger).strip()
+        if trigger.strip() in ("[图片]", "[媒体]") or (trigger and not stripped_trigger):
+            media_trigger += 1
+        combined = f"{trigger} {reply}"
+        if re.search(r"(发送[「\"]|管理员|群主|功能开关|领取|签到|老婆赠送|请在\s*\d+\s*秒)", combined):
+            template_hits += 1
+        if re.search(r"(completion_tokens|prompt_tokens|finish_reason|token_usage)", combined, re.IGNORECASE):
+            token_meta += 1
+    return {
+        "rows": rows,
+        "parsed": total,
+        "same_user_rate": round(same_user / total, 4) if total else 0,
+        "media_trigger_rate": round(media_trigger / total, 4) if total else 0,
+        "template_hit_rate": round(template_hits / total, 4) if total else 0,
+        "token_meta_count": token_meta,
+    }
+
+
+def _print_example_stats(stats: dict[str, object]) -> None:
+    print("=" * 60)
+    print("examples.jsonl 样本组成审计")
+    print("=" * 60)
+    print(f"行数 {stats['rows']} 已解析 {stats['parsed']}")
+    print(f"同人续句率 {stats['same_user_rate']:.1%}")
+    print(f"纯媒体 trigger 率 {stats['media_trigger_rate']:.1%}")
+    print(f"系统模板命中率 {stats['template_hit_rate']:.1%}")
+    print(f"token 元数据泄漏 {stats['token_meta_count']}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="审计语义风格指导器离线产出质量。")
     parser.add_argument("--min-sample", type=int, default=8, help="只审计样本数 ≥ 该值的 profile")
     parser.add_argument("--out", type=Path, default=REPO_ROOT / "data" / "llm" / "semantic_style_audit.json")
+    parser.add_argument("--profiles", type=Path, default=None, help="覆盖 profiles.json 路径")
+    parser.add_argument("--examples", type=Path, default=None, help="覆盖 examples.jsonl 路径")
     parser.add_argument(
         "--json",
         action="store_true",
@@ -127,9 +190,17 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    profiles = load_profiles()
+    profiles = load_profiles(path=args.profiles)
+    total = len(profiles)
     profiles = [profile for profile in profiles if profile.sample_count >= args.min_sample]
-    print(f"profiles 总数 {len(load_profiles())}，>= min-sample({args.min_sample}) {len(profiles)} 个")
+    print(f"profiles 总数 {total}，>= min-sample({args.min_sample}) {len(profiles)} 个")
+
+    if args.examples is not None:
+        example_stats = audit_examples(args.examples)
+        if args.json:
+            print(json.dumps({"examples": example_stats}, ensure_ascii=False))
+        else:
+            _print_example_stats(example_stats)
 
     audited = [audit_profile(profile) for profile in profiles]
 
