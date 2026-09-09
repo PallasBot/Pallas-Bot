@@ -380,6 +380,31 @@ def test_providers_store_anthropic_request_method(tmp_path: Path, monkeypatch) -
     assert exported["providers"][0]["request_method"] == "anthropic_messages"
 
 
+def test_providers_store_ollama_chat_request_method(tmp_path: Path, monkeypatch) -> None:
+    store = tmp_path / "llm_providers.json"
+    monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
+    clear_providers_store_cache()
+    save_providers_document({
+        "providers": [
+            {
+                "id": "ollama",
+                "kind": "remote",
+                "base_url": "https://ollama.com",
+                "api_key": "ollama-key",
+                "default_model": "glm-5.3-flash",
+                "request_method": "ollama_chat",
+            }
+        ],
+        "routing": {"tasks": {"llm_chat": "ollama"}},
+    })
+    clear_providers_store_cache()
+    endpoint = resolve_endpoint_for_task("llm_chat")
+    assert endpoint is not None
+    assert endpoint.request_method == "ollama_chat"
+    exported = export_providers_for_api()
+    assert exported["providers"][0]["request_method"] == "ollama_chat"
+
+
 def test_resolve_endpoint_candidates_follow_chain_fallback(tmp_path: Path, monkeypatch) -> None:
     from pallas.product.llm.providers_store import resolve_endpoint_candidates_for_task
 

@@ -238,6 +238,19 @@ async def _post_provider_chat(
                 provider_id=provider_id,
                 telemetry_context=telemetry_context,
             )
+        if method == "ollama_chat":
+            return await _repo._post_ollama_chat(
+                messages,
+                base_url=base_url,
+                api_key=api_key,
+                model=model,
+                options=use_options,
+                tools=tools,
+                timeout_sec=timeout_sec,
+                task=task,
+                provider_id=provider_id,
+                telemetry_context=telemetry_context,
+            )
         return await _repo._post_chat_completions(
             messages,
             base_url=base_url,
@@ -493,5 +506,75 @@ async def _post_chat_completions(
     if not isinstance(message_obj, dict):
         raise _repo.LlmProviderError("invalid provider message")
     if not str(message_obj.get("content", "") or "").strip() and not message_obj.get("tool_calls"):
+        raise _repo.LlmProviderError("empty provider content")
+    return message_obj
+
+
+async def _post_ollama_chat(
+    messages: list[dict[str, Any]],
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    options: dict[str, Any],
+    tools: list[dict[str, Any]] | None,
+    timeout_sec: float,
+    task: str = "llm_chat",
+    provider_id: str = "",
+    telemetry_context: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Ollama 原生 /api/chat：思考模型内容直接回填 message.content，无 reasoning 空壳问题。"""
+    model_name = str(model or "").strip()
+    if not model_name:
+        raise _repo.LlmProviderError("llm model not configured")
+    url = _repo.ollama_chat_url(base_url)
+    payload: dict[str, Any] = {"model": model_name, "messages": messages, "stream": False}
+    options_payload: dict[str, Any] = {}
+    temperature = options.get("temperature")
+    if temperature is not None:
+        options_payload["temperature"] = float(temperature)
+    max_tokens = options.get("num_predict")
+    if max_tokens is None:
+        max_tokens = options.get("max_tokens")
+    if max_tokens is not None:
+        options_payload["num_predict"] = int(max_tokens)
+    if options_payload:
+        payload["options"] = options_payload
+    timeout = httpx.Timeout(float(timeout_sec))
+    headers = _repo.auth_headers(api_key)
+    client = await _repo.get_llm_shared_httpx_client()
+    response = await client.post(url, json=payload, headers=headers, timeout=timeout)
+    if response.status_code != 200:
+        logger.error(
+            "LLM provider request failed with status [{}], response bytes [{}]",
+            response.status_code,
+            len(response.content),
+        )
+        _repo.raise_provider_http_error(response)
+    data = response.json()
+    if not isinstance(data, dict):
+        raise _repo.LlmProviderError("invalid ollama chat payload")
+    _repo._record_usage_from_payload(
+        data,
+        task=task,
+        provider_id=provider_id,
+        model=model_name,
+        local=True,
+        telemetry_context=telemetry_context,
+    )
+    message_obj = data.get("message")
+    if not isinstance(message_obj, dict):
+        raise _repo.LlmProviderError("invalid ollama message")
+    content = message_obj.get("content")
+    if isinstance(content, list):
+        texts = [
+            str(part.get("text") or "").strip()
+            for part in content
+            if isinstance(part, dict) and str(part.get("text") or "").strip()
+        ]
+        content = "\n".join(texts)
+    message_obj = dict(message_obj)
+    message_obj["content"] = str(content or "").strip()
+    if not message_obj["content"] and not message_obj.get("tool_calls"):
         raise _repo.LlmProviderError("empty provider content")
     return message_obj

@@ -127,7 +127,7 @@ PROVIDER_MODEL_EFFORTS = (
     "high",
     "xhigh",
 )
-PROVIDER_REQUEST_METHODS = ("chat_completions", "responses", "anthropic_messages")
+PROVIDER_REQUEST_METHODS = ("chat_completions", "responses", "anthropic_messages", "ollama_chat")
 DEFAULT_REQUEST_METHOD = "chat_completions"
 
 
