@@ -289,9 +289,12 @@ async def _collect_protocol_observations(*, bot_id: int, group_id: int) -> None:
         prompt_text = _text(getattr(item, "plain_text", "") or getattr(item, "raw_message", ""))
         commands = extract_protocol_commands(prompt_text)
         if commands:
-            bot_prompts.append(
-                (int(getattr(item, "time", 0) or 0), int(getattr(item, "message_id", 0) or 0), prompt_text, commands)
-            )
+            bot_prompts.append((
+                int(getattr(item, "time", 0) or 0),
+                int(getattr(item, "message_id", 0) or 0),
+                prompt_text,
+                commands,
+            ))
     bot_prompts.sort(key=itemgetter(0, 1))
 
     for reply in unique_map.values():
