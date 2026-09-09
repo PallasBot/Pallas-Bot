@@ -226,3 +226,20 @@ def test_resolve_output_filtered_reply_keeps_multi_bubble_when_each_fits() -> No
     assert filtered == "这是土狼，会搞笑。\n然后呢？\n别怕别怕。"
     for segment in filtered.split("\n"):
         assert len(segment) <= 24
+
+
+def test_resolve_output_filtered_reply_keeps_long_tool_answer_across_bubbles() -> None:
+    task = {
+        "task_type": LLM_CHAT_TASK_TYPE,
+        "reply_max_length": 20,
+        "reply_max_bubbles": 8,
+    }
+    reply = "。".join(f"第{i}条资料内容" for i in range(1, 9)) + "。"
+
+    filtered = resolve_output_filtered_reply(task, reply)
+
+    segments = filtered.split("\n")
+    assert 2 <= len(segments) <= 8
+    assert "第1条资料内容" in filtered
+    assert "第8条资料内容" in filtered
+    assert all(len(segment) <= 20 for segment in segments)

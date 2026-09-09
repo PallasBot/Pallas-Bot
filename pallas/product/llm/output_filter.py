@@ -433,7 +433,7 @@ def resolve_output_filtered_chat_reply(task: dict, reply: StructuredChatReply) -
     except (TypeError, ValueError):
         max_len = 0
     try:
-        max_bubbles = max(1, min(5, int(task.get("reply_max_bubbles") or 3)))
+        max_bubbles = max(1, min(8, int(task.get("reply_max_bubbles") or 8)))
     except (TypeError, ValueError):
         max_bubbles = 3
     # 多泡回复：每个气泡各自都落在单点上限内，就保持分条投递，而不是把
