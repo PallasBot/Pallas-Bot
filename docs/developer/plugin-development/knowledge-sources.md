@@ -59,6 +59,9 @@ extra={
 | 短 FAQ、规则、产品说明 | `knowledge_sources` / 本地目录 + prompt 注入 |
 | 参数化查询、大 KB | `llm_tools` |
 
+社区插件若需要直接返回本地检索结果，可使用 `pallas.api.platform.register_llm_tool` 注册
+只读工具；不要把大语料展开成 `knowledge_sources` chunk，也不要通过群命令转发检索请求。
+
 ## 治理与检索
 
 | 变量 | 默认 | 说明 |

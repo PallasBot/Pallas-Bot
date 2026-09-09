@@ -40,6 +40,7 @@ ToolHandler = Callable[..., dict[str, Any] | Awaitable[dict[str, Any]]]
 
 class LlmToolSource(StrEnum):
     BUILTIN = "builtin"
+    PLUGIN = "plugin"
     PLUGIN_COMMAND = "plugin_command"
     MCP = "mcp"
 
@@ -605,7 +606,10 @@ def tool_metadata_for_chat(
         sources = {str(item.source or "") for item in catalog.tools}
         tool_names = {str(item.name or "") for item in catalog.tools}
         domains = {str(d) for item in catalog.tools for d in (item.domains or [])}
-        prefer_plugin = bool(sources) and sources <= {LlmToolSource.PLUGIN_COMMAND.value}
+        prefer_plugin = bool(sources) and sources <= {
+            LlmToolSource.PLUGIN.value,
+            LlmToolSource.PLUGIN_COMMAND.value,
+        }
         prefer_web = "web" in domains or bool(tool_names.intersection({"web.search", "web.fetch"}))
         prefer_social = "social" in domains
         if catalog.selection.selective_enabled and prefer_plugin:
