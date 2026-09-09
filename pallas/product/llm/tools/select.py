@@ -35,6 +35,22 @@ _ARKNIGHTS_HINTS = (
     "立绘",
 )
 
+_PRTS_HINTS = (
+    "剧情",
+    "世界观",
+    "台词",
+    "密录",
+    "时间线",
+    "年表",
+    "角色档案",
+    "泰拉",
+    "孤星",
+    "克丽斯腾",
+    "克里斯腾",
+    "终末地",
+    "PRTS",
+)
+
 _OPERATOR_LOOKUP_HINTS = (
     "是谁",
     "谁是",
@@ -212,6 +228,8 @@ def infer_tool_domains(user_text: str) -> frozenset[str]:
     domains: set[str] = set()
     if any(hint.lower() in text for hint in _ARKNIGHTS_HINTS):
         domains.add("arknights")
+    if any(hint.lower() in text for hint in _PRTS_HINTS):
+        domains.add("prts")
     if any(hint in text for hint in _OPERATOR_LOOKUP_HINTS):
         if not is_self_identity_question(user_text):
             domains.add("arknights")
