@@ -14,7 +14,7 @@ from packages.help.menu_rows import HelpMenuRow
 from packages.help.plugin_detail_data import FunctionDetailData, HelpFunctionRow, PluginDetailData
 
 
-def test_help_renderer_mode_defaults_to_pillow_and_accepts_html(monkeypatch) -> None:
+def test_help_renderer_mode_defaults_to_html_and_accepts_pillow(monkeypatch) -> None:
     from packages.help import renderer
 
     monkeypatch.setattr(
@@ -22,6 +22,9 @@ def test_help_renderer_mode_defaults_to_pillow_and_accepts_html(monkeypatch) -> 
         lambda key: os.environ.get(key),
     )
     monkeypatch.delenv("PALLAS_HELP_RENDERER", raising=False)
+    assert renderer.help_renderer_mode() == "html"
+
+    monkeypatch.setenv("PALLAS_HELP_RENDERER", "pillow")
     assert renderer.help_renderer_mode() == "pillow"
 
     monkeypatch.setenv("PALLAS_HELP_RENDERER", "html")
@@ -77,7 +80,7 @@ def test_html_template_uses_dossier_layout_contract() -> None:
     assert "group.layout_columns" in template
     assert 'class="plugin-group-card{% if group.rows|length == 1 %} is-single{% endif %}"' in template
     assert ".plugin-group-card.is-single" in template
-    assert ".plugin-list-row + .plugin-list-row" in template
+    assert ".plugin-list-row + .plugin-list-row" not in template
     assert 'class="plugin-icon"' in template
     assert 'class="terrain-contours"' in template
     assert "padding: 0 18px" in template
@@ -88,10 +91,18 @@ def test_html_template_uses_dossier_layout_contract() -> None:
     assert '<span class="group-index">{{ group.number }}</span>' not in template
     assert ".plugin-title strong {" in template
     assert ".plugin-title strong { color: var(--text); font-size: 18px;" in template
+    assert ".plugin-copy {\n      position: relative;" in template
+    assert ".plugin-row.is-off .plugin-title { padding-right: 56px; }" in template
+    assert ".plugin-row.is-off { background: var(--record-body); }" in template
+    assert ".badge-off {\n      position: absolute;" in template
+    assert "top: 0;" in template
+    assert "right: 0;" in template
+    assert ".plugin-row.is-off { background: var(--panel); }" not in template
     assert ".function-index .idx {\n      color: var(--text);\n      font-size: 20px;" in template
     assert "--amber-ink" not in template
     assert ".nav-item.primary" not in template
     assert ".fn-name { font-size: 20px;" in template
+    assert ".fn-action-row" in template
     assert 'class="function-row"' in template
     assert 'class="function-index"' in template
     assert 'class="function-row-content"' in template
@@ -107,6 +118,10 @@ def test_html_template_uses_dossier_layout_contract() -> None:
     assert 'class="example-list"' in template
     assert 'class="command-aliases"' in template
     assert "触发" in template
+    assert 'class="fn-action-row fn-trigger-row"' in template
+    assert "权限" in template
+    assert 'row.perm != "—"' in template
+    assert 'class="fn-action-row fn-meta-row"' in template
     assert "详情" in template
     assert 'class="doc-section-heading"' in template
     assert '<div class="eyebrow">{{ eyebrow }}</div>' in template

@@ -29,7 +29,7 @@ class Config(BaseModel, extra="ignore"):
     """帮助插件配置"""
 
     renderer: Literal["pillow", "html"] = Field(
-        default="pillow",
+        default="html",
         description=field_help(
             "帮助图使用哪种渲染方式",
             "Pillow 兼容性最好；HTML / Playwright 使用新版档案排版",

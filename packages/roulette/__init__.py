@@ -99,6 +99,7 @@ __plugin_meta__ = PluginMetadata(
         "menu_data": [
             {
                 "func": "牛牛轮盘",
+                "group": "开局与模式",
                 "trigger_method": "on_message",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "牛牛轮盘 / 牛牛轮盘踢人 / 牛牛轮盘禁言",
@@ -108,6 +109,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "切换轮盘模式",
+                "group": "开局与模式",
                 "trigger_method": "on_message",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "牛牛轮盘踢人 / 牛牛轮盘禁言 / 牛牛踢人轮盘 / 牛牛禁言轮盘",
@@ -117,6 +119,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "参与轮盘",
+                "group": "对局操作",
                 "trigger_method": "on_message",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "牛牛开枪",
@@ -126,6 +129,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "牛牛救一下",
+                "group": "对局操作",
                 "trigger_method": "on_message",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "牛牛救一下 [@用户]",
@@ -135,6 +139,7 @@ __plugin_meta__ = PluginMetadata(
             },
             {
                 "func": "牛牛补一枪",
+                "group": "对局操作",
                 "trigger_method": "on_message",
                 "trigger_scene": SCENE_GROUP,
                 "trigger_condition": "牛牛补一枪 [@用户]",

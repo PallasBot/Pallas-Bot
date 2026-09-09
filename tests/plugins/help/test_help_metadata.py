@@ -17,12 +17,13 @@ def test_help_renderer_is_a_webui_select_field():
     from pallas.console.webui.plugin_api import plugin_field_env_key
 
     field = Config.model_fields["renderer"]
+    assert Config().renderer == "html"
     row = field_meta_for_model_field(
         key="renderer",
         field=field,
         env_key=plugin_field_env_key("help", "renderer"),
-        cur="pillow",
-        default_value="pillow",
+        cur="html",
+        default_value="html",
     )
 
     assert row["kind"] == "enum"

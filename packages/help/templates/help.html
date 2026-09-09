@@ -240,7 +240,6 @@
       column-gap: 28px;
     }
     .plugin-list-row.is-single { grid-template-columns: 1fr !important; }
-    .plugin-list-row + .plugin-list-row { border-top: 1px solid var(--separator); }
     .plugin-row {
       display: flex;
       min-width: 0;
@@ -260,6 +259,7 @@
       object-fit: cover;
     }
     .plugin-copy {
+      position: relative;
       display: flex;
       min-width: 0;
       flex: 1 1 auto;
@@ -268,12 +268,15 @@
       border-left: 1px solid var(--separator);
     }
     .plugin-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+    .plugin-row.is-off .plugin-title { padding-right: 56px; }
     .plugin-title .idx { flex: 0 0 auto; color: var(--text); font-size: 16px; font-weight: 800; }
     .plugin-title strong { color: var(--text); font-size: 18px; font-weight: 800; overflow-wrap: anywhere; }
-    .plugin-row.is-off { background: var(--panel); }
+    .plugin-row.is-off { background: var(--record-body); }
     .plugin-row.is-off .plugin-title strong { color: var(--text-muted); }
     .badge-off {
-      flex: 0 0 auto;
+      position: absolute;
+      top: 0;
+      right: 0;
       padding: 0 7px;
       border: 1px solid var(--danger);
       border-radius: 12px;
@@ -295,7 +298,6 @@
       gap: 6px;
       margin-top: auto;
       padding-top: 8px;
-      border-top: 1px solid var(--separator);
     }
     .plugin-command .cmd-label { color: var(--muted); font-size: 11px; }
 
@@ -362,12 +364,17 @@
       overflow-wrap: anywhere;
     }
     .fn-actions {
+      display: grid;
+      gap: 6px;
+      margin-top: auto;
+      padding-top: 6px;
+    }
+    .fn-action-row {
       display: flex;
       align-items: center;
       flex-wrap: wrap;
       gap: 6px 12px;
-      margin-top: auto;
-      padding-top: 6px;
+      min-width: 0;
     }
     .fn-action { display: inline-flex; align-items: baseline; gap: 5px; min-width: 0; }
     .fn-action-label { color: var(--muted); font-size: 10px; }
@@ -578,8 +585,13 @@
           <div class="function-row-head"><span class="fn-name">{{ row.func }}</span></div>
           {% if row.brief %}<div class="fn-brief">{{ row.brief }}</div>{% endif %}
           <div class="fn-actions">
-            {% if row.say_main %}<span class="fn-action"><span class="fn-action-label">触发</span><code class="cmd">{{ row.say_main }}</code></span>{% endif %}
-            <span class="fn-action"><span class="fn-action-label">详情</span><code class="cmd">牛牛帮助 {{ plugin_title }} {{ row.index }}</code></span>
+            {% if row.say_main %}
+              <div class="fn-action-row fn-trigger-row"><span class="fn-action"><span class="fn-action-label">触发</span><code class="cmd">{{ row.say_main }}</code></span></div>
+            {% endif %}
+            <div class="fn-action-row fn-meta-row">
+              {% if row.perm and row.perm != "—" %}<span class="fn-action"><span class="fn-action-label">权限</span><code class="cmd">{{ row.perm }}</code></span>{% endif %}
+              <span class="fn-action"><span class="fn-action-label">详情</span><code class="cmd">牛牛帮助 {{ plugin_title }} {{ row.index }}</code></span>
+            </div>
           </div>
         </div>
       </article>
