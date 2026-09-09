@@ -528,7 +528,7 @@ async def test_complete_chat_message_ollama_native_maps_tools_images_and_thinkin
     )
 
     payload = payloads[0]
-    assert payload["think"] is False
+    assert "think" not in payload
     assert payload["tools"] == tools
     assert payload["messages"][0] == {"role": "user", "content": "看看", "images": ["aGk="]}
     assert payload["messages"][1]["tool_calls"][0]["function"]["arguments"] == {"q": "x"}

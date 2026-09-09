@@ -581,6 +581,10 @@ async def _post_ollama_chat(
         content = "\n".join(texts)
     message_obj = dict(message_obj)
     message_obj["content"] = str(content or "").strip()
+    thinking = message_obj.get("thinking")
+    if isinstance(thinking, str) and thinking.strip():
+        message_obj["reasoning_content"] = thinking.strip()
+    message_obj.pop("thinking", None)
     if not message_obj["content"] and not message_obj.get("tool_calls"):
         raise _repo.LlmProviderError("empty provider content")
     return message_obj
@@ -591,7 +595,9 @@ def _ollama_think_value(options: dict[str, Any]) -> bool | str | None:
     if not effort or effort == "enable":
         return True if effort == "enable" else None
     if effort == "disable":
-        return False
+        # ollama.com 的 think: false 不关闭思考，而是把思考内容内联进 content；
+        # 不传 think 让思考进独立 thinking 字段，content 保持干净。
+        return None
     return {"minimal": "low", "low": "low", "medium": "medium", "high": "high", "xhigh": "max"}.get(
         effort,
     )
