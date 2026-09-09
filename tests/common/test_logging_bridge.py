@@ -441,6 +441,17 @@ def test_compact_group_message_log_aligns_id_fields_to_ten_digits() -> None:
     assert out == "Bot [         1] 群 [        22] 用户 [       333]: 正文"
 
 
+def test_compact_private_message_log_uses_readable_fields() -> None:
+    out = event_log.compact_private_message_log(
+        bot_id="1",
+        user_id=333,
+        message_id=444,
+        message="正文",
+    )
+
+    assert out == "Bot [         1] 私聊 用户 [       333][msg=        444]: 正文"
+
+
 def test_inbound_log_with_angle_brackets_survives_loguru_colorizer() -> None:
     """群消息含 <le> 等时，escape 后 colors=True 不应再抛 ValueError。"""
     from loguru._colorizer import Colorizer

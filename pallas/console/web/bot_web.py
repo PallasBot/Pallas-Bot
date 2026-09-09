@@ -34,8 +34,8 @@ _MESSAGE_SEND_API_RE = re.compile(
     re.IGNORECASE,
 )
 _ACCESS_PALLAS_PATH_RE = re.compile(r'"[A-Z]+\s+/pallas(?:/|\s|")')
-# 入站消息镜像行：``Bot [..] 群 [..] 用户 [..]: …``
-_MESSAGE_MIRROR_RE = re.compile(r"\bBot \[[^\]]+\] 群 \[\d+\] 用户 \[\d+\]")
+# 入站消息镜像行：``Bot [..] 群/私聊 …``
+_MESSAGE_MIRROR_RE = re.compile(r"\bBot \[[^\]]+\] (?:群 \[\d+\] 用户 \[\d+\]|私聊 用户 \[\d+\])")
 
 
 def set_log_error_capture(cb: Callable[[str, Mapping[str, Any]], None] | None) -> None:

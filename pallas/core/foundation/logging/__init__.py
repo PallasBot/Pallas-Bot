@@ -13,7 +13,12 @@ from .bridge import (
     register_repo_file_sink,
     resolve_repo_log_level,
 )
-from .event_log import compact_group_message_log, compact_inbound_event_log, inbound_event_log_as_debug
+from .event_log import (
+    compact_group_message_log,
+    compact_inbound_event_log,
+    compact_private_message_log,
+    inbound_event_log_as_debug,
+)
 from .throttle import log_rate_limited
 
 __all__ = [
@@ -21,6 +26,7 @@ __all__ = [
     "command_traffic_ctx",
     "compact_group_message_log",
     "compact_inbound_event_log",
+    "compact_private_message_log",
     "configure_quiet_library_loggers",
     "format_repo_console_log",
     "format_repo_file_log",

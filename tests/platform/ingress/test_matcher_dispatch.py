@@ -508,6 +508,52 @@ async def test_patched_handle_event_logs_group_message_at_info(monkeypatch: pyte
 
 
 @pytest.mark.asyncio
+async def test_patched_handle_event_logs_private_message_at_info(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakePrivateMessageEvent:
+        user_id = 200
+        message_id = 300
+        raw_message = "测试命令"
+
+        def get_log_string(self) -> str:
+            return "fake private message"
+
+        def get_message(self) -> str:
+            return self.raw_message
+
+        def get_type(self) -> str:
+            return "message"
+
+    class FakeLog:
+        def __init__(self) -> None:
+            self.levels: list[str] = []
+
+        def opt(self, **_kwargs):
+            return self
+
+        def bind(self, **_kwargs):
+            return self
+
+        def debug(self, *_args) -> None:
+            pass
+
+        def info(self, *_args) -> None:
+            self.levels.append("info")
+
+        def success(self, *_args) -> None:
+            self.levels.append("success")
+
+    log = FakeLog()
+    monkeypatch.setattr(dispatch, "PrivateMessageEvent", FakePrivateMessageEvent)
+    monkeypatch.setattr(dispatch.nb_message, "logger", log)
+    monkeypatch.setattr(dispatch.nb_message, "_apply_event_preprocessors", AsyncMock(return_value=False))
+    monkeypatch.setattr(dispatch, "mark_activity", lambda: None)
+
+    await dispatch.patched_handle_event_now(MagicMock(type="OneBot V11", self_id="10001"), FakePrivateMessageEvent())
+
+    assert log.levels == ["info"]
+
+
+@pytest.mark.asyncio
 async def test_patched_handle_event_escapes_non_group_event_log_for_colors(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeNoticeEvent:
         def get_log_string(self) -> str:

@@ -7,7 +7,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 import nonebot.message as nb_message
-from nonebot.adapters.onebot.v11 import GroupMessageEvent
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, PrivateMessageEvent
 from nonebot.exception import IgnoredException
 from nonebot.log import logger
 from nonebot.matcher import matchers
@@ -423,6 +423,7 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
     from pallas.core.foundation.logging import (
         compact_group_message_log,
         compact_inbound_event_log,
+        compact_private_message_log,
         inbound_event_log_as_debug,
         resolve_repo_log_level,
     )
@@ -440,14 +441,14 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
         event_type = ""
         with contextlib.suppress(Exception):
             event_type = str(event.get_type() or "")
-        if isinstance(event, GroupMessageEvent):
+        if isinstance(event, (GroupMessageEvent, PrivateMessageEvent)):
             log.debug(
                 " {} {} | {}",
                 nb_message.escape_tag(bot.type),
                 nb_message.escape_tag(bot.self_id),
                 nb_message.escape_tag(event_log),
             )
-            if all(hasattr(event, field) for field in ("group_id", "user_id", "get_message")):
+            if all(hasattr(event, field) for field in ("user_id", "get_message")):
                 reply_note = ""
                 _reply = getattr(event, "reply", None)
                 reply_id = getattr(_reply, "message_id", None)
@@ -458,14 +459,23 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         reply_text = str(_reply_msg).strip()
                         if reply_text:
                             reply_note += f"「{reply_text}」"
-                compact_log = compact_group_message_log(
-                    bot_id=str(bot.self_id),
-                    group_id=event.group_id,
-                    user_id=event.user_id,
-                    message_id=getattr(event, "message_id", None),
-                    message=f"{reply_note}{str(event.get_message())}",
-                    max_len=500,
-                )
+                if isinstance(event, GroupMessageEvent):
+                    compact_log = compact_group_message_log(
+                        bot_id=str(bot.self_id),
+                        group_id=event.group_id,
+                        user_id=event.user_id,
+                        message_id=getattr(event, "message_id", None),
+                        message=f"{reply_note}{str(event.get_message())}",
+                        max_len=500,
+                    )
+                else:
+                    compact_log = compact_private_message_log(
+                        bot_id=str(bot.self_id),
+                        user_id=event.user_id,
+                        message_id=getattr(event, "message_id", None),
+                        message=f"{reply_note}{str(event.get_message())}",
+                        max_len=500,
+                    )
                 if resolve_repo_log_level() not in {"TRACE", "DEBUG"}:
                     log.bind(display_name="Message").info(nb_message.escape_tag(compact_log))
             else:
