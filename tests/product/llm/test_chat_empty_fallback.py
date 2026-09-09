@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from pallas.product.llm.chat_empty_fallback import (
     QUERY_EMPTY_FALLBACK,
     QUERY_FAILED_FALLBACK,
@@ -16,10 +18,13 @@ def _task(trace: dict[str, int]) -> dict[str, object]:
     }
 
 
-def test_query_empty_fallback_is_visible_after_successful_lookup() -> None:
+@pytest.mark.parametrize("trigger", ["to_me", "mention", "followup"])
+def test_query_empty_fallback_is_visible_after_successful_lookup(trigger: str) -> None:
+    task = _task({"successful_query_call_count": 1, "query_tool_hit_count": 1})
+    task["speak_trigger"] = trigger
     assert (
         resolve_llm_chat_empty_fallback(
-            _task({"successful_query_call_count": 1, "query_tool_hit_count": 1}),
+            task,
             "",
             suppress_empty_fallback=True,
         )

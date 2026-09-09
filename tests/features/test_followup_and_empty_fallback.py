@@ -62,7 +62,7 @@ def test_evaluate_followup_before_ambient() -> None:
 
 def test_empty_fallback_for_hard_trigger() -> None:
     task = {"task_type": LLM_CHAT_TASK_TYPE, "speak_trigger": "mention", "fallback_text": ""}
-    assert resolve_llm_chat_empty_fallback(task, "") == "咋了"
+    assert resolve_llm_chat_empty_fallback(task, "") == ""
     assert resolve_llm_chat_empty_fallback(task, "  你好  ") == "你好"
 
 
@@ -78,7 +78,7 @@ def test_empty_fallback_uses_corpus_fallback() -> None:
         "speak_trigger": "to_me",
         "fallback_text": "在呢",
     }
-    assert resolve_llm_chat_empty_fallback(task, "") == "在呢"
+    assert resolve_llm_chat_empty_fallback(task, "") == ""
 
 
 def test_empty_fallback_replaces_filler_only_corpus_fallback() -> None:
@@ -87,7 +87,7 @@ def test_empty_fallback_replaces_filler_only_corpus_fallback() -> None:
         "speak_trigger": "to_me",
         "fallback_text": "嗯？",
     }
-    assert resolve_llm_chat_empty_fallback(task, "") == "咋了"
+    assert resolve_llm_chat_empty_fallback(task, "") == ""
 
 
 def test_empty_fallback_silent_for_ambient() -> None:

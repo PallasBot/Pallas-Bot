@@ -596,7 +596,6 @@ async def deliver_llm_callback_success(
     structured_reply = StructuredChatReply.single(reply_text)
     if not (direct_candidate and reply_text == direct_candidate) and profile_for_task_type(task_type) is not None:
         structured_reply = parse_structured_reply(reply_text)
-    reply_before_filter = structured_reply
     structured_reply = resolve_output_filtered_chat_reply(task, structured_reply)
     reply_segments = list(structured_reply.reply_segments)
     band = str(task.get("reply_total_length_band") or "").strip()
@@ -643,7 +642,7 @@ async def deliver_llm_callback_success(
         )
 
         query_fallback = query_fallback_for_task(task) if not reply_segments else ""
-        if not reply_segments and (not reply_before_filter.reply_segments or query_fallback):
+        if query_fallback:
             fallback_text = resolve_llm_chat_empty_fallback(
                 task,
                 reply_text,
@@ -696,7 +695,7 @@ async def deliver_llm_callback_success(
                         "AI callback reply silenced after unapproved mention token removal",
                     )
                 reply_text = "\n".join(delivery_segments)
-    fallback_used = bool((not had_reply_before_filter or query_fallback_used) and reply_text)
+    fallback_used = bool(query_fallback_used and reply_text)
     if not delivery_segments:
         output_decision = "silent"
         output_action = "silent"

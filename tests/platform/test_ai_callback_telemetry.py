@@ -5,7 +5,6 @@ from types import SimpleNamespace
 import pytest
 
 from pallas.product.llm import delivery as llm_delivery
-from pallas.product.llm.chat_empty_fallback import LLM_CHAT_EMPTY_FALLBACK
 from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.turn_telemetry import build_turn_event
 
@@ -171,7 +170,7 @@ async def test_query_tool_empty_model_reply_gets_visible_fallback(
 
 
 @pytest.mark.asyncio
-async def test_direct_pass_reply_gets_visible_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_direct_pass_reply_stays_silent(monkeypatch: pytest.MonkeyPatch) -> None:
     sent: list[str] = []
     monkeypatch.setattr(llm_delivery, "should_append_llm_session", lambda _task: False)
     monkeypatch.setattr(
@@ -205,8 +204,8 @@ async def test_direct_pass_reply_gets_visible_fallback(monkeypatch: pytest.Monke
         history_keep_messages=None,
     )
 
-    assert result.delivered is True
-    assert sent == [LLM_CHAT_EMPTY_FALLBACK]
+    assert result.delivered is False
+    assert sent == []
 
 
 @pytest.mark.asyncio
