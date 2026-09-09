@@ -259,6 +259,7 @@
       object-fit: cover;
     }
     .plugin-copy {
+      position: relative;
       display: flex;
       min-width: 0;
       flex: 1 1 auto;
@@ -267,12 +268,15 @@
       border-left: 1px solid var(--separator);
     }
     .plugin-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+    .plugin-row.is-off .plugin-title { padding-right: 56px; }
     .plugin-title .idx { flex: 0 0 auto; color: var(--text); font-size: 16px; font-weight: 800; }
     .plugin-title strong { color: var(--text); font-size: 18px; font-weight: 800; overflow-wrap: anywhere; }
-    .plugin-row.is-off { background: var(--panel); }
+    .plugin-row.is-off { background: var(--record-body); }
     .plugin-row.is-off .plugin-title strong { color: var(--text-muted); }
     .badge-off {
-      flex: 0 0 auto;
+      position: absolute;
+      top: 0;
+      right: 0;
       padding: 0 7px;
       border: 1px solid var(--danger);
       border-radius: 12px;

@@ -50,13 +50,13 @@ def test_html_theme_is_separate_from_pillow_theme(monkeypatch) -> None:
     dark = html_theme.get_html_theme("dark")
 
     assert light == dark
-    assert light["canvas"] == "#9A9E9B"
-    assert light["paper"] == "#ACAFAC"
-    assert light["card"] == "#DEDED8"
-    assert light["header"] == "#343A3D"
-    assert light["header_panel"] == "#42494C"
-    assert light["cyan"] == "#2DB9DD"
-    assert light["amber"] == "#E3D600"
+    assert light["canvas"] == "#7A898B"
+    assert light["paper"] == "#C9D2D1"
+    assert light["card"] == "#F1F3EF"
+    assert light["header"] == "#26343A"
+    assert light["header_panel"] == "#35474E"
+    assert light["cyan"] == "#3CC3E3"
+    assert light["amber"] == "#E8D63A"
     assert help_theme.ACCENT == (124, 58, 237)
 
 
@@ -91,6 +91,13 @@ def test_html_template_uses_dossier_layout_contract() -> None:
     assert '<span class="group-index">{{ group.number }}</span>' not in template
     assert ".plugin-title strong {" in template
     assert ".plugin-title strong { color: var(--text); font-size: 18px;" in template
+    assert ".plugin-copy {\n      position: relative;" in template
+    assert ".plugin-row.is-off .plugin-title { padding-right: 56px; }" in template
+    assert ".plugin-row.is-off { background: var(--record-body); }" in template
+    assert ".badge-off {\n      position: absolute;" in template
+    assert "top: 0;" in template
+    assert "right: 0;" in template
+    assert ".plugin-row.is-off { background: var(--panel); }" not in template
     assert ".function-index .idx {\n      color: var(--text);\n      font-size: 20px;" in template
     assert "--amber-ink" not in template
     assert ".nav-item.primary" not in template
