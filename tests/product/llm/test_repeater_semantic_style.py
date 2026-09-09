@@ -2326,7 +2326,7 @@ async def test_label_semantic_style_batch_returns_multiple_labels(monkeypatch: p
     assert results[0][1].learning_type == "observed"
     assert results[1][0].is_reply_pair is False
     assert results[1][1] is None
-    assert complete.await_args.kwargs["options"]["max_tokens"] == 256
+    assert complete.await_args.kwargs["options"]["max_tokens"] == 512
 
 
 @pytest.mark.asyncio

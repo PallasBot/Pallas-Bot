@@ -275,19 +275,75 @@ async def _collect_protocol_observations(*, bot_id: int, group_id: int) -> None:
         before_time, before_message_id = earliest_key
 
     by_message_id = {int(getattr(item, "message_id", 0) or 0): item for item in unique_map.values()}
+
+    # 窗口内 Bot 提示：Bot 发送且含显式命令候选的消息，按 (time, message_id) 升序，
+    # 供非 quoted 的「最近提示 → 真人命令」配对（命令一致/风险词校验在 record 端）。
+    bot_prompts: list[tuple[int, int, str, list[str]]] = []
+    for item in unique_map.values():
+        if not _is_bot_sender(
+            user_id=int(getattr(item, "user_id", 0) or 0),
+            self_bot_id=bot_id,
+            known_bots=known_bots,
+        ):
+            continue
+        prompt_text = _text(getattr(item, "plain_text", "") or getattr(item, "raw_message", ""))
+        commands = extract_protocol_commands(prompt_text)
+        if commands:
+            bot_prompts.append((
+                int(getattr(item, "time", 0) or 0),
+                int(getattr(item, "message_id", 0) or 0),
+                prompt_text,
+                commands,
+            ))
+    bot_prompts.sort(key=itemgetter(0, 1))
+
     for reply in unique_map.values():
         reply_user_id = int(getattr(reply, "user_id", 0) or 0)
         if _is_bot_sender(user_id=reply_user_id, self_bot_id=bot_id, known_bots=known_bots):
             continue
-        replied_id = int(getattr(reply, "reply_to_message_id", 0) or 0)
-        if replied_id <= 0:
-            continue
-        trigger = by_message_id.get(replied_id)
-        if trigger is None:
-            continue
-        trigger_text = _text(getattr(trigger, "plain_text", "") or getattr(trigger, "raw_message", ""))
+        reply_message_id = int(getattr(reply, "message_id", 0) or 0)
+        reply_time = int(getattr(reply, "time", 0) or 0)
         reply_text = _text(getattr(reply, "plain_text", "") or getattr(reply, "raw_message", ""))
-        if not trigger_text or not reply_text or not extract_protocol_commands(trigger_text):
+        if not reply_text:
+            continue
+        # quoted 配对优先：显式引用窗口内消息时以被引用消息为 trigger；
+        # 被引用者非 Bot（真人互引）直接跳过，不回退到最近提示配对。
+        replied_id = int(getattr(reply, "reply_to_message_id", 0) or 0)
+        if replied_id > 0:
+            trigger = by_message_id.get(replied_id)
+            if trigger is not None:
+                if not _is_bot_sender(
+                    user_id=int(getattr(trigger, "user_id", 0) or 0),
+                    self_bot_id=bot_id,
+                    known_bots=known_bots,
+                ):
+                    continue
+                trigger_text = _text(getattr(trigger, "plain_text", "") or getattr(trigger, "raw_message", ""))
+                if not trigger_text or not extract_protocol_commands(trigger_text):
+                    continue
+                try:
+                    record_protocol_observation(
+                        bot_id=bot_id,
+                        group_id=group_id,
+                        trigger_text=trigger_text,
+                        reply_text=reply_text,
+                        responder_id=reply_user_id,
+                        source_message_id=reply_message_id,
+                        created_at=reply_time,
+                    )
+                except Exception as exc:
+                    logger.warning("群洞察协议观察记录失败，群 [{}]：{}", group_id, exc)
+                continue
+        # 非 quoted（或引用未命中窗口）：找时间上最近、且候选命令与回复完全一致
+        # 的 Bot 提示配对；按升序扫描，最后一次命中即最近的匹配提示。
+        trigger_text = ""
+        reply_key = (reply_time, reply_message_id)
+        for prompt_time, prompt_mid, prompt_text, commands in bot_prompts:
+            if (prompt_time, prompt_mid) >= reply_key:
+                break
+            if reply_text in commands:
+                trigger_text = prompt_text
+        if not trigger_text:
             continue
         try:
             record_protocol_observation(
@@ -296,8 +352,8 @@ async def _collect_protocol_observations(*, bot_id: int, group_id: int) -> None:
                 trigger_text=trigger_text,
                 reply_text=reply_text,
                 responder_id=reply_user_id,
-                source_message_id=int(getattr(reply, "message_id", 0) or 0),
-                created_at=int(getattr(reply, "time", 0) or 0),
+                source_message_id=reply_message_id,
+                created_at=reply_time,
             )
         except Exception as exc:
             logger.warning("群洞察协议观察记录失败，群 [{}]：{}", group_id, exc)

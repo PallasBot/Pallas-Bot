@@ -25,6 +25,10 @@ def _msg(message_id, user_id, plain_text, *, time=1000, bot_id=0, reply_to_messa
     )
 
 
+async def _async_set():
+    return set()
+
+
 class _DummyMessageRepo:
     def __init__(self, messages):
         self._messages = messages
@@ -736,6 +740,179 @@ async def test_produce_semantic_profile_all_failed_keeps_cursor(monkeypatch) -> 
 
     assert persisted == []
     assert marked == []
+
+
+@pytest.mark.asyncio
+async def test_collect_protocol_observations_requires_bot_trigger(monkeypatch) -> None:
+    """真人 A 发「请回复「X」」、真人 B 引用回复，不得积累为 Bot 协议证据。"""
+    from pallas.product.llm import group_insight_processor as mod
+    from pallas.product.llm import repeater_semantic_style as sem
+    from pallas.product.llm import semantic_protocol as proto
+
+    messages = [
+        _msg(1, 11, "请在 60 秒内发送「签到」", time=1000),  # 真人 trigger
+        _msg(2, 12, "签到", time=1010, reply_to_message_id=1),  # 真人引用回复
+    ]
+    repo = _DummyMessageRepo(messages)
+    monkeypatch.setattr(mod, "make_message_repository", lambda: repo)
+    monkeypatch.setattr(mod, "_known_bots_in_group", lambda group_id: _async_set())
+    monkeypatch.setattr(sem, "get_semantic_style_group_cursor", lambda *, bot_id, group_id: (0, 0))
+
+    recorded: list[tuple] = []
+    monkeypatch.setattr(proto, "record_protocol_observation", lambda **kw: recorded.append(kw) or True)
+
+    await mod._collect_protocol_observations(bot_id=100, group_id=42)
+    assert recorded == []
+
+
+@pytest.mark.asyncio
+async def test_collect_protocol_observations_records_bot_trigger(monkeypatch) -> None:
+    """Bot 发提示、真人引用回复显式命令：记录观察。"""
+    from pallas.product.llm import group_insight_processor as mod
+    from pallas.product.llm import repeater_semantic_style as sem
+    from pallas.product.llm import semantic_protocol as proto
+
+    messages = [
+        _msg(1, 100, "请在 60 秒内发送「签到」", time=1000, bot_id=100),  # 本机 Bot trigger
+        _msg(2, 12, "签到", time=1010, reply_to_message_id=1),  # 真人引用回复
+    ]
+    repo = _DummyMessageRepo(messages)
+    monkeypatch.setattr(mod, "make_message_repository", lambda: repo)
+    monkeypatch.setattr(mod, "_known_bots_in_group", lambda group_id: _async_set())
+    monkeypatch.setattr(sem, "get_semantic_style_group_cursor", lambda *, bot_id, group_id: (0, 0))
+
+    recorded: list[tuple] = []
+    monkeypatch.setattr(proto, "record_protocol_observation", lambda **kw: recorded.append(kw) or True)
+
+    await mod._collect_protocol_observations(bot_id=100, group_id=42)
+    assert len(recorded) == 1
+    assert recorded[0]["bot_id"] == 100
+    assert recorded[0]["group_id"] == 42
+    assert recorded[0]["responder_id"] == 12
+
+
+@pytest.mark.asyncio
+async def test_collect_protocol_observations_matches_recent_prompt_without_quote(monkeypatch) -> None:
+    """Bot 提示在前、真人非 quoted 直接发命令：按最近提示配对记录。"""
+    from pallas.product.llm import group_insight_processor as mod
+    from pallas.product.llm import repeater_semantic_style as sem
+    from pallas.product.llm import semantic_protocol as proto
+
+    messages = [
+        _msg(1, 100, "请在 60 秒内发送「签到」", time=1000, bot_id=100),  # 本机 Bot 提示
+        _msg(2, 12, "签到", time=1010),  # 真人非 quoted 直接回复命令
+    ]
+    repo = _DummyMessageRepo(messages)
+    monkeypatch.setattr(mod, "make_message_repository", lambda: repo)
+    monkeypatch.setattr(mod, "_known_bots_in_group", lambda group_id: _async_set())
+    monkeypatch.setattr(sem, "get_semantic_style_group_cursor", lambda *, bot_id, group_id: (0, 0))
+
+    recorded: list[tuple] = []
+    monkeypatch.setattr(proto, "record_protocol_observation", lambda **kw: recorded.append(kw) or True)
+
+    await mod._collect_protocol_observations(bot_id=100, group_id=42)
+    assert len(recorded) == 1
+    assert recorded[0]["trigger_text"] == "请在 60 秒内发送「签到」"
+    assert recorded[0]["reply_text"] == "签到"
+    assert recorded[0]["responder_id"] == 12
+    assert recorded[0]["source_message_id"] == 2
+    assert recorded[0]["created_at"] == 1010
+
+
+@pytest.mark.asyncio
+async def test_collect_protocol_observations_skips_non_bot_prompt_without_quote(monkeypatch) -> None:
+    """真人提示在前、真人非 quoted 回复命令在后：trigger 非 Bot，不记录。"""
+    from pallas.product.llm import group_insight_processor as mod
+    from pallas.product.llm import repeater_semantic_style as sem
+    from pallas.product.llm import semantic_protocol as proto
+
+    messages = [
+        _msg(1, 11, "请在 60 秒内发送「签到」", time=1000),  # 真人提示
+        _msg(2, 12, "签到", time=1010),  # 真人非 quoted 回复
+    ]
+    repo = _DummyMessageRepo(messages)
+    monkeypatch.setattr(mod, "make_message_repository", lambda: repo)
+    monkeypatch.setattr(mod, "_known_bots_in_group", lambda group_id: _async_set())
+    monkeypatch.setattr(sem, "get_semantic_style_group_cursor", lambda *, bot_id, group_id: (0, 0))
+
+    recorded: list[tuple] = []
+    monkeypatch.setattr(proto, "record_protocol_observation", lambda **kw: recorded.append(kw) or True)
+
+    await mod._collect_protocol_observations(bot_id=100, group_id=42)
+    assert recorded == []
+
+
+@pytest.mark.asyncio
+async def test_collect_protocol_observations_picks_most_recent_matching_prompt(monkeypatch) -> None:
+    """两条 Bot 提示、真人命令只匹配第二条：配最近一条。"""
+    from pallas.product.llm import group_insight_processor as mod
+    from pallas.product.llm import repeater_semantic_style as sem
+    from pallas.product.llm import semantic_protocol as proto
+
+    messages = [
+        _msg(1, 100, "请发送「接受老婆赠送」", time=1000, bot_id=100),
+        _msg(2, 100, "请发送「拒绝老婆赠送」", time=1010, bot_id=100),
+        _msg(3, 12, "拒绝老婆赠送", time=1020),  # 只命中第二条提示
+    ]
+    repo = _DummyMessageRepo(messages)
+    monkeypatch.setattr(mod, "make_message_repository", lambda: repo)
+    monkeypatch.setattr(mod, "_known_bots_in_group", lambda group_id: _async_set())
+    monkeypatch.setattr(sem, "get_semantic_style_group_cursor", lambda *, bot_id, group_id: (0, 0))
+
+    recorded: list[tuple] = []
+    monkeypatch.setattr(proto, "record_protocol_observation", lambda **kw: recorded.append(kw) or True)
+
+    await mod._collect_protocol_observations(bot_id=100, group_id=42)
+    assert len(recorded) == 1
+    assert recorded[0]["trigger_text"] == "请发送「拒绝老婆赠送」"
+    assert recorded[0]["source_message_id"] == 3
+
+
+@pytest.mark.asyncio
+async def test_collect_protocol_observations_ignores_non_command_reply(monkeypatch) -> None:
+    """真人回复不命中任何 Bot 提示的候选命令：不记录。"""
+    from pallas.product.llm import group_insight_processor as mod
+    from pallas.product.llm import repeater_semantic_style as sem
+    from pallas.product.llm import semantic_protocol as proto
+
+    messages = [
+        _msg(1, 100, "请在 60 秒内发送「签到」", time=1000, bot_id=100),
+        _msg(2, 12, "随便回一句", time=1010),
+    ]
+    repo = _DummyMessageRepo(messages)
+    monkeypatch.setattr(mod, "make_message_repository", lambda: repo)
+    monkeypatch.setattr(mod, "_known_bots_in_group", lambda group_id: _async_set())
+    monkeypatch.setattr(sem, "get_semantic_style_group_cursor", lambda *, bot_id, group_id: (0, 0))
+
+    recorded: list[tuple] = []
+    monkeypatch.setattr(proto, "record_protocol_observation", lambda **kw: recorded.append(kw) or True)
+
+    await mod._collect_protocol_observations(bot_id=100, group_id=42)
+    assert recorded == []
+
+
+@pytest.mark.asyncio
+async def test_collect_protocol_observations_quoted_human_trigger_no_fallback(monkeypatch) -> None:
+    """真人引用回复真人提示时，即使窗口内有可配对的 Bot 提示也不回退。"""
+    from pallas.product.llm import group_insight_processor as mod
+    from pallas.product.llm import repeater_semantic_style as sem
+    from pallas.product.llm import semantic_protocol as proto
+
+    messages = [
+        _msg(1, 11, "请在 60 秒内发送「签到」", time=1000),  # 真人提示
+        _msg(2, 100, "请在 60 秒内发送「签到」", time=1005, bot_id=100),  # 更近的 Bot 提示
+        _msg(3, 12, "签到", time=1010, reply_to_message_id=1),  # 真人引用真人提示
+    ]
+    repo = _DummyMessageRepo(messages)
+    monkeypatch.setattr(mod, "make_message_repository", lambda: repo)
+    monkeypatch.setattr(mod, "_known_bots_in_group", lambda group_id: _async_set())
+    monkeypatch.setattr(sem, "get_semantic_style_group_cursor", lambda *, bot_id, group_id: (0, 0))
+
+    recorded: list[tuple] = []
+    monkeypatch.setattr(proto, "record_protocol_observation", lambda **kw: recorded.append(kw) or True)
+
+    await mod._collect_protocol_observations(bot_id=100, group_id=42)
+    assert recorded == []
 
 
 @pytest.mark.asyncio
