@@ -21,7 +21,11 @@ from pallas.core.platform.ai_callback.task_types import (
     VOICE_TASK_TYPES,
 )
 from pallas.core.platform.shard.coord.ai_task_registry import claim_ai_task_record
-from pallas.product.llm.delivery import deliver_llm_callback_success, track_llm_callback
+from pallas.product.llm.delivery import (
+    deliver_llm_callback_success,
+    emit_turn_delivery_telemetry,
+    track_llm_callback,
+)
 from pallas.product.llm.turn_telemetry import record_turn_event
 
 # 注意：runner 是协调 LLM 回调投递的平台执行层，与 product.llm 投递语义天然耦合，
@@ -178,6 +182,7 @@ async def run_ai_callback(
         text_delivered = delivery_outcome.text_delivered
         delivered = delivery_outcome.delivered
         task_type = str(task.get("task_type") or "").strip()
+        media_delivered: bool | None = None
         if file and group_id and bot is not None:
             file_bytes = await file.read()
             logger.debug(
@@ -199,22 +204,43 @@ async def run_ai_callback(
                     f"Bot [{getattr(bot, 'self_id', bot_id_str or '<missing>')}] delivering a "
                     f"[{task_type}] image [{task_id}] to group [{group_id}], length [{len(file_bytes)}]"
                 )
-                delivered = await send_group_image(
+                media_delivered = await send_group_image(
                     bot,
                     group_id,
                     file_bytes,
                     at_user_id=at_user_id,
                 )
-                if delivered and file_bytes:
+                if media_delivered and file_bytes:
                     invoke_media_task_success(task, image_bytes=file_bytes, group_id=int(group_id))
             elif task_type in VOICE_TASK_TYPES or (song_id is not None and chunk_index is not None):
                 logger.info(
                     f"Bot [{getattr(bot, 'self_id', bot_id_str or '<missing>')}] delivering a "
                     f"[{task_type}] voice [{task_id}] to group [{group_id}], length [{len(file_bytes)}]"
                 )
-                delivered = await send_group_voice(bot, group_id, file_bytes)
-                if delivered and file_bytes:
+                media_delivered = await send_group_voice(bot, group_id, file_bytes)
+                if media_delivered and file_bytes:
                     invoke_media_task_success(task, image_bytes=file_bytes, group_id=int(group_id))
+
+        if file is not None:
+            text_sent = bool(text_delivered)
+            media_sent = bool(media_delivered)
+            final_status = "sent" if text_sent or media_sent else "failed"
+            if text_sent != media_sent and (text_sent or media_sent):
+                final_status = "partial"
+            delivered = text_sent or media_sent
+            emit_turn_delivery_telemetry(
+                task_id,
+                task,
+                stage="delivery",
+                decision=final_status,
+                reason=f"media_delivery_{final_status}",
+                text=reply_text,
+                bot_id=bot_id,
+                group_id=group_id,
+                delivery_status=final_status,
+                sent_bubble_count=delivery_outcome.sent_bubble_count,
+                total_bubble_count=delivery_outcome.total_bubble_count,
+            )
 
         if (
             task_type == CHAT_DRUNK_TASK_TYPE
@@ -247,6 +273,7 @@ async def run_ai_callback(
             f"Bot [{bot_id_str or '<missing>'}] completed AI task [{task_id}], "
             f"a [{str(task.get('task_type') or '').strip()}] request in group [{group_id}], delivered [{delivered}]"
         )
-        return {"message": "ok" if delivered or delivery_outcome.status == "silent" else "failed"}
+        intentional_silent = file is None and delivery_outcome.status == "silent"
+        return {"message": "ok" if delivered or intentional_silent else "failed"}
 
     raise HTTPException(status_code=400, detail="Invalid status")

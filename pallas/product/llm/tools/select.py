@@ -28,28 +28,23 @@ _ARKNIGHTS_HINTS = (
     "方舟",
     "明日方舟",
     "arknights",
-    "查一下",
-    "查询",
-    "资料",
-    "档案",
     "立绘",
 )
 
 _PRTS_HINTS = (
-    "剧情",
-    "世界观",
-    "台词",
-    "密录",
-    "时间线",
-    "年表",
-    "角色档案",
+    "方舟剧情",
+    "明日方舟世界观",
+    "终末地剧情",
+    "PRTS台词",
+    "PRTS时间线",
+    "方舟时间线",
+    "泰拉年表",
     "泰拉",
-    "孤星",
-    "克丽斯腾",
-    "克里斯腾",
     "终末地",
     "PRTS",
 )
+_PRTS_DOMAIN_HINTS = ("方舟", "明日方舟", "arknights", "终末地", "endfield", "泰拉", "PRTS")
+_PRTS_TASK_HINTS = ("剧情", "世界观", "台词", "密录", "时间线", "年表", "发生时间", "最后去了哪里")
 
 _OPERATOR_LOOKUP_HINTS = (
     "是谁",
@@ -230,6 +225,11 @@ def infer_tool_domains(user_text: str) -> frozenset[str]:
         domains.add("arknights")
     if any(hint.lower() in text for hint in _PRTS_HINTS):
         domains.add("prts")
+    elif any(hint.lower() in text for hint in _PRTS_DOMAIN_HINTS) and any(hint in text for hint in _PRTS_TASK_HINTS):
+        domains.add("prts")
+    from pallas.product.llm.tools.external import external_llm_domains_for_text
+
+    domains.update(external_llm_domains_for_text(user_text))
     if any(hint in text for hint in _OPERATOR_LOOKUP_HINTS):
         if not is_self_identity_question(user_text):
             domains.add("arknights")

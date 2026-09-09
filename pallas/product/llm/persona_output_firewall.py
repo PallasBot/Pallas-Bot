@@ -430,6 +430,7 @@ def redact_agent_trace_for_firewall(agent_trace: object) -> dict[str, object] | 
     return {
         "final_stage": str(agent_trace.get("final_stage") or ""),
         "tool_call_count": int(agent_trace.get("tool_call_count") or 0),
+        "proposed_tool_call_count": int(agent_trace.get("proposed_tool_call_count") or 0),
         "successful_query_call_count": int(agent_trace.get("successful_query_call_count") or 0),
         "successful_side_effect_call_count": int(agent_trace.get("successful_side_effect_call_count") or 0),
         "failed_tool_call_count": int(agent_trace.get("failed_tool_call_count") or 0),

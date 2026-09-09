@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 ExternalToolHandler = Callable[..., dict[str, Any] | Awaitable[dict[str, Any]]]
+ExternalScopeMatcher = Callable[[str], bool]
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,7 @@ class ExternalLlmToolDefinition:
     plugin_name: str
     capabilities: frozenset[str] = field(default_factory=frozenset)
     hints: frozenset[str] = field(default_factory=frozenset)
+    scope_matcher: ExternalScopeMatcher | None = None
     visibility: str = "deferred"
     max_execution_ms: int = 10_000
 
@@ -36,6 +38,7 @@ def register_external_llm_tool(
     plugin_name: str,
     capabilities: set[str] | frozenset[str] = frozenset(),
     hints: set[str] | frozenset[str] = frozenset(),
+    scope_matcher: ExternalScopeMatcher | None = None,
     visibility: str = "deferred",
     max_execution_ms: int = 10_000,
 ) -> None:
@@ -48,6 +51,7 @@ def register_external_llm_tool(
         plugin_name=plugin_name.strip(),
         capabilities=frozenset(item.strip() for item in capabilities if item.strip()),
         hints=frozenset(item.strip() for item in hints if item.strip()),
+        scope_matcher=scope_matcher,
         visibility=visibility.strip() or "deferred",
         max_execution_ms=max(1, int(max_execution_ms)),
     )
@@ -82,6 +86,21 @@ def register_external_llm_tools() -> int:
         )
         registered += 1
     return registered
+
+
+def external_llm_domains_for_text(user_text: str) -> frozenset[str]:
+    domains: set[str] = set()
+    for definition in _DEFINITIONS.values():
+        matcher = definition.scope_matcher
+        if matcher is None:
+            continue
+        try:
+            matched = bool(matcher(str(user_text or "")))
+        except Exception:
+            matched = False
+        if matched:
+            domains.update(definition.domains)
+    return frozenset(domains)
 
 
 def clear_external_llm_tools_for_tests() -> None:

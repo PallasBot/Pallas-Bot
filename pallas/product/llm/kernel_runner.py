@@ -34,16 +34,27 @@ async def _mark_delivery_source(request_id: str, source: str) -> None:
 
 
 async def send_query_progress_after_delay(
-    started: asyncio.Event,
+    query_started: asyncio.Event,
+    finished: asyncio.Event,
     metadata: dict[str, Any],
     *,
     delay: float = 3.0,
+    request_started_at: float | None = None,
 ) -> None:
-    await asyncio.sleep(delay)
-    if not started.is_set():
+    await query_started.wait()
+    elapsed = time.monotonic() - float(request_started_at or time.monotonic())
+    remaining = max(0.0, float(delay) - elapsed)
+    try:
+        await asyncio.wait_for(finished.wait(), timeout=remaining)
+        return
+    except TimeoutError:
+        pass
+    if finished.is_set():
         return
     trigger = str(metadata.get("speak_trigger") or "").strip().lower()
-    if trigger not in {"to_me", "alias", "mention", "followup"}:
+    from pallas.product.llm.chat_empty_fallback import HARD_SPEAK_TRIGGERS
+
+    if trigger not in HARD_SPEAK_TRIGGERS:
         return
     group_id = int(metadata.get("group_id") or 0)
     bot_id = str(metadata.get("bot_id") or "").strip()
@@ -57,10 +68,11 @@ async def send_query_progress_after_delay(
 
         if not has_query_tool_schemas(metadata.get("tool_schemas")):
             return
-        await send_group_message(get_bot(bot_id), group_id, "我查一下。")
+        sent = await send_group_message(get_bot(bot_id), group_id, "我查一下。")
         from pallas.product.llm.task_metrics import record_bot_llm_task
 
-        record_bot_llm_task("llm_chat", "tool_progress_sent")
+        if sent:
+            record_bot_llm_task("llm_chat", "tool_progress_sent")
     except Exception:
         logger.debug("LLM query progress message skipped for task [{}]", metadata.get("request_id"))
 
@@ -77,6 +89,7 @@ async def run_kernel_chat_job(
     started = time.monotonic()
     task = str(metadata.get("task") or "llm_chat").strip() or "llm_chat"
     progress_started = asyncio.Event()
+    progress_finished = asyncio.Event()
     progress_task: asyncio.Task[None] | None = None
     try:
         from pallas.product.llm.semantic_protocol import claim_protocol_candidate
@@ -130,7 +143,12 @@ async def run_kernel_chat_job(
 
         if task == "llm_chat" and has_query_tool_schemas(metadata.get("tool_schemas")):
             progress_task = asyncio.create_task(
-                send_query_progress_after_delay(progress_started, {**metadata, "request_id": request_id}),
+                send_query_progress_after_delay(
+                    progress_started,
+                    progress_finished,
+                    {**metadata, "request_id": request_id},
+                    request_started_at=started,
+                ),
                 name=f"llm_query_progress:{request_id}",
             )
         complete_kwargs: dict[str, Any] = {}
@@ -291,6 +309,7 @@ async def run_kernel_chat_job(
         except Exception:
             logger.exception("LLM kernel delivery failed for request [{}]", request_id)
     finally:
+        progress_finished.set()
         if progress_task is not None:
             progress_task.cancel()
             try:

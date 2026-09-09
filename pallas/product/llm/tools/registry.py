@@ -317,6 +317,7 @@ def tool_catalog_for_chat(
     }
     soft_hits = None
     if cfg.llm_tools_selective:
+        ensure_tools_loaded()
         inferred = infer_tool_domains(user_text)
         if inferred:
             domains = inferred

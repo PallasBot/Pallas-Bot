@@ -531,7 +531,7 @@ def emit_turn_delivery_telemetry(
     group_id: object = None,
     **fields: object,
 ) -> None:
-    turn_id = str(task.get("turn_id") or "").strip()
+    turn_id = str(task.get("turn_id") or task_id).strip()
     if not turn_id:
         return
     try:

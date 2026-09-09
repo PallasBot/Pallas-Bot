@@ -58,12 +58,6 @@ def tool_names_from_schemas(schemas: list[Any]) -> list[str]:
 
 
 def _activate_names_from_tool_result(tool_name: str, result: dict[str, Any]) -> list[str]:
-    from pallas.product.llm.tools.discovery import TOOLS_FIND_NAME
-    from pallas.product.llm.tools.registry import from_provider_tool_name
-
-    resolved = from_provider_tool_name(tool_name)
-    if resolved != TOOLS_FIND_NAME:
-        return []
     payload = result.get("result") if isinstance(result.get("result"), dict) else result
     if not isinstance(payload, dict):
         return []
@@ -428,6 +422,7 @@ async def complete_with_tool_loop(
     agent_trace: dict[str, Any] = {
         "final_stage": "generate",
         "tool_call_count": 0,
+        "proposed_tool_call_count": 0,
         "rounds": [],
         "status": "success",
         "tool_loop_enabled": True,
@@ -572,7 +567,7 @@ async def complete_with_tool_loop(
             call_id = str(call.get("id") or tool_name)
             args = parse_tool_arguments(fn.get("arguments"))
             round_trace["tool_calls"].append(resolved_name)
-            agent_trace["tool_call_count"] = int(agent_trace.get("tool_call_count") or 0) + 1
+            agent_trace["proposed_tool_call_count"] = int(agent_trace.get("proposed_tool_call_count") or 0) + 1
             is_query = _is_query_tool(resolved_name)
             is_side_effect = _is_side_effecting_tool(resolved_name)
             call_signature = _tool_call_signature(resolved_name, args)
@@ -593,9 +588,10 @@ async def complete_with_tool_loop(
                 force_final_answer = True
             else:
                 tool_call_signatures.add(call_signature)
+                agent_trace["tool_call_count"] = int(agent_trace.get("tool_call_count") or 0) + 1
                 if is_query:
                     query_call_counts[resolved_name] = query_count + 1
-                if tool_call_started is not None:
+                if is_query and tool_call_started is not None:
                     tool_call_started.set()
                 execute_kwargs = {"context": context}
                 if run_in_background:

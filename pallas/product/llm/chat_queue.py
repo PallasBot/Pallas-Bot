@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from typing import Any
 
 from pallas.product.llm.config import LlmConfig, get_llm_config
 
@@ -28,6 +29,7 @@ class PendingChat:
     created_at: float
     is_to_me: bool = False
     speak_trigger: str = ""
+    event: Any = None
 
     def __iter__(self):
         yield self.text
@@ -75,6 +77,17 @@ def _fresh_entries(key: str) -> list[PendingChat]:
     return entries
 
 
+def has_pending_chat(bot_id: int, group_id: int | None, user_id: int) -> bool:
+    return bool(_fresh_entries(chat_queue_key(bot_id, group_id, user_id)))
+
+
+def pending_chats_can_merge(bot_id: int, group_id: int | None, user_id: int) -> bool:
+    entries = _fresh_entries(chat_queue_key(bot_id, group_id, user_id))
+    return bool(entries) and all(
+        should_merge_chat(entry.text, is_to_me=entry.is_to_me, speak_trigger=entry.speak_trigger) for entry in entries
+    )
+
+
 def stash_pending_chat(
     bot_id: int,
     group_id: int | None,
@@ -84,6 +97,7 @@ def stash_pending_chat(
     message_id: int = 0,
     is_to_me: bool = False,
     speak_trigger: str = "",
+    event: Any = None,
 ) -> None:
     value = str(text or "").strip()
     if not value:
@@ -96,6 +110,7 @@ def stash_pending_chat(
             created_at=time.monotonic(),
             is_to_me=bool(is_to_me),
             speak_trigger=str(speak_trigger or "").strip(),
+            event=event,
         )
     )
     if len(entries) > _MAX_PENDING_PER_KEY:
