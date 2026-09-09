@@ -1296,6 +1296,7 @@ async def prepare_and_submit_llm_chat_turn(
             preferred_bubbles=reply_shape.preferred_bubbles,
             bubble_count_p50=int(getattr(reply_shape_hint, "bubble_count_p50", 0) or 0),
             segment_char_length_p50=int(getattr(reply_shape_hint, "segment_char_length_p50", 0) or 0),
+            target_chars_max=reply_shape.target_chars_max if turn_policy.needs_tool else 0,
         )
         semantic_example_sources = list(getattr(semantic_style, "matched_example_sources", []) or [])
         semantic_examples: list[tuple[str, str]] = []

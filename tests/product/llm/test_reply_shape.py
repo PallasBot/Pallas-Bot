@@ -46,6 +46,12 @@ def test_reply_hard_cap_uses_default_segment_when_no_group_stats() -> None:
     assert cap == 6 * 1 + 12  # 6*1+12=18
 
 
+def test_tool_reply_hard_cap_keeps_grounded_answer_budget() -> None:
+    cap = resolve_reply_hard_cap(36, target_chars_max=160)
+
+    assert cap == 160
+
+
 def test_reply_hard_cap_zero_when_scene_cap_absent() -> None:
     assert resolve_reply_hard_cap(0) == 0
 
