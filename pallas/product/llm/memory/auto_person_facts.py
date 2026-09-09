@@ -147,7 +147,7 @@ async def maybe_auto_save_person_facts(
                         "temperature": 0.3,
                         "max_tokens": task_token_budget("memory_extract"),
                     },
-                    task="memory_extract",
+                    task="memory_person_facts",
                     cfg=c,
                 )
         except Exception as exc:

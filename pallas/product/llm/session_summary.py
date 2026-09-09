@@ -14,7 +14,7 @@ from nonebot import logger
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.inference_params import task_token_budget
 from pallas.product.llm.kernel.memory_governance import can_write_runtime_state_summary
-from pallas.product.llm.memory.rate_limit import WriteCooldown
+from pallas.product.llm.memory.rate_limit import DailyBudget, WriteCooldown
 from pallas.product.llm.provider_client import complete_chat_message
 from pallas.product.llm.session_store import (
     compact_user_llm_history_with_summary,
@@ -25,6 +25,7 @@ from pallas.product.llm.session_store import (
 _summary_mark = "【此前对话摘要】"
 _in_flight: set[tuple[int, int, int]] = set()
 _last_compact_at = WriteCooldown()
+_daily_budget = DailyBudget()
 
 _SESSION_SUMMARY_SYSTEM = """你是群聊对话摘要助手。把用户与机器人的一段聊天历史压缩成一条不超过 120 字的中文摘要。
 
@@ -62,6 +63,14 @@ def _compact_ok(bot_id: int, group_id: int, user_id: int, *, cooldown_sec: int) 
     return _last_compact_at.ok(key, cooldown_sec)
 
 
+def _daily_budget_ok(*, cfg: LlmConfig) -> bool:
+    return _daily_budget.ok(int(cfg.llm_session_summary_daily_budget))
+
+
+def _bump_daily_budget(*, cfg: LlmConfig) -> None:
+    _daily_budget.bump(int(cfg.llm_session_summary_daily_budget))
+
+
 def _mark_compacted(bot_id: int, group_id: int, user_id: int) -> None:
     key = (int(bot_id), int(group_id) if group_id is not None else 0, int(user_id))
     _last_compact_at.mark(key)
@@ -89,6 +98,8 @@ async def maybe_compact_session_history(
         return False
     if not _compact_ok(bid, gid, uid, cooldown_sec=int(c.llm_session_summary_cooldown_sec)):
         return False
+    if not _daily_budget_ok(cfg=c):
+        return False
     history = await list_user_llm_messages(bid, gid, uid, limit=int(c.llm_session_user_storage_window), cfg=c)
     user_turns = [turn for turn in history if str(getattr(turn, "role", "") or "") == "user"]
     if len(user_turns) < threshold:
@@ -106,7 +117,7 @@ async def maybe_compact_session_history(
                     "temperature": 0.2,
                     "max_tokens": task_token_budget("memory_extract"),
                 },
-                task="memory_extract",
+                task="memory_session_summary",
                 cfg=c,
             )
         except Exception as exc:
@@ -126,6 +137,7 @@ async def maybe_compact_session_history(
         )
         if ok:
             _mark_compacted(bid, gid, uid)
+            _bump_daily_budget(cfg=c)
             logger.info(
                 "Session history compacted for bot [{}], group [{}], user [{}]: kept [{}]",
                 bid,
@@ -155,6 +167,7 @@ def schedule_session_summary(*, bot_id: int, group_id: int | None, user_id: int,
 def clear_session_summary_state_for_tests() -> None:
     _in_flight.clear()
     _last_compact_at.clear()
+    _daily_budget.reset()
 
 
 def session_summary_status_snapshot() -> dict[str, Any]:

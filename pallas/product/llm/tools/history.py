@@ -7,6 +7,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 from pallas.product.llm.inference_params import task_token_budget
+from pallas.product.llm.memory.rate_limit import DailyBudget
 from pallas.product.llm.tools.contracts import ToolCapability
 from pallas.product.llm.tools.registry import LlmToolSpec, register_tool
 from pallas.product.persona.prompt_guard import sanitize_prompt_literal
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
 
 _RECENT_SUMMARY_CACHE_TTL_SEC = 600.0
 _recent_summary_cache: dict[tuple[int, int], tuple[float, str, str]] = {}
+_daily_budget = DailyBudget()
 # chat.history 结果回灌进后续轮次的总量上限；过大会在 tool loop 里放大输入。
 _HISTORY_RESULT_MAX_CHARS = 4000
 _RECENT_SUMMARY_SYSTEM = """总结当前群最近聊天。只写主要话题、已经达成的结论和明显分歧；
@@ -146,16 +148,22 @@ async def handle_recent_summary(arguments: dict[str, Any], context: ToolInvokeCo
         from pallas.product.llm.provider_client import complete_chat_message
 
         cfg = get_llm_config()
+        if not _daily_budget.ok(int(cfg.llm_tools_history_daily_budget)):
+            return {
+                "ok": True,
+                "result": {"summary": "最近消息较多，但暂时无法整理出明确话题。", "message_count": len(rows)},
+            }
         response = await complete_chat_message(
             [{"role": "system", "content": _RECENT_SUMMARY_SYSTEM}, {"role": "user", "content": transcript}],
             model="",
             options={"temperature": 0.2, "max_tokens": task_token_budget("memory_extract")},
-            task="memory_extract",
+            task="memory_tool_summary",
             cfg=cfg,
         )
         summary = sanitize_prompt_literal(str(response.get("content") or ""), max_len=240)
         if not summary:
             summary = "最近消息较多，但暂时无法整理出明确话题。"
+        _daily_budget.bump(int(cfg.llm_tools_history_daily_budget))
         _recent_summary_cache[cache_key] = (now + _RECENT_SUMMARY_CACHE_TTL_SEC, signature, summary)
     return {
         "ok": True,

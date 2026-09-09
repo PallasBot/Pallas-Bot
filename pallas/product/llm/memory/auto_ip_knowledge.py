@@ -144,7 +144,7 @@ async def maybe_auto_save_ip_knowledge(
                         "temperature": 0,
                         "max_tokens": task_token_budget("memory_extract"),
                     },
-                    task="memory_extract",
+                    task="memory_ip_knowledge",
                     cfg=c,
                 )
         except Exception as exc:

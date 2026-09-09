@@ -153,7 +153,7 @@ async def maybe_auto_save_group_episode(*, bot_id: int, group_id: int | None, cf
                         "temperature": 0.2,
                         "max_tokens": task_token_budget("memory_extract"),
                     },
-                    task="memory_extract",
+                    task="memory_episode",
                     cfg=c,
                 )
         except Exception as exc:
