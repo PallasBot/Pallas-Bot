@@ -51,10 +51,6 @@ _PRTS_HINTS = (
     "PRTS",
 )
 
-_KNOWLEDGE_QUESTION_RE = re.compile(
-    r"(是什么|是谁|什么时候|哪里|哪个|哪位|为什么|剧情|设定|世界观|历史|档案|密录|活动)",
-)
-
 _OPERATOR_LOOKUP_HINTS = (
     "是谁",
     "谁是",
@@ -234,8 +230,6 @@ def infer_tool_domains(user_text: str) -> frozenset[str]:
         domains.add("arknights")
     if any(hint.lower() in text for hint in _PRTS_HINTS):
         domains.add("prts")
-    if _KNOWLEDGE_QUESTION_RE.search(text):
-        domains.add("knowledge")
     if any(hint in text for hint in _OPERATOR_LOOKUP_HINTS):
         if not is_self_identity_question(user_text):
             domains.add("arknights")

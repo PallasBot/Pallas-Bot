@@ -161,7 +161,7 @@ async def run_ai_callback(
         return {"message": "ok"}
 
     if status == "success":
-        reply_text, text_delivered, delivered = await deliver_llm_callback_success(
+        delivery_outcome = await deliver_llm_callback_success(
             task_id,
             task,
             bot=bot,
@@ -174,6 +174,9 @@ async def run_ai_callback(
             history_keep_messages=history_keep_messages,
             suppress_empty_fallback=suppress_empty_fallback,
         )
+        reply_text = delivery_outcome.reply_text
+        text_delivered = delivery_outcome.text_delivered
+        delivered = delivery_outcome.delivered
         task_type = str(task.get("task_type") or "").strip()
         if file and group_id and bot is not None:
             file_bytes = await file.read()
@@ -196,14 +199,11 @@ async def run_ai_callback(
                     f"Bot [{getattr(bot, 'self_id', bot_id_str or '<missing>')}] delivering a "
                     f"[{task_type}] image [{task_id}] to group [{group_id}], length [{len(file_bytes)}]"
                 )
-                delivered = (
-                    await send_group_image(
-                        bot,
-                        group_id,
-                        file_bytes,
-                        at_user_id=at_user_id,
-                    )
-                    and delivered
+                delivered = await send_group_image(
+                    bot,
+                    group_id,
+                    file_bytes,
+                    at_user_id=at_user_id,
                 )
                 if delivered and file_bytes:
                     invoke_media_task_success(task, image_bytes=file_bytes, group_id=int(group_id))
@@ -212,7 +212,7 @@ async def run_ai_callback(
                     f"Bot [{getattr(bot, 'self_id', bot_id_str or '<missing>')}] delivering a "
                     f"[{task_type}] voice [{task_id}] to group [{group_id}], length [{len(file_bytes)}]"
                 )
-                delivered = await send_group_voice(bot, group_id, file_bytes) and delivered
+                delivered = await send_group_voice(bot, group_id, file_bytes)
                 if delivered and file_bytes:
                     invoke_media_task_success(task, image_bytes=file_bytes, group_id=int(group_id))
 
@@ -247,6 +247,6 @@ async def run_ai_callback(
             f"Bot [{bot_id_str or '<missing>'}] completed AI task [{task_id}], "
             f"a [{str(task.get('task_type') or '').strip()}] request in group [{group_id}], delivered [{delivered}]"
         )
-        return {"message": "ok" if delivered else "failed"}
+        return {"message": "ok" if delivered or delivery_outcome.status == "silent" else "failed"}
 
     raise HTTPException(status_code=400, detail="Invalid status")

@@ -9,6 +9,26 @@ from pallas.product.persona.soft_agree_fillers import LLM_CHAT_EMPTY_FALLBACK_TE
 HARD_SPEAK_TRIGGERS = frozenset({"to_me", "mention", "followup"})
 # 须避开 FILLER_ONLY_REPLIES（如「嗯？」），否则过滤清空后又被填回同一垫词
 LLM_CHAT_EMPTY_FALLBACK = LLM_CHAT_EMPTY_FALLBACK_TEXT
+QUERY_EMPTY_FALLBACK = "资料查到了，但这次回答没整理出来，再问我一次吧。"
+QUERY_NO_RESULT_FALLBACK = "现有资料里没找到可靠答案。"
+QUERY_FAILED_FALLBACK = "资料查询失败了，稍后再试。"
+
+
+def query_fallback_for_task(task: dict) -> str:
+    trace = task.get("agent_trace")
+    if not isinstance(trace, dict):
+        return ""
+    if int(trace.get("successful_query_call_count") or 0) <= 0 and int(trace.get("query_tool_failed_count") or 0) <= 0:
+        return ""
+    trigger = str(task.get("speak_trigger") or "to_me").strip() or "to_me"
+    if trigger not in HARD_SPEAK_TRIGGERS:
+        return ""
+    if int(trace.get("query_tool_hit_count") or 0) <= 0:
+        if int(trace.get("query_tool_failed_count") or 0) > 0:
+            return QUERY_FAILED_FALLBACK
+        if int(trace.get("query_tool_empty_count") or 0) > 0:
+            return QUERY_NO_RESULT_FALLBACK
+    return QUERY_EMPTY_FALLBACK
 
 
 def resolve_llm_chat_empty_fallback(
@@ -24,9 +44,12 @@ def resolve_llm_chat_empty_fallback(
     text = str(reply_text or "").strip()
     if text:
         return text
-    if suppress_empty_fallback:
-        return ""
     if str(task.get("task_type") or "").strip() != LLM_CHAT_TASK_TYPE:
+        return ""
+    query_fallback = query_fallback_for_task(task)
+    if query_fallback:
+        return query_fallback
+    if suppress_empty_fallback:
         return ""
     trace = task.get("agent_trace")
     if isinstance(trace, dict) and int(trace.get("tool_call_count") or 0) > 0:

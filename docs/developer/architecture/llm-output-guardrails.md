@@ -2,7 +2,7 @@
 
 本页补全 [LLM 输出路径](llm-output-path.md) 的「输出护栏」细节：从模型生成到进群的每一道过滤、命中后的退化语义，以及离线质量评测的用法。面向改动护栏链路、接线新过滤器、或要跑评测的开发者。
 
-一句话模型：**护栏分两层——安全意识护栏（拦）与表现护栏（不拦安全、只调形态）**；命中后按 `allow / retry / fallback / silent` 四态收敛，最终由 `deliver_llm_callback_success` 逐气泡投递，写路径全部有回归点可观测。
+一句话模型：**护栏分两层——安全意识护栏（拦）与表现护栏（不拦安全、只调形态）**；命中后按 `allow / retry / fallback / silent` 四态收敛，最终由 `deliver_llm_callback_success` 返回 `DeliveryOutcome` 并逐气泡投递，写路径全部有回归点可观测。
 
 ## 判定顺序（从生成到进群）
 
@@ -20,10 +20,10 @@ Provider 输出 / direct_candidate 直投
   │      配置：llm_output_filter_enabled（默认 on）
   │  ⑦ split_short_reply_segments（short 取向单段 → 按句末标点拆 3 段）
   │  ⑧ strip_leading_self_at_mentions（开头 @ 自己 → 去）
-  │  ⑨ chat_empty_fallback（空回复兜底；suppress_empty_fallback 时跳过）
+   │  ⑨ chat_empty_fallback（空回复兜底；查询工具空回复使用查询/失败/无结果文案）
   │  ⑩ apply_reply_postprocess（错别字/句尾句号，llm_reply_postprocess_enabled 默认 off）
   │  ⑪ replace_mention_tokens（未授权提及 token → 静默）
-  ▼ 多气泡逐条投递（气泡间 0.5~3.5s 随机抖动）
+   ▼ 多气泡逐条投递（气泡间 0.5~3.5s 随机抖动；查询工具不得无声结束）
   落群成功后：会话回写 / auto_episode / repeater_feedback / reply_effect 评分
 ```
 
@@ -81,7 +81,10 @@ Provider 输出 / direct_candidate 直投
 | `allow` | 全部通过 | 走 ⑤→⑪ 正常逐气泡投递 |
 | `retry` | 防火墙命中且策略 `retry_then_fallback` | 带修正指令重生成一次，仍命中则下行 |
 | `fallback` | 防火墙 / 过滤给出兜底文案 | 优先任务 `fallback_text`，无则内建；兜底文案也要过自检，不过则升 `silent` |
-| `silent` | 兜底仍不过 / 无正文 / 未授权提及 token | 不投递，`suppress_empty_fallback=True` 防止被空回复兜底填回 |
+| `silent` | 副作用工具明确成功后无可见对白，或非显式闲聊无正文 | 不投递，`suppress_empty_fallback=True` 防止被空回复兜底填回 |
+| `failed` | 查询任务无可见结果、投递目标缺失或发送失败 | 不伪装为 `delivered=True`；查询任务优先发送确定性失败说明 |
+
+查询任务的 `silent` 不是合法成功出口：只要本轮成功调用过查询工具且属于显式问答，即使模型返回 `PASS`、结构化解析失败或输出过滤清空，也必须回落到查询结果、无结果或查询失败说明。
 
 三条补充：
 

@@ -49,7 +49,10 @@ async def test_delivery_emits_silent_output_and_delivery_events_without_reply_te
         suppress_empty_fallback=True,
     )
 
-    assert result == ("", False, True)
+    assert result.reply_text == ""
+    assert result.text_delivered is False
+    assert result.delivered is False
+    assert result.status == "silent"
     output = next(event for event in events if event["stage"] == "output")
     delivery = next(event for event in events if event["stage"] == "delivery")
     assert output["output_filter_action"] == "silent"
@@ -112,6 +115,58 @@ async def test_delivery_emits_status_for_complete_and_partial_bubbles(
     assert delivery["total_bubble_count"] == 3
     assert delivery["sent_message_id_hashes"]
     assert all("第一条" not in str(event) for event in events)
+
+
+@pytest.mark.asyncio
+async def test_query_tool_empty_model_reply_gets_visible_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[dict[str, object]] = []
+    sent: list[str] = []
+    monkeypatch.setattr(llm_delivery, "record_turn_event", _capture_events(events))
+    monkeypatch.setattr(llm_delivery, "should_append_llm_session", lambda _task: False)
+    monkeypatch.setattr(
+        llm_delivery,
+        "get_llm_config",
+        lambda: LlmConfig(
+            llm_reply_postprocess_enabled=False,
+            llm_reply_trim_terminal_period_enabled=False,
+        ),
+    )
+
+    async def fake_send(_bot, _group_id, text, **_kwargs):
+        sent.append(str(text))
+        return SimpleNamespace(message_id=1, delivered=True)
+
+    monkeypatch.setattr(
+        "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
+        fake_send,
+    )
+    task = {
+        **_task(),
+        "speak_trigger": "to_me",
+        "agent_trace": {
+            "successful_query_call_count": 1,
+            "query_tool_hit_count": 1,
+        },
+    }
+
+    result = await llm_delivery.deliver_llm_callback_success(
+        "request-query-fallback",
+        task,
+        bot=SimpleNamespace(self_id="99"),
+        group_id=42,
+        bot_id=99,
+        bot_id_str="99",
+        text="PASS",
+        parsed_agent_trace=task["agent_trace"],
+        history_summary=None,
+        history_keep_messages=None,
+        suppress_empty_fallback=True,
+    )
+
+    assert result.delivered is True
+    assert sent == ["资料查到了，但这次回答没整理出来，再问我一次吧。"]
 
 
 @pytest.mark.asyncio

@@ -39,11 +39,14 @@ from pallas.product.llm.behavior_store import ensure_default_behavior_patterns
 from pallas.product.llm.bot_reply_context import lookup_bot_reply_context, recent_group_bot_speaker
 from pallas.product.llm.budget import trim_messages_to_char_budget
 from pallas.product.llm.chat_queue import (
+    PendingChat,
     begin_chat_turn,
     finish_chat_turn,
     merge_queued_chat,
+    should_merge_chat,
     stash_pending_chat,
     take_pending_chat_one,
+    take_pending_chat_one_entry,
 )
 from pallas.product.llm.current_turn_decision import (
     CurrentTurnAction,
@@ -632,20 +635,37 @@ async def handle_llm_chat(
         logger.debug("relationship silent persist skip schedule failed")
 
     if not begin_chat_turn(int(bot.self_id), group_id, user_id):
-        stash_pending_chat(int(bot.self_id), group_id, user_id, plain or msg, message_id=message_id)
+        stash_pending_chat(
+            int(bot.self_id),
+            group_id,
+            user_id,
+            plain or msg,
+            message_id=message_id,
+            is_to_me=is_to_me,
+            speak_trigger=speak_trigger,
+        )
         record_bot_llm_task(LLM_CHAT_TASK_TYPE, "background_coalesced")
         return
 
     force_quote_message_id: int | None = None
     if llm_cfg.llm_chat_queue_merge:
-        merge_result = merge_queued_chat(int(bot.self_id), group_id, user_id, plain, cfg=llm_cfg)
-        plain = merge_result.text
-        if merge_result.merged:
-            logger.debug("llm chat merged queued message for group [{}], user [{}]", group_id, user_id)
+        if should_merge_chat(plain, is_to_me=is_to_me, speak_trigger=speak_trigger):
+            merge_result = merge_queued_chat(int(bot.self_id), group_id, user_id, plain, cfg=llm_cfg)
+            plain = merge_result.text
+            if merge_result.merged:
+                logger.debug("llm chat merged queued message for group [{}], user [{}]", group_id, user_id)
     else:
         deferred_text, deferred_message_id = take_pending_chat_one(int(bot.self_id), group_id, user_id)
         if deferred_text:
-            stash_pending_chat(int(bot.self_id), group_id, user_id, plain, message_id=message_id)
+            stash_pending_chat(
+                int(bot.self_id),
+                group_id,
+                user_id,
+                plain,
+                message_id=message_id,
+                is_to_me=is_to_me,
+                speak_trigger=speak_trigger,
+            )
             plain = deferred_text
             force_quote_message_id = deferred_message_id or None
 
@@ -668,6 +688,68 @@ async def handle_llm_chat(
         name=f"llm_chat_prepare:{int(bot.self_id)}:{group_id or 0}:{user_id}",
     )
     record_bot_llm_task(LLM_CHAT_TASK_TYPE, "background_enqueued")
+
+
+async def run_pending_chat_turn(
+    *,
+    pending: PendingChat,
+    bot: Bot,
+    event: Event,
+    group_id: int | None,
+    user_id: int,
+    llm_cfg: LlmConfig,
+    chat_cfg: Config,
+) -> None:
+    await prepare_and_submit_llm_chat_turn(
+        bot=bot,
+        event=event,
+        msg=pending.text,
+        plain=pending.text,
+        group_id=group_id,
+        user_id=user_id,
+        message_id=pending.message_id,
+        is_to_me=pending.is_to_me,
+        speak_trigger=pending.speak_trigger,
+        llm_cfg=llm_cfg,
+        chat_cfg=chat_cfg,
+    )
+
+
+def schedule_pending_chat(
+    *,
+    bot: Bot,
+    event: Event,
+    group_id: int | None,
+    user_id: int,
+    llm_cfg: LlmConfig,
+    chat_cfg: Config,
+) -> None:
+    pending = take_pending_chat_one_entry(int(bot.self_id), group_id, user_id)
+    if pending is None:
+        return
+    if not begin_chat_turn(int(bot.self_id), group_id, user_id):
+        stash_pending_chat(
+            int(bot.self_id),
+            group_id,
+            user_id,
+            pending.text,
+            message_id=pending.message_id,
+            is_to_me=pending.is_to_me,
+            speak_trigger=pending.speak_trigger,
+        )
+        return
+    asyncio.create_task(
+        run_pending_chat_turn(
+            pending=pending,
+            bot=bot,
+            event=event,
+            group_id=group_id,
+            user_id=user_id,
+            llm_cfg=llm_cfg,
+            chat_cfg=chat_cfg,
+        ),
+        name=f"llm_chat_pending:{int(bot.self_id)}:{group_id or 0}:{user_id}",
+    )
 
 
 def _referenced_vision_metadata(event: Event) -> dict[str, object] | None:
@@ -836,7 +918,15 @@ async def prepare_and_submit_llm_chat_turn(
                 is_to_me=is_to_me,
                 speak_trigger=speak_trigger,
             )
-            stash_pending_chat(int(bot.self_id), group_id, user_id, plain or msg, message_id=message_id)
+            stash_pending_chat(
+                int(bot.self_id),
+                group_id,
+                user_id,
+                plain or msg,
+                message_id=message_id,
+                is_to_me=is_to_me,
+                speak_trigger=speak_trigger,
+            )
             record_bot_llm_task(LLM_CHAT_TASK_TYPE, "reply_gate_defer")
             logger.debug(
                 "llm chat route deferred: reason=cooldown message_id={} group={} user={}",

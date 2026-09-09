@@ -8,6 +8,7 @@ import random
 import re
 import time
 from contextlib import nullcontext
+from dataclasses import dataclass
 from io import BytesIO
 from typing import TYPE_CHECKING, Any
 
@@ -34,6 +35,46 @@ STICKER_IMAGE_MAX_SIDE = 320
 _STICKER_JPEG_QUALITY = 90
 
 _STICKER_MARKER_RE = re.compile(r"\[表情[：:]\s*([^\]\n]{1,24})\]\s*$")
+
+
+@dataclass(frozen=True, slots=True, eq=False)
+class DeliveryOutcome:
+    reply_text: str
+    text_delivered: bool
+    delivered: bool
+    status: str
+    sent_bubble_count: int
+    total_bubble_count: int
+
+    def __iter__(self):
+        """兼容旧的三元组调用方，内部新代码使用具名字段。"""
+        yield self.reply_text
+        yield self.text_delivered
+        yield self.delivered
+
+    def __getitem__(self, index: int):
+        return (self.reply_text, self.text_delivered, self.delivered)[index]
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, tuple):
+            return tuple(self) == other
+        if not isinstance(other, DeliveryOutcome):
+            return NotImplemented
+        return (
+            self.reply_text,
+            self.text_delivered,
+            self.delivered,
+            self.status,
+            self.sent_bubble_count,
+            self.total_bubble_count,
+        ) == (
+            other.reply_text,
+            other.text_delivered,
+            other.delivered,
+            other.status,
+            other.sent_bubble_count,
+            other.total_bubble_count,
+        )
 
 
 def extract_sticker_marker(text: str) -> tuple[str, str]:
@@ -529,17 +570,20 @@ async def deliver_llm_callback_success(
     history_keep_messages: int | None,
     suppress_empty_fallback: bool = False,
     sleeper: Callable[[float], Awaitable[None] | None] | None = None,
-) -> tuple[str, bool, bool]:
-    """处理 LLM 回调文本并投递到群。返回 (reply_text, text_delivered, delivered)。"""
-    delivered = bot is not None
+) -> DeliveryOutcome:
+    """处理 LLM 回调文本并投递到群。"""
+    delivered = False
     reply_text = str(text or "").strip()
     text_delivered = False
     bot_message_id: int | None = None
     task_type = str(task.get("task_type") or "").strip()
+    if parsed_agent_trace is not None and "agent_trace" not in task:
+        task = {**task, "agent_trace": parsed_agent_trace}
     if should_suppress_llm_duplicate_reply(task, reply_text):
         fallback = str(task.get("fallback_text") or "").strip()
         reply_text = fallback if fallback and fallback != reply_text else ""
     marker_intent = ""
+    query_fallback_used = False
     from pallas.product.llm.models import StructuredChatReply
     from pallas.product.llm.output_filter import profile_for_task_type, resolve_output_filtered_chat_reply
     from pallas.product.llm.structured_reply import parse_structured_reply
@@ -591,15 +635,23 @@ async def deliver_llm_callback_success(
         )
         reply_segments = [first_segment, *reply_segments[1:]] if first_segment else reply_segments[1:]
         reply_text = "\n".join(reply_segments)
-    if task_type == LLM_CHAT_TASK_TYPE and not had_reply_before_filter:
-        from pallas.product.llm.chat_empty_fallback import resolve_llm_chat_empty_fallback
-
-        reply_text = resolve_llm_chat_empty_fallback(
-            task,
-            reply_text,
-            suppress_empty_fallback=suppress_empty_fallback,
+    if task_type == LLM_CHAT_TASK_TYPE:
+        from pallas.product.llm.chat_empty_fallback import (
+            query_fallback_for_task,
+            resolve_llm_chat_empty_fallback,
         )
-        reply_segments = [reply_text] if reply_text else []
+
+        query_fallback = query_fallback_for_task(task) if not reply_segments else ""
+        if not had_reply_before_filter or query_fallback:
+            fallback_text = resolve_llm_chat_empty_fallback(
+                task,
+                reply_text,
+                suppress_empty_fallback=suppress_empty_fallback,
+            )
+            if fallback_text:
+                reply_text = fallback_text
+                reply_segments = [fallback_text]
+                query_fallback_used = bool(query_fallback)
     learned_reply_text = "\n".join(reply_segments)
     delivery_segments = list(reply_segments)
     if delivery_segments:
@@ -643,7 +695,7 @@ async def deliver_llm_callback_success(
                         "AI callback reply silenced after unapproved mention token removal",
                     )
                 reply_text = "\n".join(delivery_segments)
-    fallback_used = bool(not had_reply_before_filter and reply_text)
+    fallback_used = bool((not had_reply_before_filter or query_fallback_used) and reply_text)
     if not delivery_segments:
         output_decision = "silent"
         output_action = "silent"
@@ -736,11 +788,19 @@ async def deliver_llm_callback_success(
             )
             sent_indexes.append(index)
         text_delivered = len(sent_indexes) == len(delivery_segments)
-        delivered = text_delivered and delivered
-    if not delivery_segments or not (group_id and bot is not None):
-        delivery_status = "silent"
-        delivery_decision = "silent"
-        delivery_reason = "no_delivery_segments"
+        delivered = text_delivered
+    has_delivery_target = group_id is not None and bot is not None
+    if not delivery_segments:
+        from pallas.product.llm.chat_empty_fallback import query_fallback_for_task
+
+        query_failed_to_render = bool(query_fallback_for_task(task))
+        delivery_status = "failed" if query_failed_to_render else "silent"
+        delivery_decision = delivery_status
+        delivery_reason = "query_no_delivery_segments" if query_failed_to_render else "no_delivery_segments"
+    elif not has_delivery_target:
+        delivery_status = "failed"
+        delivery_decision = "failed"
+        delivery_reason = "delivery_target_missing"
     elif not sent_indexes:
         delivery_status = "failed"
         delivery_decision = "failed"
@@ -905,7 +965,14 @@ async def deliver_llm_callback_success(
             )
         except Exception:
             logger.debug("semantic exposure record skipped for task [{}]", task_id)
-    return reply_text, text_delivered, delivered
+    return DeliveryOutcome(
+        reply_text=reply_text,
+        text_delivered=text_delivered,
+        delivered=delivered,
+        status=delivery_status,
+        sent_bubble_count=len(sent_indexes),
+        total_bubble_count=len(delivery_segments),
+    )
 
 
 async def deliver_llm_chat_result(
