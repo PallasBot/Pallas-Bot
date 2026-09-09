@@ -15,6 +15,11 @@ dependencies = [
     "pallas-core>=4.0.0,<5.0.0",
 ]
 
+[dependency-groups]
+dev = [
+    "ruff>=0.16.0",
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
