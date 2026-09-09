@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -528,7 +529,9 @@ async def _post_ollama_chat(
     if not model_name:
         raise _repo.LlmProviderError("llm model not configured")
     url = _repo.ollama_chat_url(base_url)
-    payload: dict[str, Any] = {"model": model_name, "messages": messages, "stream": False}
+    payload: dict[str, Any] = {"model": model_name, "messages": _ollama_messages(messages), "stream": False}
+    if tools:
+        payload["tools"] = tools
     options_payload: dict[str, Any] = {}
     temperature = options.get("temperature")
     if temperature is not None:
@@ -540,6 +543,9 @@ async def _post_ollama_chat(
         options_payload["num_predict"] = int(max_tokens)
     if options_payload:
         payload["options"] = options_payload
+    think = _ollama_think_value(options)
+    if think is not None:
+        payload["think"] = think
     timeout = httpx.Timeout(float(timeout_sec))
     headers = _repo.auth_headers(api_key)
     client = await _repo.get_llm_shared_httpx_client()
@@ -578,3 +584,80 @@ async def _post_ollama_chat(
     if not message_obj["content"] and not message_obj.get("tool_calls"):
         raise _repo.LlmProviderError("empty provider content")
     return message_obj
+
+
+def _ollama_think_value(options: dict[str, Any]) -> bool | str | None:
+    effort = str(options.get("model_effort") or "").strip().lower()
+    if not effort or effort == "enable":
+        return True if effort == "enable" else None
+    if effort == "disable":
+        return False
+    return {"minimal": "low", "low": "low", "medium": "medium", "high": "high", "xhigh": "max"}.get(
+        effort,
+    )
+
+
+def _ollama_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        row = dict(message)
+        role = str(row.get("role") or "").strip().lower()
+        content = row.get("content")
+        if isinstance(content, list):
+            texts: list[str] = []
+            images: list[str] = []
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                part_type = str(part.get("type") or "").strip().lower()
+                if part_type == "text":
+                    text = str(part.get("text") or "")
+                    if text:
+                        texts.append(text)
+                    continue
+                if part_type != "image_url":
+                    continue
+                image_url = part.get("image_url")
+                url = image_url.get("url") if isinstance(image_url, dict) else image_url
+                raw_url = str(url or "")
+                if raw_url.startswith("data:") and "," in raw_url:
+                    images.append(raw_url.split(",", 1)[1])
+            row["content"] = "\n".join(texts)
+            if images:
+                row["images"] = images
+            else:
+                row.pop("images", None)
+
+        if role == "assistant" and isinstance(row.get("tool_calls"), list):
+            tool_calls: list[dict[str, Any]] = []
+            for call in row["tool_calls"]:
+                if not isinstance(call, dict):
+                    continue
+                normalized = dict(call)
+                function = dict(call.get("function") or {})
+                arguments = function.get("arguments")
+                if isinstance(arguments, str):
+                    try:
+                        parsed = json.loads(arguments)
+                    except json.JSONDecodeError:
+                        parsed = None
+                    if isinstance(parsed, dict):
+                        function["arguments"] = parsed
+                normalized["function"] = function
+                tool_calls.append(normalized)
+            row["tool_calls"] = tool_calls
+
+        if role == "tool":
+            tool_name = str(row.get("tool_name") or "").strip()
+            if not tool_name and isinstance(content, str):
+                try:
+                    tool_name = str(json.loads(content).get("tool") or "").strip()
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+            if tool_name:
+                row["tool_name"] = tool_name
+            row.pop("tool_call_id", None)
+        out.append(row)
+    return out

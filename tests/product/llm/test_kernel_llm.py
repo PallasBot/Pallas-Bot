@@ -118,6 +118,76 @@ async def test_list_openai_compatible_models(monkeypatch: pytest.MonkeyPatch) ->
 
 
 @pytest.mark.asyncio
+async def test_list_ollama_native_models_uses_tags_endpoint(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm.provider_client import list_openai_compatible_models
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self) -> dict:
+            return {"models": [{"name": "glm-5.3-flash"}]}
+
+    class FakeClient:
+        async def get(self, url: str, headers: dict | None = None, **_kwargs):
+            assert url == "https://ollama.example/api/tags"
+            assert headers == {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer ollama-key",
+            }
+            return FakeResponse()
+
+    async def fake_client():
+        return FakeClient()
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.get_llm_shared_httpx_client", fake_client)
+    models = await list_openai_compatible_models(
+        "https://ollama.example",
+        "ollama-key",
+        request_method="ollama_chat",
+    )
+    assert models == ["glm-5.3-flash"]
+
+
+@pytest.mark.asyncio
+async def test_probe_provider_models_uses_ollama_tags_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from pallas.product.llm.config import LlmConfig
+    from pallas.product.llm.provider_client import probe_provider_models
+
+    class FakeResponse:
+        status_code = 200
+
+    class FakeClient:
+        async def get(self, url: str, headers: dict | None = None, **_kwargs):
+            assert url == "https://ollama.example/api/tags"
+            assert headers == {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer ollama-key",
+            }
+            return FakeResponse()
+
+    async def fake_client():
+        return FakeClient()
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.get_llm_shared_httpx_client", fake_client)
+    monkeypatch.setattr(
+        "pallas.product.llm.providers_store.resolve_endpoint_for_task",
+        lambda _task: SimpleNamespace(
+            base_url="https://ollama.example",
+            api_key="ollama-key",
+            request_method="ollama_chat",
+        ),
+    )
+
+    result = await probe_provider_models(cfg=LlmConfig())
+    assert result["ok"] is True
+    assert result["url"] == "https://ollama.example/api/tags"
+
+
+@pytest.mark.asyncio
 async def test_fetch_provider_models_bot_direct(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.product.llm.model_admin import fetch_provider_models
 
@@ -142,6 +212,31 @@ async def test_fetch_provider_models_bot_direct(monkeypatch: pytest.MonkeyPatch)
     assert result["ok"] is True
     assert result["source"] == "openai"
     assert result["models"] == ["Qwen/Qwen2.5-7B-Instruct"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_provider_models_ollama_native_source(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm.model_admin import fetch_provider_models
+
+    async def fake_list(
+        base_url: str, api_key: str = "", *, timeout_sec: float = 15.0, request_method: str | None = None
+    ):
+        assert base_url == "https://ollama.example"
+        assert api_key == "ollama-key"
+        assert request_method == "ollama_chat"
+        return ["glm-5.3-flash"]
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.list_openai_compatible_models", fake_list)
+    result = await fetch_provider_models(
+        "ollama",
+        base_url="https://ollama.example",
+        api_key="ollama-key",
+        kind="remote",
+        request_method="ollama_chat",
+    )
+    assert result["ok"] is True
+    assert result["source"] == "ollama"
+    assert result["models"] == ["glm-5.3-flash"]
 
 
 @pytest.mark.asyncio
@@ -368,6 +463,78 @@ async def test_complete_chat_message_parses_openai_response(monkeypatch: pytest.
         cfg=cfg,
     )
     assert message["content"] == "你好"
+
+
+@pytest.mark.asyncio
+async def test_complete_chat_message_ollama_native_maps_tools_images_and_thinking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payloads: list[dict[str, Any]] = []
+
+    class FakeResponse:
+        status_code = 200
+
+        def json(self) -> dict[str, Any]:
+            return {"message": {"role": "assistant", "content": "收到"}}
+
+    class FakeClient:
+        async def post(self, url: str, json: dict[str, Any] | None = None, headers=None, **_kwargs) -> FakeResponse:
+            assert url == "https://ollama.example/api/chat"
+            assert headers == {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer ollama-key",
+            }
+            assert json is not None
+            payloads.append(json)
+            return FakeResponse()
+
+    async def fake_client():
+        return FakeClient()
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.get_llm_shared_httpx_client", fake_client)
+    tools = [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}]
+    message = await complete_chat_message(
+        [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "看看"},
+                    {"type": "image_url", "image_url": {"url": "data:image/png;base64,aGk="}},
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "call-1",
+                        "type": "function",
+                        "function": {"name": "lookup", "arguments": '{"q":"x"}'},
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call-1",
+                "content": '{"tool":"lookup","result":{"ok":true}}',
+            },
+        ],
+        model="demo",
+        base_url="https://ollama.example/v1",
+        api_key="ollama-key",
+        request_method="ollama_chat",
+        options={"model_effort": "disable", "temperature": 0.2, "num_predict": 64},
+        tools=tools,
+    )
+
+    payload = payloads[0]
+    assert payload["think"] is False
+    assert payload["tools"] == tools
+    assert payload["messages"][0] == {"role": "user", "content": "看看", "images": ["aGk="]}
+    assert payload["messages"][1]["tool_calls"][0]["function"]["arguments"] == {"q": "x"}
+    assert payload["messages"][2]["tool_name"] == "lookup"
+    assert "tool_call_id" not in payload["messages"][2]
+    assert message["content"] == "收到"
 
 
 @pytest.mark.asyncio
