@@ -2,7 +2,31 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
+
+from pallas.core.foundation.config.repo_settings import repo_env_raw_value
+
+_memory_llm_sem: asyncio.Semaphore | None = None
+_memory_llm_sem_limit: int | None = None
+
+
+def memory_llm_concurrency_limit() -> int:
+    """自动记忆 LLM 抽取并发上限（默认 2），episode / person_facts / ip_knowledge 共享。"""
+    raw = repo_env_raw_value("LLM_MEMORY_MAX_CONCURRENCY")
+    try:
+        return max(1, min(16, int(str(raw if raw is not None else "2").strip())))
+    except ValueError:
+        return 2
+
+
+def memory_llm_sem() -> asyncio.Semaphore:
+    global _memory_llm_sem, _memory_llm_sem_limit
+    limit = memory_llm_concurrency_limit()
+    if _memory_llm_sem is None or _memory_llm_sem_limit != limit:
+        _memory_llm_sem = asyncio.Semaphore(limit)
+        _memory_llm_sem_limit = limit
+    return _memory_llm_sem
 
 
 class DailyBudget:
