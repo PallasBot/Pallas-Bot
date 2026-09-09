@@ -24,11 +24,16 @@ def test_match_output_filter_chat_hard_block_celebration_template(monkeypatch) -
     assert hit.phrase == "希望每个庆典"
 
 
+def test_match_output_filter_allows_doctor_term() -> None:
+    hit = match_output_filter("博士在吗？", "chat")
+    assert hit is None
+
+
 def test_match_output_filter_chat_hard_block() -> None:
-    hit = match_output_filter("博士您好，想聊点什么？", "chat")
+    hit = match_output_filter("您好，想聊点什么？", "chat")
     assert hit is not None
     assert hit.tier == "hard_block"
-    assert hit.phrase == "博士"
+    assert hit.phrase == "您"
 
 
 def test_match_output_filter_chat_soft_retry() -> None:
@@ -38,9 +43,10 @@ def test_match_output_filter_chat_soft_retry() -> None:
     assert hit.phrase == "很高兴"
 
 
-def test_resolve_output_filtered_reply_silent_without_fallback() -> None:
+def test_resolve_output_filtered_reply_allows_doctor_term() -> None:
     task = {"task_type": LLM_CHAT_TASK_TYPE}
-    assert resolve_output_filtered_reply(task, "博士在吗？") == ""
+    reply = "博士在吗？"
+    assert resolve_output_filtered_reply(task, reply) == reply
 
 
 def test_resolve_output_filtered_reply_allows_clean_text() -> None:
@@ -67,7 +73,7 @@ def test_output_filter_can_be_disabled(monkeypatch) -> None:
         lambda: LlmConfig(llm_output_filter_enabled=False),
     )
     task = {"task_type": LLM_CHAT_TASK_TYPE}
-    assert resolve_output_filtered_reply(task, "博士在吗？") == "博士在吗？"
+    assert resolve_output_filtered_reply(task, "您好") == "您好"
 
 
 def test_match_output_filter_uses_configured_phrases(monkeypatch) -> None:
@@ -81,7 +87,7 @@ def test_match_output_filter_uses_configured_phrases(monkeypatch) -> None:
 
 
 def test_chat_hard_block_phrases_non_empty() -> None:
-    assert "博士" in CHAT_HARD_BLOCK_PHRASES
+    assert "博士" not in CHAT_HARD_BLOCK_PHRASES
 
 
 def test_resolve_output_filtered_reply_blocks_attack_or_plugin_reply() -> None:
