@@ -25,7 +25,7 @@
 | 多 Bot / claim | `try_claim_group_message_once`、`begin_group_exclusive_activity`、`claim_group_handler` |
 | 舰队 | `get_fleet_bot_ids`、`connected_bot_ids`、`list_local_fleet_bots_in_group` |
 | 分片在线 / 代发 | `get_cluster_online_bot_ids`、`send_group_message_as_bot`、`invoke_bot_action` |
-| LLM（平台协作） | `get_llm_config`、`llm_server_base_url`、`llm_command_tool_row` |
+| LLM（平台协作） | `get_llm_config`、`llm_server_base_url`、`llm_command_tool_row`、`register_llm_tool` |
 
 完整列表以模块 `__all__` 为准；新增导出需同步本表。
 
@@ -40,6 +40,9 @@
 
 - 普通命令型插件仅为少写包装而跳过 L1
 - 把 Platform 当随意内部捷径
+
+`register_llm_tool` 仅用于社区插件提供本地、只读、参数化查询工具；工具定义会在 LLM
+工具注册刷新时重新装载。需要发送群命令的能力仍使用 `llm_command_tool_row`。
 
 ## 相关链接
 

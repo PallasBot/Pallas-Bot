@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from io import BytesIO
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from fastapi import UploadFile
 from nonebot.adapters.onebot.v11.exception import NetworkError
 
 from pallas.core.platform.ai_callback import runner as ai_callback_runner
@@ -724,6 +726,49 @@ async def test_run_ai_callback_sing_sends_voice_without_progress_metadata(
 
 
 @pytest.mark.asyncio
+async def test_run_ai_callback_sing_media_failure_is_not_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    bot = MagicMock()
+    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
+    monkeypatch.setattr(
+        ai_callback_runner.TaskManager,
+        "claim_task",
+        AsyncMock(return_value={"bot_id": "111", "group_id": 222, "task_type": "sing"}),
+    )
+    monkeypatch.setattr(ai_callback_runner, "send_group_voice", AsyncMock(return_value=False))
+
+    upload = UploadFile(filename="sing.mp3", file=BytesIO(b"ID3"))
+
+    result = await ai_callback_runner.run_ai_callback("sing-task-failed", status="success", file=upload)
+
+    assert result == {"message": "failed"}
+
+
+@pytest.mark.asyncio
+async def test_run_ai_callback_draw_media_failure_is_not_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    bot = MagicMock()
+    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
+    monkeypatch.setattr(
+        ai_callback_runner.TaskManager,
+        "claim_task",
+        AsyncMock(
+            return_value={
+                "bot_id": "111",
+                "group_id": 222,
+                "user_id": 333,
+                "task_type": DRAW_IMAGE_TASK_TYPE,
+            }
+        ),
+    )
+    monkeypatch.setattr(ai_callback_runner, "send_group_image", AsyncMock(return_value=False))
+
+    upload = UploadFile(filename="draw.png", file=BytesIO(b"PNG"))
+
+    result = await ai_callback_runner.run_ai_callback("draw-task-failed", status="success", file=upload)
+
+    assert result == {"message": "failed"}
+
+
+@pytest.mark.asyncio
 async def test_run_ai_callback_sing_registry_fallback_uses_registered_bot(monkeypatch: pytest.MonkeyPatch) -> None:
     from io import BytesIO
 
@@ -910,9 +955,7 @@ async def test_run_ai_callback_voice_delivery_invokes_media_task_hook(monkeypatc
         monkeypatch.setattr(
             ai_callback_runner.TaskManager,
             "claim_task",
-            AsyncMock(
-                return_value={"bot_id": "111", "group_id": 222, "user_id": 333, "task_type": "sing"}
-            ),
+            AsyncMock(return_value={"bot_id": "111", "group_id": 222, "user_id": 333, "task_type": "sing"}),
         )
         file = MagicMock()
         file.read = AsyncMock(return_value=b"\xff\xf3\xc4" * 100)

@@ -662,8 +662,13 @@ async def test_produce_semantic_profile_partial_failure_persists_and_advances(mo
     async def fake_known_bots(group_id):
         return set()
 
+    class _EmptyRepo:
+        async def find_recent_in_group(self, *args, **kwargs):
+            return []
+
     monkeypatch.setattr(mod, "_known_bots_in_group", fake_known_bots)
     monkeypatch.setattr(mod, "_rebuild_pairs_from_messages", fake_rebuild)
+    monkeypatch.setattr(mod, "make_message_repository", lambda: _EmptyRepo())
     monkeypatch.setattr(sem, "semantic_style_collection_enabled", lambda *, bot_id, group_id: True)
     monkeypatch.setattr(sem, "semantic_label_budget_ok", lambda: True)
     monkeypatch.setattr(sem, "get_semantic_style_group_cursor", lambda *, bot_id, group_id: (0, 0))
@@ -704,8 +709,13 @@ async def test_produce_semantic_profile_all_failed_keeps_cursor(monkeypatch) -> 
     async def fake_known_bots(group_id):
         return set()
 
+    class _EmptyRepo:
+        async def find_recent_in_group(self, *args, **kwargs):
+            return []
+
     monkeypatch.setattr(mod, "_known_bots_in_group", fake_known_bots)
     monkeypatch.setattr(mod, "_rebuild_pairs_from_messages", fake_rebuild)
+    monkeypatch.setattr(mod, "make_message_repository", lambda: _EmptyRepo())
     monkeypatch.setattr(sem, "semantic_style_collection_enabled", lambda *, bot_id, group_id: True)
     monkeypatch.setattr(sem, "semantic_label_budget_ok", lambda: True)
     monkeypatch.setattr(sem, "get_semantic_style_group_cursor", lambda *, bot_id, group_id: (0, 0))

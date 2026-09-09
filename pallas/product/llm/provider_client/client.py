@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from typing import TYPE_CHECKING, Any
 
@@ -227,6 +228,19 @@ async def _post_provider_chat(
             )
         if method == "anthropic_messages":
             return await _repo._post_anthropic_messages(
+                messages,
+                base_url=base_url,
+                api_key=api_key,
+                model=model,
+                options=use_options,
+                tools=tools,
+                timeout_sec=timeout_sec,
+                task=task,
+                provider_id=provider_id,
+                telemetry_context=telemetry_context,
+            )
+        if method == "ollama_chat":
+            return await _repo._post_ollama_chat(
                 messages,
                 base_url=base_url,
                 api_key=api_key,
@@ -495,3 +509,161 @@ async def _post_chat_completions(
     if not str(message_obj.get("content", "") or "").strip() and not message_obj.get("tool_calls"):
         raise _repo.LlmProviderError("empty provider content")
     return message_obj
+
+
+async def _post_ollama_chat(
+    messages: list[dict[str, Any]],
+    *,
+    base_url: str,
+    api_key: str,
+    model: str,
+    options: dict[str, Any],
+    tools: list[dict[str, Any]] | None,
+    timeout_sec: float,
+    task: str = "llm_chat",
+    provider_id: str = "",
+    telemetry_context: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Ollama 原生 /api/chat：思考模型内容直接回填 message.content，无 reasoning 空壳问题。"""
+    model_name = str(model or "").strip()
+    if not model_name:
+        raise _repo.LlmProviderError("llm model not configured")
+    url = _repo.ollama_chat_url(base_url)
+    payload: dict[str, Any] = {"model": model_name, "messages": _ollama_messages(messages), "stream": False}
+    if tools:
+        payload["tools"] = tools
+    options_payload: dict[str, Any] = {}
+    temperature = options.get("temperature")
+    if temperature is not None:
+        options_payload["temperature"] = float(temperature)
+    max_tokens = options.get("num_predict")
+    if max_tokens is None:
+        max_tokens = options.get("max_tokens")
+    if max_tokens is not None:
+        options_payload["num_predict"] = int(max_tokens)
+    if options_payload:
+        payload["options"] = options_payload
+    think = _ollama_think_value(options)
+    if think is not None:
+        payload["think"] = think
+    timeout = httpx.Timeout(float(timeout_sec))
+    headers = _repo.auth_headers(api_key)
+    client = await _repo.get_llm_shared_httpx_client()
+    response = await client.post(url, json=payload, headers=headers, timeout=timeout)
+    if response.status_code != 200:
+        logger.error(
+            "LLM provider request failed with status [{}], response bytes [{}]",
+            response.status_code,
+            len(response.content),
+        )
+        _repo.raise_provider_http_error(response)
+    data = response.json()
+    if not isinstance(data, dict):
+        raise _repo.LlmProviderError("invalid ollama chat payload")
+    _repo._record_usage_from_payload(
+        data,
+        task=task,
+        provider_id=provider_id,
+        model=model_name,
+        local=True,
+        telemetry_context=telemetry_context,
+    )
+    message_obj = data.get("message")
+    if not isinstance(message_obj, dict):
+        raise _repo.LlmProviderError("invalid ollama message")
+    content = message_obj.get("content")
+    if isinstance(content, list):
+        texts = [
+            str(part.get("text") or "").strip()
+            for part in content
+            if isinstance(part, dict) and str(part.get("text") or "").strip()
+        ]
+        content = "\n".join(texts)
+    message_obj = dict(message_obj)
+    message_obj["content"] = str(content or "").strip()
+    thinking = message_obj.get("thinking")
+    if isinstance(thinking, str) and thinking.strip():
+        message_obj["reasoning_content"] = thinking.strip()
+    message_obj.pop("thinking", None)
+    if not message_obj["content"] and not message_obj.get("tool_calls"):
+        raise _repo.LlmProviderError("empty provider content")
+    return message_obj
+
+
+def _ollama_think_value(options: dict[str, Any]) -> bool | str | None:
+    effort = str(options.get("model_effort") or "").strip().lower()
+    if not effort or effort == "enable":
+        return True if effort == "enable" else None
+    if effort == "disable":
+        # ollama.com 的 think: false 不关闭思考，而是把思考内容内联进 content；
+        # 不传 think 让思考进独立 thinking 字段，content 保持干净。
+        return None
+    return {"minimal": "low", "low": "low", "medium": "medium", "high": "high", "xhigh": "max"}.get(
+        effort,
+    )
+
+
+def _ollama_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        row = dict(message)
+        role = str(row.get("role") or "").strip().lower()
+        content = row.get("content")
+        if isinstance(content, list):
+            texts: list[str] = []
+            images: list[str] = []
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                part_type = str(part.get("type") or "").strip().lower()
+                if part_type == "text":
+                    text = str(part.get("text") or "")
+                    if text:
+                        texts.append(text)
+                    continue
+                if part_type != "image_url":
+                    continue
+                image_url = part.get("image_url")
+                url = image_url.get("url") if isinstance(image_url, dict) else image_url
+                raw_url = str(url or "")
+                if raw_url.startswith("data:") and "," in raw_url:
+                    images.append(raw_url.split(",", 1)[1])
+            row["content"] = "\n".join(texts)
+            if images:
+                row["images"] = images
+            else:
+                row.pop("images", None)
+
+        if role == "assistant" and isinstance(row.get("tool_calls"), list):
+            tool_calls: list[dict[str, Any]] = []
+            for call in row["tool_calls"]:
+                if not isinstance(call, dict):
+                    continue
+                normalized = dict(call)
+                function = dict(call.get("function") or {})
+                arguments = function.get("arguments")
+                if isinstance(arguments, str):
+                    try:
+                        parsed = json.loads(arguments)
+                    except json.JSONDecodeError:
+                        parsed = None
+                    if isinstance(parsed, dict):
+                        function["arguments"] = parsed
+                normalized["function"] = function
+                tool_calls.append(normalized)
+            row["tool_calls"] = tool_calls
+
+        if role == "tool":
+            tool_name = str(row.get("tool_name") or "").strip()
+            if not tool_name and isinstance(content, str):
+                try:
+                    tool_name = str(json.loads(content).get("tool") or "").strip()
+                except (json.JSONDecodeError, AttributeError):
+                    pass
+            if tool_name:
+                row["tool_name"] = tool_name
+            row.pop("tool_call_id", None)
+        out.append(row)
+    return out

@@ -64,7 +64,7 @@ def is_anthropic_official_host(base_url: str) -> bool:
 
 def resolve_request_method(request_method: str | None, base_url: str) -> str:
     method = str(request_method or "").strip().lower() or "chat_completions"
-    if method == "anthropic_messages":
+    if method in ("anthropic_messages", "ollama_chat"):
         return method
     # 官方 Anthropic 端点默认走 Messages；OpenRouter 等兼容代理仍用 chat_completions
     if method == "chat_completions" and _repo.is_anthropic_official_host(base_url):
@@ -78,3 +78,12 @@ def ollama_tags_url(base_url: str) -> str:
         raise _repo.LlmProviderError("ollama base url not configured")
     base = base.removesuffix("/v1")
     return f"{base.rstrip('/')}/api/tags"
+
+
+def ollama_chat_url(base_url: str) -> str:
+    """Ollama 原生 /api/chat：思考模型内容能正常回填 content。"""
+    base = _repo.normalize_openai_base_url(base_url)
+    if not base:
+        raise _repo.LlmProviderError("ollama base url not configured")
+    base = base.removesuffix("/v1")
+    return f"{base.rstrip('/')}/api/chat"

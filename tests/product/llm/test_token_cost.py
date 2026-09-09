@@ -106,6 +106,43 @@ def test_compute_model_rule_cost_applies_daily_time_window() -> None:
     )
 
 
+def test_compute_model_rule_cost_applies_daily_ranges() -> None:
+    rule = {
+        "id": "peak",
+        "kind": "per_request",
+        "price_per_request": 0.02,
+        "daily_ranges": [["09:00", "12:00"], ["14:00", "18:00"]],
+    }
+    assert (
+        compute_model_rule_cost(rule, request_at="2026-09-01T10:00:00+08:00", prompt_tokens=1, completion_tokens=0)[0]
+        == 0.02
+    )
+    assert (
+        compute_model_rule_cost(rule, request_at="2026-09-01T15:00:00+08:00", prompt_tokens=1, completion_tokens=0)[0]
+        == 0.02
+    )
+    assert (
+        compute_model_rule_cost(rule, request_at="2026-09-01T13:00:00+08:00", prompt_tokens=1, completion_tokens=0)[0]
+        == 0.0
+    )
+    assert (
+        compute_model_rule_cost(rule, request_at="2026-09-01T20:00:00+08:00", prompt_tokens=1, completion_tokens=0)[0]
+        == 0.0
+    )
+    midnight = {
+        "id": "night",
+        "kind": "per_request",
+        "price_per_request": 0.02,
+        "daily_ranges": [["23:00", "02:00"]],
+    }
+    assert (
+        compute_model_rule_cost(midnight, request_at="2026-09-01T00:30:00+08:00", prompt_tokens=1, completion_tokens=0)[
+            0
+        ]
+        == 0.02
+    )
+
+
 def test_compute_model_rule_cost_keeps_legacy_tier_upper_bound_inclusive() -> None:
     cost, snapshot = compute_model_rule_cost(
         {

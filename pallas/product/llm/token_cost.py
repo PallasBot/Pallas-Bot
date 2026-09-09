@@ -85,6 +85,32 @@ def compute_usage_cost(
     return round(cost, 6)
 
 
+def _time_in_ranges(current_time: clock_time, ranges: object) -> bool:
+    """任一每日时段区间命中即生效；区间可跨零点。空列表视为全天。"""
+    if not isinstance(ranges, list):
+        return False
+    if not ranges:
+        return True
+    for pair in ranges:
+        if not isinstance(pair, (list, tuple)) or len(pair) < 2:
+            continue
+        start_raw = str(pair[0] or "").strip()
+        end_raw = str(pair[1] or "").strip()
+        try:
+            start = clock_time.fromisoformat(start_raw or "00:00")
+            end = clock_time.fromisoformat(end_raw or "00:00")
+        except ValueError:
+            continue
+        if start == end:
+            return True
+        if start < end:
+            if start <= current_time < end:
+                return True
+        elif current_time >= start or current_time < end:
+            return True
+    return False
+
+
 def _rule_is_active(rule: dict[str, Any], request_at: str) -> bool:
     try:
         current = datetime.fromisoformat(request_at)
@@ -107,6 +133,10 @@ def _rule_is_active(rule: dict[str, Any], request_at: str) -> bool:
             value = value.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
         if compare(value):
             return False
+    current_time = current.timetz().replace(tzinfo=None)
+    ranges = rule.get("daily_ranges")
+    if ranges is not None:
+        return _time_in_ranges(current_time, ranges)
     start_raw = str(rule.get("daily_start") or "").strip()
     end_raw = str(rule.get("daily_end") or "").strip()
     if not start_raw and not end_raw:
@@ -116,7 +146,6 @@ def _rule_is_active(rule: dict[str, Any], request_at: str) -> bool:
         end = clock_time.fromisoformat(end_raw or "00:00")
     except ValueError:
         return False
-    current_time = current.timetz().replace(tzinfo=None)
     if start == end:
         return True
     if start < end:

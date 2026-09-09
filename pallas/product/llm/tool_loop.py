@@ -58,12 +58,6 @@ def tool_names_from_schemas(schemas: list[Any]) -> list[str]:
 
 
 def _activate_names_from_tool_result(tool_name: str, result: dict[str, Any]) -> list[str]:
-    from pallas.product.llm.tools.discovery import TOOLS_FIND_NAME
-    from pallas.product.llm.tools.registry import from_provider_tool_name
-
-    resolved = from_provider_tool_name(tool_name)
-    if resolved != TOOLS_FIND_NAME:
-        return []
     payload = result.get("result") if isinstance(result.get("result"), dict) else result
     if not isinstance(payload, dict):
         return []
@@ -130,6 +124,39 @@ def _is_side_effecting_tool(name: str) -> bool:
     if spec is None:
         return False
     return ToolCapability.SIDE_EFFECTING.value in (spec.capabilities or frozenset())
+
+
+def _is_query_tool(name: str) -> bool:
+    from pallas.product.llm.tools.inventory import is_query_tool
+    from pallas.product.llm.tools.registry import from_provider_tool_name
+
+    spec = _tool_spec_by_name(from_provider_tool_name(name))
+    return bool(spec is not None and is_query_tool(spec))
+
+
+def has_query_tool_schemas(schemas: list[Any] | None) -> bool:
+    return any(_is_query_tool(name) for name in tool_names_from_schemas(list(schemas or [])))
+
+
+def _tool_call_signature(name: str, args: dict[str, Any]) -> str:
+    return json.dumps(
+        {"name": str(name or "").strip(), "args": args},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+        default=str,
+    )
+
+
+def _query_result_stats(result: dict[str, Any]) -> tuple[bool, bool]:
+    payload = result.get("result") if isinstance(result.get("result"), dict) else result
+    if not isinstance(payload, dict) or "count" not in payload:
+        return False, False
+    try:
+        count = int(payload.get("count") or 0)
+    except (TypeError, ValueError):
+        return False, False
+    return count > 0, count == 0
 
 
 def resolve_visible_reply_after_tools(
@@ -246,6 +273,7 @@ async def complete_with_tool_loop(
     messages: list[dict[str, Any]],
     metadata: dict[str, Any] | None = None,
     cfg: LlmConfig | None = None,
+    tool_call_started: Any | None = None,
 ) -> tuple[str, dict[str, Any]]:
     c = cfg or get_llm_config()
     meta = metadata if isinstance(metadata, dict) else {}
@@ -394,6 +422,7 @@ async def complete_with_tool_loop(
     agent_trace: dict[str, Any] = {
         "final_stage": "generate",
         "tool_call_count": 0,
+        "proposed_tool_call_count": 0,
         "rounds": [],
         "status": "success",
         "tool_loop_enabled": True,
@@ -402,16 +431,69 @@ async def complete_with_tool_loop(
         "activated_tools": list(meta.get("activated_tools") or []),
         "background_results": background_events,
         "tool_selection": tool_selection,
+        "successful_query_call_count": 0,
+        "successful_side_effect_call_count": 0,
+        "failed_tool_call_count": 0,
+        "query_tool_failed_count": 0,
+        "query_tool_empty_count": 0,
+        "query_tool_hit_count": 0,
+        "duplicate_tool_call_blocked": 0,
+        "query_budget_blocked": 0,
         "provider_calls": [],
     }
     reply_texts: list[str] = []
     side_effect_ok = False
     chat_reply_injected = False
     social_tool_succeeded = False
+    tool_call_signatures: set[str] = set()
+    query_call_counts: dict[str, int] = {}
+    last_query_previews: dict[str, str] = {}
+    force_final_answer = False
+    final_answer_instruction = (
+        "根据已经取得的工具结果直接回答当前问题；有依据就给结论，资料不足就明确说明不足；"
+        "不要继续调用工具，也不要输出 PASS。"
+    )
 
     from pallas.product.llm.tools.reply import CHAT_REPLY_NAME, extract_chat_reply_text
 
-    for round_idx in range(max_rounds):
+    async def complete_final_answer(round_number: int) -> tuple[str, dict[str, Any]]:
+        if not working or str(working[-1].get("content") or "") != final_answer_instruction:
+            working.append({"role": "user", "content": final_answer_instruction})
+        record_provider_prompt_hit(working)
+        final_message = await complete_chat_message(
+            working,
+            model=model,
+            options=dict(options),
+            tools=None,
+            cfg=c,
+            task=task,
+            prepare_candidate_messages=prepare_candidate,
+            **telemetry_kwargs,
+        )
+        provider_trace = final_message.get("_provider_trace")
+        if isinstance(provider_trace, dict):
+            agent_trace["provider_calls"].append(provider_trace)
+        final_round = {"round": round_number, "tool_calls": [], "calls": []}
+        freeform = str(final_message.get("content", "") or "").strip()
+        content, reply_source = resolve_visible_reply_after_tools(
+            freeform_content=freeform,
+            reply_texts=reply_texts,
+            side_effect_ok=side_effect_ok,
+            tool_call_count=int(agent_trace.get("tool_call_count") or 0),
+        )
+        agent_trace["rounds"].append(final_round)
+        agent_trace["reply_source"] = reply_source
+        agent_trace["final_stage"] = "final_answer"
+        assistant_message = dict(final_message)
+        assistant_message.setdefault("role", "assistant")
+        assistant_message["content"] = content
+        assistant_message["_agent_trace"] = agent_trace
+        record_bot_llm_task(task, "tool_session_called")
+        return content, assistant_message
+
+    for round_idx in range(max(2, max_rounds)):
+        if force_final_answer:
+            return await complete_final_answer(round_idx + 1)
         round_options = dict(options)
         if prefer_required and round_idx == 0:
             round_options["tool_choice"] = "required"
@@ -454,7 +536,9 @@ async def complete_with_tool_loop(
                 tool_call_count=int(agent_trace.get("tool_call_count") or 0),
             )
             agent_trace["reply_source"] = reply_source
-            if reply_source != "generate":
+            if force_final_answer:
+                agent_trace["final_stage"] = "final_answer"
+            if not force_final_answer and reply_source != "generate":
                 agent_trace["final_stage"] = reply_source
             assistant_message = dict(last_message)
             assistant_message.setdefault("role", "assistant")
@@ -483,13 +567,36 @@ async def complete_with_tool_loop(
             call_id = str(call.get("id") or tool_name)
             args = parse_tool_arguments(fn.get("arguments"))
             round_trace["tool_calls"].append(resolved_name)
-            agent_trace["tool_call_count"] = int(agent_trace.get("tool_call_count") or 0) + 1
+            agent_trace["proposed_tool_call_count"] = int(agent_trace.get("proposed_tool_call_count") or 0) + 1
+            is_query = _is_query_tool(resolved_name)
+            is_side_effect = _is_side_effecting_tool(resolved_name)
+            call_signature = _tool_call_signature(resolved_name, args)
+            query_count = query_call_counts.get(resolved_name, 0)
+            blocked_reason = ""
+            if call_signature in tool_call_signatures:
+                blocked_reason = "duplicate_tool_call"
+                agent_trace["duplicate_tool_call_blocked"] = (
+                    int(agent_trace.get("duplicate_tool_call_blocked") or 0) + 1
+                )
+            elif is_query and (query_count >= 2 or sum(query_call_counts.values()) >= 3):
+                blocked_reason = "query_budget_exceeded"
+                agent_trace["query_budget_blocked"] = int(agent_trace.get("query_budget_blocked") or 0) + 1
             background_names = {str(name).strip() for name in (meta.get("background_tool_names") or [])}
             run_in_background = resolved_name in background_names
-            execute_kwargs = {"context": context}
-            if run_in_background:
-                execute_kwargs["background"] = True
-            tool_result = await execute_tool_async(resolved_name, args, **execute_kwargs)
+            if blocked_reason:
+                tool_result = {"ok": False, "error": blocked_reason}
+                force_final_answer = True
+            else:
+                tool_call_signatures.add(call_signature)
+                agent_trace["tool_call_count"] = int(agent_trace.get("tool_call_count") or 0) + 1
+                if is_query:
+                    query_call_counts[resolved_name] = query_count + 1
+                if is_query and tool_call_started is not None:
+                    tool_call_started.set()
+                execute_kwargs = {"context": context}
+                if run_in_background:
+                    execute_kwargs["background"] = True
+                tool_result = await execute_tool_async(resolved_name, args, **execute_kwargs)
             result_dict = tool_result if isinstance(tool_result, dict) else {"ok": True, "result": tool_result}
             summary = summarize_tool_result(result_dict)
             round_trace["calls"].append({
@@ -503,14 +610,31 @@ async def complete_with_tool_loop(
             })
             if summary["ok"]:
                 record_bot_llm_task(task, "tool_call_ok")
+                if is_query:
+                    agent_trace["successful_query_call_count"] = (
+                        int(agent_trace.get("successful_query_call_count") or 0) + 1
+                    )
+                    has_hits, is_empty = _query_result_stats(result_dict)
+                    if has_hits:
+                        agent_trace["query_tool_hit_count"] = int(agent_trace.get("query_tool_hit_count") or 0) + 1
+                    if is_empty:
+                        agent_trace["query_tool_empty_count"] = int(agent_trace.get("query_tool_empty_count") or 0) + 1
+                    previous_preview = last_query_previews.get(resolved_name)
+                    if summary["result_preview"] and previous_preview == summary["result_preview"]:
+                        force_final_answer = True
+                    if summary["result_preview"]:
+                        last_query_previews[resolved_name] = str(summary["result_preview"])
                 if resolved_name.startswith("social."):
                     social_tool_succeeded = True
                 if resolved_name == CHAT_REPLY_NAME:
                     extracted = extract_chat_reply_text(result_dict)
                     if extracted is not None:
                         reply_texts.append(extracted)
-                elif _is_side_effecting_tool(resolved_name):
+                elif is_side_effect:
                     side_effect_ok = True
+                    agent_trace["successful_side_effect_call_count"] = (
+                        int(agent_trace.get("successful_side_effect_call_count") or 0) + 1
+                    )
                     if not chat_reply_injected:
                         tool_schemas = _merge_activated_tool_schemas(tool_schemas, [CHAT_REPLY_NAME])
                         schema_names = tool_names_from_schemas(tool_schemas)
@@ -522,6 +646,12 @@ async def complete_with_tool_loop(
                         chat_reply_injected = True
             else:
                 record_bot_llm_task(task, "tool_call_fail")
+                if not blocked_reason:
+                    agent_trace["failed_tool_call_count"] = int(agent_trace.get("failed_tool_call_count") or 0) + 1
+                    if is_query:
+                        agent_trace["query_tool_failed_count"] = (
+                            int(agent_trace.get("query_tool_failed_count") or 0) + 1
+                        )
                 if social_tool_required and resolved_name.startswith("social."):
                     content = "群内信息暂时查不了，稍后再试。"
                     agent_trace["status"] = "required_tool_failed"
@@ -533,7 +663,7 @@ async def complete_with_tool_loop(
                     assistant_message["content"] = content
                     assistant_message["_agent_trace"] = agent_trace
                     return content, assistant_message
-                if _is_side_effecting_tool(resolved_name):
+                if is_side_effect:
                     agent_trace.setdefault("reject_reasons", []).append({
                         "tool": resolved_name,
                         "reason": summary["error"] or "side_effect_rejected",
@@ -557,6 +687,8 @@ async def complete_with_tool_loop(
                     if name not in agent_trace["activated_tools"]:
                         agent_trace["activated_tools"].append(name)
         agent_trace["rounds"].append(round_trace)
+        if force_final_answer:
+            return await complete_final_answer(round_idx + 2)
 
     freeform = str(last_message.get("content", "") or "").strip()
     if social_tool_required and not social_tool_succeeded:
@@ -581,7 +713,9 @@ async def complete_with_tool_loop(
         reply_source = "max_rounds_fallback"
     agent_trace["status"] = "max_rounds"
     agent_trace["reply_source"] = reply_source
-    if reply_source != "generate":
+    if force_final_answer:
+        agent_trace["final_stage"] = "final_answer"
+    elif reply_source != "generate":
         agent_trace["final_stage"] = reply_source
     assistant_message = dict(last_message)
     assistant_message.setdefault("role", "assistant")

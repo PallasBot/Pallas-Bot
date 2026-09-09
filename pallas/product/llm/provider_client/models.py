@@ -43,6 +43,8 @@ async def list_openai_compatible_models(
     method = _repo.resolve_request_method(request_method, base_url)
     if method == "anthropic_messages":
         return await _repo.list_anthropic_models(base_url, api_key, timeout_sec=timeout_sec)
+    if method == "ollama_chat":
+        return await _repo.list_ollama_tag_models(base_url, api_key, timeout_sec=timeout_sec)
     url = _repo.models_url(base_url)
     headers = _repo.auth_headers(api_key)
     try:
@@ -83,13 +85,15 @@ async def list_anthropic_models(
 
 async def list_ollama_tag_models(
     base_url: str,
+    api_key: str = "",
     *,
     timeout_sec: float = 15.0,
 ) -> list[str]:
     url = _repo.ollama_tags_url(base_url)
+    headers = _repo.auth_headers(api_key)
     try:
         client = await _repo.get_llm_shared_httpx_client()
-        response = await client.get(url, timeout=httpx.Timeout(timeout_sec))
+        response = await client.get(url, headers=headers, timeout=httpx.Timeout(timeout_sec))
     except Exception as exc:
         raise _repo.LlmProviderError(_repo.format_provider_transport_error(exc, url=url)) from exc
     if response.status_code != 200:
@@ -105,6 +109,7 @@ async def probe_provider_models(*, timeout_sec: float = 3.0, cfg: _repo.LlmConfi
     c = cfg or _repo.get_llm_config()
     base = str(c.llm_base_url or "").strip()
     key = str(c.llm_api_key or "").strip()
+    request_method = ""
     if not base:
         from pallas.product.llm.providers_store import resolve_endpoint_for_task
 
@@ -112,8 +117,10 @@ async def probe_provider_models(*, timeout_sec: float = 3.0, cfg: _repo.LlmConfi
         if endpoint is not None:
             base = endpoint.base_url
             key = key or endpoint.api_key
+            request_method = str(endpoint.request_method or "").strip()
     try:
-        url = _repo.models_url(base)
+        method = _repo.resolve_request_method(request_method, base)
+        url = _repo.ollama_tags_url(base) if method == "ollama_chat" else _repo.models_url(base)
     except _repo.LlmProviderError as exc:
         return {"ok": False, "url": "", "error": str(exc)}
     headers = _repo.auth_headers(key)

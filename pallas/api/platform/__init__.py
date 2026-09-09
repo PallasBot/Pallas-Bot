@@ -135,6 +135,7 @@ from pallas.core.shared.dream_ban_ack_state import DREAM_BAN_ACK_SENT_STATE_KEY
 # ── 产品域 (LLM) ──
 from pallas.product.llm.config import get_llm_config, llm_server_base_url
 from pallas.product.llm.tools.declare import llm_command_tool_row
+from pallas.product.llm.tools.external import register_external_llm_tool as register_llm_tool
 
 __all__ = [
     # AI callback
@@ -227,6 +228,7 @@ __all__ = [
     # LLM
     "get_llm_config",
     "llm_command_tool_row",
+    "register_llm_tool",
     "llm_server_base_url",
     # 跨插件常量
     "DREAM_BAN_ACK_SENT_STATE_KEY",

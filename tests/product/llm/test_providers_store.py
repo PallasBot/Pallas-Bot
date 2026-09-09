@@ -131,6 +131,27 @@ def test_providers_store_honors_explicit_registered_model_removal(tmp_path: Path
     assert [model["name"] for model in models] == ["keep-model"]
 
 
+def test_providers_store_always_registers_default_model(tmp_path: Path, monkeypatch) -> None:
+    store = tmp_path / "llm_providers.json"
+    monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
+    clear_providers_store_cache()
+    saved = save_providers_document({
+        "providers": [
+            {
+                "id": "ds",
+                "base_url": "https://api.deepseek.com",
+                "default_model": "deepseek-v4-flash",
+                "models": [{"model_id": "other", "name": "other-model"}],
+            }
+        ],
+        "routing": {"tasks": {"llm_chat": "ds"}},
+    })
+    models = saved["providers"][0]["models"]
+    assert [model["name"] for model in models] == ["other-model", "deepseek-v4-flash"]
+    default = next(model for model in models if model["name"] == "deepseek-v4-flash")
+    assert default["is_default"] is True
+
+
 def test_endpoint_uses_registered_model_capabilities_and_effort(tmp_path: Path, monkeypatch) -> None:
     store = tmp_path / "llm_providers.json"
     monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
@@ -378,6 +399,31 @@ def test_providers_store_anthropic_request_method(tmp_path: Path, monkeypatch) -
     assert endpoint.request_method == "anthropic_messages"
     exported = export_providers_for_api()
     assert exported["providers"][0]["request_method"] == "anthropic_messages"
+
+
+def test_providers_store_ollama_chat_request_method(tmp_path: Path, monkeypatch) -> None:
+    store = tmp_path / "llm_providers.json"
+    monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
+    clear_providers_store_cache()
+    save_providers_document({
+        "providers": [
+            {
+                "id": "ollama",
+                "kind": "remote",
+                "base_url": "https://ollama.com",
+                "api_key": "ollama-key",
+                "default_model": "glm-5.3-flash",
+                "request_method": "ollama_chat",
+            }
+        ],
+        "routing": {"tasks": {"llm_chat": "ollama"}},
+    })
+    clear_providers_store_cache()
+    endpoint = resolve_endpoint_for_task("llm_chat")
+    assert endpoint is not None
+    assert endpoint.request_method == "ollama_chat"
+    exported = export_providers_for_api()
+    assert exported["providers"][0]["request_method"] == "ollama_chat"
 
 
 def test_resolve_endpoint_candidates_follow_chain_fallback(tmp_path: Path, monkeypatch) -> None:

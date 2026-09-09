@@ -16,7 +16,7 @@ from pallas.product.llm.memory.policy import (
     has_event_signal,
     has_transient_signal,
 )
-from pallas.product.llm.memory.rate_limit import DailyBudget, WriteCooldown
+from pallas.product.llm.memory.rate_limit import DailyBudget, WriteCooldown, memory_llm_sem
 from pallas.product.llm.memory.store import is_llm_memory_store_available, save_memory_entry
 from pallas.product.llm.provider_client import complete_chat_message
 
@@ -145,16 +145,17 @@ async def maybe_auto_save_group_episode(*, bot_id: int, group_id: int | None, cf
         if not transcript or _last_summary_signature.get(key) == transcript:
             return False
         try:
-            message = await complete_chat_message(
-                [{"role": "system", "content": _group_episode_system}, {"role": "user", "content": transcript}],
-                model="",
-                options={
-                    "temperature": 0.2,
-                    "max_tokens": task_token_budget("memory_extract"),
-                },
-                task="memory_extract",
-                cfg=c,
-            )
+            async with memory_llm_sem():
+                message = await complete_chat_message(
+                    [{"role": "system", "content": _group_episode_system}, {"role": "user", "content": transcript}],
+                    model="",
+                    options={
+                        "temperature": 0.2,
+                        "max_tokens": task_token_budget("memory_extract"),
+                    },
+                    task="memory_extract",
+                    cfg=c,
+                )
         except Exception as exc:
             logger.warning("Group episode summary failed for bot [{}] and group [{}]: [{}]", bid, gid, exc)
             return False

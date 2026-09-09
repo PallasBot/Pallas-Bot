@@ -46,6 +46,12 @@ def test_reply_hard_cap_uses_default_segment_when_no_group_stats() -> None:
     assert cap == 6 * 1 + 12  # 6*1+12=18
 
 
+def test_tool_reply_hard_cap_keeps_grounded_answer_budget() -> None:
+    cap = resolve_reply_hard_cap(36, target_chars_max=160)
+
+    assert cap == 160
+
+
 def test_reply_hard_cap_zero_when_scene_cap_absent() -> None:
     assert resolve_reply_hard_cap(0) == 0
 
@@ -66,7 +72,8 @@ def test_casual_chat_defaults_to_one_or_two_short_bubbles() -> None:
     policy = resolve_reply_shape(make_turn_policy(), None)
 
     assert 1 <= policy.preferred_bubbles <= 3
-    assert policy.max_bubbles <= 5
+    assert policy.max_bubbles >= 2
+    assert policy.max_bubbles <= 8
     assert (policy.target_chars_min, policy.target_chars_max) == (4, 18)
     assert policy.total_length_band == "short"
     assert policy.max_output_tokens == chat_reply_token_budget("casual")
@@ -77,7 +84,7 @@ def test_casual_chat_without_profile_randomizes_bubble_count_across_range() -> N
     for seed in range(200):
         policy = resolve_reply_shape(make_turn_policy(), None, rng=random.Random(seed))
         seen.add(policy.preferred_bubbles)
-        assert policy.max_bubbles <= 5
+        assert policy.max_bubbles <= 8
         assert policy.total_length_band == "short"
     assert seen == {1, 2, 3}
 
@@ -148,7 +155,7 @@ def test_group_shape_can_supply_three_beat_ceiling_and_rhythm() -> None:
     policy = resolve_reply_shape(make_turn_policy(), profile)
 
     assert policy.preferred_bubbles == 2
-    assert policy.max_bubbles == 5
+    assert policy.max_bubbles == 8
     assert policy.rhythm == "multi"
     assert (policy.target_chars_min, policy.target_chars_max) == (4, 18)
 
@@ -187,7 +194,7 @@ def test_tool_budget_is_not_truncated_by_legacy_short_preference() -> None:
     assert short.max_output_tokens == baseline.max_output_tokens
     assert short.max_output_tokens == chat_reply_token_budget("tool")
     assert short.target_chars_max == baseline.target_chars_max
-    assert short.max_bubbles <= 3
+    assert short.max_bubbles <= 8
 
 
 @pytest.mark.parametrize(

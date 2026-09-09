@@ -894,7 +894,10 @@ async def fetch_provider_models(
         }
 
     effective_method = resolve_request_method(method, url)
-    source = "anthropic" if effective_method == "anthropic_messages" else "openai"
+    source = {
+        "anthropic_messages": "anthropic",
+        "ollama_chat": "ollama",
+    }.get(effective_method, "openai")
     last_exc: LlmProviderError | None = None
     for key_index, use_key in enumerate(keys):
         try:
