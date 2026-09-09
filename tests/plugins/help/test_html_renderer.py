@@ -50,13 +50,13 @@ def test_html_theme_is_separate_from_pillow_theme(monkeypatch) -> None:
     dark = html_theme.get_html_theme("dark")
 
     assert light == dark
-    assert light["canvas"] == "#7A898B"
-    assert light["paper"] == "#C9D2D1"
-    assert light["card"] == "#F1F3EF"
-    assert light["header"] == "#26343A"
-    assert light["header_panel"] == "#35474E"
-    assert light["cyan"] == "#3CC3E3"
-    assert light["amber"] == "#E8D63A"
+    assert light["canvas"] == "#9A9E9B"
+    assert light["paper"] == "#ACAFAC"
+    assert light["card"] == "#DEDED8"
+    assert light["header"] == "#343A3D"
+    assert light["header_panel"] == "#42494C"
+    assert light["cyan"] == "#2DB9DD"
+    assert light["amber"] == "#E3D600"
     assert help_theme.ACCENT == (124, 58, 237)
 
 
