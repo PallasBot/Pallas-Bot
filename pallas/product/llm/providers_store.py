@@ -269,6 +269,8 @@ def _normalize_registered_models(
     for row in rows:
         if isinstance(row, dict):
             add(row.get("name"), row)
+    # 默认模型始终进注册列表；add 内按名称去重，已注册则跳过
+    add(default_model)
     if not has_registered_models:
         add(default_model)
         for name in task_models.values():

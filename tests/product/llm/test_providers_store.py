@@ -131,6 +131,27 @@ def test_providers_store_honors_explicit_registered_model_removal(tmp_path: Path
     assert [model["name"] for model in models] == ["keep-model"]
 
 
+def test_providers_store_always_registers_default_model(tmp_path: Path, monkeypatch) -> None:
+    store = tmp_path / "llm_providers.json"
+    monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
+    clear_providers_store_cache()
+    saved = save_providers_document({
+        "providers": [
+            {
+                "id": "ds",
+                "base_url": "https://api.deepseek.com",
+                "default_model": "deepseek-v4-flash",
+                "models": [{"model_id": "other", "name": "other-model"}],
+            }
+        ],
+        "routing": {"tasks": {"llm_chat": "ds"}},
+    })
+    models = saved["providers"][0]["models"]
+    assert [model["name"] for model in models] == ["other-model", "deepseek-v4-flash"]
+    default = next(model for model in models if model["name"] == "deepseek-v4-flash")
+    assert default["is_default"] is True
+
+
 def test_endpoint_uses_registered_model_capabilities_and_effort(tmp_path: Path, monkeypatch) -> None:
     store = tmp_path / "llm_providers.json"
     monkeypatch.setattr("pallas.product.llm.providers_store.providers_store_path", lambda: store)
