@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from pallas.product.llm import delivery as llm_delivery
+from pallas.product.llm.chat_empty_fallback import LLM_CHAT_EMPTY_FALLBACK
 from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.turn_telemetry import build_turn_event
 
@@ -167,6 +168,45 @@ async def test_query_tool_empty_model_reply_gets_visible_fallback(
 
     assert result.delivered is True
     assert sent == ["资料查到了，但这次回答没整理出来，再问我一次吧。"]
+
+
+@pytest.mark.asyncio
+async def test_direct_pass_reply_gets_visible_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent: list[str] = []
+    monkeypatch.setattr(llm_delivery, "should_append_llm_session", lambda _task: False)
+    monkeypatch.setattr(
+        llm_delivery,
+        "get_llm_config",
+        lambda: LlmConfig(
+            llm_reply_postprocess_enabled=False,
+            llm_reply_trim_terminal_period_enabled=False,
+        ),
+    )
+
+    async def fake_send(_bot, _group_id, text, **_kwargs):
+        sent.append(str(text))
+        return SimpleNamespace(message_id=1, delivered=True)
+
+    monkeypatch.setattr(
+        "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
+        fake_send,
+    )
+
+    result = await llm_delivery.deliver_llm_callback_success(
+        "request-direct-pass-fallback",
+        {**_task(), "speak_trigger": "to_me"},
+        bot=SimpleNamespace(self_id="99"),
+        group_id=42,
+        bot_id=99,
+        bot_id_str="99",
+        text="PASS",
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+    )
+
+    assert result.delivered is True
+    assert sent == [LLM_CHAT_EMPTY_FALLBACK]
 
 
 @pytest.mark.asyncio

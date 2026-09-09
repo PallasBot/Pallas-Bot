@@ -596,6 +596,7 @@ async def deliver_llm_callback_success(
     structured_reply = StructuredChatReply.single(reply_text)
     if not (direct_candidate and reply_text == direct_candidate) and profile_for_task_type(task_type) is not None:
         structured_reply = parse_structured_reply(reply_text)
+    reply_before_filter = structured_reply
     structured_reply = resolve_output_filtered_chat_reply(task, structured_reply)
     reply_segments = list(structured_reply.reply_segments)
     band = str(task.get("reply_total_length_band") or "").strip()
@@ -642,7 +643,7 @@ async def deliver_llm_callback_success(
         )
 
         query_fallback = query_fallback_for_task(task) if not reply_segments else ""
-        if not had_reply_before_filter or query_fallback:
+        if not reply_segments and (not reply_before_filter.reply_segments or query_fallback):
             fallback_text = resolve_llm_chat_empty_fallback(
                 task,
                 reply_text,
@@ -651,7 +652,7 @@ async def deliver_llm_callback_success(
             if fallback_text:
                 reply_text = fallback_text
                 reply_segments = [fallback_text]
-                query_fallback_used = bool(query_fallback)
+                query_fallback_used = True
     learned_reply_text = "\n".join(reply_segments)
     delivery_segments = list(reply_segments)
     if delivery_segments:

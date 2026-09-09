@@ -74,3 +74,54 @@ async def test_duplicate_query_call_forces_final_answer_without_third_tool_call(
     assert trace["duplicate_tool_call_blocked"] == 1
     assert trace["successful_query_call_count"] == 1
     assert trace["final_stage"] == "final_answer"
+
+
+@pytest.mark.asyncio
+async def test_last_round_duplicate_still_runs_final_answer(monkeypatch) -> None:
+    async def search(_args, _ctx=None):
+        return {"ok": True, "result": {"count": 1, "items": [{"title": "命中"}]}}
+
+    register_tool(
+        LlmToolSpec(
+            name="demo.search",
+            description="查询资料",
+            parameters={"type": "object", "properties": {"query": {"type": "string"}}},
+            domains=frozenset({"demo"}),
+            handler=search,
+            source=LlmToolSource.BUILTIN,
+            capabilities=frozenset({ToolCapability.READ_ONLY.value}),
+        )
+    )
+    calls: list[object] = []
+
+    async def fake_complete(messages, *, tools=None, **_kwargs):
+        del messages
+        calls.append(tools)
+        if len(calls) == 1:
+            call = {
+                "type": "function",
+                "function": {"name": "demo__search", "arguments": '{"query":"相同"}'},
+            }
+            return {"role": "assistant", "content": "", "tool_calls": [{"id": "c1", **call}, {"id": "c2", **call}]}
+        return {"role": "assistant", "content": "最后一轮也能回答。"}
+
+    monkeypatch.setattr("pallas.product.llm.tool_loop.complete_chat_message", fake_complete)
+    content, assistant = await complete_with_tool_loop(
+        system_prompt="sys",
+        messages=[{"role": "user", "content": "查资料"}],
+        metadata={
+            "tools_enabled": True,
+            "tool_schemas": [{"type": "function", "function": {"name": "demo__search"}}],
+            "bot_id": 1,
+            "user_id": 2,
+            "group_id": 3,
+        },
+        cfg=LlmConfig(llm_tools_enabled=True, llm_tools_max_rounds=1),
+    )
+
+    trace = assistant["_agent_trace"]
+    assert content == "最后一轮也能回答。"
+    assert len(calls) == 2
+    assert calls[-1] is None
+    assert trace["duplicate_tool_call_blocked"] == 1
+    assert trace["final_stage"] == "final_answer"

@@ -461,11 +461,46 @@ async def complete_with_tool_loop(
 
     from pallas.product.llm.tools.reply import CHAT_REPLY_NAME, extract_chat_reply_text
 
-    for round_idx in range(max(2, max_rounds)):
-        if force_final_answer and (not working or str(working[-1].get("content") or "") != final_answer_instruction):
+    async def complete_final_answer(round_number: int) -> tuple[str, dict[str, Any]]:
+        if not working or str(working[-1].get("content") or "") != final_answer_instruction:
             working.append({"role": "user", "content": final_answer_instruction})
+        record_provider_prompt_hit(working)
+        final_message = await complete_chat_message(
+            working,
+            model=model,
+            options=dict(options),
+            tools=None,
+            cfg=c,
+            task=task,
+            prepare_candidate_messages=prepare_candidate,
+            **telemetry_kwargs,
+        )
+        provider_trace = final_message.get("_provider_trace")
+        if isinstance(provider_trace, dict):
+            agent_trace["provider_calls"].append(provider_trace)
+        final_round = {"round": round_number, "tool_calls": [], "calls": []}
+        freeform = str(final_message.get("content", "") or "").strip()
+        content, reply_source = resolve_visible_reply_after_tools(
+            freeform_content=freeform,
+            reply_texts=reply_texts,
+            side_effect_ok=side_effect_ok,
+            tool_call_count=int(agent_trace.get("tool_call_count") or 0),
+        )
+        agent_trace["rounds"].append(final_round)
+        agent_trace["reply_source"] = reply_source
+        agent_trace["final_stage"] = "final_answer"
+        assistant_message = dict(final_message)
+        assistant_message.setdefault("role", "assistant")
+        assistant_message["content"] = content
+        assistant_message["_agent_trace"] = agent_trace
+        record_bot_llm_task(task, "tool_session_called")
+        return content, assistant_message
+
+    for round_idx in range(max(2, max_rounds)):
+        if force_final_answer:
+            return await complete_final_answer(round_idx + 1)
         round_options = dict(options)
-        if prefer_required and round_idx == 0 and not force_final_answer:
+        if prefer_required and round_idx == 0:
             round_options["tool_choice"] = "required"
             # DeepSeek thinking 模式不支持 tool_choice=required
             round_options["model_effort"] = "disable"
@@ -474,7 +509,7 @@ async def complete_with_tool_loop(
             working,
             model=model,
             options=round_options,
-            tools=None if force_final_answer else tool_schemas,
+            tools=tool_schemas,
             cfg=c,
             task=task,
             prepare_candidate_messages=prepare_candidate,
@@ -656,6 +691,8 @@ async def complete_with_tool_loop(
                     if name not in agent_trace["activated_tools"]:
                         agent_trace["activated_tools"].append(name)
         agent_trace["rounds"].append(round_trace)
+        if force_final_answer:
+            return await complete_final_answer(round_idx + 2)
 
     freeform = str(last_message.get("content", "") or "").strip()
     if social_tool_required and not social_tool_succeeded:
