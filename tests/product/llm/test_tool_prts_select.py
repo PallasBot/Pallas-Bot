@@ -15,3 +15,7 @@ from pallas.product.llm.tools.select import infer_tool_domains
 )
 def test_prts_lore_questions_infer_prts_domain(text: str) -> None:
     assert "prts" in infer_tool_domains(text)
+
+
+def test_generic_knowledge_question_infers_knowledge_domain() -> None:
+    assert "knowledge" in infer_tool_domains("谢拉格战舰是什么时候造的")
