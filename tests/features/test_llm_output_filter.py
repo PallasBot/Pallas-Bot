@@ -24,11 +24,16 @@ def test_match_output_filter_chat_hard_block_celebration_template(monkeypatch) -
     assert hit.phrase == "希望每个庆典"
 
 
+def test_match_output_filter_allows_doctor_term() -> None:
+    hit = match_output_filter("博士在吗？", "chat")
+    assert hit is None
+
+
 def test_match_output_filter_chat_hard_block() -> None:
-    hit = match_output_filter("博士您好，想聊点什么？", "chat")
+    hit = match_output_filter("您好，想聊点什么？", "chat")
     assert hit is not None
     assert hit.tier == "hard_block"
-    assert hit.phrase == "博士"
+    assert hit.phrase == "您"
 
 
 def test_match_output_filter_chat_soft_retry() -> None:
@@ -38,9 +43,10 @@ def test_match_output_filter_chat_soft_retry() -> None:
     assert hit.phrase == "很高兴"
 
 
-def test_resolve_output_filtered_reply_silent_without_fallback() -> None:
+def test_resolve_output_filtered_reply_allows_doctor_term() -> None:
     task = {"task_type": LLM_CHAT_TASK_TYPE}
-    assert resolve_output_filtered_reply(task, "博士在吗？") == ""
+    reply = "博士在吗？"
+    assert resolve_output_filtered_reply(task, reply) == reply
 
 
 def test_resolve_output_filtered_reply_allows_clean_text() -> None:
@@ -67,7 +73,7 @@ def test_output_filter_can_be_disabled(monkeypatch) -> None:
         lambda: LlmConfig(llm_output_filter_enabled=False),
     )
     task = {"task_type": LLM_CHAT_TASK_TYPE}
-    assert resolve_output_filtered_reply(task, "博士在吗？") == "博士在吗？"
+    assert resolve_output_filtered_reply(task, "您好") == "您好"
 
 
 def test_match_output_filter_uses_configured_phrases(monkeypatch) -> None:
@@ -81,7 +87,7 @@ def test_match_output_filter_uses_configured_phrases(monkeypatch) -> None:
 
 
 def test_chat_hard_block_phrases_non_empty() -> None:
-    assert "博士" in CHAT_HARD_BLOCK_PHRASES
+    assert "博士" not in CHAT_HARD_BLOCK_PHRASES
 
 
 def test_resolve_output_filtered_reply_blocks_attack_or_plugin_reply() -> None:
@@ -161,6 +167,15 @@ def test_resolve_output_filtered_reply_splits_overlength_short_band() -> None:
     assert all(len(segment) <= 12 for segment in filtered.split("\n"))
 
 
+def test_resolve_output_filtered_reply_splits_past_single_bubble_cap() -> None:
+    task = {"task_type": LLM_CHAT_TASK_TYPE, "reply_max_length": 16, "reply_max_bubbles": 1}
+    reply = "她开着飞船冲出了泰拉，没有后续了。"
+
+    filtered = resolve_output_filtered_reply(task, reply)
+
+    assert filtered == "她开着飞船冲出了泰拉\n没有后续了"
+
+
 def test_resolve_output_filtered_reply_splits_overlength_reply_and_keeps_tail() -> None:
     task = {"task_type": LLM_CHAT_TASK_TYPE, "reply_max_length": 12}
     reply = "今天先说第一件事。后面还有第二件事。最后还有第三件事。"
@@ -226,3 +241,20 @@ def test_resolve_output_filtered_reply_keeps_multi_bubble_when_each_fits() -> No
     assert filtered == "这是土狼，会搞笑。\n然后呢？\n别怕别怕。"
     for segment in filtered.split("\n"):
         assert len(segment) <= 24
+
+
+def test_resolve_output_filtered_reply_keeps_long_tool_answer_across_bubbles() -> None:
+    task = {
+        "task_type": LLM_CHAT_TASK_TYPE,
+        "reply_max_length": 20,
+        "reply_max_bubbles": 8,
+    }
+    reply = "。".join(f"第{i}条资料内容" for i in range(1, 9)) + "。"
+
+    filtered = resolve_output_filtered_reply(task, reply)
+
+    segments = filtered.split("\n")
+    assert 2 <= len(segments) <= 8
+    assert "第1条资料内容" in filtered
+    assert "第8条资料内容" in filtered
+    assert all(len(segment) <= 20 for segment in segments)

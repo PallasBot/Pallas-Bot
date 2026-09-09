@@ -382,7 +382,7 @@ async def settle_pending_semantic_exposures(*, now: int | None = None) -> int:
         request_id = str(item.get("request_id") or "")
         record_experiment_outcome(
             request_id=request_id,
-            bucket=int(item.get("bucket") or 1),
+            bucket=int(item.get("bucket") if item.get("bucket") is not None else 1),
             target_followup=target_followup,
             negative=negative,
         )

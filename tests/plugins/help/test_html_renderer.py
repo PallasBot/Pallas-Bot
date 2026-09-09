@@ -91,6 +91,13 @@ def test_html_template_uses_dossier_layout_contract() -> None:
     assert '<span class="group-index">{{ group.number }}</span>' not in template
     assert ".plugin-title strong {" in template
     assert ".plugin-title strong { color: var(--text); font-size: 18px;" in template
+    assert ".plugin-copy {\n      position: relative;" in template
+    assert ".plugin-row.is-off .plugin-title { padding-right: 56px; }" in template
+    assert ".plugin-row.is-off { background: var(--record-body); }" in template
+    assert ".badge-off {\n      position: absolute;" in template
+    assert "top: 0;" in template
+    assert "right: 0;" in template
+    assert ".plugin-row.is-off { background: var(--panel); }" not in template
     assert ".function-index .idx {\n      color: var(--text);\n      font-size: 20px;" in template
     assert "--amber-ink" not in template
     assert ".nav-item.primary" not in template

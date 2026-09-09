@@ -133,3 +133,30 @@ async def test_settlement_marks_actual_rows_and_counts_each_request_once(monkeyp
 
     exp.record_experiment_outcome(request_id="old", bucket=1, target_followup=True, negative=True)
     assert exp.experiment_status()["experiment"] == {"settled": 1, "target_followup": 1}
+
+
+async def test_settlement_counts_control_bucket_as_control(tmp_path, monkeypatch) -> None:
+    """bucket=0（对照组）的 exposure 必须计入 control，不得因 `0 or 1` 落入 experiment。"""
+    exp.record_semantic_exposure(
+        request_id="ctl-1",
+        bot_id=100,
+        group_id=42,
+        user_id=11,
+        bucket=0,
+        injection_types=[],
+        source_ids=[],
+        delivery_source="provider",
+        bot_message_id=501,
+        delivered_at=900,
+    )
+
+    class Repo:
+        async def list_group_messages_after(self, *_args, **_kwargs):
+            return [SimpleNamespace(message_id=1, user_id=11, plain_text="接着聊", raw_message="")]
+
+    monkeypatch.setattr("pallas.core.foundation.db.make_message_repository", lambda: Repo())
+
+    assert await exp.settle_pending_semantic_exposures(now=1000) == 1
+    status = exp.experiment_status()
+    assert status["control"] == {"settled": 1, "target_followup": 1}
+    assert status["experiment"] == {}

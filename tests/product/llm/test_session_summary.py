@@ -11,6 +11,10 @@ from pallas.product.llm.session_summary import (
 )
 
 
+def test_config_has_session_summary_daily_budget() -> None:
+    assert LlmConfig.model_fields["llm_session_summary_daily_budget"].default == 5000
+
+
 @pytest.mark.asyncio
 async def test_summary_messages_excludes_existing_summary() -> None:
     turns = [
@@ -48,6 +52,47 @@ async def test_maybe_compact_skips_below_threshold(monkeypatch: pytest.MonkeyPat
         llm_session_user_storage_window=200,
     )
     assert await maybe_compact_session_history(bot_id=1, group_id=2, user_id=3, cfg=cfg) is False
+
+
+@pytest.mark.asyncio
+async def test_maybe_compact_skips_when_daily_budget_exhausted(monkeypatch: pytest.MonkeyPatch) -> None:
+    clear_session_summary_state_for_tests()
+    calls: list[str] = []
+
+    async def fake_list(*_a, **_k):
+        return [LlmChatTurn(role="user", content=f"讨论第{i}件事", user_id=1, created_at=i) for i in range(50)]
+
+    async def fake_complete(*_a, **_k):
+        calls.append("called")
+        return {"content": "x"}
+
+    monkeypatch.setattr(
+        "pallas.product.llm.session_summary.is_llm_session_store_available",
+        lambda: True,
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.session_summary.list_user_llm_messages",
+        fake_list,
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.session_summary._daily_budget_ok",
+        lambda **k: False,
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.session_summary.complete_chat_message",
+        fake_complete,
+    )
+    cfg = LlmConfig(
+        llm_chat_enabled=True,
+        llm_session_enabled=True,
+        llm_session_summary_enabled=True,
+        llm_session_summary_threshold=40,
+        llm_session_summary_cooldown_sec=0,
+        llm_session_user_storage_window=200,
+        llm_session_summary_daily_budget=500,
+    )
+    assert await maybe_compact_session_history(bot_id=1, group_id=2, user_id=3, cfg=cfg) is False
+    assert calls == []
 
 
 @pytest.mark.asyncio

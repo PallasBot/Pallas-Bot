@@ -8,6 +8,7 @@ from pallas.product.llm.chat_queue import (
     clear_chat_queue_for_tests,
     finish_chat_turn,
     merge_queued_chat,
+    should_merge_chat,
     stash_chat_during_cooldown,
     stash_pending_chat,
     take_pending_chat,
@@ -27,6 +28,12 @@ def test_begin_chat_turn_allows_only_one_worker_per_session() -> None:
     assert not begin_chat_turn(10001, 20002, 30003)
     finish_chat_turn(10001, 20002, 30003)
     assert begin_chat_turn(10001, 20002, 30003)
+
+
+def test_explicit_and_tool_questions_are_not_merged() -> None:
+    assert not should_merge_chat("孤星剧情发生在什么时候", is_to_me=False, speak_trigger="")
+    assert not should_merge_chat("随便聊聊", is_to_me=True, speak_trigger="to_me")
+    assert should_merge_chat("哈哈", is_to_me=False, speak_trigger="ambient")
 
 
 def test_stash_and_take_pending_chat_merges_in_arrival_order() -> None:

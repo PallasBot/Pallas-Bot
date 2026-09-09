@@ -235,6 +235,16 @@ class LlmWebuiConfig(BaseModel):
             "只影响摘要触发频率，不影响存储窗口",
         ),
     )
+    llm_session_summary_daily_budget: int = Field(
+        default=5000,
+        ge=0,
+        le=100000,
+        description=field_help(
+            "会话摘要每日调用上限（次数）",
+            "按天计数，超限后当天跳过新摘要（长对话暂不压缩）；0=不限制（默认 5000）",
+            "用于控制会话摘要的 LLM 调用成本；跳过摘要不影响对话，只是历史压缩延迟",
+        ),
+    )
     llm_speak_perception_enabled: bool = Field(
         default=True,
         description=field_help(
@@ -447,6 +457,16 @@ class LlmWebuiConfig(BaseModel):
             "发给模型的工具说明最长多少字（多了截断）",
             "默认 120。说明太短模型可能用错工具可略增；想省 token 保持默认或略减",
             "只影响写入模型的说明长度，不改工具本身功能",
+        ),
+    )
+    llm_tools_history_daily_budget: int = Field(
+        default=2000,
+        ge=0,
+        le=100000,
+        description=field_help(
+            "工具「最近消息」摘要每日调用上限（次数）",
+            "按天计数，超限后当天工具摘要返回降级文案；0=不限制（默认 2000）",
+            "用于控制工具摘要的 LLM 调用成本；不影响读取原始聊天记录工具",
         ),
     )
     mcp_servers: list[LlmMcpServerConfig] = Field(
@@ -1223,6 +1243,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_session_summary_threshold=cfg.llm_session_summary_threshold,
         llm_session_summary_keep_messages=cfg.llm_session_summary_keep_messages,
         llm_session_summary_cooldown_sec=cfg.llm_session_summary_cooldown_sec,
+        llm_session_summary_daily_budget=cfg.llm_session_summary_daily_budget,
         llm_speak_perception_enabled=cfg.llm_speak_perception_enabled,
         llm_speak_mention_enabled=cfg.llm_speak_mention_enabled,
         llm_speak_ambient_enabled=cfg.llm_speak_ambient_enabled,
@@ -1246,6 +1267,7 @@ def get_llm_webui_config() -> LlmWebuiConfig:
         llm_tools_max_rounds=cfg.llm_tools_max_rounds,
         llm_tools_blacklist=list(cfg.llm_tools_blacklist or []),
         llm_tools_desc_max_len=cfg.llm_tools_desc_max_len,
+        llm_tools_history_daily_budget=cfg.llm_tools_history_daily_budget,
         mcp_servers=list(cfg.mcp_servers or []),
         llm_mcp_http_allowlist=str(repo_env_raw_value("LLM_MCP_HTTP_ALLOWLIST") or "").strip(),
         web_search_api_url=str(repo_env_raw_value("WEB_SEARCH_API_URL") or "").strip(),

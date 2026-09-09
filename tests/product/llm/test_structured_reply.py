@@ -132,6 +132,8 @@ def test_normalize_plain_chat_passthrough() -> None:
 def test_normalize_rejects_reasoning_prefix_leak() -> None:
     assert normalize_model_reply("意图：先安抚再提问\n然后说你好") == ""
     assert normalize_model_reply("thinking: stay calm") == ""
+    assert normalize_model_reply("The user is asking about the story") == ""
+    assert normalize_model_reply("Let me look at the context") == ""
 
 
 def test_validate_reply_chars_allows_normal_zh() -> None:

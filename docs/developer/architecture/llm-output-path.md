@@ -19,7 +19,9 @@
 
 普通聊天在 Bot 进程内执行：`submit_chat_task` 安排 `kernel_runner`。通常由后者调用 Provider、运行工具循环，并通过 `pallas/product/llm/delivery.py` 的 `deliver_llm_chat_result` 交给既有投递入口；若 semantic style 给出通过相关性与近期回复去重的 `direct_candidate`，并通过滚动窗口 15% 配额，kernel 会直接投递该真实语料而不调用 Provider。该判断不对语料内容作额外价值判断。Repeater 日常接话自身不创建 LLM 任务。
 
-工具循环会在模型提出 tool call 后执行工具、将结果追加回上下文并继续补全。默认工具集会按场景选择；延迟公开的工具可由 `tools.find` 发现，并在后续轮次加入可调用集合。延迟完成的外部工具只派发任务；任务结果由其自身通道回传，不阻塞当前 LLM 回复。
+工具循环会在模型提出 tool call 后执行工具、将结果追加回上下文并继续补全。默认工具集会按场景选择；延迟公开的工具可由 `tools.find` 发现，并在后续轮次加入可调用集合。查询工具有单轮调用预算、重复参数去重和最终回答阶段；副作用工具成功后才允许静默。延迟完成的外部工具只派发任务；任务结果由其自身通道回传，不阻塞当前 LLM 回复。
+
+显式查询超过 3 秒且已经开始实际工具调用时，kernel 最多发送一次“我查一下。”进度气泡；该气泡不写入会话历史、表达学习或最终答案上下文。
 
 ## LLM 输出管线
 
@@ -36,7 +38,7 @@
 | 输出过滤 | `output_filter.py` | 语料污染词、续写残片、角色 / 形态守卫、长度硬闸（由 reply_shape 的 p50 段长推导 `reply_max_length`，超限找干净断点压短，否则回落 fallback） |
 | 短气泡兜底拆分 | `reply_postprocess.py` `split_short_reply_segments` | short 取向但只有单段时，按句末标点 / 换行拆成多气泡 |
 | 轻量后处理 | `apply_reply_postprocess` | 错别字、句尾句号 |
-| 多气泡投递 | `delivery.py` `deliver_llm_callback_success` | 逐条发送，气泡间按上句长度叠加随机抖动（0.5~3.5s，模拟真人节奏） |
+| 多气泡投递 | `delivery.py` `deliver_llm_callback_success` | 逐条发送，返回 `DeliveryOutcome`；`sent` / `partial` / `failed` / `silent` 由真实发送回执推导，气泡间按上句长度叠加随机抖动（0.5~3.5s） |
 | 学习回写 | 会话 / `behavior_store` / `repeater_feedback` / `auto_episode` | 投递成功后写历史、行为与表达 |
 
 ## LLM turn telemetry

@@ -51,6 +51,7 @@ def resolve_reply_hard_cap(
     preferred_bubbles: int = 1,
     bubble_count_p50: int = 0,
     segment_char_length_p50: int = 0,
+    target_chars_max: int = 0,
     min_cap: int = 16,
 ) -> int:
     """按「段数 × 段中位字长 + 余量」推导回复硬上限（字符数），再 clamp 到场景 cap 内。
@@ -58,10 +59,11 @@ def resolve_reply_hard_cap(
     本群没有真人统计（segment_char_length_p50 为 0）时，用真人语料中位段作默认段长。
     返回值为正即投入使用。
     """
-    if scene_cap <= 0:
+    target = max(0, int(target_chars_max))
+    if scene_cap <= 0 and target <= 0:
         return 0
-    cap = int(scene_cap)
-    segment_p50 = int(segment_char_length_p50) or _DEFAULT_SEGMENT_CHAR_LENGTH_P50
+    cap = max(int(scene_cap), target)
+    segment_p50 = max(int(segment_char_length_p50), target) or _DEFAULT_SEGMENT_CHAR_LENGTH_P50
     if bubble_count_p50:
         bubble_count = max(1, min(3, int(bubble_count_p50)))
     else:
@@ -99,7 +101,7 @@ def resolve_reply_shape(
     if turn_policy.needs_tool:
         return ReplyShapePolicy(
             preferred_bubbles=1,
-            max_bubbles=2,
+            max_bubbles=8,
             target_chars_min=8,
             target_chars_max=160,
             total_length_band="task",
@@ -121,7 +123,7 @@ def resolve_reply_shape(
     shape = group_expression.reply_shape if group_expression is not None else None
     preferred_bubbles = dice.choice([1, 2, 3]) if shape is None else max(1, min(3, int(shape.bubble_count_p50 or 2)))
     observed_max = int(shape.bubble_count_p90 or 3) if shape else 3
-    max_bubbles = max(preferred_bubbles, min(5, max(1, observed_max)))
+    max_bubbles = max(2, preferred_bubbles, min(8, max(1, observed_max)))
     return ReplyShapePolicy(
         preferred_bubbles=preferred_bubbles,
         max_bubbles=max_bubbles,

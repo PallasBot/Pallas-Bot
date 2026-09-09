@@ -88,6 +88,31 @@ async def test_recent_summary_returns_short_message_without_model(monkeypatch: p
     assert result["result"]["summary"] == "最近消息不多，还没有形成明确话题。"
 
 
+@pytest.mark.asyncio
+async def test_recent_summary_degrades_when_daily_budget_exhausted(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    messages = [
+        SimpleNamespace(user_id=index % 2 + 11, sender_name=f"群友{index}", plain_text=f"讨论第{index}条", time=index)
+        for index in range(8)
+    ]
+
+    class Repo:
+        async def find_recent_in_group(self, group_id: int, *, limit: int):
+            return messages
+
+    monkeypatch.setattr("pallas.core.foundation.db.make_message_repository", lambda: Repo())
+    monkeypatch.setattr(
+        "pallas.product.llm.tools.history._daily_budget",
+        SimpleNamespace(ok=lambda budget: False, bump=lambda budget: None),
+    )
+
+    result = await handle_recent_summary({}, ToolInvokeContext(bot_id=99, group_id=42, user_id=11))
+
+    assert result["ok"] is True
+    assert result["result"]["summary"] == "最近消息较多，但暂时无法整理出明确话题。"
+
+
 def test_history_tool_hints_match_followup_questions() -> None:
     from pallas.product.llm.tools.history import register_history_tools
     from pallas.product.llm.tools.select import deferred_tools_matched_by_hints

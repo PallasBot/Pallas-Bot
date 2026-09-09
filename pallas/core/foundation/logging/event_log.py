@@ -44,6 +44,20 @@ def compact_group_message_log(
     return f"{prefix}{content}"
 
 
+def compact_private_message_log(
+    *,
+    bot_id: str,
+    user_id: int,
+    message: str,
+    message_id: int | None = None,
+    max_len: int = 240,
+) -> str:
+    mid = f"[msg={message_id:>11}]" if message_id is not None else ""
+    prefix = f"Bot [{bot_id:>10}] 私聊 用户 [{user_id:>10}]{mid}: "
+    content = compact_inbound_event_log(message, max_len=max(1, max_len - len(prefix)))
+    return f"{prefix}{content}"
+
+
 def inbound_event_log_as_debug(event_type: str) -> bool:
     """notice / request / meta 默认 DEBUG，避免完整 dict 刷 SUCCESS。"""
     return event_type in {"notice", "request", "meta_event"}

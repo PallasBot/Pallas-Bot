@@ -282,6 +282,7 @@ class LlmConfig(BaseModel):
     llm_feedback_retention_interval_sec: int = Field(default=86400, ge=3600, le=604800)
     llm_tools_blacklist: list[str] = Field(default_factory=list)
     llm_tools_desc_max_len: int = Field(default=120, ge=32, le=512)
+    llm_tools_history_daily_budget: int = Field(default=2000, ge=0, le=100000)
     llm_memory_rag_enabled: bool = Field(default=True)
     llm_vector_retrieve: VectorRetrieveMode = Field(default="hybrid")
     llm_embedding_model: str = Field(default="stub")
@@ -349,6 +350,7 @@ class LlmConfig(BaseModel):
     llm_session_summary_threshold: int = Field(default=24, ge=8, le=200)
     llm_session_summary_keep_messages: int = Field(default=16, ge=4, le=120)
     llm_session_summary_cooldown_sec: int = Field(default=600, ge=0, le=86400)
+    llm_session_summary_daily_budget: int = Field(default=5000, ge=0, le=100000)
     # 发送节奏（deliver）：气泡间隔 = base + len*per_char，再乘 (1±jitter)，clamp [0.5, 3.5]
     llm_bubble_delay_base_sec: float = Field(default=0.8, ge=0.0, le=5.0)
     llm_bubble_delay_per_char: float = Field(default=0.04, ge=0.0, le=0.5)
@@ -542,6 +544,7 @@ def get_llm_config() -> LlmConfig:
             llm_feedback_retention_interval_sec=_env_int("LLM_FEEDBACK_RETENTION_INTERVAL_SEC", 86400),
             llm_tools_blacklist=_env_str_list("LLM_TOOLS_BLACKLIST"),
             llm_tools_desc_max_len=_env_int("LLM_TOOLS_DESC_MAX_LEN", 120),
+            llm_tools_history_daily_budget=_env_int("LLM_TOOLS_HISTORY_DAILY_BUDGET", 2000),
             llm_memory_rag_enabled=_env_bool("LLM_MEMORY_RAG_ENABLED", True),
             llm_vector_retrieve=resolve_llm_vector_retrieve(),
             llm_embedding_model=resolve_llm_embedding_model(),
@@ -615,6 +618,7 @@ def get_llm_config() -> LlmConfig:
             llm_session_summary_threshold=_env_int("LLM_SESSION_SUMMARY_THRESHOLD", 24),
             llm_session_summary_keep_messages=_env_int("LLM_SESSION_SUMMARY_KEEP_MESSAGES", 16),
             llm_session_summary_cooldown_sec=_env_int("LLM_SESSION_SUMMARY_COOLDOWN_SEC", 600),
+            llm_session_summary_daily_budget=_env_int("LLM_SESSION_SUMMARY_DAILY_BUDGET", 5000),
             llm_bubble_delay_base_sec=_env_float("LLM_BUBBLE_DELAY_BASE_SEC", 0.8),
             llm_bubble_delay_per_char=_env_float("LLM_BUBBLE_DELAY_PER_CHAR", 0.04),
             llm_bubble_delay_jitter=_env_float("LLM_BUBBLE_DELAY_JITTER", 0.35),

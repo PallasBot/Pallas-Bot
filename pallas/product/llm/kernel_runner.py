@@ -33,6 +33,50 @@ async def _mark_delivery_source(request_id: str, source: str) -> None:
         task["delivery_source"] = source
 
 
+async def send_query_progress_after_delay(
+    query_started: asyncio.Event,
+    finished: asyncio.Event,
+    metadata: dict[str, Any],
+    *,
+    delay: float = 3.0,
+    request_started_at: float | None = None,
+) -> None:
+    await query_started.wait()
+    elapsed = time.monotonic() - float(request_started_at or time.monotonic())
+    remaining = max(0.0, float(delay) - elapsed)
+    try:
+        await asyncio.wait_for(finished.wait(), timeout=remaining)
+        return
+    except TimeoutError:
+        pass
+    if finished.is_set():
+        return
+    trigger = str(metadata.get("speak_trigger") or "").strip().lower()
+    from pallas.product.llm.chat_empty_fallback import HARD_SPEAK_TRIGGERS
+
+    if trigger not in HARD_SPEAK_TRIGGERS:
+        return
+    group_id = int(metadata.get("group_id") or 0)
+    bot_id = str(metadata.get("bot_id") or "").strip()
+    if group_id <= 0 or not bot_id:
+        return
+    try:
+        from nonebot import get_bot
+
+        from pallas.core.platform.ai_callback.delivery import send_group_message
+        from pallas.product.llm.tool_loop import has_query_tool_schemas
+
+        if not has_query_tool_schemas(metadata.get("tool_schemas")):
+            return
+        sent = await send_group_message(get_bot(bot_id), group_id, "我查一下。")
+        from pallas.product.llm.task_metrics import record_bot_llm_task
+
+        if sent:
+            record_bot_llm_task("llm_chat", "tool_progress_sent")
+    except Exception:
+        logger.debug("LLM query progress message skipped for task [{}]", metadata.get("request_id"))
+
+
 async def run_kernel_chat_job(
     request_id: str,
     *,
@@ -44,6 +88,9 @@ async def run_kernel_chat_job(
 ) -> None:
     started = time.monotonic()
     task = str(metadata.get("task") or "llm_chat").strip() or "llm_chat"
+    progress_started = asyncio.Event()
+    progress_finished = asyncio.Event()
+    progress_task: asyncio.Task[None] | None = None
     try:
         from pallas.product.llm.semantic_protocol import claim_protocol_candidate
 
@@ -92,11 +139,27 @@ async def run_kernel_chat_job(
             await _mark_delivery_source(request_id, "semantic_direct")
             await deliver_llm_chat_result(request_id, status="success", text=direct_candidate)
             return
+        from pallas.product.llm.tool_loop import has_query_tool_schemas
+
+        if task == "llm_chat" and has_query_tool_schemas(metadata.get("tool_schemas")):
+            progress_task = asyncio.create_task(
+                send_query_progress_after_delay(
+                    progress_started,
+                    progress_finished,
+                    {**metadata, "request_id": request_id},
+                    request_started_at=started,
+                ),
+                name=f"llm_query_progress:{request_id}",
+            )
+        complete_kwargs: dict[str, Any] = {}
+        if progress_task is not None:
+            complete_kwargs["tool_call_started"] = progress_started
         content, assistant_message = await complete_with_tool_loop(
             system_prompt=system_prompt,
             messages=messages,
             metadata=metadata,
             cfg=cfg,
+            **complete_kwargs,
         )
         generate_ms = int((time.monotonic() - started) * 1000)
         from pallas.product.llm.persona_output_firewall import (
@@ -228,7 +291,6 @@ async def run_kernel_chat_job(
             from pallas.product.llm.task_metrics import record_bot_llm_task
 
             record_bot_llm_task(task, "reply_silenced")
-            delivery_kwargs["suppress_empty_fallback"] = True
         await deliver_llm_chat_result(request_id, **delivery_kwargs)
     except Exception as exc:
         logger.exception("LLM kernel chat failed for request [{}]", request_id)
@@ -246,6 +308,13 @@ async def run_kernel_chat_job(
         except Exception:
             logger.exception("LLM kernel delivery failed for request [{}]", request_id)
     finally:
+        progress_finished.set()
+        if progress_task is not None:
+            progress_task.cancel()
+            try:
+                await progress_task
+            except asyncio.CancelledError:
+                pass
         release_llm_execution_slot(execution_slot, cfg=cfg)
 
 

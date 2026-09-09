@@ -48,7 +48,7 @@ def _resolve_task_and_model() -> tuple[str, str]:
     from pallas.product.llm.providers_store import resolve_endpoint_for_task
 
     cfg = get_llm_config()
-    for task in ("memory_extract", "llm_chat"):
+    for task in ("memory_graph_hiergraph", "llm_chat"):
         endpoint = resolve_endpoint_for_task(task)
         if endpoint is not None and endpoint.model:
             return task, endpoint.model

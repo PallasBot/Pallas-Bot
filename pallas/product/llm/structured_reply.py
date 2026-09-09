@@ -18,9 +18,14 @@ _REASONING_PREFIX_RE = re.compile(
     r")[:：]",
     re.IGNORECASE,
 )
+_MODEL_REASONING_PREFIX_RE = re.compile(
+    r"^\s*(?:the user\b|the assistant\b|let me\b|i need to\b|i should\b|i will\b|sure,\s)",
+    re.IGNORECASE,
+)
 _BAD_TOKEN_CHARS = frozenset("<>{}|｜▁")
 _ALLOWED_ASCII_PUNCT = frozenset(".,?!;:'\"()-_~`@#&+*=%^/\n\t \r")
 _EMPTY_MEM_TOKENS = frozenset({"无", "none", "n/a", "null", "无内容", "无可记"})
+_MAX_REPLY_CHARS = 2400
 _STANDALONE_CHAT_RE = re.compile(r"^[？?]$")
 # 受控提及占位符：LLM 可能输出单/双括号或裸 @key，delivery 校验授权后替换为 CQ at
 _MENTION_PLACEHOLDER_RE = re.compile(r"(?:\[{1,2}|【|（|\(|「)?\s*@[^\s\]】）)」]+\s*(?:\]{1,2}|】|）|\)|」)?")
@@ -143,6 +148,8 @@ def parse_structured_reply(raw: str) -> StructuredChatReply:
     plain = str(raw).strip()
     if _is_pass_reply(plain):
         return StructuredChatReply()
+    if _MODEL_REASONING_PREFIX_RE.match(plain):
+        return StructuredChatReply()
     if _REASONING_PREFIX_RE.match(plain):
         return StructuredChatReply()
     if validate_reply_chars(plain)[0]:
@@ -170,7 +177,7 @@ def validate_reply_chars(text: str) -> tuple[bool, str]:
         return False, "markdown heading"
     if _URL_RE.search(plain):
         return False, "url"
-    if len(plain) > 500:
+    if len(plain) > _MAX_REPLY_CHARS:
         return False, f"too long ({len(plain)})"
     cjk_count = 0
     letter_count = 0

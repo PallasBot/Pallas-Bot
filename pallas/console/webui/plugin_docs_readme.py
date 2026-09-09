@@ -49,6 +49,9 @@ def bundled_plugin_readme_relative_path(plugin_id: str) -> str | None:
         rel = f"docs/plugins/{candidate}/README.md"
         if (PROJECT_ROOT / rel).is_file():
             return rel
+        rel = f"local/plugins/{candidate}/README.md"
+        if (PROJECT_ROOT / rel).is_file():
+            return rel
     return None
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from typing import Any
 
 from pallas.product.llm.config import LlmConfig, get_llm_config
 
@@ -11,7 +12,7 @@ from pallas.product.llm.config import LlmConfig, get_llm_config
 _MAX_PENDING_PER_KEY = 8
 _PENDING_TTL_SEC = 600.0
 
-_QUEUE: dict[str, list[tuple[str, int, float]]] = {}
+_QUEUE: dict[str, list[PendingChat]] = {}
 _IN_FLIGHT: set[str] = set()
 
 
@@ -19,6 +20,21 @@ _IN_FLIGHT: set[str] = set()
 class ChatQueueMergeResult:
     text: str
     merged: bool
+
+
+@dataclass(frozen=True)
+class PendingChat:
+    text: str
+    message_id: int
+    created_at: float
+    is_to_me: bool = False
+    speak_trigger: str = ""
+    event: Any = None
+
+    def __iter__(self):
+        yield self.text
+        yield self.message_id
+        yield self.created_at
 
 
 def chat_queue_key(bot_id: int, group_id: int | None, user_id: int) -> str:
@@ -38,14 +54,38 @@ def finish_chat_turn(bot_id: int, group_id: int | None, user_id: int) -> None:
     _IN_FLIGHT.discard(chat_queue_key(bot_id, group_id, user_id))
 
 
-def _fresh_entries(key: str) -> list[tuple[str, int, float]]:
+def should_merge_chat(text: str, *, is_to_me: bool, speak_trigger: str) -> bool:
+    if is_to_me or str(speak_trigger or "").strip() in {"alias", "mention", "followup"}:
+        return False
+    from pallas.product.llm.reply_necessity import has_reply_obligation
+    from pallas.product.llm.tools.select import infer_tool_domains
+
+    return not (has_reply_obligation(text) or infer_tool_domains(text))
+
+
+def _fresh_entries(key: str) -> list[PendingChat]:
     now = time.monotonic()
-    entries = [entry for entry in _QUEUE.get(key, []) if now - entry[2] <= _PENDING_TTL_SEC]
+    entries: list[PendingChat] = []
+    for raw_entry in _QUEUE.get(key, []):
+        entry = raw_entry if isinstance(raw_entry, PendingChat) else PendingChat(*raw_entry)
+        if now - entry.created_at <= _PENDING_TTL_SEC:
+            entries.append(entry)
     if entries:
         _QUEUE[key] = entries
     else:
         _QUEUE.pop(key, None)
     return entries
+
+
+def has_pending_chat(bot_id: int, group_id: int | None, user_id: int) -> bool:
+    return bool(_fresh_entries(chat_queue_key(bot_id, group_id, user_id)))
+
+
+def pending_chats_can_merge(bot_id: int, group_id: int | None, user_id: int) -> bool:
+    entries = _fresh_entries(chat_queue_key(bot_id, group_id, user_id))
+    return bool(entries) and all(
+        should_merge_chat(entry.text, is_to_me=entry.is_to_me, speak_trigger=entry.speak_trigger) for entry in entries
+    )
 
 
 def stash_pending_chat(
@@ -55,12 +95,24 @@ def stash_pending_chat(
     text: str,
     *,
     message_id: int = 0,
+    is_to_me: bool = False,
+    speak_trigger: str = "",
+    event: Any = None,
 ) -> None:
     value = str(text or "").strip()
     if not value:
         return
     entries = _QUEUE.setdefault(chat_queue_key(bot_id, group_id, user_id), [])
-    entries.append((value, int(message_id or 0), time.monotonic()))
+    entries.append(
+        PendingChat(
+            text=value,
+            message_id=int(message_id or 0),
+            created_at=time.monotonic(),
+            is_to_me=bool(is_to_me),
+            speak_trigger=str(speak_trigger or "").strip(),
+            event=event,
+        )
+    )
     if len(entries) > _MAX_PENDING_PER_KEY:
         del entries[: len(entries) - _MAX_PENDING_PER_KEY]
 
@@ -68,19 +120,24 @@ def stash_pending_chat(
 def take_pending_chat(bot_id: int, group_id: int | None, user_id: int) -> str:
     entries = _fresh_entries(chat_queue_key(bot_id, group_id, user_id))
     _QUEUE.pop(chat_queue_key(bot_id, group_id, user_id), None)
-    return "\n".join(text for text, _message_id, _created_at in entries)
+    return "\n".join(entry.text for entry in entries)
 
 
 def take_pending_chat_one(bot_id: int, group_id: int | None, user_id: int) -> tuple[str, int]:
+    entry = take_pending_chat_one_entry(bot_id, group_id, user_id)
+    return (entry.text, entry.message_id) if entry is not None else ("", 0)
+
+
+def take_pending_chat_one_entry(bot_id: int, group_id: int | None, user_id: int) -> PendingChat | None:
     entries = _fresh_entries(chat_queue_key(bot_id, group_id, user_id))
     if not entries:
-        return "", 0
-    text, message_id, _created_at = entries.pop(0)
+        return None
+    entry = entries.pop(0)
     if entries:
         _QUEUE[chat_queue_key(bot_id, group_id, user_id)] = entries
     else:
         _QUEUE.pop(chat_queue_key(bot_id, group_id, user_id), None)
-    return text, message_id
+    return entry
 
 
 def stash_chat_during_cooldown(
