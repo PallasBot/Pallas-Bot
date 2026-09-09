@@ -72,6 +72,7 @@ def test_casual_chat_defaults_to_one_or_two_short_bubbles() -> None:
     policy = resolve_reply_shape(make_turn_policy(), None)
 
     assert 1 <= policy.preferred_bubbles <= 3
+    assert policy.max_bubbles >= 2
     assert policy.max_bubbles <= 8
     assert (policy.target_chars_min, policy.target_chars_max) == (4, 18)
     assert policy.total_length_band == "short"

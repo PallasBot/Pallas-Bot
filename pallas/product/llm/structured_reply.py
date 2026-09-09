@@ -18,6 +18,10 @@ _REASONING_PREFIX_RE = re.compile(
     r")[:：]",
     re.IGNORECASE,
 )
+_MODEL_REASONING_PREFIX_RE = re.compile(
+    r"^\s*(?:the user\b|the assistant\b|let me\b|i need to\b|i should\b|i will\b|sure,\s)",
+    re.IGNORECASE,
+)
 _BAD_TOKEN_CHARS = frozenset("<>{}|｜▁")
 _ALLOWED_ASCII_PUNCT = frozenset(".,?!;:'\"()-_~`@#&+*=%^/\n\t \r")
 _EMPTY_MEM_TOKENS = frozenset({"无", "none", "n/a", "null", "无内容", "无可记"})
@@ -143,6 +147,8 @@ def parse_structured_reply(raw: str) -> StructuredChatReply:
         return StructuredChatReply()
     plain = str(raw).strip()
     if _is_pass_reply(plain):
+        return StructuredChatReply()
+    if _MODEL_REASONING_PREFIX_RE.match(plain):
         return StructuredChatReply()
     if _REASONING_PREFIX_RE.match(plain):
         return StructuredChatReply()

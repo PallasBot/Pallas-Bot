@@ -1,9 +1,7 @@
-"""续聊软窗口与空回复兜底。"""
+"""续聊软窗口。"""
 
 from __future__ import annotations
 
-from pallas.core.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE
-from pallas.product.llm.chat_empty_fallback import resolve_llm_chat_empty_fallback
 from pallas.product.llm.followup_window import (
     clear_followup_window_state,
     in_followup_window,
@@ -58,49 +56,3 @@ def test_evaluate_followup_before_ambient() -> None:
     )
     assert d.should_speak
     assert d.reason == "followup"
-
-
-def test_empty_fallback_for_hard_trigger() -> None:
-    task = {"task_type": LLM_CHAT_TASK_TYPE, "speak_trigger": "mention", "fallback_text": ""}
-    assert resolve_llm_chat_empty_fallback(task, "") == ""
-    assert resolve_llm_chat_empty_fallback(task, "  你好  ") == "你好"
-
-
-def test_empty_fallback_stays_silent_after_firewall_rejection() -> None:
-    task = {"task_type": LLM_CHAT_TASK_TYPE, "speak_trigger": "mention", "fallback_text": ""}
-
-    assert resolve_llm_chat_empty_fallback(task, "", suppress_empty_fallback=True) == ""
-
-
-def test_empty_fallback_uses_corpus_fallback() -> None:
-    task = {
-        "task_type": LLM_CHAT_TASK_TYPE,
-        "speak_trigger": "to_me",
-        "fallback_text": "在呢",
-    }
-    assert resolve_llm_chat_empty_fallback(task, "") == ""
-
-
-def test_empty_fallback_replaces_filler_only_corpus_fallback() -> None:
-    task = {
-        "task_type": LLM_CHAT_TASK_TYPE,
-        "speak_trigger": "to_me",
-        "fallback_text": "嗯？",
-    }
-    assert resolve_llm_chat_empty_fallback(task, "") == ""
-
-
-def test_empty_fallback_silent_for_ambient() -> None:
-    task = {"task_type": LLM_CHAT_TASK_TYPE, "speak_trigger": "ambient"}
-    assert resolve_llm_chat_empty_fallback(task, "") == ""
-
-
-def test_empty_fallback_silent_after_tool_calls() -> None:
-    task = {
-        "task_type": LLM_CHAT_TASK_TYPE,
-        "speak_trigger": "mention",
-        "fallback_text": "在呢",
-        "agent_trace": {"tool_call_count": 1},
-    }
-    assert resolve_llm_chat_empty_fallback(task, "") == ""
-    assert resolve_llm_chat_empty_fallback(task, "房开了") == "房开了"

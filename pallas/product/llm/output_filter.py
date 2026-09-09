@@ -344,47 +344,6 @@ def _split_reply_to_fit(
     return segments
 
 
-def _enforce_max_length(text: str, *, task: dict, task_type: str) -> str:
-    """行为/场景长度违约：超上限先断点压短，压不短才回落 fallback 或静默。"""
-    try:
-        max_len = int(task.get("reply_max_length") or 0)
-    except (TypeError, ValueError):
-        max_len = 0
-    if max_len <= 0 or not text:
-        return text
-    if len(text) <= max_len:
-        return text
-    pressed = _press_reply_to_limit(text, max_len=max_len)
-    if pressed and pressed != text:
-        log_rate_limited(
-            logger,
-            "info",
-            "llm.output_filter.length_press",
-            "LLM reply pressed to length cap for task [{}], len [{}] max [{}] -> [{}]",
-            task_type,
-            len(text),
-            max_len,
-            pressed,
-        )
-        return pressed
-    fallback = str(task.get("fallback_text") or "").strip()
-    if fallback and fallback != text and len(fallback) <= max_len:
-        logger.info(
-            "LLM reply length over cap for task [{}], len [{}] max [{}] -> fallback",
-            task_type,
-            len(text),
-            max_len,
-        )
-        return fallback
-    logger.info(
-        "LLM reply length over cap for task [{}], len [{}] max [{}] -> silent",
-        task_type,
-        len(text),
-        max_len,
-    )
-    return ""
-
-
 def resolve_output_filtered_reply(task: dict, reply_text: str) -> str:
     """返回可投递文本；空串表示静默不发。"""
     from pallas.product.llm.structured_reply import parse_structured_reply
@@ -433,7 +392,7 @@ def resolve_output_filtered_chat_reply(task: dict, reply: StructuredChatReply) -
     except (TypeError, ValueError):
         max_len = 0
     try:
-        max_bubbles = max(1, min(8, int(task.get("reply_max_bubbles") or 8)))
+        max_bubbles = max(2, min(8, int(task.get("reply_max_bubbles") or 8)))
     except (TypeError, ValueError):
         max_bubbles = 3
     # 多泡回复：每个气泡各自都落在单点上限内，就保持分条投递，而不是把
@@ -456,8 +415,6 @@ def resolve_output_filtered_chat_reply(task: dict, reply: StructuredChatReply) -
         )
         text = filtered.logical_text
     else:
-        enforced_text = text
-        split_done = False
         # 超限时完整拆成多个气泡，避免只保留第一段导致回复戛然而止。
         if max_len > 0 and len(text) > max_len:
             split = _split_reply_to_fit(text, max_len=max_len, max_segments=max_bubbles)
@@ -474,14 +431,6 @@ def resolve_output_filtered_chat_reply(task: dict, reply: StructuredChatReply) -
                 )
                 filtered = replace(filtered, reply_segments=tuple(split))
                 text = filtered.logical_text
-                split_done = True
-        if not split_done:
-            enforced_text = _enforce_max_length(text, task=task, task_type=task_type)
-            if not enforced_text:
-                return StructuredChatReply()
-            if enforced_text != text:
-                filtered = replace(filtered, reply_segments=(enforced_text,))
-                text = enforced_text
     if not filter_enabled:
         return filtered
     hit = match_output_filter(text, profile) or match_output_filter("".join(filtered.reply_segments), profile)

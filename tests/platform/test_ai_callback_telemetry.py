@@ -46,7 +46,6 @@ async def test_delivery_emits_silent_output_and_delivery_events_without_reply_te
         parsed_agent_trace=None,
         history_summary=None,
         history_keep_messages=None,
-        suppress_empty_fallback=True,
     )
 
     assert result.reply_text == ""
@@ -118,7 +117,7 @@ async def test_delivery_emits_status_for_complete_and_partial_bubbles(
 
 
 @pytest.mark.asyncio
-async def test_query_tool_empty_model_reply_gets_visible_fallback(
+async def test_query_tool_empty_model_reply_stays_silent(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     events: list[dict[str, object]] = []
@@ -162,11 +161,11 @@ async def test_query_tool_empty_model_reply_gets_visible_fallback(
         parsed_agent_trace=task["agent_trace"],
         history_summary=None,
         history_keep_messages=None,
-        suppress_empty_fallback=True,
     )
 
-    assert result.delivered is True
-    assert sent == ["资料查到了，但这次回答没整理出来，再问我一次吧。"]
+    assert result.delivered is False
+    assert result.status == "silent"
+    assert sent == []
 
 
 @pytest.mark.asyncio

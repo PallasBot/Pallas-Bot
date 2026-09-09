@@ -11,7 +11,7 @@ Provider 输出 / direct_candidate 直投
   └─ ① persona_output_firewall（kernel_runner.run_kernel_chat_job）
   │      硬规则命中 → retry（修正指令重生成，max_retries=1）→ 仍命中 → fallback → silent
   │      配置：llm_persona_output_firewall（默认 off）
-  └─ ② decision.action == "silent" → suppress_empty_fallback=True（防空兜底填回）
+  └─ ② decision.action == "silent" → 空输出直接静默，不再回落兜底文案
   ▼ delivery.deliver_llm_callback_success（投递出口）
   │  ③ should_suppress_llm_duplicate_reply（与近期回复去重）
   │  ④ extract_sticker_marker（贴纸指令）
@@ -20,10 +20,10 @@ Provider 输出 / direct_candidate 直投
   │      配置：llm_output_filter_enabled（默认 on）
   │  ⑦ split_short_reply_segments（short 取向单段 → 按句末标点拆 3 段）
   │  ⑧ strip_leading_self_at_mentions（开头 @ 自己 → 去）
-   │  ⑨ chat_empty_fallback（空回复兜底；查询工具空回复使用查询/失败/无结果文案）
+   │  ⑨ 空回复无兜底：无正文（含查询工具命中但模型未成答）直接静默
   │  ⑩ apply_reply_postprocess（错别字/句尾句号，llm_reply_postprocess_enabled 默认 off）
   │  ⑪ replace_mention_tokens（未授权提及 token → 静默）
-   ▼ 多气泡逐条投递（气泡间 0.5~3.5s 随机抖动；查询工具不得无声结束）
+   ▼ 多气泡逐条投递（气泡间 0.5~3.5s 随机抖动；空回复静默不投递）
   落群成功后：会话回写 / auto_episode / repeater_feedback / reply_effect 评分
 ```
 
@@ -63,7 +63,7 @@ Provider 输出 / direct_candidate 直投
 
 - JSON 契约校验：坏结构整条不回（fail-closed）
 - 超长找干净断点压短，短回复按句末标点拆多气泡
-- 去掉开头多余的 @；空回复兜底
+- 去掉开头多余的 @；空回复直接静默
 - 错别字 / 句尾句号修正：`llm_reply_postprocess_enabled`（默认 `false`）
 - 与近期回复去重、气泡间随机抖动
 
@@ -81,15 +81,15 @@ Provider 输出 / direct_candidate 直投
 | `allow` | 全部通过 | 走 ⑤→⑪ 正常逐气泡投递 |
 | `retry` | 防火墙命中且策略 `retry_then_fallback` | 带修正指令重生成一次，仍命中则下行 |
 | `fallback` | 防火墙 / 过滤给出兜底文案 | 优先任务 `fallback_text`，无则内建；兜底文案也要过自检，不过则升 `silent` |
-| `silent` | 副作用工具明确成功后无可见对白，或非显式闲聊无正文 | 不投递，`suppress_empty_fallback=True` 防止被空回复兜底填回 |
+| `silent` | 副作用工具明确成功后无可见对白，或非显式闲聊无正文 | 不投递，不再回落兜底文案 |
 | `failed` | 查询任务无可见结果、投递目标缺失或发送失败 | 不伪装为 `delivered=True`；查询任务优先发送确定性失败说明 |
 
-查询任务的 `silent` 不是合法成功出口：只要本轮成功调用过查询工具且属于显式问答，即使模型返回 `PASS`、结构化解析失败或输出过滤清空，也必须回落到查询结果、无结果或查询失败说明。
+查询任务空回复同样直接静默：模型返回 `PASS`、结构化解析失败或输出过滤清空时，不再发「查到了 / 没找到 / 查询失败」等可见兜底（原兜底文案已撤销）。
 
 三条补充：
 
 - 防火墙 `severity=soft` 且仅命中 `roleplay_stage_direction` 时会放行。
-- 空回复兜底在 `chat_empty_fallback.py`；`suppress_empty_fallback` 时跳过。
+- 空回复不再有可见兜底：查询工具命中但模型无正文时同样静默；`chat_empty_fallback.py` 仅保留硬触发常量供进度提示使用。
 - 防火墙命中后 agent trace 会脱敏再落盘（`redact_agent_trace_for_firewall`）。
 
 ## 可观测契约

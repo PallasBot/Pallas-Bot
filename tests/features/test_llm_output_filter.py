@@ -167,6 +167,15 @@ def test_resolve_output_filtered_reply_splits_overlength_short_band() -> None:
     assert all(len(segment) <= 12 for segment in filtered.split("\n"))
 
 
+def test_resolve_output_filtered_reply_splits_past_single_bubble_cap() -> None:
+    task = {"task_type": LLM_CHAT_TASK_TYPE, "reply_max_length": 16, "reply_max_bubbles": 1}
+    reply = "她开着飞船冲出了泰拉，没有后续了。"
+
+    filtered = resolve_output_filtered_reply(task, reply)
+
+    assert filtered == "她开着飞船冲出了泰拉\n没有后续了"
+
+
 def test_resolve_output_filtered_reply_splits_overlength_reply_and_keeps_tail() -> None:
     task = {"task_type": LLM_CHAT_TASK_TYPE, "reply_max_length": 12}
     reply = "今天先说第一件事。后面还有第二件事。最后还有第三件事。"

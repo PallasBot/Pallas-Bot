@@ -291,7 +291,6 @@ async def run_kernel_chat_job(
             from pallas.product.llm.task_metrics import record_bot_llm_task
 
             record_bot_llm_task(task, "reply_silenced")
-            delivery_kwargs["suppress_empty_fallback"] = True
         await deliver_llm_chat_result(request_id, **delivery_kwargs)
     except Exception as exc:
         logger.exception("LLM kernel chat failed for request [{}]", request_id)

@@ -568,7 +568,6 @@ async def deliver_llm_callback_success(
     parsed_agent_trace: dict | None,
     history_summary: str | None,
     history_keep_messages: int | None,
-    suppress_empty_fallback: bool = False,
     sleeper: Callable[[float], Awaitable[None] | None] | None = None,
 ) -> DeliveryOutcome:
     """处理 LLM 回调文本并投递到群。"""
@@ -583,7 +582,6 @@ async def deliver_llm_callback_success(
         fallback = str(task.get("fallback_text") or "").strip()
         reply_text = fallback if fallback and fallback != reply_text else ""
     marker_intent = ""
-    query_fallback_used = False
     from pallas.product.llm.models import StructuredChatReply
     from pallas.product.llm.output_filter import profile_for_task_type, resolve_output_filtered_chat_reply
     from pallas.product.llm.structured_reply import parse_structured_reply
@@ -635,23 +633,6 @@ async def deliver_llm_callback_success(
         )
         reply_segments = [first_segment, *reply_segments[1:]] if first_segment else reply_segments[1:]
         reply_text = "\n".join(reply_segments)
-    if task_type == LLM_CHAT_TASK_TYPE:
-        from pallas.product.llm.chat_empty_fallback import (
-            query_fallback_for_task,
-            resolve_llm_chat_empty_fallback,
-        )
-
-        query_fallback = query_fallback_for_task(task) if not reply_segments else ""
-        if query_fallback:
-            fallback_text = resolve_llm_chat_empty_fallback(
-                task,
-                reply_text,
-                suppress_empty_fallback=suppress_empty_fallback,
-            )
-            if fallback_text:
-                reply_text = fallback_text
-                reply_segments = [fallback_text]
-                query_fallback_used = True
     learned_reply_text = "\n".join(reply_segments)
     delivery_segments = list(reply_segments)
     if delivery_segments:
@@ -695,17 +676,12 @@ async def deliver_llm_callback_success(
                         "AI callback reply silenced after unapproved mention token removal",
                     )
                 reply_text = "\n".join(delivery_segments)
-    fallback_used = bool(query_fallback_used and reply_text)
     if not delivery_segments:
         output_decision = "silent"
         output_action = "silent"
         output_reason = "empty_after_filter" if had_reply_before_filter else "empty_output"
         if had_reply_before_filter:
             record_bot_llm_task(task_type, "output_filter_block")
-    elif fallback_used:
-        output_decision = "success"
-        output_action = "fallback"
-        output_reason = "empty_fallback"
     else:
         output_decision = "success"
         output_action = "processed"
@@ -721,7 +697,7 @@ async def deliver_llm_callback_success(
         group_id=group_id,
         output_filter_action=output_action,
         output_filter_reason=output_reason,
-        fallback=fallback_used,
+        fallback=False,
         segment_count=len(delivery_segments),
     )
     sticker_intent = str(structured_reply.sticker_intent or "")
@@ -791,12 +767,9 @@ async def deliver_llm_callback_success(
         delivered = text_delivered
     has_delivery_target = group_id is not None and bot is not None
     if not delivery_segments:
-        from pallas.product.llm.chat_empty_fallback import query_fallback_for_task
-
-        query_failed_to_render = bool(query_fallback_for_task(task))
-        delivery_status = "failed" if query_failed_to_render else "silent"
-        delivery_decision = delivery_status
-        delivery_reason = "query_no_delivery_segments" if query_failed_to_render else "no_delivery_segments"
+        delivery_status = "silent"
+        delivery_decision = "silent"
+        delivery_reason = "no_delivery_segments"
     elif not has_delivery_target:
         delivery_status = "failed"
         delivery_decision = "failed"
@@ -983,7 +956,6 @@ async def deliver_llm_chat_result(
     agent_trace: str | None = None,
     history_summary: str | None = None,
     history_keep_messages: int | None = None,
-    suppress_empty_fallback: bool = False,
 ) -> dict[str, str]:
     """闲聊结果投递（内核直连与 AI HTTP 回调共用）。"""
     from pallas.core.platform.ai_callback.runner import run_ai_callback
@@ -995,5 +967,4 @@ async def deliver_llm_chat_result(
         agent_trace=agent_trace,
         history_summary=history_summary,
         history_keep_messages=history_keep_messages,
-        suppress_empty_fallback=suppress_empty_fallback,
     )

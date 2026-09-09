@@ -817,8 +817,8 @@ async def test_kernel_keeps_short_social_reply_silent_after_two_quality_failures
     async def fake_complete(**_kwargs):
         return next(replies)
 
-    async def fake_deliver(_task_id, *, text=None, suppress_empty_fallback=False, **_kwargs):
-        delivered.append((str(text or ""), bool(suppress_empty_fallback)))
+    async def fake_deliver(_task_id, *, text=None, **_kwargs):
+        delivered.append(str(text or ""))
         return {"message": "ok"}
 
     monkeypatch.setattr(kernel_runner, "complete_with_tool_loop", fake_complete)
@@ -833,7 +833,7 @@ async def test_kernel_keeps_short_social_reply_silent_after_two_quality_failures
         cfg=LlmConfig(llm_persona_output_firewall={"enabled": True, "max_retries": 1}),
     )
 
-    assert delivered == [("", True)]
+    assert delivered == [""]
 
 
 @pytest.mark.asyncio
@@ -850,8 +850,8 @@ async def test_kernel_retries_then_silences_unrelated_persona_topic(monkeypatch:
     async def fake_complete(**_kwargs):
         return next(replies)
 
-    async def fake_deliver(_task_id, *, text=None, suppress_empty_fallback=False, **_kwargs):
-        delivered.append((str(text or ""), bool(suppress_empty_fallback)))
+    async def fake_deliver(_task_id, *, text=None, **_kwargs):
+        delivered.append(str(text or ""))
         return {"message": "ok"}
 
     monkeypatch.setattr(kernel_runner, "complete_with_tool_loop", fake_complete)
@@ -869,7 +869,7 @@ async def test_kernel_retries_then_silences_unrelated_persona_topic(monkeypatch:
         cfg=LlmConfig(llm_persona_output_firewall={"enabled": True, "max_retries": 1}),
     )
 
-    assert delivered == [("", True)]
+    assert delivered == [""]
     assert traces[0]["chat_reply_quality"]["initial"]["rule_ids"] == ["persona_topic_hijack"]
 
 
