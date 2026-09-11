@@ -4,6 +4,10 @@
 
 普通 `@` 聊天走 Bot Provider，在 Bot 进程内完成；不要为这条路径增加 Pallas-Bot-AI / `:9099` / HTTP callback。媒体与遗留 RWKV 另见 [Agent 生命周期](agent-lifecycle.md) 与运维文档。
 
+## 出口总闸
+
+所有 LLM 出口（`complete_chat_message`、`fetch_embeddings_sync`）统一受 `pallas.product.llm.availability.llm_calls_enabled` 约束：`LLM_CHAT_ENABLED` 为关，或 `llm_chat` 插件被全实例禁用时，直接不发请求。消息入口另有 `llm_plugin_disabled_for_scope` 做按牛/按群拦截；后台循环、work/embed 辅进程在各自任务入口自查同一作用域，避免绕过插件禁用。治理细节见 [插件治理](plugin-governance.md)。
+
 ## 两条出口
 
 ```text

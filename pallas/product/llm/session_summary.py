@@ -155,9 +155,17 @@ def schedule_session_summary(*, bot_id: int, group_id: int | None, user_id: int,
     c = cfg or get_llm_config()
     if not can_write_runtime_state_summary(c) or not user_id:
         return
+
+    async def _guarded() -> None:
+        from pallas.product.llm.availability import llm_plugin_disabled_for_scope
+
+        if await llm_plugin_disabled_for_scope(bot_id, group_id):
+            return
+        await maybe_compact_session_history(bot_id=bot_id, group_id=group_id, user_id=user_id, cfg=c)
+
     try:
         asyncio.get_running_loop().create_task(
-            maybe_compact_session_history(bot_id=bot_id, group_id=group_id, user_id=user_id, cfg=c),
+            _guarded(),
             name=f"session_summary:{bot_id}:{group_id or 0}:{user_id}",
         )
     except RuntimeError:

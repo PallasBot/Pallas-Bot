@@ -454,6 +454,7 @@ async def test_complete_chat_message_parses_openai_response(monkeypatch: pytest.
         llm_api_key="sk-test",
         llm_model="demo",
         chat_timeout_sec=5.0,
+        llm_chat_enabled=True,
     )
     message = await complete_chat_message(
         [{"role": "user", "content": "hi"}],
@@ -575,7 +576,7 @@ async def test_complete_chat_message_downgrades_incompatible_required_tool_choic
         return FakeClient()
 
     monkeypatch.setattr("pallas.product.llm.provider_client.get_llm_shared_httpx_client", fake_client)
-    cfg = LlmConfig(chat_timeout_sec=5.0)
+    cfg = LlmConfig(chat_timeout_sec=5.0, llm_chat_enabled=True)
     tools = [{"type": "function", "function": {"name": "demo", "parameters": {"type": "object"}}}]
 
     first = await complete_chat_message(
@@ -669,7 +670,7 @@ async def test_complete_chat_message_falls_back_to_next_provider(
     message = await complete_chat_message(
         [{"role": "user", "content": "hi"}],
         model="",
-        cfg=LlmConfig(chat_timeout_sec=5.0),
+        cfg=LlmConfig(chat_timeout_sec=5.0, llm_chat_enabled=True),
         task="llm_chat",
     )
     assert message["content"] == "fallback-ok"
@@ -762,7 +763,7 @@ async def test_provider_fallback_reprepares_messages_for_each_capability(
                 {"speaker": "兔兔", "text": "看这个", "url": "https://example.com/history.png"},
             ],
         },
-        cfg=LlmConfig(chat_timeout_sec=5.0),
+        cfg=LlmConfig(chat_timeout_sec=5.0, llm_chat_enabled=True),
     )
 
     assert content == "fallback-ok"

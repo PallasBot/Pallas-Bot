@@ -126,6 +126,7 @@ def test_fetch_via_provider_openai(monkeypatch) -> None:
         llm_embedding_provider="openai",
         llm_base_url="https://example.test",
         llm_api_key="key",
+        llm_chat_enabled=True,
     )
 
     class Response:

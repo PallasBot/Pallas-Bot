@@ -127,6 +127,10 @@ def fetch_embeddings_sync(
     inputs = [str(text or "").strip() for text in texts]
     if not inputs or any(not text for text in inputs):
         return None
+    from pallas.product.llm.availability import llm_calls_enabled
+
+    if not llm_calls_enabled(cfg):
+        return None
     from pallas.product.llm.knowledge.embedding_provider import get_embedding_provider
 
     provider = get_embedding_provider(cfg)

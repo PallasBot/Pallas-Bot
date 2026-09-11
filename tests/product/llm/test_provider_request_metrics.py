@@ -39,7 +39,7 @@ async def test_complete_chat_message_returns_sanitized_provider_trace(monkeypatc
         base_url="https://example.test/v1",
         api_key="sk-test",
         provider_id="demo-provider",
-        cfg=LlmConfig(chat_timeout_sec=5.0),
+        cfg=LlmConfig(chat_timeout_sec=5.0, llm_chat_enabled=True),
     )
 
     trace = result["_provider_trace"]

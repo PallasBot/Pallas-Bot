@@ -336,6 +336,10 @@ async def run_sticker_label_backfill_once(*, cfg=None) -> dict[str, int]:
     config = cfg or get_llm_config()
     if not bool(getattr(config, "llm_sticker_label_backfill_enabled", True)):
         return {"queued": 0, "skipped": 0, "missing_cache": 0, "budget_exhausted": True, "used": 0}
+    from pallas.product.llm.availability import llm_calls_enabled
+
+    if not llm_calls_enabled(config):
+        return {"queued": 0, "skipped": 0, "missing_cache": 0, "budget_exhausted": True, "used": 0}
     if lazy_sticker_labels_paused():
         return {"queued": 0, "skipped": 0, "missing_cache": 0, "budget_exhausted": True, "used": 0}
     daily_limit = max(0, int(getattr(config, "llm_sticker_label_backfill_daily_limit", 200) or 0))

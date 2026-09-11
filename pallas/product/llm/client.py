@@ -7,6 +7,7 @@ from nonebot import logger
 from pallas.core.platform.observability import SlowPathTimer, slow_path_threshold_ms
 from pallas.core.shared.utils import HTTPXClient
 
+from .availability import llm_plugin_disabled_for_scope
 from .budget import trim_messages_to_char_budget
 from .config import LlmConfig, get_llm_config, llm_server_base_url
 from .kernel.memory_governance import can_write_runtime_state_summary, runtime_state_summary_metadata
@@ -118,6 +119,8 @@ async def submit_chat_task(
     c = cfg or get_llm_config()
     if not c.llm_chat_enabled:
         return ChatSubmitResult(status="llm_chat_disabled", ok=False)
+    if await llm_plugin_disabled_for_scope(request.bot_id, request.group_id):
+        return ChatSubmitResult(status="plugin_disabled", ok=False)
     timer = SlowPathTimer(
         "llm.submit_chat_task",
         threshold_ms=slow_path_threshold_ms("LLM_CHAT_SLOW_PATH_MS", 500.0),

@@ -15,6 +15,19 @@
 | 帮助可见性 | `usage` / `menu_data` / `help_audience` | 帮助图与控制台展示 |
 | 安装 / 禁用 / 更新 | console / CLI | 包生命周期 |
 
+## LLM 出口总闸
+
+`llm_chat` 是 LLM 能力的载体插件。除消息入口的 matcher 门禁外，LLM 底层出口还有一层统一闸，避免后台循环、work/embed 辅进程绕过插件禁用：
+
+| 层 | 位置 | 作用 |
+| --- | --- | --- |
+| 配置总闸 | `LLM_CHAT_ENABLED` → `LlmConfig.llm_chat_enabled` | 用户可关的「智能对话」总开关 |
+| 插件全局禁用 | `packages/help/global_disable`（`llm_chat` / `ollama` 别名） | 全实例禁用；启动时跳过插件加载 |
+| 出口兜底 | `pallas.product.llm.availability.llm_calls_enabled` | `complete_chat_message` / `fetch_embeddings_sync` 在无消息上下文处统一拦截 |
+| 运行时按牛/按群 | `llm_plugin_disabled_for_scope` | 供 work aux / 后台任务按作用域自查 |
+
+规则：任一为「关」即不发请求。运行中热改全局禁用名单或按群/按牛禁用后，已注册的后台循环也会在下一轮自查时停，无需重启。
+
 ## 稳定约定
 
 | 约定 | 说明 |

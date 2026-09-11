@@ -787,6 +787,7 @@ async def test_kernel_persona_retry_plain_text_drops_group_timeline_images(
         },
         cfg=LlmConfig(
             chat_timeout_sec=5.0,
+            llm_chat_enabled=True,
             llm_persona_output_firewall={"enabled": True, "max_retries": 1},
         ),
     )

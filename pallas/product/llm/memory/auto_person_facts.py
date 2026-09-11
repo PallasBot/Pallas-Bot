@@ -120,6 +120,10 @@ async def maybe_auto_save_person_facts(
         return 0
     if group_id is None or not user_id or not can_read_persistent_memory(c):
         return 0
+    from pallas.product.llm.availability import llm_plugin_disabled_for_scope
+
+    if await llm_plugin_disabled_for_scope(bot_id, group_id):
+        return 0
     bid, gid, uid = int(bot_id), int(group_id), int(user_id)
     if not _cooldown_ok(bid, gid, uid, cooldown_sec=c.llm_memory_auto_person_facts_cooldown_sec):
         return 0

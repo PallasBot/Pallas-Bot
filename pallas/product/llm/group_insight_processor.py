@@ -100,10 +100,10 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
         mark_semantic_style_group_processed,
         persist_semantic_style_examples,
         semantic_style_candidate_rejected,
-        semantic_style_collection_enabled,
+        semantic_style_collection_allowed,
     )
 
-    if not semantic_style_collection_enabled(bot_id=bot_id, group_id=group_id):
+    if not await semantic_style_collection_allowed(bot_id=bot_id, group_id=group_id):
         return
 
     await _collect_protocol_observations(bot_id=bot_id, group_id=group_id)
@@ -660,6 +660,10 @@ async def _sweep_semantic_groups() -> None:
             "今日语义标注已达上限，本轮群洞察扫描跳过入队",
         )
         return
+    from pallas.product.llm.availability import is_llm_plugin_globally_disabled
+
+    if is_llm_plugin_globally_disabled():
+        return
 
     seen_groups: set[int] = set()
     _local = await _local_bot_ids()
@@ -694,8 +698,12 @@ async def _sweep_semantic_groups() -> None:
     _sweep_cursor = (start + len(selected)) % count
 
     enqueued = 0
+    from pallas.product.llm.availability import llm_plugin_disabled_for_scope
+
     for _sample_count, semantic_bot, group_id in selected:
         try:
+            if await llm_plugin_disabled_for_scope(semantic_bot, group_id):
+                continue
             await store.enqueue(build_semantic_insight_job(bot_id=semantic_bot, group_id=group_id, day=day))
             enqueued += 1
         except Exception as exc:

@@ -642,7 +642,7 @@ async def test_current_turn_decision_retries_configured_task_backup(
     })
     monkeypatch.setattr(
         "pallas.product.llm.provider_client.get_llm_config",
-        lambda: LlmConfig(llm_base_url="", llm_model=""),
+        lambda: LlmConfig(llm_base_url="", llm_model="", llm_chat_enabled=True),
     )
     attempted: list[tuple[str, str]] = []
 

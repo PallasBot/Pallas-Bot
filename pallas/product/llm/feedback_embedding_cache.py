@@ -384,6 +384,10 @@ def backfill_feedback_trigger_embeddings(
 def schedule_feedback_trigger_backfill(*, limit_texts: int = 120, batch_size: int = 24) -> None:
     """进程内只排一次的后台回填，避免拖启动。"""
     global _backfill_started
+    from pallas.product.llm.availability import llm_calls_enabled
+
+    if not llm_calls_enabled():
+        return
     with _LOCK:
         if _backfill_started:
             return

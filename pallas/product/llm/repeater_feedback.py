@@ -109,6 +109,10 @@ def schedule_feedback_index_prewarm() -> None:
     构建期间与 on-demand 加锁互斥；结果天然被 revision 校验复用。
     """
     global _feedback_index_prewarm_started
+    from pallas.product.llm.availability import llm_calls_enabled
+
+    if not llm_calls_enabled():
+        return
     with _group_entries_index_lock:
         if _feedback_index_prewarm_started:
             return

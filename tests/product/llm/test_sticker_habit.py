@@ -116,6 +116,7 @@ def _cfg(**overrides):
         "llm_sticker_habit_min_count": 5,
         "llm_sticker_habit_top_k": 1,
         "llm_sticker_habit_backfill_days": 7,
+        "llm_chat_enabled": True,
     }
     values.update(overrides)
     return SimpleNamespace(**values)

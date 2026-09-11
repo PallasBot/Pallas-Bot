@@ -45,6 +45,7 @@ def test_fetch_embeddings_uses_openai_compatible_endpoint(monkeypatch) -> None:
         llm_embedding_provider="openai",
         llm_base_url="https://example.test",
         llm_api_key="key",
+        llm_chat_enabled=True,
     )
 
     class Response:
@@ -67,6 +68,7 @@ def test_fetch_embeddings_failure_uses_stub(monkeypatch) -> None:
         llm_embedding_model="text-embedding-3-small",
         llm_embedding_provider="openai",
         llm_base_url="https://example.test",
+        llm_chat_enabled=True,
     )
     monkeypatch.setattr("httpx.post", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("down")))
 
@@ -85,6 +87,7 @@ def test_fetch_embeddings_failure_skips_stub_when_opt_out(monkeypatch) -> None:
         llm_embedding_model="text-embedding-3-small",
         llm_embedding_provider="openai",
         llm_base_url="https://example.test",
+        llm_chat_enabled=True,
     )
     monkeypatch.setattr("httpx.post", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("down")))
 

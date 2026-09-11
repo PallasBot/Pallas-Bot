@@ -17,6 +17,10 @@ def register_llm_tools_startup_hook() -> None:
 
     @driver.on_startup
     async def refresh_plugin_llm_tools() -> None:
+        from pallas.product.llm.availability import llm_calls_enabled
+
+        if not llm_calls_enabled():
+            return
         from pallas.product.llm.feedback_embedding_cache import schedule_feedback_trigger_backfill
         from pallas.product.llm.repeater_feedback import schedule_feedback_index_prewarm
         from pallas.product.llm.tools.background import resume_background_tool_tasks

@@ -117,6 +117,10 @@ async def maybe_auto_save_ip_knowledge(
         return False
     if group_id is None or not can_read_persistent_memory(c) or not is_llm_memory_store_available():
         return False
+    from pallas.product.llm.availability import llm_plugin_disabled_for_scope
+
+    if await llm_plugin_disabled_for_scope(bot_id, group_id):
+        return False
     bid, gid = int(bot_id), int(group_id)
     if not _cooldown_ok(bid, gid, cooldown_sec=c.llm_memory_auto_ip_cooldown_sec):
         return False

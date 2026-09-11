@@ -168,6 +168,10 @@ async def enqueue_sticker_label_candidate(*, cache_key: str, content: bytes, sou
     """仅为显式候选创建任务；普通缓存永不从这里扫描。"""
     if type(source) is not StickerLabelSource or not cache_key:
         return False
+    from pallas.product.llm.availability import llm_calls_enabled
+
+    if not llm_calls_enabled():
+        return False
     if lazy_sticker_labels_paused():
         return False
     if not sticker_label_realtime_budget_ok():

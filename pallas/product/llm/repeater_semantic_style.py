@@ -2125,6 +2125,17 @@ def semantic_style_collection_enabled(*, bot_id: int | None = None, group_id: in
     return load_semantic_style_settings(bot_id=bot_id, group_id=group_id).collection_enabled
 
 
+async def semantic_style_collection_allowed(*, bot_id: int | None = None, group_id: int | None = None) -> bool:
+    """采集前置门：插件全局禁用或本牛本群运行时禁用即停（含 work aux）。"""
+    from pallas.product.llm.availability import is_llm_plugin_globally_disabled, llm_plugin_disabled_for_scope
+
+    if is_llm_plugin_globally_disabled():
+        return False
+    if bot_id is not None and group_id is not None:
+        return not await llm_plugin_disabled_for_scope(bot_id, group_id)
+    return True
+
+
 def semantic_style_source_example_id(pair: SemanticStyleDirectPair) -> str:
     source_id = str(pair.source_example_id or "").strip()
     if source_id:

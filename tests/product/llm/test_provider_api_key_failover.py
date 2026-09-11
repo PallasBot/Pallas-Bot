@@ -77,7 +77,7 @@ async def test_chat_tries_next_api_key_on_429(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(
         pc,
         "get_llm_config",
-        lambda: SimpleNamespace(llm_api_key="", llm_model="", chat_timeout_sec=10.0),
+        lambda: SimpleNamespace(llm_api_key="", llm_model="", chat_timeout_sec=10.0, llm_chat_enabled=True),
     )
 
     result = await pc.complete_chat_message(
@@ -117,7 +117,7 @@ async def test_chat_does_not_failover_key_on_400(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(
         pc,
         "get_llm_config",
-        lambda: SimpleNamespace(llm_api_key="", llm_model="", chat_timeout_sec=10.0),
+        lambda: SimpleNamespace(llm_api_key="", llm_model="", chat_timeout_sec=10.0, llm_chat_enabled=True),
     )
 
     with pytest.raises(LlmProviderError) as exc_info:

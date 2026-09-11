@@ -183,6 +183,11 @@ async def refine_group_style_affect(
     if not llm_affect_refine_enabled():
         profile = merge_affect_refine_into_profile(profile, empty_affect_refine())
         return apply_affect_refine_triggers_to_profile(profile, None), False
+    from pallas.product.llm.availability import llm_plugin_disabled_for_scope
+
+    if await llm_plugin_disabled_for_scope(None, group_id):
+        profile = merge_affect_refine_into_profile(profile, empty_affect_refine())
+        return apply_affect_refine_triggers_to_profile(profile, None), False
 
     if not allow_llm or not should_request_llm_affect_refine(profile, prev_profile, force_llm=force_llm):
         profile = carry_forward_or_heuristic_refine(profile, prev_profile)

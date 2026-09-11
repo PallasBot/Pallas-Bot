@@ -239,6 +239,10 @@ async def _enqueue_sticker_label_for_hash(content_hash: str) -> bool:
 
     if lazy_sticker_labels_paused() or sticker_label_circuit_open() or not sticker_label_realtime_budget_ok():
         return False
+    from pallas.product.llm.availability import llm_calls_enabled
+
+    if not llm_calls_enabled():
+        return False
     job = WorkJob.create(
         kind=STICKER_LABEL_JOB_KIND,
         payload={},
@@ -309,6 +313,10 @@ async def _project_group_habits(
         return 0, 0
 
     bot_id = await _resolve_group_bot(group_id, bot_cache)
+    from pallas.product.llm.availability import llm_plugin_disabled_for_scope
+
+    if bot_id > 0 and await llm_plugin_disabled_for_scope(bot_id, group_id):
+        return 0, 0
     facts = 0
     label_queued = 0
     label_cache: dict[str, object] = {}
@@ -352,6 +360,10 @@ async def run_sticker_habit_pass() -> dict[str, int]:
 
     cfg = get_llm_config()
     if not bool(getattr(cfg, "llm_sticker_habit_enabled", True)):
+        return {"groups": 0, "messages": 0, "images": 0, "facts": 0, "label_queued": 0}
+    from pallas.product.llm.availability import llm_calls_enabled
+
+    if not llm_calls_enabled(cfg):
         return {"groups": 0, "messages": 0, "images": 0, "facts": 0, "label_queued": 0}
 
     repo = make_message_repository()

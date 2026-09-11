@@ -56,6 +56,10 @@ async def complete_chat_message(
     telemetry_context: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     c = cfg or _repo.get_llm_config()
+    from pallas.product.llm.availability import llm_calls_enabled
+
+    if not llm_calls_enabled(c):
+        raise _repo.LlmProviderError("llm plugin disabled or master switch off")
     explicit_base = str(base_url or "").strip()
     explicit_key = str(api_key or "").strip()
     explicit_model = str(model or "").strip()

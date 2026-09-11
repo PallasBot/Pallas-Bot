@@ -273,8 +273,11 @@ async def enqueue_sticker_vision_job(
     cooldown_sec: int = 90,
 ) -> str:
     """将图片选择交由 work 辅进程执行，返回可轮询的 job id。"""
+    from pallas.product.llm.availability import llm_plugin_disabled_for_scope
     from pallas.product.llm.sticker_label_jobs import StickerLabelSource, enqueue_sticker_label_candidate
 
+    if await llm_plugin_disabled_for_scope(bot_id, group_id):
+        raise RuntimeError("llm_chat plugin disabled for scope")
     source = (
         StickerLabelSource.TEST_CANDIDATE
         if idempotency_key.startswith("sticker_vision.test:")
