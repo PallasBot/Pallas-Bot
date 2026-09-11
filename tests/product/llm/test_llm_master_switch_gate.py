@@ -32,6 +32,26 @@ def test_is_llm_plugin_globally_disabled_reads_alias(monkeypatch: pytest.MonkeyP
     assert is_llm_plugin_globally_disabled() is True
 
 
+def test_is_llm_plugin_globally_disabled_before_driver_uses_startup_list(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """启动器 / embed 辅进程在 nonebot.init 前自查，不得导入 packages.help。"""
+    from pallas.product.llm import availability
+
+    monkeypatch.setattr(availability, "nonebot_driver_ready", lambda: False)
+    monkeypatch.setattr(
+        "pallas.core.platform.bot_runtime.startup_global_disable.startup_global_disabled_plugin_names",
+        lambda: frozenset({"ollama"}),
+    )
+    assert availability.is_llm_plugin_globally_disabled() is True
+
+    monkeypatch.setattr(
+        "pallas.core.platform.bot_runtime.startup_global_disable.startup_global_disabled_plugin_names",
+        lambda: frozenset(),
+    )
+    assert availability.is_llm_plugin_globally_disabled() is False
+
+
 @pytest.mark.asyncio
 async def test_complete_chat_message_raises_when_master_off(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.product.llm.provider_client import LlmProviderError, complete_chat_message

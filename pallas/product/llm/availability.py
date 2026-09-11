@@ -11,6 +11,16 @@ def is_llm_chat_service_enabled(cfg: LlmConfig | None = None) -> bool:
     return bool((cfg or get_llm_config()).llm_chat_enabled)
 
 
+def nonebot_driver_ready() -> bool:
+    try:
+        from nonebot import get_driver
+
+        get_driver()
+    except Exception:
+        return False
+    return True
+
+
 def is_llm_plugin_globally_disabled() -> bool:
     """llm_chat 插件是否被全实例禁用（含 ollama 等别名）。
 
@@ -18,10 +28,18 @@ def is_llm_plugin_globally_disabled() -> bool:
     work/embed 辅进程，保证后台出口也停。
     """
     try:
-        from packages.help.global_disable import resolve_global_disabled_plugin_names
-        from packages.help.plugin_legacy_names import is_plugin_name_in_set
+        if nonebot_driver_ready():
+            from packages.help.global_disable import resolve_global_disabled_plugin_names
+            from packages.help.plugin_legacy_names import is_plugin_name_in_set
 
-        return is_plugin_name_in_set("llm_chat", resolve_global_disabled_plugin_names())
+            return is_plugin_name_in_set("llm_chat", resolve_global_disabled_plugin_names())
+        # 启动器 / embed 辅进程在 nonebot.init 前自查，只能读 core 侧启动名单：
+        # 此时导入 packages.help 会触发其插件加载副作用（require htmlrender）。
+        from pallas.core.platform.bot_runtime.startup_global_disable import startup_global_disabled_plugin_names
+        from pallas.core.platform.plugin_runtime.plugin_identity import canonical_plugin_id
+
+        disabled = {canonical_plugin_id(name) for name in startup_global_disabled_plugin_names()}
+        return canonical_plugin_id("llm_chat") in disabled
     except Exception:
         return False
 
