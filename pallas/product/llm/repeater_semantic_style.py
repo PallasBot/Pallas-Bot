@@ -2627,7 +2627,7 @@ async def label_semantic_style_with_llm(
     response = await complete_chat_message(
         [{"role": "user", "content": prompt}],
         model=str(cfg.llm_model or ""),
-        options={"temperature": 0, "max_tokens": 160},
+        options={"temperature": 0, "max_tokens": task_token_budget("repeater.semantic_style")},
         cfg=cfg,
         task="repeater.semantic_style",
     )

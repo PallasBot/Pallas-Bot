@@ -49,7 +49,7 @@ def test_derive_llm_inference_params_drunk_skips_temperature() -> None:
         ("affect_refine", False, 512),
         ("memory_extract", False, 160),
         ("turn_decision", False, 48),
-        ("repeater.semantic_style", False, 96),
+        ("repeater.semantic_style", False, 240),
         ("sticker_vision", False, 2048),
         ("vision_messages", False, 2048),
         ("memory_graph_extract", False, 1200),

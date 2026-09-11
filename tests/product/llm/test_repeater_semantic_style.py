@@ -224,7 +224,12 @@ async def test_semantic_style_label_uses_deterministic_short_options(monkeypatch
 
     await mod.label_semantic_style_with_llm(trigger_text="前句", reply_text="接话")
 
-    assert complete.await_args.kwargs["options"] == {"temperature": 0, "max_tokens": 160}
+    from pallas.product.llm.inference_params import task_token_budget
+
+    assert complete.await_args.kwargs["options"] == {
+        "temperature": 0,
+        "max_tokens": task_token_budget("repeater.semantic_style"),
+    }
 
 
 @pytest.mark.asyncio
