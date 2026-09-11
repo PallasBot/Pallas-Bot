@@ -1,6 +1,6 @@
 """跨进程按天持久化的每日预算计数（供 LLM 任务调用数 / 提供方花费封顶复用）。
 
-计数按天分桶，落在 ``plugin_data_dir("pb_webui")`` 下的 JSON 文件，重启不丢。
+计数按自然日（北京时区）分桶，落在 ``plugin_data_dir("pb_webui")`` 下的 JSON 文件，重启不丢。
 每个计数桶可同时累计 calls / tokens / cost 三类数值，按 ``key`` 区分维度
 （如任务名、提供方 id）。写入为 best-effort，失败仅告警不阻断主流程。
 
@@ -14,8 +14,10 @@ import json
 import threading
 import time
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 from nonebot import logger
 
@@ -25,7 +27,22 @@ from pallas.core.foundation.paths import plugin_data_dir
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
+_BEIJING_TZ = ZoneInfo("Asia/Shanghai")
+
 _thread_locks: dict[str, threading.RLock] = {}
+
+
+def natural_day_key(now: int | None = None) -> str:
+    """自然日键（北京时区 ``YYYY-MM-DD``），每日预算按此分桶。"""
+    current = int(time.time()) if now is None else int(now)
+    return datetime.fromtimestamp(current, tz=_BEIJING_TZ).date().isoformat()
+
+
+def natural_day_start(now: int | None = None) -> int:
+    """自然日零点（北京时区）的 epoch 秒。"""
+    current = int(time.time()) if now is None else int(now)
+    day = datetime.fromtimestamp(current, tz=_BEIJING_TZ)
+    return int(day.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
 
 
 def _budget_path(name: str) -> Path:
@@ -67,7 +84,7 @@ def _save(name: str, state: dict[str, Any]) -> None:
         logger.warning("记录每日预算失败 [{}]：{}", name, exc)
 
 
-def _bucket(state: dict[str, Any], day_key: int, key: str) -> dict[str, float]:
+def _bucket(state: dict[str, Any], day_key: str, key: str) -> dict[str, float]:
     day = state.get(str(day_key))
     if isinstance(day, dict):
         bucket = day.get(key)
@@ -76,10 +93,10 @@ def _bucket(state: dict[str, Any], day_key: int, key: str) -> dict[str, float]:
     return {}
 
 
-def used_today(name: str, *, key: str = "", day_key: int | None = None) -> dict[str, float]:
+def used_today(name: str, *, key: str = "", day_key: str | None = None) -> dict[str, float]:
     """今日某 key 的累计计数，返回 ``{"calls":..,"tokens":..,"cost":..}``。"""
     if day_key is None:
-        day_key = int(time.time() // 86400)
+        day_key = natural_day_key()
     with _budget_lock(name):
         bucket = _bucket(_state(name), day_key, key)
     return {
@@ -100,7 +117,7 @@ def bump_today(
     """累加今日某 key 的计数（calls/tokens/cost 可分别传）。"""
     if calls <= 0 and tokens <= 0 and cost <= 0:
         return
-    day_key = int(time.time() // 86400)
+    day_key = natural_day_key()
     with _budget_lock(name):
         state = _state(name)
         day = state.get(str(day_key))
@@ -124,7 +141,7 @@ def reserve_today(name: str, *, key: str = "", count: int = 1, limit: int = 0) -
     count = max(1, int(count))
     if limit <= 0:
         return True
-    day_key = int(time.time() // 86400)
+    day_key = natural_day_key()
     with _budget_lock(name):
         state = _state(name)
         day = state.get(str(day_key))

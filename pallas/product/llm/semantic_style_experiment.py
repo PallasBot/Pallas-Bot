@@ -11,9 +11,7 @@ import hashlib
 import json
 import re
 import time
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
-from zoneinfo import ZoneInfo
 
 from nonebot import get_driver, logger
 
@@ -39,7 +37,6 @@ _OUTCOME_MAX_FOLLOWUPS = 3
 _OUTCOME_SETTLE_INTERVAL_SEC = 60
 _OUTCOME_MAX_PER_PASS = 200
 _SETTLED_REQUEST_ID_LIMIT = 8192
-_BEIJING_TZ = ZoneInfo("Asia/Shanghai")
 
 # 高置信负反馈短语：要求回复/提及 Bot 或与目标用户 exposure 时间窗口一致。
 _NEGATIVE_PHRASES = (
@@ -79,8 +76,9 @@ def experiment_state_path() -> Path:
 
 
 def semantic_style_day_key(now: int | None = None) -> str:
-    current = int(time.time()) if now is None else int(now)
-    return datetime.fromtimestamp(current, tz=_BEIJING_TZ).date().isoformat()
+    from pallas.product.llm.daily_budget import natural_day_key
+
+    return natural_day_key(now)
 
 
 def semantic_style_bucket(bot_id: int, group_id: int, now: int | None = None) -> int:

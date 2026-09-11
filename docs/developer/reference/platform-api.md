@@ -24,7 +24,7 @@
 | Ingress | `text_matches_plugin_fanout`、`dream_session_ingress_passes` |
 | 多 Bot / claim | `try_claim_group_message_once`、`begin_group_exclusive_activity`、`claim_group_handler` |
 | 舰队 | `get_fleet_bot_ids`、`connected_bot_ids`、`list_local_fleet_bots_in_group` |
-| 分片在线 / 代发 | `get_cluster_online_bot_ids`、`send_group_message_as_bot`、`invoke_bot_action` |
+| 分片在线 / 代发 | `get_cluster_online_bot_ids`、`send_group_message_as_bot`、`send_group_forward_message_as_bot`、`invoke_bot_action` |
 | LLM（平台协作） | `get_llm_config`、`llm_server_base_url`、`llm_command_tool_row`、`register_llm_tool` |
 
 完整列表以模块 `__all__` 为准；新增导出需同步本表。

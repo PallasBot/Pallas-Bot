@@ -23,6 +23,7 @@ TaskBudgetKey = Literal[
     "memory_graph_extract",
     "memory_graph_hiergraph",
     "offline_quality_eval",
+    "offline_quality_judge",
     "llm.relationship.affinity",
 ]
 
@@ -34,11 +35,12 @@ _TASK_TOKEN_BUDGETS: dict[TaskBudgetKey, int] = {
     "memory_extract": 160,
     "turn_decision": 48,
     "repeater.semantic_style": 240,
-    "sticker_vision": 32,
-    "vision_messages": 256,
+    "sticker_vision": 2048,
+    "vision_messages": 2048,
     "memory_graph_extract": 1200,
     "memory_graph_hiergraph": 1500,
     "offline_quality_eval": 96,
+    "offline_quality_judge": 256,
     "llm.relationship.affinity": 128,
 }
 _CHAT_TOOLS_TOKEN_BUDGET = 360

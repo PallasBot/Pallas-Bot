@@ -336,7 +336,7 @@ async def run_configured_offline_quality_eval(
         response = await complete_chat_message(
             messages,
             model="",
-            options={"temperature": 0, "max_tokens": 256},
+            options={"temperature": 0, "max_tokens": task_token_budget("offline_quality_judge")},
             tools=None,
             task="llm_chat",
         )

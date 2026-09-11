@@ -224,7 +224,12 @@ async def test_semantic_style_label_uses_deterministic_short_options(monkeypatch
 
     await mod.label_semantic_style_with_llm(trigger_text="前句", reply_text="接话")
 
-    assert complete.await_args.kwargs["options"] == {"temperature": 0, "max_tokens": 160}
+    from pallas.product.llm.inference_params import task_token_budget
+
+    assert complete.await_args.kwargs["options"] == {
+        "temperature": 0,
+        "max_tokens": task_token_budget("repeater.semantic_style"),
+    }
 
 
 @pytest.mark.asyncio
@@ -850,6 +855,42 @@ def test_safe_direct_candidate_requires_quoted_evidence() -> None:
         representative_triggers=["好烦，又加班"],
     )
     assert select_safe_direct_candidate([pattern], query_text="好烦，又加班") == ""
+
+
+def test_status_injectable_behavior_counts_only_recallable_patterns(tmp_path, monkeypatch) -> None:
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+
+    def pattern(*, triggers: list[str]) -> mod.ControlledBehaviorPattern:
+        return mod.ControlledBehaviorPattern(
+            interaction_action="agree",
+            semantic_relation="agree",
+            form="short",
+            intensity="soft",
+            count=3,
+            responder_ids=[11, 12],
+            representative_triggers=triggers,
+            quoted_triggers=triggers,
+        )
+
+    mod._write_profiles({
+        (100, 42, "group_chat"): mod.SemanticStyleProfile(
+            bot_id=100,
+            group_id=42,
+            scene="group_chat",
+            behavior_patterns=[pattern(triggers=["好烦"])],
+        ),
+        (100, 43, "group_chat"): mod.SemanticStyleProfile(
+            bot_id=100,
+            group_id=43,
+            scene="group_chat",
+            behavior_patterns=[pattern(triggers=[])],
+        ),
+    })
+
+    # 无代表 trigger 的模式线上召回不到，不计入可注入口径
+    assert mod.semantic_style_status()["injectable_behavior_patterns"] == 1
 
 
 def test_v3_rebuild_excludes_continuation_and_rejected_text_from_direct_pairs() -> None:

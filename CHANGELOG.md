@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+* docs(platform): 补全平台 API 导出清单
+* docs(release): 允许 dev→main squash 合入
+
+### Fixed
+
+* fix(llm): 行为模式可注入统计对齐召回条件
+* fix(llm): 每日预算改用北京自然日
+* fix(llm): 视觉任务输出预算适配思考模型
+* fix(llm): 内部任务输出预算统一走任务键
+
 ## [4.4.2] - 2026-09-09
 
 ### 更新公告
