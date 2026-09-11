@@ -428,18 +428,22 @@ def _sticker_habit_prune_state_path() -> Path:
 
 def _should_run_sticker_habit_prune(now_ts: int) -> bool:
     """自然日闸：清理每天最多跑一次。"""
+    from pallas.product.llm.daily_budget import natural_day_key
+
     try:
         raw = json.loads(_sticker_habit_prune_state_path().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return True
-    last_day = int(raw.get("last_prune_day") or 0) if isinstance(raw, dict) else 0
-    return last_day != now_ts // 86400
+    last_day = str(raw.get("last_prune_day") or "") if isinstance(raw, dict) else ""
+    return last_day != natural_day_key(now_ts)
 
 
 def _mark_sticker_habit_prune_done(now_ts: int) -> None:
+    from pallas.product.llm.daily_budget import natural_day_key
+
     atomic_write_text(
         _sticker_habit_prune_state_path(),
-        json.dumps({"last_prune_day": now_ts // 86400}, ensure_ascii=False) + "\n",
+        json.dumps({"last_prune_day": natural_day_key(now_ts)}, ensure_ascii=False) + "\n",
     )
 
 

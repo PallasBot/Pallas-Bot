@@ -542,7 +542,9 @@ def record_semantic_style_visual_circuit_success(
 
 
 def semantic_style_backfill_remaining_today(cursor: SemanticStyleBackfillCursor, *, now: int) -> int:
-    day_started_at = int(now) - int(now) % (24 * 60 * 60)
+    from pallas.product.llm.daily_budget import natural_day_start
+
+    day_started_at = natural_day_start(now)
     used = cursor.enqueued_today if cursor.day_started_at == day_started_at else 0
     return max(0, SEMANTIC_STYLE_BACKFILL_MAX_PER_DAY - int(used))
 
@@ -558,7 +560,9 @@ def build_semantic_style_backfill_batch(
     """将调用方提供的一页历史候选转为有界 work jobs，不负责扫描仓储。"""
     current_time = int(time.time()) if now is None else int(now)
     previous = cursor or SemanticStyleBackfillCursor()
-    day_started_at = current_time - current_time % (24 * 60 * 60)
+    from pallas.product.llm.daily_budget import natural_day_start
+
+    day_started_at = natural_day_start(current_time)
     used_today = previous.enqueued_today if previous.day_started_at == day_started_at else 0
     capacity = semantic_style_backfill_remaining_today(previous, now=current_time)
     if remaining_today is not None:
@@ -981,19 +985,23 @@ def _semantic_label_budget_state() -> dict[str, Any]:
         return {}
 
 
-def semantic_label_budget_used_today(*, day_key: int | None = None) -> int:
-    """今日已提交的语义风格 LLM 标注次数（跨进程按天持久化计数）。"""
+def semantic_label_budget_used_today(*, day_key: str | None = None) -> int:
+    """今日已提交的语义风格 LLM 标注次数（跨进程按自然日持久化计数）。"""
     if day_key is None:
-        day_key = int(time.time() // 86400)
+        from pallas.product.llm.daily_budget import natural_day_key
+
+        day_key = natural_day_key()
     state = _semantic_label_budget_state()
     return int(state.get(str(day_key)) or 0)
 
 
 def record_semantic_label_budget(n: int = 1) -> None:
-    """累加一次语义风格 LLM 标注提交计数（按天分桶，供预算闸消费侧判断）。"""
+    """累加一次语义风格 LLM 标注提交计数（按自然日分桶，供预算闸消费侧判断）。"""
     if n <= 0:
         return
-    day_key = int(time.time() // 86400)
+    from pallas.product.llm.daily_budget import natural_day_key
+
+    day_key = natural_day_key()
     state = _semantic_label_budget_state()
     state[str(day_key)] = int(state.get(str(day_key)) or 0) + n
     try:
@@ -1011,7 +1019,9 @@ def claim_semantic_label_budget(n: int = 1) -> bool:
     from pallas.product.llm.config import get_llm_config
 
     limit = max(0, int(getattr(get_llm_config(), "llm_semantic_style_realtime_daily_limit", 0) or 0))
-    day_key = str(int(time.time() // 86400))
+    from pallas.product.llm.daily_budget import natural_day_key
+
+    day_key = natural_day_key()
     with semantic_style_data_lock():
         state = _semantic_label_budget_state()
         used = int(state.get(day_key) or 0)
@@ -1028,7 +1038,7 @@ def claim_semantic_label_budget(n: int = 1) -> bool:
     return True
 
 
-def semantic_label_budget_ok(*, day_key: int | None = None) -> bool:
+def semantic_label_budget_ok(*, day_key: str | None = None) -> bool:
     """语义风格每日 LLM 标注预算闸：消费侧检查今日累计是否已达上限。
 
     上限配置 ``llm_semantic_style_realtime_daily_limit``，默认 600 次/天。
