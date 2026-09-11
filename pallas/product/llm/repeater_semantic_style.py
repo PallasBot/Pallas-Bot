@@ -1114,7 +1114,11 @@ def semantic_style_status(*, bot_id: int | None = None, group_id: int | None = N
         2 if settings.active_pipeline == "v2" else max((int(p.schema_version) for p in scoped_profiles), default=3)
     )
     injectable_behavior = sum(
-        1 for p in scoped_profiles for pattern in p.behavior_patterns if behavioral_pattern_injectable(pattern)
+        1
+        for p in scoped_profiles
+        for pattern in p.behavior_patterns
+        # 无代表 trigger 线上永远召回不到，不计入可用口径
+        if behavioral_pattern_injectable(pattern) and pattern.representative_triggers
     )
     injectable_continuation = sum(
         1 for p in scoped_profiles for pattern in p.continuation_patterns if continuation_pattern_injectable(pattern)
