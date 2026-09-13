@@ -268,12 +268,13 @@ async def handle_ban_latest(bot: Bot, event: GroupMessageEvent, state: T_State):
         format_business_event("复读禁言", "已准备", bot=event.self_id, group=event.group_id, target="latest_reply")
     )
 
-    try:
-        await bot.delete_msg(message_id=event.reply.message_id)  # type: ignore
-    except ActionFailed:
-        logger.warning(
-            "[Repeater] Failed to recall mute target for bot [{}] in group [{}]", event.self_id, event.group_id
-        )
+    if event.reply:
+        try:
+            await bot.delete_msg(message_id=event.reply.message_id)  # type: ignore
+        except ActionFailed:
+            logger.warning(
+                "[Repeater] Failed to recall mute target for bot [{}] in group [{}]", event.self_id, event.group_id
+            )
 
     if event.reply:
         await apply_llm_negative_feedback_safely(

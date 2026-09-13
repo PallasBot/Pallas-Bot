@@ -139,6 +139,24 @@ async def test_recalled_feedback_failure_does_not_block_ban(monkeypatch) -> None
 
 
 @pytest.mark.asyncio
+async def test_ban_latest_without_reply_does_not_raise(monkeypatch) -> None:
+    from packages.repeater.handlers import ban
+
+    chat_ban = AsyncMock(return_value=True)
+    finish_ack = AsyncMock()
+    monkeypatch.setattr(ban.Chat, "ban", chat_ban)
+    monkeypatch.setattr(ban, "finish_ban_ack", finish_ack)
+    bot = SimpleNamespace(delete_msg=AsyncMock())
+    event = SimpleNamespace(self_id=10001, group_id=20001, user_id=30001, reply=None)
+
+    await ban.handle_ban_latest(bot, event, {})
+
+    bot.delete_msg.assert_not_awaited()
+    chat_ban.assert_awaited_once()
+    finish_ack.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_latest_feedback_failure_does_not_block_ban(monkeypatch) -> None:
     from packages.repeater.handlers import ban
 
