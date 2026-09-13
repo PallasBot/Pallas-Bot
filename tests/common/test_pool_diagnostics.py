@@ -35,6 +35,31 @@ def test_pg_session_caller_hint_entry_falls_back_to_inspect_stack(monkeypatch) -
     assert pool_diagnostics.pg_session_caller_hint_entry() == "fallback_wrapper@common/test_pool_diagnostics.py:27"
 
 
+def test_pg_session_caller_hint_entry_skips_repository_pg_lifecycle(monkeypatch) -> None:
+    monkeypatch.setattr(pool_diagnostics.sys, "_getframe", None, raising=False)
+
+    class _LifecycleFrame:
+        filename = "/root/Projects/Bots/Pallas-Bot/pallas/core/foundation/db/repository_pg/lifecycle.py"
+        function = "get_session"
+        lineno = 494
+
+    class _CallerFrame:
+        filename = "/root/Projects/Bots/Pallas-Bot/pallas/core/foundation/db/repository_pg/context_repo.py"
+        function = "_find_by_keywords_for_reply_snapshot"
+        lineno = 269
+
+    monkeypatch.setattr(
+        pool_diagnostics.inspect,
+        "stack",
+        lambda: [None, None, _LifecycleFrame(), _CallerFrame()],
+    )
+
+    assert (
+        pool_diagnostics.pg_session_caller_hint_entry()
+        == "_find_by_keywords_for_reply_snapshot@repository_pg/context_repo.py:269"
+    )
+
+
 def test_pool_diag_tick_notable_only_when_anomaly() -> None:
     base = {
         "under_pressure": False,

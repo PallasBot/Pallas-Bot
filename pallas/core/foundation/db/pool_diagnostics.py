@@ -20,7 +20,7 @@ _slow_by_caller: Counter[str] = Counter()
 _slow_session_total: int = 0
 _slow_hold_max_ms: float = 0.0
 _mirror_skipped_pressure: int = 0
-_CALLER_SCAN_SKIP_SUFFIXES = ("/foundation/db/repository_pg.py", "/contextlib.py")
+_CALLER_SCAN_SKIP_SUFFIXES = ("/foundation/db/repository_pg/lifecycle.py", "/contextlib.py")
 _CALLER_SCAN_MAX_DEPTH = 16
 
 
