@@ -228,12 +228,63 @@ async def _upsert_db_table_row(table: str, row_id: int, data: dict[str, Any]) ->
     raise ValueError("仅支持 config(bot_config)/group_config/user_config")
 
 
+async def _release_config_derived_acl(table: str, row_id: int) -> None:
+    """删除 config 行前撤掉该行派生的 ACL 规则，避免留下无人管的 deny。"""
+    from pallas.core.foundation.db.blacklist_audit import record_blacklist_audit
+
+    row = await _get_db_table_row_public(table, row_id)
+    if row is None:
+        return
+    if table == "user_config":
+        if not bool(row.get("banned")):
+            return
+        from packages.blacklist import apply_user_banned_change
+
+        await apply_user_banned_change(row_id, False)
+        await record_blacklist_audit(
+            target_type="user",
+            target_id=row_id,
+            action="unban",
+            operator="webui",
+            reason="WebUI 删除用户配置",
+        )
+        return
+    if table == "group_config":
+        if bool(row.get("banned")):
+            from packages.blacklist import apply_group_banned_change
+
+            await apply_group_banned_change(row_id, False)
+            await record_blacklist_audit(
+                target_type="group",
+                target_id=row_id,
+                group_id=row_id,
+                action="unban",
+                operator="webui",
+                reason="WebUI 删除群配置",
+            )
+        blocked = [int(u) for u in (row.get("blocked_user_ids") or [])]
+        if blocked:
+            from packages.blacklist import apply_group_blocked_users_change
+
+            await apply_group_blocked_users_change(row_id, [])
+            for uid in blocked:
+                await record_blacklist_audit(
+                    target_type="group_user",
+                    target_id=uid,
+                    group_id=row_id,
+                    action="unban",
+                    operator="webui",
+                    reason="WebUI 删除群配置",
+                )
+
+
 async def _delete_db_table_row(table: str, row_id: int) -> bool:
     from pallas.core.foundation.db import get_db_backend
 
     t = _normalize_table_name(table)
     if not t:
         raise ValueError("仅支持 config(bot_config)/group_config/user_config")
+    await _release_config_derived_acl(t, row_id)
     backend = get_db_backend()
     if backend == "mongodb":
         from pallas.core.foundation.db.modules import BotConfigModule, GroupConfigModule, UserConfigModule

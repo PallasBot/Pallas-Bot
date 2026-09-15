@@ -6,6 +6,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from nonebot import logger
+
 from pallas.core.foundation.db import (
     ensure_backend_registered,
     make_acl_repository,
@@ -14,7 +16,7 @@ from pallas.core.foundation.db import (
     make_group_config_repository,
     make_user_config_repository,
 )
-from pallas.core.perm.acl import ACL_TARGET_GROUP_BAN, group_block_target
+from pallas.core.perm.acl import ACL_TARGET_GROUP_BAN, clear_acl_cache, group_block_target
 
 # run-once step names
 _MIGRATE_ADMINS_STEP = "acl.migrate_bot_admins_to_admin_members"
@@ -133,6 +135,91 @@ async def derive_acl_from_legacy() -> dict[str, int]:
     return counts
 
 
+async def prune_orphan_legacy_acl_rules() -> int:
+    """清掉 legacy 已无对应记录的 system 封禁规则。
+
+    早期删除 user_config / group_config 行时不会同步撤 ACL（见 migration 由来），
+    留下 subject 已无 banned=true 配置行的 deny，且 target='*' 会命中所有群与私聊。
+    这里按行反查，删掉这类孤儿。只处理 source='system' 的封禁签名，
+    不碰 WebUI 手写的规则与插件治理规则（source='governance'）。
+    """
+    acl_repo = make_acl_repository()
+    removed = 0
+    try:
+        groups = await make_group_config_repository().list_all()
+    except Exception:
+        logger.exception("ACL orphan prune failed to load group configs")
+        return 0
+    try:
+        banned_users = {int(d.user_id) for d in await make_user_config_repository().list_all() if d.banned}
+        for rule in await acl_repo.list_rules(action="event.receive", target="*", role="用户"):
+            if getattr(rule, "source", "") != "system" or getattr(rule, "effect", "") != "deny":
+                continue
+            uid = _subject_id(getattr(rule, "subject", None), "u:")
+            if uid is None or uid in banned_users:
+                continue
+            removed += await acl_repo.delete_by_signature(
+                role="用户",
+                subject=rule.subject,
+                action="event.receive",
+                target_scope="全局",
+                target="*",
+            )
+    except Exception:
+        logger.exception("ACL orphan user-ban prune failed")
+
+    try:
+        banned_groups = {int(d.group_id) for d in groups if d.banned}
+        blocked_pairs = {
+            (int(d.group_id), int(u)) for d in groups for u in (getattr(d, "blocked_user_ids", None) or [])
+        }
+        for rule in await acl_repo.list_rules(action="event.receive", role="用户"):
+            if getattr(rule, "source", "") != "system":
+                continue
+            target = getattr(rule, "target", "") or ""
+            if not target.startswith("group:"):
+                continue
+            uid = _subject_id(getattr(rule, "subject", None), "u:")
+            gid = _subject_id(target, "group:")
+            if uid is None or gid is None or (gid, uid) in blocked_pairs:
+                continue
+            removed += await acl_repo.delete_by_signature(
+                role="用户",
+                subject=rule.subject,
+                action="event.receive",
+                target_scope="全局",
+                target=target,
+            )
+        for rule in await acl_repo.list_rules(action="event.receive", target=ACL_TARGET_GROUP_BAN, role="群"):
+            if getattr(rule, "source", "") != "system":
+                continue
+            gid = _subject_id(getattr(rule, "subject", None), "g:")
+            if gid is None or gid in banned_groups:
+                continue
+            removed += await acl_repo.delete_by_signature(
+                role="群",
+                subject=rule.subject,
+                action="event.receive",
+                target_scope="全局",
+                target=ACL_TARGET_GROUP_BAN,
+            )
+    except Exception:
+        logger.exception("ACL orphan group-ban prune failed")
+
+    if removed:
+        clear_acl_cache()
+    return removed
+
+
+def _subject_id(subject: str | None, prefix: str) -> int | None:
+    if not subject or not subject.startswith(prefix):
+        return None
+    try:
+        return int(subject[len(prefix) :])
+    except ValueError:
+        return None
+
+
 async def run_acl_startup_migrations() -> dict[str, Any]:
     """对外统一入口：bot hub / worker 启动时调用一次。"""
     out: dict[str, Any] = {}
@@ -144,4 +231,8 @@ async def run_acl_startup_migrations() -> dict[str, Any]:
         out["legacy_bans"] = await derive_acl_from_legacy()
     except Exception as exc:
         out["legacy_bans_error"] = str(exc)
+    try:
+        out["orphans_removed"] = await prune_orphan_legacy_acl_rules()
+    except Exception as exc:
+        out["orphans_removed_error"] = str(exc)
     return out

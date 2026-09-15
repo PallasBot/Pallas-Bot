@@ -51,6 +51,95 @@ async def test_derive_acl_from_legacy_idempotent(beanie_fixture):
 
 
 @pytest.mark.asyncio
+async def test_prune_orphan_legacy_acl_rules(beanie_fixture):
+    from pallas.core.perm.migration import prune_orphan_legacy_acl_rules
+
+    orphan_uid = 770_031
+    orphan_gid = 770_032
+    kept_uid = 770_033
+    governance_uid = 770_034
+    repo = make_acl_repository()
+    # 孤儿：user/group 配置行已删，ACL deny 残留
+    await repo.upsert_rule(
+        role="用户",
+        subject=f"u:{orphan_uid}",
+        action="event.receive",
+        target_scope="全局",
+        target="*",
+        effect="deny",
+        priority=2000,
+        source="system",
+    )
+    await repo.upsert_rule(
+        role="群",
+        subject=f"g:{orphan_gid}",
+        action="event.receive",
+        target_scope="全局",
+        target="group",
+        effect="deny",
+        priority=2000,
+        source="system",
+    )
+    # 非孤儿：仍被封禁
+    await UserConfig(kept_uid).ban()
+    await repo.upsert_rule(
+        role="用户",
+        subject=f"u:{kept_uid}",
+        action="event.receive",
+        target_scope="全局",
+        target="*",
+        effect="deny",
+        priority=2000,
+        source="system",
+    )
+    # 非 system 来源（治理规则）不应被清
+    await repo.upsert_rule(
+        role="用户",
+        subject=f"u:{governance_uid}",
+        action="event.receive",
+        target_scope="全局",
+        target="*",
+        effect="deny",
+        priority=1500,
+        source="governance",
+    )
+    # 群内黑名单：孤儿 vs 仍在名单
+    live_blocked_gid = 770_035
+    live_blocked_uid = 770_036
+    await GroupConfig(live_blocked_gid).add_blocked_users([live_blocked_uid])
+    await repo.upsert_rule(
+        role="用户",
+        subject=f"u:{live_blocked_uid}",
+        action="event.receive",
+        target_scope="全局",
+        target=f"group:{live_blocked_gid}",
+        effect="deny",
+        priority=1000,
+        source="system",
+    )
+    await repo.upsert_rule(
+        role="用户",
+        subject="u:770_037",
+        action="event.receive",
+        target_scope="全局",
+        target="group:770_038",
+        effect="deny",
+        priority=1000,
+        source="system",
+    )
+
+    removed = await prune_orphan_legacy_acl_rules()
+    assert removed == 3
+
+    remaining = {(r.subject, r.target, r.source) for r in await repo.list_all()}
+    assert remaining == {
+        (f"u:{kept_uid}", "*", "system"),
+        (f"u:{governance_uid}", "*", "governance"),
+        (f"u:{live_blocked_uid}", f"group:{live_blocked_gid}", "system"),
+    }
+
+
+@pytest.mark.asyncio
 async def test_migrate_bot_admins_to_admin_members_once(beanie_fixture):
     from pallas.core.foundation.db import make_bot_config_repository
     from pallas.core.perm.migration import migrate_bot_admins_to_admin_members_once

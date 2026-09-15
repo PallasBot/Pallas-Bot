@@ -7,7 +7,7 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_group_config_api_records_blacklist_changes(beanie_fixture, monkeypatch):
-    from packages.pb_webui.instances_configs_api import _GroupConfigPatch, _apply_group_config_patch
+    from packages.pb_webui.instances_configs_api import _apply_group_config_patch, _GroupConfigPatch
     from pallas.core.foundation.db.modules import BlacklistAudit
 
     monkeypatch.setattr("packages.blacklist.apply_group_banned_change", AsyncMock())
@@ -48,3 +48,35 @@ async def test_legacy_db_table_row_api_records_blacklist_changes(beanie_fixture,
         ("group", 7003, "ban", "WebUI 修改群封禁"),
         ("group_user", 789, "ban", "WebUI 修改群内屏蔽名单"),
     }
+
+
+@pytest.mark.asyncio
+async def test_delete_user_config_releases_acl_and_audits(beanie_fixture, monkeypatch):
+    from packages.pb_webui.db_api import _delete_db_table_row, _upsert_db_table_row
+    from pallas.core.foundation.db.modules import BlacklistAudit
+
+    apply_user = AsyncMock()
+    monkeypatch.setattr("packages.blacklist.apply_user_banned_change", apply_user)
+
+    await _upsert_db_table_row("user_config", 7004, {"banned": True})
+    apply_user.reset_mock()
+
+    assert await _delete_db_table_row("user_config", 7004) is True
+    apply_user.assert_awaited_once_with(7004, False)
+
+    audits = await BlacklistAudit.find_all().to_list()
+    assert ("user", 7004, "unban") in {(row.target_type, row.target_id, row.action) for row in audits}
+
+
+@pytest.mark.asyncio
+async def test_delete_unbanned_user_config_skips_acl(beanie_fixture, monkeypatch):
+    from packages.pb_webui.db_api import _delete_db_table_row, _upsert_db_table_row
+
+    apply_user = AsyncMock()
+    monkeypatch.setattr("packages.blacklist.apply_user_banned_change", apply_user)
+
+    await _upsert_db_table_row("user_config", 7005, {"banned": False})
+    apply_user.reset_mock()
+
+    assert await _delete_db_table_row("user_config", 7005) is True
+    apply_user.assert_not_awaited()
