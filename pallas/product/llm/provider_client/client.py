@@ -280,6 +280,8 @@ async def _post_provider_chat(
         try:
             result = await request(options_for_attempt)
         except Exception as exc:
+            if isinstance(exc, httpx.PoolTimeout):
+                _repo.note_llm_http_pool_timeout()
             _repo._emit_provider_attempt(
                 telemetry_context=telemetry_context,
                 decision="failed",
@@ -292,6 +294,7 @@ async def _post_provider_chat(
                 failure_class=_repo._provider_failure_class(exc),
             )
             raise
+        _repo.note_llm_http_success()
         _repo._emit_provider_attempt(
             telemetry_context=telemetry_context,
             decision="success",
