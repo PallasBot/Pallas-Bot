@@ -78,7 +78,11 @@ from pallas.product.llm.provider_client.urls import (
     resolve_request_method,
     responses_url,
 )
-from pallas.product.llm.shared_httpx import get_llm_shared_httpx_client
+from pallas.product.llm.shared_httpx import (
+    get_llm_shared_httpx_client,
+    note_llm_http_pool_timeout,
+    note_llm_http_success,
+)
 from pallas.product.llm.turn_telemetry import record_turn_event
 
 __all__ = [
@@ -126,6 +130,8 @@ __all__ = [
     "messages_to_responses_payload",
     "models_url",
     "normalize_openai_base_url",
+    "note_llm_http_pool_timeout",
+    "note_llm_http_success",
     "ollama_chat_url",
     "ollama_tags_url",
     "openai_api_root",
