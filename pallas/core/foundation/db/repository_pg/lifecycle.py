@@ -436,6 +436,20 @@ def _ensure_pg_background_job_pending_claim_index(connection) -> None:
     )
 
 
+def _ensure_pg_background_job_active_kind_created_index(connection) -> None:
+    """background_job 表补按 kind + created_at 领取活动任务索引。"""
+    insp = _repo.inspect(connection)
+    if not insp.has_table("background_job"):
+        return
+    connection.execute(
+        text(
+            "CREATE INDEX IF NOT EXISTS ix_background_job_active_kind_created "
+            "ON background_job (kind, created_at) "
+            "WHERE finished_at IS NULL AND status IN ('pending', 'leased')"
+        )
+    )
+
+
 def _ensure_pg_stat_statements_extension(connection) -> None:
     """启用 pg_stat_statements（仅应在独立 autocommit 连接中调用）。
 
@@ -548,6 +562,7 @@ PG_SCHEMA_ENSURE_STEPS: list[tuple[str, Any]] = [
     ("ddl.context_answer_message_reply_index", _ensure_pg_context_answer_message_reply_index),
     ("ddl.background_job_delivery_claim_index", _ensure_pg_background_job_delivery_claim_index),
     ("ddl.background_job_pending_claim_index", _ensure_pg_background_job_pending_claim_index),
+    ("ddl.background_job_active_kind_created_index", _ensure_pg_background_job_active_kind_created_index),
 ]
 
 

@@ -545,6 +545,30 @@ def test_ensure_pg_background_job_delivery_claim_index(monkeypatch):
     ]
 
 
+def test_ensure_pg_background_job_active_kind_created_index(monkeypatch):
+    from pallas.core.foundation.db import repository_pg as mod
+
+    executed: list[str] = []
+
+    class FakeInspector:
+        def has_table(self, name: str) -> bool:
+            return name == "background_job"
+
+    class FakeConnection:
+        def execute(self, statement) -> None:
+            executed.append(str(statement))
+
+    monkeypatch.setattr(mod, "inspect", lambda _connection: FakeInspector())
+
+    mod._ensure_pg_background_job_active_kind_created_index(FakeConnection())
+
+    assert executed == [
+        "CREATE INDEX IF NOT EXISTS ix_background_job_active_kind_created "
+        "ON background_job (kind, created_at) "
+        "WHERE finished_at IS NULL AND status IN ('pending', 'leased')"
+    ]
+
+
 @pytest.mark.asyncio
 async def test_find_by_keywords_for_reply_many_answers_no_in_overflow(pg_engine, monkeypatch):
     """热词大量 Answer 时不得用超大 IN (...)，接话 find 应成功且受 reply_answers_cap 限制。"""

@@ -98,24 +98,65 @@ class MongoWorkJobStore:
         kinds: frozenset[str] | None = None,
         exclude_kinds: frozenset[str] | None = None,
         bot_owner_ids: frozenset[int] | None = None,
-        priority_kinds: frozenset[str] | None = None,
+        priority_tiers: tuple[frozenset[str], ...] | None = None,
     ) -> WorkJob | None:
         from pallas.core.foundation.db.modules import BackgroundJob
 
         now = time.time()
         collection = BackgroundJob.get_pymongo_collection()
+        from .store import normalize_priority_tiers
+
+        tiers = normalize_priority_tiers(priority_tiers, kinds=kinds, exclude_kinds=exclude_kinds)
+        for tier in tiers:
+            raw = await self._claim_one(
+                collection,
+                now=now,
+                owner=owner,
+                lease_sec=lease_sec,
+                kinds=tier,
+                bot_owner_ids=bot_owner_ids,
+            )
+            if raw is not None:
+                return work_job_from_mongo(BackgroundJob.model_validate(raw))
+        tier_kinds = frozenset(kind for tier in tiers for kind in tier)
+        fallback_exclude = frozenset((exclude_kinds or set()) | set(tier_kinds))
+        raw = await self._claim_one(
+            collection,
+            now=now,
+            owner=owner,
+            lease_sec=lease_sec,
+            kinds=kinds,
+            exclude_kinds=fallback_exclude,
+            bot_owner_ids=bot_owner_ids,
+        )
+        return work_job_from_mongo(BackgroundJob.model_validate(raw)) if raw else None
+
+    async def _claim_one(
+        self,
+        collection,
+        *,
+        now: float,
+        owner: str,
+        lease_sec: float,
+        kinds: frozenset[str] | None = None,
+        exclude_kinds: frozenset[str] | None = None,
+        bot_owner_ids: frozenset[int] | None = None,
+    ):
         query: dict = {
             "finished_at": None,
             "available_at": {"$lte": now},
-            "$or": [{"status": "pending"}, {"leased_until": {"$lt": now}}],
+            "$or": [{"status": "pending"}, {"status": "leased", "leased_until": {"$lt": now}}],
         }
+        kind_filter: dict = {}
         if kinds is not None:
-            query["kind"] = {"$in": list(kinds)}
+            kind_filter["$in"] = list(kinds)
         if exclude_kinds is not None:
-            query["kind"] = {"$nin": list(exclude_kinds)}
+            kind_filter["$nin"] = list(exclude_kinds)
+        if kind_filter:
+            query["kind"] = kind_filter
         if bot_owner_ids is not None:
             query["payload.bot_qq"] = {"$in": [int(q) for q in bot_owner_ids]}
-        raw = await collection.find_one_and_update(
+        return await collection.find_one_and_update(
             query,
             {
                 "$set": {
@@ -129,7 +170,6 @@ class MongoWorkJobStore:
             sort=[("created_at", 1)],
             return_document=ReturnDocument.AFTER,
         )
-        return work_job_from_mongo(BackgroundJob.model_validate(raw)) if raw else None
 
     async def claim_many(
         self,
@@ -140,7 +180,7 @@ class MongoWorkJobStore:
         kinds: frozenset[str] | None = None,
         exclude_kinds: frozenset[str] | None = None,
         bot_owner_ids: frozenset[int] | None = None,
-        priority_kinds: frozenset[str] | None = None,
+        priority_tiers: tuple[frozenset[str], ...] | None = None,
     ) -> list[WorkJob]:
         jobs: list[WorkJob] = []
         for _ in range(max(1, int(limit))):
@@ -150,7 +190,7 @@ class MongoWorkJobStore:
                 kinds=kinds,
                 exclude_kinds=exclude_kinds,
                 bot_owner_ids=bot_owner_ids,
-                priority_kinds=priority_kinds,
+                priority_tiers=priority_tiers,
             )
             if job is None:
                 break

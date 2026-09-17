@@ -6,13 +6,14 @@ import time
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import case, delete, func, or_, select, tuple_, update
+from sqlalchemy import and_, delete, func, or_, select, tuple_, update
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from .models import WorkJob
+from .store import normalize_priority_tiers
 
 
 def build_requeue_terminal_statement(job: WorkJob, *, now: float):
@@ -67,6 +68,60 @@ def build_complete_retained_statement(
             leased_until=None,
         )
     )
+
+
+def build_claim_statement(
+    row_model,
+    *,
+    now: float,
+    limit: int,
+    kinds: frozenset[str] | None = None,
+    exclude_kinds: frozenset[str] | None = None,
+    bot_owner_ids: frozenset[int] | None = None,
+):
+    conditions = [
+        row_model.finished_at.is_(None),
+        row_model.available_at <= now,
+        or_(row_model.status == "pending", and_(row_model.status == "leased", row_model.leased_until < now)),
+    ]
+    if kinds is not None:
+        conditions.append(row_model.kind.in_(tuple(kinds)))
+    if exclude_kinds:
+        conditions.append(row_model.kind.not_in(tuple(exclude_kinds)))
+    if bot_owner_ids is not None:
+        conditions.append(row_model.payload["bot_qq"].astext.in_([str(int(q)) for q in bot_owner_ids]))
+    return (
+        select(row_model)
+        .where(*conditions)
+        .order_by(row_model.created_at)
+        .with_for_update(skip_locked=True)
+        .limit(max(1, int(limit)))
+    )
+
+
+async def load_claim_rows(
+    session,
+    row_model,
+    *,
+    now: float,
+    limit: int,
+    kinds: frozenset[str] | None = None,
+    exclude_kinds: frozenset[str] | None = None,
+    bot_owner_ids: frozenset[int] | None = None,
+):
+    if kinds is not None and not kinds:
+        return []
+    result = await session.execute(
+        build_claim_statement(
+            row_model,
+            now=now,
+            limit=limit,
+            kinds=kinds,
+            exclude_kinds=exclude_kinds,
+            bot_owner_ids=bot_owner_ids,
+        )
+    )
+    return list(result.scalars().all())
 
 
 class PostgresWorkJobStore:
@@ -185,34 +240,26 @@ class PostgresWorkJobStore:
             if (row := by_key.get(key)) is not None
         ]
 
-    async def claim(self, *, owner: str, lease_sec: float) -> WorkJob | None:
-        from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
-
-        now = time.time()
-        async with get_session() as session:
-            stmt = (
-                select(BackgroundJobRow)
-                .where(
-                    BackgroundJobRow.finished_at.is_(None),
-                    BackgroundJobRow.available_at <= now,
-                    or_(BackgroundJobRow.status == "pending", BackgroundJobRow.leased_until < now),
-                )
-                .order_by(BackgroundJobRow.created_at)
-                .with_for_update(skip_locked=True)
-                .limit(1)
-            )
-            row = (await session.execute(stmt)).scalar_one_or_none()
-            if row is None:
-                return None
-            row.status = "leased"
-            row.lease_owner = str(owner)
-            row.lease_id = uuid.uuid4().hex
-            row.leased_until = now + max(1.0, float(lease_sec))
-            row.attempts += 1
-            await session.commit()
-        return WorkJob(
-            row.id, row.kind, dict(row.payload or {}), row.idempotency_key, row.created_at, row.attempts, row.lease_id
+    async def claim(
+        self,
+        *,
+        owner: str,
+        lease_sec: float,
+        kinds: frozenset[str] | None = None,
+        exclude_kinds: frozenset[str] | None = None,
+        bot_owner_ids: frozenset[int] | None = None,
+        priority_tiers: tuple[frozenset[str], ...] | None = None,
+    ) -> WorkJob | None:
+        jobs = await self.claim_many(
+            owner=owner,
+            lease_sec=lease_sec,
+            limit=1,
+            kinds=kinds,
+            exclude_kinds=exclude_kinds,
+            bot_owner_ids=bot_owner_ids,
+            priority_tiers=priority_tiers,
         )
+        return jobs[0] if jobs else None
 
     async def claim_many(
         self,
@@ -223,7 +270,7 @@ class PostgresWorkJobStore:
         kinds: frozenset[str] | None = None,
         exclude_kinds: frozenset[str] | None = None,
         bot_owner_ids: frozenset[int] | None = None,
-        priority_kinds: frozenset[str] | None = None,
+        priority_tiers: tuple[frozenset[str], ...] | None = None,
     ) -> list[WorkJob]:
         from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
         from pallas.core.platform.observability import SlowPathTimer, slow_path_threshold_ms
@@ -234,27 +281,53 @@ class PostgresWorkJobStore:
             log_level="debug",
         )
         now = time.time()
-        stmt = select(BackgroundJobRow).where(
-            BackgroundJobRow.finished_at.is_(None),
-            BackgroundJobRow.available_at <= now,
-            or_(BackgroundJobRow.status == "pending", BackgroundJobRow.leased_until < now),
-        )
-        if kinds is not None:
-            stmt = stmt.where(BackgroundJobRow.kind.in_(tuple(kinds)))
-        if exclude_kinds is not None:
-            stmt = stmt.where(BackgroundJobRow.kind.not_in(tuple(exclude_kinds)))
-        if bot_owner_ids is not None:
-            stmt = stmt.where(BackgroundJobRow.payload["bot_qq"].astext.in_([str(int(q)) for q in bot_owner_ids]))
-        if priority_kinds:
-            stmt = stmt.order_by(
-                case((BackgroundJobRow.kind.in_(tuple(priority_kinds)), 0), else_=1),
-                BackgroundJobRow.created_at,
-            )
-        else:
-            stmt = stmt.order_by(BackgroundJobRow.created_at)
-        stmt = stmt.with_for_update(skip_locked=True).limit(max(1, int(limit)))
+        batch_limit = max(1, int(limit))
         async with get_session() as session:
-            rows = (await session.execute(stmt)).scalars().all()
+            tiers = normalize_priority_tiers(priority_tiers, kinds=kinds, exclude_kinds=exclude_kinds)
+            rows = []
+            tier_kinds = frozenset(kind for tier in tiers for kind in tier)
+            if tiers:
+                # 每个 kind 单独取候选，再在内存合并，避免跨 kind ORDER BY 触发全量排序。
+                for tier in tiers:
+                    tier_limit = batch_limit - len(rows)
+                    candidates = []
+                    for kind in sorted(tier):
+                        candidates.extend(
+                            await load_claim_rows(
+                                session,
+                                BackgroundJobRow,
+                                now=now,
+                                limit=tier_limit,
+                                kinds=frozenset({kind}),
+                                bot_owner_ids=bot_owner_ids,
+                            )
+                        )
+                    rows.extend(sorted(candidates, key=lambda row: (row.created_at, row.id))[:tier_limit])
+                    if len(rows) >= batch_limit:
+                        break
+                if len(rows) < batch_limit:
+                    fallback_exclude = frozenset((exclude_kinds or set()) | set(tier_kinds))
+                    rows.extend(
+                        await load_claim_rows(
+                            session,
+                            BackgroundJobRow,
+                            now=now,
+                            limit=batch_limit - len(rows),
+                            kinds=kinds,
+                            exclude_kinds=fallback_exclude,
+                            bot_owner_ids=bot_owner_ids,
+                        )
+                    )
+            else:
+                rows = await load_claim_rows(
+                    session,
+                    BackgroundJobRow,
+                    now=now,
+                    limit=batch_limit,
+                    kinds=kinds,
+                    exclude_kinds=exclude_kinds,
+                    bot_owner_ids=bot_owner_ids,
+                )
             timer.mark("query")
             for row in rows:
                 row.status = "leased"
@@ -263,7 +336,7 @@ class PostgresWorkJobStore:
                 row.leased_until = now + max(1.0, float(lease_sec))
                 row.attempts += 1
             await session.commit()
-        timer.finish(owner=owner, limit=limit, rows=len(rows))
+        timer.finish(owner=owner, limit=batch_limit, rows=len(rows))
         return [
             WorkJob(
                 row.id,

@@ -74,17 +74,19 @@ def main() -> None:
     install_uvloop()
     from pallas.core.platform.work_jobs.result_committer import SEND_JOB_KIND
 
-    # 用户等待的交互任务优先于后台派生任务（如图片缓存），避免被积压队列饿死。
-    priority_kinds = frozenset({
-        SEND_JOB_KIND,
-        "sing.submit",
-        "sing.request_song",
-        "tts.submit",
-        "repeater.message",
-        "repeater.learn",
-    })
+    # 按用户等待程度分桶：交互任务 > 消息落库 > 复读学习 > 其他后台任务。
+    priority_tiers = (
+        frozenset({
+            SEND_JOB_KIND,
+            "sing.submit",
+            "sing.request_song",
+            "tts.submit",
+        }),
+        frozenset({"repeater.message"}),
+        frozenset({"repeater.learn"}),
+    )
     asyncio.run(
-        run_work_service(load_work_handlers(), exclude_kinds=frozenset({SEND_JOB_KIND}), priority_kinds=priority_kinds)
+        run_work_service(load_work_handlers(), exclude_kinds=frozenset({SEND_JOB_KIND}), priority_tiers=priority_tiers)
     )
 
 

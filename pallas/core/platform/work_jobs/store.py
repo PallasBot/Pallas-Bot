@@ -14,6 +14,28 @@ if TYPE_CHECKING:
     from .models import WorkJob
 
 
+def normalize_priority_tiers(
+    priority_tiers: tuple[frozenset[str], ...] | None,
+    *,
+    kinds: frozenset[str] | None = None,
+    exclude_kinds: frozenset[str] | None = None,
+) -> tuple[frozenset[str], ...]:
+    """应用领取过滤条件，并让重复 kind 只归属于最早的分桶。"""
+    seen: set[str] = set()
+    normalized: list[frozenset[str]] = []
+    for tier in priority_tiers or ():
+        selected = set(tier)
+        if kinds is not None:
+            selected.intersection_update(kinds)
+        if exclude_kinds is not None:
+            selected.difference_update(exclude_kinds)
+        selected.difference_update(seen)
+        if selected:
+            normalized.append(frozenset(selected))
+            seen.update(selected)
+    return tuple(normalized)
+
+
 class WorkJobStore(Protocol):
     async def enqueue(self, job: WorkJob) -> WorkJob: ...
 
@@ -29,7 +51,7 @@ class WorkJobStore(Protocol):
         kinds: frozenset[str] | None = None,
         exclude_kinds: frozenset[str] | None = None,
         bot_owner_ids: frozenset[int] | None = None,
-        priority_kinds: frozenset[str] | None = None,
+        priority_tiers: tuple[frozenset[str], ...] | None = None,
     ) -> WorkJob | None: ...
 
     async def claim_many(
@@ -41,7 +63,7 @@ class WorkJobStore(Protocol):
         kinds: frozenset[str] | None = None,
         exclude_kinds: frozenset[str] | None = None,
         bot_owner_ids: frozenset[int] | None = None,
-        priority_kinds: frozenset[str] | None = None,
+        priority_tiers: tuple[frozenset[str], ...] | None = None,
     ) -> list[WorkJob]: ...
 
     async def renew(self, *, job_id: str, owner: str, lease_id: str, lease_sec: float) -> bool: ...
@@ -126,11 +148,11 @@ class MemoryWorkJobStore:
         kinds: frozenset[str] | None = None,
         exclude_kinds: frozenset[str] | None = None,
         bot_owner_ids: frozenset[int] | None = None,
-        priority_kinds: frozenset[str] | None = None,
+        priority_tiers: tuple[frozenset[str], ...] | None = None,
     ) -> WorkJob | None:
         now = time.monotonic()
         async with self._lock:
-            ordered = _sort_claimable_jobs(self._jobs, priority_kinds=priority_kinds)
+            ordered = _sort_claimable_jobs(self._jobs, priority_tiers=priority_tiers)
             for job_id, job in ordered:
                 if not _job_matches(job, kinds=kinds, exclude_kinds=exclude_kinds, bot_owner_ids=bot_owner_ids):
                     continue
@@ -160,12 +182,12 @@ class MemoryWorkJobStore:
         kinds: frozenset[str] | None = None,
         exclude_kinds: frozenset[str] | None = None,
         bot_owner_ids: frozenset[int] | None = None,
-        priority_kinds: frozenset[str] | None = None,
+        priority_tiers: tuple[frozenset[str], ...] | None = None,
     ) -> list[WorkJob]:
         now = time.monotonic()
         claimed: list[WorkJob] = []
         async with self._lock:
-            ordered = _sort_claimable_jobs(self._jobs, priority_kinds=priority_kinds)
+            ordered = _sort_claimable_jobs(self._jobs, priority_tiers=priority_tiers)
             for job_id, job in ordered:
                 if len(claimed) >= max(1, int(limit)):
                     break
@@ -289,10 +311,17 @@ def _job_matches(
     return True
 
 
-def _sort_claimable_jobs(jobs: dict[str, object], *, priority_kinds: frozenset[str] | None) -> list[tuple[str, object]]:
+def _sort_claimable_jobs(
+    jobs: dict[str, object], *, priority_tiers: tuple[frozenset[str], ...] | None
+) -> list[tuple[str, object]]:
     ordered = list(jobs.items())
-    if priority_kinds:
-        ordered.sort(key=lambda item: (0 if item[1].kind in priority_kinds else 1, item[1].created_at))
-    else:
+    if not priority_tiers:
         ordered.sort(key=lambda item: item[1].created_at)
+        return ordered
+    rank_by_kind: dict[str, int] = {}
+    for index, tier in enumerate(priority_tiers):
+        for kind in tier:
+            rank_by_kind.setdefault(kind, index)
+    fallback_rank = len(priority_tiers)
+    ordered.sort(key=lambda item: (rank_by_kind.get(item[1].kind, fallback_rank), item[1].created_at))
     return ordered
