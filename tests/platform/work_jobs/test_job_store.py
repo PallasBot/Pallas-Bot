@@ -116,6 +116,60 @@ async def test_memory_store_claim_many_leases_oldest_jobs_in_one_call() -> None:
 
 
 @pytest.mark.asyncio
+async def test_memory_store_priority_tiers_keep_interactive_jobs_ahead_of_backlog() -> None:
+    from dataclasses import replace
+
+    from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
+
+    store = MemoryWorkJobStore()
+    backlog = [
+        await store.enqueue(
+            replace(
+                WorkJob.create(kind="repeater.message", payload={}, idempotency_key=f"repeater:{index}"),
+                created_at=100.0 + index,
+            )
+        )
+        for index in range(5)
+    ]
+    interactive = await store.enqueue(
+        replace(
+            WorkJob.create(kind="sing.submit", payload={}, idempotency_key="sing:1"),
+            created_at=200.0,
+        )
+    )
+
+    claimed = await store.claim_many(
+        owner="worker",
+        lease_sec=1,
+        limit=2,
+        priority_tiers=(frozenset({"sing.submit"}), frozenset({"repeater.message"})),
+    )
+
+    assert [job.id for job in claimed] == [interactive.id, backlog[0].id]
+
+
+@pytest.mark.asyncio
+async def test_memory_store_without_priority_tiers_keeps_fifo_order() -> None:
+    from dataclasses import replace
+
+    from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.platform.work_jobs.store import MemoryWorkJobStore
+
+    store = MemoryWorkJobStore()
+    older = await store.enqueue(
+        replace(WorkJob.create(kind="repeater.message", payload={}, idempotency_key="fifo:old"), created_at=1.0)
+    )
+    newer = await store.enqueue(
+        replace(WorkJob.create(kind="sing.submit", payload={}, idempotency_key="fifo:new"), created_at=2.0)
+    )
+
+    claimed = await store.claim_many(owner="worker", lease_sec=1, limit=2)
+
+    assert [job.id for job in claimed] == [older.id, newer.id]
+
+
+@pytest.mark.asyncio
 async def test_memory_store_complete_many_releases_a_claimed_batch() -> None:
     from pallas.core.platform.work_jobs.models import WorkJob
     from pallas.core.platform.work_jobs.store import MemoryWorkJobStore

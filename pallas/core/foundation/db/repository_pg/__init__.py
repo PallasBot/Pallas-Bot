@@ -52,6 +52,7 @@ from pallas.core.foundation.db.repository_pg.lifecycle import (
     _CONFIG_CACHES,
     PG_SCHEMA_ENSURE_STEPS,
     _engine,
+    _ensure_pg_background_job_active_kind_created_index,
     _ensure_pg_background_job_delivery_claim_index,
     _ensure_pg_background_job_lease_id,
     _ensure_pg_background_job_pending_claim_index,

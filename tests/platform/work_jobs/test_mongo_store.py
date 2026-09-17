@@ -17,9 +17,13 @@ class _FakeCollection:
         self,
         query: dict[str, object],
         update: dict[str, dict[str, object]],
+        sort: list[tuple[str, int]] | None = None,
         **_: object,
     ) -> dict[str, object] | None:
-        row = next((row for row in self.rows.values() if _matches(row, query)), None)
+        rows = [row for row in self.rows.values() if _matches(row, query)]
+        for field, direction in reversed(sort or []):
+            rows.sort(key=lambda row, field=field: row.get(field), reverse=direction < 0)
+        row = rows[0] if rows else None
         if row is None:
             return None
         row.update(update["$set"])
@@ -67,8 +71,20 @@ def _matches(row: dict[str, object], query: dict[str, object]) -> bool:
         if key == "$or":
             if not any(_matches(row, sub) for sub in expected):
                 return False
-        elif isinstance(expected, dict) and "$in" in expected:
-            if row.get(key) not in expected["$in"]:
+        elif isinstance(expected, dict) and ("$in" in expected or "$nin" in expected):
+            if "$in" in expected and row.get(key) not in expected["$in"]:
+                return False
+            if "$nin" in expected and row.get(key) in expected["$nin"]:
+                return False
+        elif isinstance(expected, dict) and any(op in expected for op in ("$lt", "$lte", "$gt", "$gte")):
+            value = row.get(key)
+            if "$lt" in expected and not (value is not None and value < expected["$lt"]):
+                return False
+            if "$lte" in expected and not (value is not None and value <= expected["$lte"]):
+                return False
+            if "$gt" in expected and not (value is not None and value > expected["$gt"]):
+                return False
+            if "$gte" in expected and not (value is not None and value >= expected["$gte"]):
                 return False
         elif row.get(key) != expected:
             return False
@@ -207,6 +223,31 @@ async def test_mongo_store_complete_retains_configured_kind(mongo_store) -> None
     assert row["leased_until"] is None
     assert row["finished_at"] is not None
     assert "job_id" in row
+
+
+@pytest.mark.asyncio
+async def test_mongo_claim_prefers_earlier_priority_tiers_over_older_backlog(mongo_store) -> None:
+    from pallas.core.platform.work_jobs.models import WorkJob
+
+    backlog = replace(
+        WorkJob.create(kind="repeater.message", payload={}, idempotency_key="mongo:tier:backlog"),
+        created_at=100.0,
+    )
+    interactive = replace(
+        WorkJob.create(kind="sing.submit", payload={}, idempotency_key="mongo:tier:interactive"),
+        created_at=200.0,
+    )
+    _FakeBackgroundJob.collection.rows[backlog.idempotency_key] = _row_from_job(backlog, status="pending")
+    _FakeBackgroundJob.collection.rows[interactive.idempotency_key] = _row_from_job(interactive, status="pending")
+
+    claimed = await mongo_store.claim(
+        owner="worker",
+        lease_sec=1,
+        priority_tiers=(frozenset({"sing.submit"}), frozenset({"repeater.message"})),
+    )
+
+    assert claimed is not None
+    assert claimed.id == interactive.id
 
 
 @pytest.mark.asyncio

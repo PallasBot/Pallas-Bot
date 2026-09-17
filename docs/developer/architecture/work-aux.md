@@ -22,6 +22,8 @@ flowchart LR
 
 `uv run pallas`、`uv run pallas run unified` 会同时维护消息实例与一个 `work aux`；`uv run pallas status` 显示它的 pid 和日志。完整分片启动也只维护一个 aux，避免每个 worker 重复拉起消费者。
 
+领取排序按优先级分桶（`priority_tiers`）：交互任务排在最前，其次是 `repeater.message`，再次是 `repeater.learn`，其余后台派生任务排最后；同桶内按 `created_at` 先入先出。PostgreSQL 对已配置的 kind 按桶逐 kind 领取，避免大积压触发跨 kind 全量排序。
+
 多机或更高吞吐时可手动启动更多 `bot_work_aux.py` 消费者。数据库领取使用租约，多个消费者不会领取同一条正在持有租约的任务。先观察 outbox 积压与数据库写入能力，再增加消费者；不要把 worker 数与 QQ 账号数绑定。
 
 ## Redis

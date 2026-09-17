@@ -36,7 +36,7 @@ class WorkJobWorker:
         kinds: frozenset[str] | None = None,
         exclude_kinds: frozenset[str] | None = None,
         bot_owner_ids: frozenset[int] | None = None,
-        priority_kinds: frozenset[str] | None = None,
+        priority_tiers: tuple[frozenset[str], ...] | None = None,
     ) -> None:
         self.store = store
         self.owner = str(owner)
@@ -49,7 +49,7 @@ class WorkJobWorker:
         self._kinds = frozenset(kinds) if kinds is not None else None
         self._exclude_kinds = frozenset(exclude_kinds) if exclude_kinds is not None else None
         self._bot_owner_ids = frozenset(int(q) for q in bot_owner_ids) if bot_owner_ids is not None else None
-        self._priority_kinds = frozenset(priority_kinds) if priority_kinds is not None else None
+        self._priority_tiers = tuple(frozenset(tier) for tier in priority_tiers) if priority_tiers is not None else None
         self.metrics = metrics or WorkAuxRuntimeMetrics()
         if result_committer is None:
             from .result_committer import WorkResultCommitter
@@ -57,16 +57,16 @@ class WorkJobWorker:
             result_committer = WorkResultCommitter(store=store)
         self.result_committer = result_committer
 
-    def _claim_filters(self) -> dict[str, frozenset]:
-        filters: dict[str, frozenset] = {}
+    def _claim_filters(self) -> dict[str, tuple[frozenset[str], ...] | frozenset]:
+        filters: dict[str, tuple[frozenset[str], ...] | frozenset] = {}
         if self._kinds is not None:
             filters["kinds"] = self._kinds
         if self._exclude_kinds is not None:
             filters["exclude_kinds"] = self._exclude_kinds
         if self._bot_owner_ids is not None:
             filters["bot_owner_ids"] = self._bot_owner_ids
-        if self._priority_kinds is not None:
-            filters["priority_kinds"] = self._priority_kinds
+        if self._priority_tiers is not None:
+            filters["priority_tiers"] = self._priority_tiers
         return filters
 
     async def run_once(self) -> bool:
