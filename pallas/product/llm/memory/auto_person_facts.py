@@ -157,6 +157,9 @@ async def maybe_auto_save_person_facts(
         except Exception as exc:
             logger.warning("Auto person facts extract failed for bot [{}] and group [{}]: [{}]", bid, gid, exc)
             return 0
+        finally:
+            # 请求已发出即计入预算，避免失败后同一用户反复重试
+            _bump_daily_budget(cfg=c)
         facts = _parse_facts(str(message.get("content") or "") if isinstance(message, dict) else "")
         if not facts:
             return 0
@@ -180,7 +183,6 @@ async def maybe_auto_save_person_facts(
             except Exception as exc:
                 logger.warning("Auto person fact save failed for bot [{}] and group [{}]: [{}]", bid, gid, exc)
         if saved:
-            _bump_daily_budget(cfg=c)
             _mark_written(bid, gid, uid)
             logger.info("Auto person facts saved {} fact(s) for user [{}] in group [{}]", saved, uid, gid)
         return saved

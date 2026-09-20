@@ -154,10 +154,12 @@ async def maybe_auto_save_ip_knowledge(
         except Exception as exc:
             logger.warning("Auto IP knowledge extract failed for bot [{}] and group [{}]: [{}]", bid, gid, exc)
             return False
+        finally:
+            # 请求已发出即计入预算，避免失败后同一群人反复重试
+            _bump_daily_budget(cfg=c)
         facts = _parse_facts(str(message.get("content") or "") if isinstance(message, dict) else "")
         if not facts:
             return False
-        _bump_daily_budget(cfg=c)
         saved = 0
         for item in facts:
             ok = await save_memory_entry(

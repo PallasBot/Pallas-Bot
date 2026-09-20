@@ -353,3 +353,40 @@ async def test_auto_episode_respects_daily_budget(monkeypatch: pytest.MonkeyPatc
     assert await maybe_auto_save_group_episode(bot_id=1, group_id=2, cfg=cfg) is True
     assert await maybe_auto_save_group_episode(bot_id=1, group_id=2, cfg=cfg) is False
     assert saved["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_auto_episode_counts_failed_call_against_daily_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    """失败的请求同样消耗预算，避免同一群人被反复重试刷爆额度。"""
+    clear_auto_episode_cooldown_for_tests()
+    calls = {"n": 0}
+
+    async def fake_list(*_args, **_kwargs):
+        return [
+            LlmChatTurn(role="user", content="周五晚上一起开黑吗", user_id=11, created_at=1),
+            LlmChatTurn(role="user", content="可以，我带新图", user_id=22, created_at=2),
+            LlmChatTurn(role="user", content="八点在群里喊", user_id=11, created_at=3),
+        ]
+
+    async def failing_complete(*_args, **_kwargs):
+        calls["n"] += 1
+        raise RuntimeError("empty provider content")
+
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.is_llm_memory_store_available", lambda: True)
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.can_read_persistent_memory", lambda _cfg=None: True)
+    monkeypatch.setattr(
+        "pallas.product.llm.memory.auto_episode.make_message_repository", lambda: message_repo(fake_list)
+    )
+    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.complete_chat_message", failing_complete)
+
+    cfg = LlmConfig(
+        llm_memory_auto_episode_enabled=True,
+        llm_memory_auto_episode_summary_enabled=True,
+        llm_memory_auto_episode_cooldown_sec=0,
+        llm_memory_auto_episode_daily_budget=1,
+    )
+    assert await maybe_auto_save_group_episode(bot_id=1, group_id=2, cfg=cfg) is False
+    assert calls["n"] == 1
+    # 预算已耗尽：第二次连请求都不该发出
+    assert await maybe_auto_save_group_episode(bot_id=1, group_id=2, cfg=cfg) is False
+    assert calls["n"] == 1

@@ -66,6 +66,28 @@ Telemetry 是 best-effort 的旁路观测：写 key、序列化、目录或文�
 
 at-chat 系统提示词 `pallas/product/persona/at_chat_system_prompt.txt` 只承载背景 / 输出边界 / 群聊边界等不变原则，不再内嵌具体对话示范；接话的差异化由语义风格按 **bot × 群** 注入（见上表「群表达指导」「真人接话参考」）。`ChatPromptAssembler`（`pallas/product/llm/assembler/chat_prompt.py`）按变化频率从低到高依次组装：persona 核心 → 群表达指导 / 真人接话参考（随 profile 有数据才注入）→ 近期上下文（检索块 → 群时间线）→ reply_shape（回复形状与输出契约）→ turn policy → 当前时间 → 工具上下文，使支持前缀缓存的 Provider 可命中更长的稳定前缀。
 
+## 任务路由与模型选择
+
+所有 LLM 任务经 `resolve_endpoint_candidates_for_task(task)`（`pallas/product/llm/providers_store.py`）取提供方候选：
+
+```text
+routing.tasks[task]                       → 主提供方（WebUI 任务编排写入）
+routing.task_backups[task]                → 全任务备用（可含 backup model）
+routing.tier_backups[high|low]            → 档位备用（low 含记忆与后台任务）
+routing.chain_fallback                    → 其余提供方兜底
+provider.task_models[task] / default_model → 该提供方下的具体模型
+```
+
+任务分两类：
+
+| 类别 | 任务 | 说明 |
+| --- | --- | --- |
+| high | `llm_chat`、`drunk` | WebUI「高级任务」主备 |
+| low | `affect_refine`、`turn_decision`、`memory_episode`、`memory_person_facts`、`memory_ip_knowledge`、`memory_graph_extract`、`memory_graph_hiergraph`、`memory_session_summary`、`memory_tool_summary`、`llm.relationship.affinity`、`repeater.semantic_style` | WebUI「低级任务」主备 |
+| 独立 | `sticker_vision` | 「全任务」视图单独指定；无配置时回落到提供方 `default_model` |
+
+后台与记忆任务调用频次远高于对话且无需强模型，因此并入低档：在 WebUI 改一次低档主备即可全部生效；没有独立配置时仍回落到提供方 `default_model`。
+
 ## 关键锚点
 
 | 步骤 | 位置 |
