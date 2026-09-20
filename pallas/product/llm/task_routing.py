@@ -13,9 +13,19 @@ _providers_cache: dict[str, Any] = {}
 _providers_cache_at = 0.0
 
 HIGH_TIER_TASKS = frozenset({"llm_chat", "drunk"})
+# 后台与记忆任务并入低档：调用量大、无需强模型，随低级任务主备一起同步
 LOW_TIER_TASKS = frozenset({
     "affect_refine",
     "turn_decision",
+    "memory_episode",
+    "memory_person_facts",
+    "memory_ip_knowledge",
+    "memory_graph_extract",
+    "memory_graph_hiergraph",
+    "memory_session_summary",
+    "memory_tool_summary",
+    "llm.relationship.affinity",
+    "repeater.semantic_style",
 })
 
 
