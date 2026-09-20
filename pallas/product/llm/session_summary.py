@@ -123,6 +123,9 @@ async def maybe_compact_session_history(
         except Exception as exc:
             logger.warning("Session summary generation failed for bot [{}] and user [{}]: [{}]", bid, uid, exc)
             return False
+        finally:
+            # 请求已发出即计入预算，避免失败后同一用户反复重试
+            _bump_daily_budget(cfg=c)
         summary = str(message.get("content") or "") if isinstance(message, dict) else ""
         summary = " ".join(summary.split()).strip()
         if not summary or _summary_mark in summary:
@@ -137,7 +140,6 @@ async def maybe_compact_session_history(
         )
         if ok:
             _mark_compacted(bid, gid, uid)
-            _bump_daily_budget(cfg=c)
             logger.info(
                 "Session history compacted for bot [{}], group [{}], user [{}]: kept [{}]",
                 bid,

@@ -163,6 +163,9 @@ async def maybe_auto_save_group_episode(*, bot_id: int, group_id: int | None, cf
         except Exception as exc:
             logger.warning("Group episode summary failed for bot [{}] and group [{}]: [{}]", bid, gid, exc)
             return False
+        finally:
+            # 请求已发出即计入预算：失败不扣会让同一群人反复重试到刷爆额度
+            _bump_daily_budget(cfg=c)
         summary = str(message.get("content") or "").strip() if isinstance(message, dict) else ""
         if summary in {"", "无", "无。"} or classify_memory_candidate(summary) != "episode_note":
             return False
@@ -171,7 +174,6 @@ async def maybe_auto_save_group_episode(*, bot_id: int, group_id: int | None, cf
         ok = await _save_auto_episode(bot_id=bid, group_id=gid, content=summary, source="auto_episode_summary", cfg=c)
         if ok:
             _last_summary_signature[key] = transcript
-            _bump_daily_budget(cfg=c)
         return ok
     finally:
         _group_episode_summary_in_flight.discard(key)
