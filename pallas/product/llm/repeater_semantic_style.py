@@ -2653,7 +2653,7 @@ async def label_semantic_style_visual_with_cached_image(*, cq_code: str) -> Sema
     image = await get_image(cq_code)
     if not image:
         return None
-    endpoint = resolve_endpoint_for_task("repeater_semantic_style")
+    endpoint = resolve_endpoint_for_task("repeater.semantic_style")
     if endpoint is None or "image" not in endpoint.capabilities:
         return None
     if not claim_semantic_label_budget():
