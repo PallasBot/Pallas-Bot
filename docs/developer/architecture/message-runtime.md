@@ -49,6 +49,10 @@ planner、registry、`HandlingPlan`、`HandlingOutcome` 和 `ActionCommitter` �
 
 durable work handler 可以返回 `DirectWorkResult`，其中的 `DirectBotAction` 由 work auxiliary 按顺序交给现有 `bot_action` 设施，单机直接投递，分片时路由到持有目标 Bot 连接的 worker。handler 在返回结果前失败仍使用 work job 的重试策略；结果提交一旦开始便可能已经产生可见动作，此后失败会直接 dead-letter，不再重跑整个 job。
 
+## 出站发送队列
+
+发送队列的 `depth` / `depth_live` 统计所有已接纳任务，包括排队、执行与退避中的重试，`max_depth` 限制接纳总量。高优先级发送在满载时等待至 `PALLAS_SEND_QUEUE_ENQUEUE_TIMEOUT_SEC`，超时明确失败；低优先级丢弃策略不变。停止时先拒绝新任务，结束容量等待者与已接纳调用，并取消延迟重试；重启会建立新生命周期，旧重试不会进入新队列。回执超时仍按“结果不明确”处理，不盲目再次发送。
+
 ## fallback 与 continuation
 
 fallback 表示 direct **没有处理**本次消息，由 matcher 接管；continuation 表示 direct **已经处理**，但业务明确要求 matcher 继续运行。两者互斥。

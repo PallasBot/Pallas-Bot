@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from .models import WorkJob
+from .models import WorkJob, normalize_work_job_payload
 from .store import normalize_priority_tiers
 
 
@@ -22,7 +22,7 @@ def build_requeue_terminal_statement(job: WorkJob, *, now: float):
     stmt = pg_insert(BackgroundJobRow).values(
         id=job.id,
         kind=job.kind,
-        payload=job.payload,
+        payload=normalize_work_job_payload(job.payload),
         idempotency_key=job.idempotency_key,
         status="pending",
         attempts=job.attempts,
@@ -137,13 +137,14 @@ class PostgresWorkJobStore:
     async def enqueue(self, job: WorkJob) -> WorkJob:
         from pallas.core.foundation.db.repository_pg import BackgroundJobRow, get_session
 
+        payload = normalize_work_job_payload(job.payload)
         async with get_session() as session:
             stmt = (
                 pg_insert(BackgroundJobRow)
                 .values(
                     id=job.id,
                     kind=job.kind,
-                    payload=job.payload,
+                    payload=payload,
                     idempotency_key=job.idempotency_key,
                     status="pending",
                     attempts=job.attempts,
@@ -208,7 +209,7 @@ class PostgresWorkJobStore:
             {
                 "id": job.id,
                 "kind": job.kind,
-                "payload": job.payload,
+                "payload": normalize_work_job_payload(job.payload),
                 "idempotency_key": job.idempotency_key,
                 "status": "pending",
                 "attempts": job.attempts,

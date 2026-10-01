@@ -144,35 +144,120 @@ async def test_repeater_outbox_writer_flushes_buffered_jobs_as_a_batch(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_repeater_outbox_writer_drops_nul_payload_without_retrying(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_repeater_outbox_writer_normalizes_nul_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     from packages.repeater import learn_queue
     from pallas.core.platform.work_jobs.models import WorkJob
 
     learn_queue.clear_repeater_learn_runtime_state()
-    store = SimpleNamespace(
-        enqueue_many=AsyncMock(
-            side_effect=RuntimeError("unsupported Unicode escape sequence: \\u0000 cannot be converted to text")
-        )
-    )
+    store = SimpleNamespace(enqueue_many=AsyncMock())
+    monkeypatch.setattr(learn_queue, "is_postgresql_backend", lambda: True)
     monkeypatch.setattr(learn_queue, "build_work_job_store", lambda: store)
     monkeypatch.setattr(learn_queue, "wait_pg_pool_headroom_for_learn", AsyncMock())
     learn_queue.learn_queue().put_nowait(
-        WorkJob.create(
-            kind="repeater.learn", payload={"raw_message": "bad\\x00payload"}, idempotency_key="repeater:nul"
-        )
+        WorkJob.create(kind="repeater.learn", payload={"raw_message": "bad\x00payload"}, idempotency_key="repeater:nul")
     )
+    queue = learn_queue.learn_queue()
     writer = asyncio.create_task(learn_queue.run_learn_consumer())
 
     try:
-        for _ in range(20):
-            if store.enqueue_many.await_count:
-                break
-            await asyncio.sleep(0.01)
-        await asyncio.sleep(0.25)
+        await asyncio.wait_for(queue.join(), timeout=0.2)
         store.enqueue_many.assert_awaited_once()
+        persisted_job = store.enqueue_many.await_args.args[0][0]
+        assert persisted_job.payload == {"raw_message": "badpayload"}
     finally:
         writer.cancel()
         await asyncio.gather(writer, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_repeater_outbox_isolates_permanent_payload_after_transient_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from packages.repeater import learn_queue
+    from pallas.core.platform.work_jobs.models import InvalidWorkJobPayloadError, WorkJob, normalize_work_job_payload
+
+    learn_queue.clear_repeater_learn_runtime_state()
+    attempts = 0
+    persisted: list[WorkJob] = []
+    warnings: list[str] = []
+    bad = WorkJob.create(kind="repeater.learn", payload={"message": "bad"}, idempotency_key="repeater:bad")
+    good = WorkJob.create(kind="repeater.learn", payload={"message": "good"}, idempotency_key="repeater:good")
+
+    class Store:
+        async def enqueue_many(self, jobs: list[WorkJob]) -> None:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                jobs[0].payload.update({"key\x00": "PAYLOAD_SENTINEL", "key": "collision"})
+                raise RuntimeError("temporary database outage")
+            for job in jobs:
+                try:
+                    normalize_work_job_payload(job.payload)
+                except InvalidWorkJobPayloadError as exc:
+                    raise InvalidWorkJobPayloadError(f"{exc} PAYLOAD_SENTINEL") from exc
+            persisted.extend(jobs)
+
+    monkeypatch.setattr(learn_queue, "build_work_job_store", Store)
+    monkeypatch.setattr(learn_queue, "wait_pg_pool_headroom_for_learn", AsyncMock())
+    monkeypatch.setattr(learn_queue.logger, "warning", lambda *args: warnings.append(" ".join(map(str, args))))
+    learn_queue.learn_queue().put_nowait(bad)
+    learn_queue.learn_queue().put_nowait(good)
+    queue = learn_queue.learn_queue()
+    writer = asyncio.create_task(learn_queue.run_learn_consumer())
+
+    try:
+        await asyncio.wait_for(queue.join(), timeout=0.5)
+        assert attempts == 3
+        assert persisted == [good]
+        assert "PAYLOAD_SENTINEL" not in " ".join(warnings)
+    finally:
+        writer.cancel()
+        await asyncio.gather(writer, return_exceptions=True)
+        learn_queue.clear_repeater_learn_runtime_state()
+
+
+@pytest.mark.asyncio
+async def test_repeater_outbox_backoff_stays_capped_after_prolonged_outage(monkeypatch: pytest.MonkeyPatch) -> None:
+    from packages.repeater import learn_queue
+    from pallas.core.platform.work_jobs.models import WorkJob
+
+    learn_queue.clear_repeater_learn_runtime_state()
+    attempts = 0
+    persisted: list[WorkJob] = []
+    delays: list[float] = []
+    real_sleep = asyncio.sleep
+
+    class Store:
+        async def enqueue_many(self, jobs: list[WorkJob]) -> None:
+            nonlocal attempts
+            attempts += 1
+            if attempts <= 1100:
+                raise RuntimeError("temporary database outage")
+            persisted.extend(jobs)
+
+    async def fast_sleep(delay: float) -> None:
+        delays.append(delay)
+        await real_sleep(0)
+
+    monkeypatch.setattr(learn_queue, "is_postgresql_backend", lambda: True)
+    monkeypatch.setattr(learn_queue, "build_work_job_store", Store)
+    monkeypatch.setattr(learn_queue, "wait_pg_pool_headroom_for_learn", AsyncMock())
+    monkeypatch.setattr(learn_queue.asyncio, "sleep", fast_sleep)
+    job = WorkJob.create(kind="repeater.learn", payload={}, idempotency_key="repeater:long-outage")
+    queue = learn_queue.learn_queue()
+    await queue.put(job)
+    writer = asyncio.create_task(learn_queue.run_learn_consumer())
+
+    try:
+        await asyncio.wait_for(queue.join(), timeout=2.0)
+        assert attempts == 1101
+        assert persisted == [job]
+        assert delays
+        assert max(delays) <= learn_queue._OUTBOX_RETRY_MAX_SEC
+    finally:
+        writer.cancel()
+        await asyncio.gather(writer, return_exceptions=True)
+        learn_queue.clear_repeater_learn_runtime_state()
 
 
 @pytest.mark.asyncio

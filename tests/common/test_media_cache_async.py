@@ -7,6 +7,13 @@ from unittest.mock import AsyncMock
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def reset_capture_log_throttle(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.foundation.logging import throttle
+
+    monkeypatch.setattr(throttle, "_LAST_EMIT_AT", {})
+
+
 @pytest.mark.asyncio
 async def test_insert_image_buffers_durable_capture_job_under_ingress_pressure(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.core.shared.utils import media_cache as mod
@@ -65,6 +72,223 @@ async def test_image_capture_consumer_persists_buffered_jobs(monkeypatch: pytest
 
 
 @pytest.mark.asyncio
+async def test_image_capture_consumer_isolates_poison_job_and_keeps_good_jobs(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.platform.work_jobs.models import InvalidWorkJobPayloadError, WorkJob
+    from pallas.core.shared.utils import media_cache as mod
+
+    await mod.reset_image_cache_runtime_state_for_tests()
+    bad = WorkJob.create(
+        kind="image_cache.capture",
+        payload={"bad\x00": "PAYLOAD_SENTINEL", "bad": "collision"},
+        idempotency_key="image:bad",
+    )
+    good = WorkJob.create(
+        kind="image_cache.capture",
+        payload={"cq_code": "[CQ:image,file=good.image]", "url": "https://example.com/good.png"},
+        idempotency_key="image:good",
+    )
+    persisted: list[WorkJob] = []
+    warnings: list[str] = []
+
+    class Store:
+        async def enqueue_many(self, jobs: list[WorkJob]) -> None:
+            for job in jobs:
+                if job.idempotency_key == "image:bad":
+                    raise InvalidWorkJobPayloadError("payload contains PAYLOAD_SENTINEL")
+            persisted.extend(jobs)
+
+    monkeypatch.setattr(mod, "build_work_job_store", Store)
+    monkeypatch.setattr(mod.logger, "warning", lambda *args: warnings.append(" ".join(map(str, args))))
+    await mod.image_capture_queue().put(bad)
+    await mod.image_capture_queue().put(good)
+    task = asyncio.create_task(mod.run_image_capture_consumer())
+    try:
+        await asyncio.wait_for(mod.image_capture_queue().join(), timeout=0.5)
+        assert persisted == [good]
+        assert warnings
+        assert "PAYLOAD_SENTINEL" not in " ".join(warnings)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await mod.reset_image_cache_runtime_state_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_image_capture_consumer_backs_off_transient_failures_and_cancels_cleanly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.shared.utils import media_cache as mod
+
+    await mod.reset_image_cache_runtime_state_for_tests()
+    attempts = 0
+    persisted: list[WorkJob] = []
+    warnings: list[str] = []
+
+    class Store:
+        async def enqueue_many(self, jobs: list[WorkJob]) -> None:
+            nonlocal attempts
+            attempts += 1
+            if attempts < 3:
+                raise RuntimeError("SQL params contain PAYLOAD_SENTINEL")
+            persisted.extend(jobs)
+
+    job = WorkJob.create(
+        kind="image_cache.capture",
+        payload={"cq_code": "[CQ:image,file=retry.image]", "url": "https://example.com/retry.png"},
+        idempotency_key="image:retry",
+    )
+    monkeypatch.setattr(mod, "build_work_job_store", Store)
+    monkeypatch.setattr(mod, "_IMAGE_CAPTURE_RETRY_BASE_SEC", 0.02, raising=False)
+    monkeypatch.setattr(mod.logger, "warning", lambda *args: warnings.append(" ".join(map(str, args))))
+    await mod.image_capture_queue().put(job)
+    task = asyncio.create_task(mod.run_image_capture_consumer())
+    try:
+        await asyncio.sleep(0.005)
+        assert attempts == 1
+        await asyncio.wait_for(mod.image_capture_queue().join(), timeout=0.5)
+        assert persisted == [job]
+        assert attempts == 3
+        assert len(warnings) == 1
+        assert "PAYLOAD_SENTINEL" not in " ".join(warnings)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await mod.reset_image_cache_runtime_state_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_image_capture_consumer_isolates_permanent_failure_after_transient_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.core.platform.work_jobs.models import InvalidWorkJobPayloadError, WorkJob, normalize_work_job_payload
+    from pallas.core.shared.utils import media_cache as mod
+
+    await mod.reset_image_cache_runtime_state_for_tests()
+    attempts = 0
+    persisted: list[WorkJob] = []
+    warnings: list[str] = []
+    bad = WorkJob.create(
+        kind="image_cache.capture",
+        payload={"cq_code": "[CQ:image,file=bad.image]", "url": "https://example.com/bad.png"},
+        idempotency_key="image:transient-then-invalid",
+    )
+    good = WorkJob.create(
+        kind="image_cache.capture",
+        payload={"cq_code": "[CQ:image,file=good.image]", "url": "https://example.com/good.png"},
+        idempotency_key="image:transient-then-good",
+    )
+
+    class Store:
+        async def enqueue_many(self, jobs: list[WorkJob]) -> None:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                jobs[0].payload.update({"bad\x00": "PAYLOAD_SENTINEL", "bad": "collision"})
+                raise RuntimeError("temporary database outage")
+            for job in jobs:
+                try:
+                    normalize_work_job_payload(job.payload)
+                except InvalidWorkJobPayloadError as exc:
+                    raise InvalidWorkJobPayloadError(f"{exc} PAYLOAD_SENTINEL") from exc
+            persisted.extend(jobs)
+
+    monkeypatch.setattr(mod, "build_work_job_store", Store)
+    monkeypatch.setattr(mod, "_IMAGE_CAPTURE_RETRY_BASE_SEC", 0.01, raising=False)
+    monkeypatch.setattr(mod.logger, "warning", lambda *args: warnings.append(" ".join(map(str, args))))
+    await mod.image_capture_queue().put(bad)
+    await mod.image_capture_queue().put(good)
+    task = asyncio.create_task(mod.run_image_capture_consumer())
+    try:
+        await asyncio.wait_for(mod.image_capture_queue().join(), timeout=0.5)
+        assert attempts == 3
+        assert persisted == [good]
+        assert warnings
+        assert "PAYLOAD_SENTINEL" not in " ".join(warnings)
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await mod.reset_image_cache_runtime_state_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_image_capture_consumer_cancellation_finishes_queue_accounting(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.shared.utils import media_cache as mod
+
+    await mod.reset_image_cache_runtime_state_for_tests()
+    attempted = asyncio.Event()
+
+    class Store:
+        async def enqueue_many(self, _jobs: list[WorkJob]) -> None:
+            attempted.set()
+            raise RuntimeError("temporary database outage")
+
+    monkeypatch.setattr(mod, "build_work_job_store", Store)
+    monkeypatch.setattr(mod, "_IMAGE_CAPTURE_RETRY_BASE_SEC", 60.0, raising=False)
+    await mod.image_capture_queue().put(
+        WorkJob.create(
+            kind="image_cache.capture",
+            payload={"cq_code": "[CQ:image,file=shutdown.image]", "url": "https://example.com/shutdown.png"},
+            idempotency_key="image:shutdown",
+        )
+    )
+    queue = mod.image_capture_queue()
+    task = asyncio.create_task(mod.run_image_capture_consumer())
+    try:
+        await attempted.wait()
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await asyncio.wait_for(queue.join(), timeout=0.1)
+        assert queue._unfinished_tasks == 0
+    finally:
+        if not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        await mod.reset_image_cache_runtime_state_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_image_capture_backoff_stays_capped_after_prolonged_outage(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.platform.work_jobs.models import WorkJob
+    from pallas.core.shared.utils import media_cache as mod
+
+    await mod.reset_image_cache_runtime_state_for_tests()
+    attempts = 0
+    persisted: list[WorkJob] = []
+    delays: list[float] = []
+    real_sleep = asyncio.sleep
+
+    class Store:
+        async def enqueue_many(self, jobs: list[WorkJob]) -> None:
+            nonlocal attempts
+            attempts += 1
+            if attempts <= 1100:
+                raise RuntimeError("temporary database outage")
+            persisted.extend(jobs)
+
+    async def fast_sleep(delay: float) -> None:
+        delays.append(delay)
+        await real_sleep(0)
+
+    monkeypatch.setattr(mod, "build_work_job_store", Store)
+    monkeypatch.setattr(mod.asyncio, "sleep", fast_sleep)
+    job = WorkJob.create(kind="image_cache.capture", payload={}, idempotency_key="image:long-outage")
+    queue = mod.image_capture_queue()
+    await queue.put(job)
+    task = asyncio.create_task(mod.run_image_capture_consumer())
+    try:
+        await asyncio.wait_for(queue.join(), timeout=2.0)
+        assert persisted == [job]
+        assert delays
+        assert max(delays) <= mod._IMAGE_CAPTURE_RETRY_MAX_SEC
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await mod.reset_image_cache_runtime_state_for_tests()
+
+
+@pytest.mark.asyncio
 async def test_image_capture_work_handler_rejects_non_http_url() -> None:
     from pallas.core.shared.utils import media_cache as mod
 
@@ -115,6 +339,7 @@ async def test_image_capture_work_handler_times_out_hung_download(monkeypatch: p
         await asyncio.Event().wait()
 
     monkeypatch.setattr(mod, "_fetch_image_bytes", hang)
+    monkeypatch.setattr(mod, "_IMAGE_CAPTURE_DOWNLOAD_BUDGET_SEC", 0.01)
 
     await mod.handle_image_cache_capture({
         "cq_code": "[CQ:image,file=hang.image]",

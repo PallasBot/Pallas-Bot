@@ -124,7 +124,7 @@ FIELD_LABELS: dict[str, str] = {
     "route_index_strict": "只响应已登记的命令",
     "send_queue_enabled": "发送消息排队（防刷屏）",
     "send_queue_enqueue_timeout_sec": "排队发送超时（秒）",
-    "send_queue_max_depth": "待发消息队列长度",
+    "send_queue_max_depth": "发送任务容量上限",
     "send_queue_min_interval_ms": "同一只牛最短发送间隔（毫秒）",
     "send_queue_workers": "发送消息的工作线程数",
     "spam_message_threshold": "刷屏消息阈值",
