@@ -15,7 +15,7 @@ from pallas.core.foundation.db.blob_store import read_image_blob_at
 from pallas.core.foundation.db.repository import ImageCachePrunePolicy, ImageCachePruneResult
 from pallas.core.foundation.db.runtime import is_postgresql_backend
 from pallas.core.foundation.logging.throttle import log_rate_limited
-from pallas.core.platform.work_jobs.models import WorkJob
+from pallas.core.platform.work_jobs.models import InvalidWorkJobPayloadError, WorkJob, normalize_work_job_batch
 from pallas.core.platform.work_jobs.runtime import build_work_job_store
 
 image_cache_repo = make_image_cache_repository()
@@ -31,6 +31,8 @@ _IMAGE_CAPTURE_GLOBAL_RATE_PER_SEC = 4
 _IMAGE_CAPTURE_GLOBAL_WINDOW_SEC = 1.0
 _IMAGE_CAPTURE_MAX_AGE_SEC = 600.0
 _IMAGE_CAPTURE_DOWNLOAD_BUDGET_SEC = 15.0
+_IMAGE_CAPTURE_RETRY_BASE_SEC = 0.2
+_IMAGE_CAPTURE_RETRY_MAX_SEC = 30.0
 _IMAGE_CAPTURE_DOWNLOAD_LIMITED_TIMEOUT = httpx.Timeout(8.0, connect=3.0)
 _image_download_client: httpx.AsyncClient | None = None
 _image_download_lock = asyncio.Lock()
@@ -172,32 +174,65 @@ async def handle_image_cache_capture(payload: dict[str, object]) -> None:
 
 async def run_image_capture_consumer() -> None:
     while True:
-        first = await image_capture_queue().get()
+        queue = image_capture_queue()
+        first = await queue.get()
         jobs = [first]
         try:
             while len(jobs) < 64:
                 try:
-                    jobs.append(image_capture_queue().get_nowait())
+                    jobs.append(queue.get_nowait())
                 except asyncio.QueueEmpty:
                     break
-            await build_work_job_store().enqueue_many(jobs)
-        except Exception as e:
-            logger.warning("Image cache capture outbox batch with [{}] jobs failed: [{}].", len(jobs), e)
-            while True:
-                await asyncio.sleep(0.2)
+            valid_jobs, invalid_count = normalize_work_job_batch(jobs) if is_postgresql_backend() else (jobs, 0)
+            if invalid_count:
+                log_rate_limited(
+                    logger,
+                    "warning",
+                    "image_cache.capture.invalid_payload",
+                    "Image cache capture discarded [{}] permanently invalid jobs",
+                    invalid_count,
+                )
+            retry_delay = min(_IMAGE_CAPTURE_RETRY_BASE_SEC, _IMAGE_CAPTURE_RETRY_MAX_SEC)
+            while valid_jobs:
                 try:
-                    await build_work_job_store().enqueue_many(jobs)
-                except Exception as retry_exc:
-                    logger.warning(
-                        "Image cache capture outbox retry with [{}] jobs failed: [{}].",
-                        len(jobs),
-                        retry_exc,
+                    await build_work_job_store().enqueue_many(valid_jobs)
+                    break
+                except InvalidWorkJobPayloadError as exc:
+                    # The PG store validates at the write boundary; isolate a concurrent mutation too.
+                    valid_jobs, invalid_in_batch = normalize_work_job_batch(valid_jobs)
+                    if invalid_in_batch:
+                        log_rate_limited(
+                            logger,
+                            "warning",
+                            "image_cache.capture.invalid_payload",
+                            "Image cache capture discarded [{}] permanently invalid jobs",
+                            invalid_in_batch,
+                        )
+                    else:
+                        log_rate_limited(
+                            logger,
+                            "warning",
+                            "image_cache.capture.outbox_retry",
+                            "Image cache capture outbox batch with [{}] jobs failed ([{}]); retrying",
+                            len(valid_jobs),
+                            type(exc).__name__,
+                        )
+                        await asyncio.sleep(retry_delay)
+                        retry_delay = min(retry_delay * 2, _IMAGE_CAPTURE_RETRY_MAX_SEC)
+                except Exception as exc:
+                    log_rate_limited(
+                        logger,
+                        "warning",
+                        "image_cache.capture.outbox_retry",
+                        "Image cache capture outbox batch with [{}] jobs failed ([{}]); retrying",
+                        len(valid_jobs),
+                        type(exc).__name__,
                     )
-                    continue
-                break
+                    await asyncio.sleep(retry_delay)
+                    retry_delay = min(retry_delay * 2, _IMAGE_CAPTURE_RETRY_MAX_SEC)
         finally:
             for _job in jobs:
-                image_capture_queue().task_done()
+                queue.task_done()
 
 
 async def start_image_capture_workers() -> None:
