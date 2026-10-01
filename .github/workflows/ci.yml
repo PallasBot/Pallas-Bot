@@ -61,6 +61,18 @@ jobs:
             -q
           uv run pytest tests/common/test_plugin_loader_unified.py -q
 
+      - name: Run runtime reliability regression tests
+        run: |
+          env -u PG_TEST_DSN uv run pytest \
+            tests/common/test_media_cache_async.py \
+            tests/platform/work_jobs/test_pg_store.py \
+            tests/platform/message_runtime/test_committer.py \
+            tests/platform/ingress/test_send_queue.py \
+            tests/platform/ingress/test_send_queue_retry.py \
+            tests/plugins/repeater/test_work_enqueue.py \
+            tests/product/llm/test_offline_quality_eval.py \
+            -q
+
       - name: Check console OpenAPI spec drift
         run: |
           uv run python tools/check_console_openapi_drift.py
