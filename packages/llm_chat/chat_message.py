@@ -1697,6 +1697,7 @@ async def prepare_and_submit_llm_chat_turn(
                 is_to_me=is_to_me,
                 speak_trigger=speak_trigger,
                 request_id=request_id,
+                context_assembly_ms=pre_submit_context_durations_ms.get("direct_context"),
             )
             await TaskManager.remove_task(request_id)
             record_bot_llm_task(LLM_CHAT_TASK_TYPE, "submit_skip")
@@ -1724,6 +1725,7 @@ async def prepare_and_submit_llm_chat_turn(
             is_to_me=is_to_me,
             speak_trigger=speak_trigger,
             request_id=request_id,
+            context_assembly_ms=pre_submit_context_durations_ms.get("direct_context"),
         )
         record_bot_llm_task(LLM_CHAT_TASK_TYPE, "submit_ok")
         logger.info(

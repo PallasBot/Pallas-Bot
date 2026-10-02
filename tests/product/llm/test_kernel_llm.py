@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -12,6 +13,13 @@ from pallas.product.llm.models import ChatSubmitRequest
 from pallas.product.llm.provider_client import chat_completions_url, complete_chat_message
 from pallas.product.llm.submit_gate import assess_llm_kernel_submit_gate, user_message_for_submit_status
 from pallas.product.llm.tool_loop import complete_with_tool_loop, parse_tool_arguments
+
+
+def _allow_live_llm_gate(monkeypatch: pytest.MonkeyPatch, cfg: LlmConfig) -> None:
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
+    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: cfg)
+    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
+    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", AsyncMock(return_value=False))
 
 
 @pytest.mark.asyncio
@@ -526,6 +534,7 @@ async def test_complete_chat_message_ollama_native_maps_tools_images_and_thinkin
         request_method="ollama_chat",
         options={"model_effort": "disable", "temperature": 0.2, "num_predict": 64},
         tools=tools,
+        cfg=LlmConfig(llm_chat_enabled=True),
     )
 
     payload = payloads[0]
@@ -863,8 +872,9 @@ async def test_submit_chat_task_kernel_schedules_deliver(monkeypatch: pytest.Mon
         llm_governance_enabled=False,
         llm_tools_enabled=False,
     )
+    _allow_live_llm_gate(monkeypatch, cfg)
 
-    async def fake_complete(*, system_prompt, messages, metadata=None, cfg=None):
+    async def fake_complete(*, system_prompt, messages, metadata=None, cfg=None, **_kwargs):
         return "内核回复", {"role": "assistant", "content": "内核回复"}
 
     async def fake_deliver(
@@ -927,6 +937,8 @@ async def test_kernel_delivers_approved_semantic_style_direct_candidate_without_
     from pallas.product.llm.repeater_semantic_style import clear_semantic_style_direct_quota_for_tests
 
     delivered: list[tuple[str, str, str]] = []
+    cfg = LlmConfig(llm_chat_enabled=True, llm_persona_output_firewall={"enabled": False})
+    _allow_live_llm_gate(monkeypatch, cfg)
     clear_semantic_style_direct_quota_for_tests()
 
     async def provider_must_not_run(**_kwargs):
@@ -949,10 +961,222 @@ async def test_kernel_delivers_approved_semantic_style_direct_candidate_without_
             "group_id": 42,
             "semantic_style_direct_candidate": "确实",
         },
-        cfg=LlmConfig(llm_persona_output_firewall={"enabled": False}),
+        cfg=cfg,
     )
 
     assert delivered == [("direct-candidate-task", "success", "确实")]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("global_enabled", "scope_disabled", "captured_enabled"),
+    [(False, False, True), (True, True, True), (False, False, False), (True, False, False)],
+)
+async def test_kernel_rechecks_exit_gate_after_submit_before_direct_candidate_delivery(
+    monkeypatch: pytest.MonkeyPatch,
+    global_enabled: bool,
+    scope_disabled: bool,
+    captured_enabled: bool,
+) -> None:
+    from pallas.product.llm import kernel_runner
+    from pallas.product.llm.config import LlmConfig
+
+    complete = AsyncMock()
+    monkeypatch.setattr(kernel_runner, "complete_with_tool_loop", complete)
+    delivered = AsyncMock()
+    traces: list[dict] = []
+    monkeypatch.setattr(kernel_runner, "deliver_llm_chat_result", delivered)
+    monkeypatch.setattr(
+        "pallas.product.llm.config.get_llm_config",
+        lambda: LlmConfig(llm_chat_enabled=global_enabled),
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.availability.get_llm_config",
+        lambda: LlmConfig(llm_chat_enabled=global_enabled),
+    )
+    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
+
+    async def plugin_disabled_for_scope(_bot_id, _group_id):
+        return scope_disabled
+
+    monkeypatch.setattr(
+        "pallas.product.llm.availability.llm_plugin_disabled_for_scope",
+        plugin_disabled_for_scope,
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.runtime_debug.append_runtime_trace",
+        lambda **kwargs: traces.append(kwargs["trace"]),
+    )
+    monkeypatch.setattr(kernel_runner.TaskManager, "remove_task", AsyncMock())
+    monkeypatch.setattr(
+        "pallas.product.llm.repeater_semantic_style.should_deliver_semantic_style_direct_candidate",
+        lambda **_kwargs: True,
+    )
+
+    await kernel_runner.run_kernel_chat_job(
+        "closed-exit-task",
+        system_prompt="sys",
+        messages=[{"role": "user", "content": "好"}],
+        metadata={"bot_id": 99, "group_id": 42, "semantic_style_direct_candidate": "确实"},
+        cfg=LlmConfig(llm_chat_enabled=captured_enabled),
+    )
+
+    delivered.assert_not_awaited()
+    complete.assert_not_awaited()
+    assert traces[0]["skip_reason"] == (
+        "scope_disabled_after_submit" if scope_disabled else "global_disabled_after_submit"
+    )
+
+
+@pytest.mark.asyncio
+async def test_exit_gate_rechecks_global_switch_after_scope_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import availability
+
+    cfg = LlmConfig(llm_chat_enabled=True)
+
+    async def scope_lookup(_bot_id, _group_id):
+        cfg.llm_chat_enabled = False
+        return False
+
+    monkeypatch.setattr(availability, "get_llm_config", lambda: cfg)
+    monkeypatch.setattr(availability, "is_llm_plugin_globally_disabled", lambda: False)
+    monkeypatch.setattr(availability, "llm_plugin_disabled_for_scope", scope_lookup)
+
+    assert await availability.llm_chat_exit_gate_reason(1, 42) == "global_disabled_after_submit"
+
+
+@pytest.mark.asyncio
+async def test_kernel_drops_reply_if_switch_closes_during_persona_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from pallas.product.llm import kernel_runner
+
+    cfg = LlmConfig(llm_chat_enabled=True)
+    live_cfg = {"value": cfg}
+    provider_calls = 0
+    delivered = AsyncMock()
+    traces: list[dict] = []
+
+    async def complete(**_kwargs):
+        nonlocal provider_calls
+        provider_calls += 1
+        if provider_calls == 2:
+            live_cfg["value"] = LlmConfig(llm_chat_enabled=False)
+        return "reply", {"role": "assistant", "content": "reply"}
+
+    def resolve(content, **_kwargs):
+        return SimpleNamespace(
+            action="retry" if provider_calls == 1 else "allow",
+            text=content,
+            trace={"chat_quality": {"rule_ids": []}},
+        )
+
+    monkeypatch.setattr(kernel_runner, "complete_with_tool_loop", complete)
+    monkeypatch.setattr(kernel_runner, "deliver_llm_chat_result", delivered)
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: live_cfg["value"])
+    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: live_cfg["value"])
+    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
+    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", AsyncMock(return_value=False))
+    monkeypatch.setattr("pallas.product.llm.persona_output_firewall.resolve_persona_output", resolve)
+    monkeypatch.setattr(
+        "pallas.product.llm.runtime_debug.append_runtime_trace", lambda **kwargs: traces.append(kwargs["trace"])
+    )
+    monkeypatch.setattr(kernel_runner.TaskManager, "remove_task", AsyncMock())
+
+    await kernel_runner.run_kernel_chat_job(
+        "switch-closed-during-retry",
+        system_prompt="sys",
+        messages=[{"role": "user", "content": "hi"}],
+        metadata={"bot_id": 1, "group_id": 2},
+        cfg=cfg,
+    )
+
+    assert provider_calls == 2
+    delivered.assert_not_awaited()
+    assert traces[-1]["skip_reason"] == "global_disabled_after_submit"
+
+
+@pytest.mark.asyncio
+async def test_kernel_drops_generated_reply_if_global_switch_closes_during_provider_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm import kernel_runner
+    from pallas.product.llm.config import LlmConfig
+
+    captured_cfg = LlmConfig(llm_chat_enabled=True, llm_persona_output_firewall={"enabled": False})
+    live_cfg = {"value": captured_cfg}
+    delivered = AsyncMock()
+    traces: list[dict] = []
+    provider_calls = 0
+
+    async def complete(**_kwargs):
+        nonlocal provider_calls
+        provider_calls += 1
+        live_cfg["value"] = LlmConfig(llm_chat_enabled=False)
+        return "generated", {"role": "assistant", "content": "generated"}
+
+    monkeypatch.setattr(kernel_runner, "complete_with_tool_loop", complete)
+    monkeypatch.setattr(kernel_runner, "deliver_llm_chat_result", delivered)
+    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: live_cfg["value"])
+    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: live_cfg["value"])
+    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
+
+    async def scope_enabled(_bot_id, _group_id):
+        return False
+
+    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", scope_enabled)
+    monkeypatch.setattr(
+        "pallas.product.llm.runtime_debug.append_runtime_trace",
+        lambda **kwargs: traces.append(kwargs["trace"]),
+    )
+    monkeypatch.setattr(kernel_runner.TaskManager, "remove_task", AsyncMock())
+
+    await kernel_runner.run_kernel_chat_job(
+        "switch-closed-in-flight",
+        system_prompt="sys",
+        messages=[{"role": "user", "content": "hi"}],
+        metadata={"bot_id": 1, "group_id": 2},
+        cfg=captured_cfg,
+    )
+
+    assert provider_calls == 1
+    delivered.assert_not_awaited()
+    assert traces[0]["skip_reason"] == "global_disabled_after_submit"
+
+
+@pytest.mark.asyncio
+async def test_provider_exit_gate_stops_processing_response_after_external_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pallas.product.llm import availability, provider_client
+    from pallas.product.llm.availability import LlmChatExitGateError
+
+    active = True
+    provider_calls = 0
+
+    async def fake_post(*_args, **_kwargs):
+        nonlocal active, provider_calls
+        provider_calls += 1
+        active = False
+        return {"role": "assistant", "content": "must be dropped"}
+
+    async def exit_gate():
+        if not active:
+            raise LlmChatExitGateError("global_disabled_after_submit")
+
+    monkeypatch.setattr(availability, "llm_calls_enabled", lambda _cfg=None: True)
+    monkeypatch.setattr(provider_client, "_post_provider_chat", fake_post)
+
+    with pytest.raises(LlmChatExitGateError):
+        await provider_client.complete_chat_message(
+            [],
+            model="test-model",
+            cfg=LlmConfig(llm_chat_enabled=True),
+            base_url="https://example.invalid/v1",
+            exit_gate=exit_gate,
+        )
+
+    assert provider_calls == 1
 
 
 @pytest.mark.asyncio
@@ -965,6 +1189,8 @@ async def test_kernel_delivers_qualified_protocol_candidate_without_provider(
 
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     proto.clear_protocol_data_for_tests()
+    cfg = LlmConfig(llm_chat_enabled=True, llm_persona_output_firewall={"enabled": False})
+    _allow_live_llm_gate(monkeypatch, cfg)
     trigger = "请在 60 秒内发送「接受老婆赠送」，或发送「拒绝老婆赠送」"
     for mid, responder in ((1, 11), (2, 12), (3, 13)):
         proto.record_protocol_observation(
@@ -1001,7 +1227,7 @@ async def test_kernel_delivers_qualified_protocol_candidate_without_provider(
             "recent_group_bot_speaker": 99,
             "protocol_nickname_target": True,
         },
-        cfg=LlmConfig(llm_persona_output_firewall={"enabled": False}),
+        cfg=cfg,
     )
 
     assert delivered == [("protocol-candidate-task", "success", "接受老婆赠送")]
@@ -1017,6 +1243,8 @@ async def test_kernel_does_not_deliver_unsafe_cached_semantic_direct_candidate(
     from pallas.product.llm import repeater_semantic_style as semantic_style
 
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    cfg = LlmConfig(llm_chat_enabled=True, llm_persona_output_firewall={"enabled": False})
+    _allow_live_llm_gate(monkeypatch, cfg)
     semantic_style.clear_semantic_style_cache_for_tests()
     semantic_style._write_profiles({
         (99, 42, "group_chat"): semantic_style.SemanticStyleProfile(
@@ -1065,7 +1293,7 @@ async def test_kernel_does_not_deliver_unsafe_cached_semantic_direct_candidate(
             "group_id": 42,
             "semantic_style_direct_candidate": resolution.direct_candidate,
         },
-        cfg=LlmConfig(llm_persona_output_firewall={"enabled": False}),
+        cfg=cfg,
     )
 
     assert provider_calls == 1

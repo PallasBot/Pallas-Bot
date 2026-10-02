@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 
 def test_outgoing_sticker_followup_can_be_suppressed_for_one_send() -> None:
     from pallas.product.llm.sticker_followup import (
@@ -79,3 +81,40 @@ def test_outgoing_text_followup_rejects_sensitive_result() -> None:
         max_per_hour=8,
         now=100.0,
     )
+
+
+@pytest.mark.asyncio
+async def test_outgoing_followup_preserves_llm_origin_without_changing_ordinary_origin(monkeypatch) -> None:
+    import asyncio
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    from nonebot.adapters import Bot as BaseBot
+
+    from pallas.product.llm import sticker_followup
+
+    hooks = []
+    monkeypatch.setattr(BaseBot, "on_called_api", lambda hook: hooks.append(hook) or hook)
+    monkeypatch.setattr(sticker_followup, "_OUTGOING_HOOK_BOUND", False)
+    monkeypatch.setattr(
+        "pallas.product.llm.config.get_llm_config",
+        lambda: SimpleNamespace(llm_chat_sticker_enabled=True, llm_chat_sticker_cooldown_sec=0),
+    )
+    monkeypatch.setattr(sticker_followup, "should_schedule_outgoing_sticker", lambda *_args, **_kwargs: True)
+    origins = []
+
+    async def send_followup(*_args, llm_origin: bool = False, **_kwargs) -> None:
+        origins.append(llm_origin)
+
+    monkeypatch.setattr(sticker_followup, "send_outgoing_sticker_followup", send_followup)
+    sticker_followup.bind_outgoing_sticker_followup()
+    hook = hooks[0]
+    bot = MagicMock(self_id=111)
+    args = (bot, None, "send_group_msg", {"group_id": 222, "message": "普通文本"}, None)
+
+    with sticker_followup.llm_sticker_followup_origin():
+        await hook(*args)
+    await hook(*args)
+    await asyncio.sleep(0)
+
+    assert origins == [True, False]

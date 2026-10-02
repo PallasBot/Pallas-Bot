@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import asyncio
+import math
+import time
 from unittest.mock import AsyncMock, Mock, call
 
 import pytest
@@ -7,6 +10,18 @@ import pytest
 from pallas.product.llm import delivery as llm_delivery
 from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.webui_config import LlmWebuiConfig
+
+
+@pytest.fixture(autouse=True)
+def allow_live_llm_delivery(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = LlmConfig(llm_chat_enabled=True)
+    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: cfg)
+    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
+
+    async def scope_enabled(_bot_id, _group_id):
+        return False
+
+    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", scope_enabled)
 
 
 def test_bubble_delay_is_human_like_and_bounded() -> None:
@@ -579,6 +594,7 @@ async def test_failed_bubble_does_not_write_incomplete_logical_turn(monkeypatch:
     append = AsyncMock(return_value=True)
     behavior = AsyncMock()
     feedback = AsyncMock()
+    telemetry: list[dict] = []
     monkeypatch.setattr(
         "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
         sender,
@@ -588,8 +604,9 @@ async def test_failed_bubble_does_not_write_incomplete_logical_turn(monkeypatch:
     monkeypatch.setattr(llm_delivery, "should_append_llm_session", lambda _task: True)
     monkeypatch.setattr(llm_delivery, "get_llm_config", lambda: LlmConfig(llm_repeater_feedback_enabled=True))
     monkeypatch.setattr("pallas.product.llm.repeater_feedback.append_feedback_entry", feedback)
+    monkeypatch.setattr(llm_delivery, "record_turn_event", lambda **fields: telemetry.append(fields))
 
-    _reply, text_delivered, delivered = await llm_delivery.deliver_llm_callback_success(
+    outcome = await llm_delivery.deliver_llm_callback_success(
         "task-failed-bubbles",
         {
             "task_type": "llm_chat",
@@ -599,6 +616,8 @@ async def test_failed_bubble_does_not_write_incomplete_logical_turn(monkeypatch:
             "user_text": "在吗",
             "behavior_scene": "banter",
             "source_tags": ["recent_chat"],
+            "turn_id": "partial-turn",
+            "start_time": time.time() - 1,
         },
         bot=object(),
         group_id=42,
@@ -611,8 +630,251 @@ async def test_failed_bubble_does_not_write_incomplete_logical_turn(monkeypatch:
         sleeper=lambda _delay: None,
     )
 
-    assert (text_delivered, delivered) == (False, False)
+    assert outcome.status == "partial"
+    assert outcome.sent_bubble_count == 1
+    assert outcome.total_bubble_count == 3
     assert sender.await_count == 2
     append.assert_not_awaited()
     behavior.assert_not_called()
     feedback.assert_not_called()
+    delivery_event = next(event for event in telemetry if event["stage"] == "delivery")
+    assert delivery_event["delivery_status"] == "partial"
+    assert delivery_event["sent_bubble_count"] == 1
+    assert delivery_event["total_bubble_count"] == 3
+    assert isinstance(delivery_event["first_reply_latency_ms"], int)
+    assert isinstance(delivery_event["delivery_latency_ms"], int)
+
+
+@pytest.mark.asyncio
+async def test_llm_delivery_stops_after_gate_closes_between_bubbles(monkeypatch: pytest.MonkeyPatch) -> None:
+    live_cfg = {"value": LlmConfig(llm_chat_enabled=True, llm_reply_postprocess_enabled=False)}
+    sent: list[str] = []
+    telemetry: list[dict] = []
+    history = AsyncMock(return_value=True)
+
+    async def sender(_bot, _group, text, **_kwargs):
+        sent.append(text)
+        return type("Receipt", (), {"delivered": True, "message_id": len(sent)})()
+
+    async def close_gate(_delay):
+        live_cfg["value"] = LlmConfig(llm_chat_enabled=False, llm_reply_postprocess_enabled=False)
+
+    monkeypatch.setattr("pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt", sender)
+    monkeypatch.setattr(llm_delivery, "append_llm_message", history)
+    monkeypatch.setattr(llm_delivery, "should_append_llm_session", lambda _task: True)
+    monkeypatch.setattr(llm_delivery, "get_llm_config", lambda: live_cfg["value"])
+    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: live_cfg["value"])
+    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
+
+    async def scope_enabled(_bot_id, _group_id):
+        return False
+
+    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", scope_enabled)
+    monkeypatch.setattr(llm_delivery, "record_turn_event", lambda **fields: telemetry.append(fields))
+
+    outcome = await llm_delivery.deliver_llm_callback_success(
+        "gate-between-bubbles",
+        {
+            "task_type": "llm_chat",
+            "bot_id": 99,
+            "group_id": 42,
+            "user_id": 7,
+            "user_text": "继续",
+            "turn_id": "gate-between-bubbles",
+        },
+        bot=object(),
+        group_id=42,
+        bot_id=99,
+        bot_id_str="99",
+        text='{"reply_segments":["第一泡","第二泡","第三泡"]}',
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+        sleeper=close_gate,
+    )
+
+    assert sent == ["第一泡"]
+    assert outcome.status == "partial"
+    assert outcome.sent_bubble_count == 1
+    history.assert_not_awaited()
+    delivery_event = next(event for event in telemetry if event["stage"] == "delivery")
+    assert delivery_event["delivery_status"] == "partial"
+    assert delivery_event["reason"] == "global_disabled_after_submit"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("start_time", "now"),
+    [
+        (None, 100.0),
+        (False, 100.0),
+        ("not-a-time", 100.0),
+        (101.0, 100.0),
+        (100.0, math.nan),
+        (100.0, math.inf),
+    ],
+)
+async def test_invalid_or_reversed_task_clock_keeps_delivery_success_without_latency(
+    monkeypatch: pytest.MonkeyPatch,
+    start_time: object,
+    now: float,
+) -> None:
+    telemetry: list[dict] = []
+
+    async def sender(_bot, _group, _text, **_kwargs):
+        return type("Receipt", (), {"delivered": True, "message_id": 10})()
+
+    monkeypatch.setattr("pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt", sender)
+    monkeypatch.setattr(llm_delivery, "get_llm_config", lambda: LlmConfig(llm_chat_enabled=True))
+    monkeypatch.setattr(llm_delivery.time, "time", lambda: now)
+    monkeypatch.setattr(llm_delivery, "record_turn_event", lambda **fields: telemetry.append(fields))
+
+    outcome = await llm_delivery.deliver_llm_callback_success(
+        "invalid-clock",
+        {"task_type": "llm_chat", "bot_id": 99, "group_id": 42, "start_time": start_time},
+        bot=object(),
+        group_id=42,
+        bot_id=99,
+        bot_id_str="99",
+        text="已送达",
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+        sleeper=lambda _delay: None,
+    )
+
+    assert outcome.status == "sent"
+    assert outcome.delivered is True
+    delivery_event = next(event for event in telemetry if event["stage"] == "delivery")
+    assert delivery_event["first_reply_latency_ms"] is None
+
+
+@pytest.mark.asyncio
+async def test_first_effective_reply_clock_excludes_progress_bubble_as_reply(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from pallas.product.llm.kernel_runner import send_query_progress_after_delay
+
+    cfg = LlmConfig(llm_chat_enabled=True, llm_reply_postprocess_enabled=False)
+    progress_messages: list[str] = []
+    answer_messages: list[str] = []
+    telemetry: list[dict] = []
+    started = asyncio.Event()
+    finished = asyncio.Event()
+    started.set()
+
+    async def progress_sender(_bot, _group, text):
+        progress_messages.append(text)
+        return True
+
+    async def answer_sender(_bot, _group, text, **_kwargs):
+        answer_messages.append(text)
+        return type("Receipt", (), {"delivered": True, "message_id": 10})()
+
+    async def scope_enabled(_bot_id, _group_id):
+        return False
+
+    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: cfg)
+    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
+    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", scope_enabled)
+    monkeypatch.setattr("pallas.product.llm.tool_loop.has_query_tool_schemas", lambda _schemas: True)
+    monkeypatch.setattr("nonebot.get_bot", lambda _bot_id: SimpleNamespace(self_id="99"))
+    monkeypatch.setattr("pallas.core.platform.ai_callback.delivery.send_group_message", progress_sender)
+    monkeypatch.setattr("pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt", answer_sender)
+    monkeypatch.setattr(llm_delivery, "get_llm_config", lambda: cfg)
+    monkeypatch.setattr(llm_delivery, "record_turn_event", lambda **fields: telemetry.append(fields))
+    monkeypatch.setattr(llm_delivery.time, "time", lambda: 112.5)
+
+    await send_query_progress_after_delay(
+        started,
+        finished,
+        {
+            "bot_id": 99,
+            "group_id": 42,
+            "speak_trigger": "to_me",
+            "tool_schemas": [{"function": {"name": "demo__search"}}],
+        },
+        delay=0,
+        request_started_at=time.monotonic() - 1,
+    )
+    await llm_delivery.deliver_llm_callback_success(
+        "clocked-first-reply",
+        {"task_type": "llm_chat", "bot_id": 99, "group_id": 42, "start_time": 100.0},
+        bot=object(),
+        group_id=42,
+        bot_id=99,
+        bot_id_str="99",
+        text="有效答复",
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+        sleeper=lambda _delay: None,
+    )
+
+    assert progress_messages == ["我查一下。"]
+    assert answer_messages == ["有效答复"]
+    delivery_events = [event for event in telemetry if event["stage"] == "delivery"]
+    assert len(delivery_events) == 1
+    assert delivery_events[0]["first_reply_latency_ms"] == 12_500
+
+
+@pytest.mark.asyncio
+async def test_delivery_telemetry_failure_does_not_block_reply(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent: list[str] = []
+
+    async def sender(_bot, _group, text, **_kwargs):
+        sent.append(text)
+        return type("Receipt", (), {"delivered": True, "message_id": 10})()
+
+    def fail_telemetry(**_fields):
+        raise OSError("telemetry unavailable")
+
+    monkeypatch.setattr("pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt", sender)
+    monkeypatch.setattr(llm_delivery, "record_turn_event", fail_telemetry)
+    monkeypatch.setattr(llm_delivery, "get_llm_config", lambda: LlmConfig(llm_chat_enabled=True))
+
+    outcome = await llm_delivery.deliver_llm_callback_success(
+        "telemetry-failure",
+        {"task_type": "llm_chat", "bot_id": 99, "group_id": 42, "turn_id": "telemetry-failure"},
+        bot=object(),
+        group_id=42,
+        bot_id=99,
+        bot_id_str="99",
+        text="继续工作",
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+        sleeper=lambda _delay: None,
+    )
+
+    assert sent == ["继续工作"]
+    assert outcome.status == "sent"
+
+
+@pytest.mark.asyncio
+async def test_llm_master_switch_does_not_block_legacy_chat_or_media_tasks(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent: list[str] = []
+
+    async def sender(_bot, _group, text, **_kwargs):
+        sent.append(text)
+        return type("Receipt", (), {"delivered": True, "message_id": 10})()
+
+    monkeypatch.setattr("pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt", sender)
+    monkeypatch.setattr(llm_delivery, "get_llm_config", lambda: LlmConfig(llm_chat_enabled=False))
+
+    outcome = await llm_delivery.deliver_llm_callback_success(
+        "legacy-chat",
+        {"task_type": "chat", "bot_id": 99, "group_id": 42},
+        bot=object(),
+        group_id=42,
+        bot_id=99,
+        bot_id_str="99",
+        text="旧路径仍可回复",
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+        sleeper=lambda _delay: None,
+    )
+
+    assert sent == ["旧路径仍可回复"]
+    assert outcome.status == "sent"

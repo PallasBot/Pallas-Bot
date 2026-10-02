@@ -54,6 +54,7 @@ async def complete_chat_message(
     prepare_candidate_messages: Callable[[list[dict[str, Any]], Any, str], Awaitable[list[dict[str, Any]]]]
     | None = None,
     telemetry_context: dict[str, str] | None = None,
+    exit_gate: Callable[[], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
     c = cfg or _repo.get_llm_config()
     from pallas.product.llm.availability import llm_calls_enabled
@@ -67,10 +68,25 @@ async def complete_chat_message(
     method = str(request_method or opts.get("request_method") or "chat_completions").strip().lower()
     telemetry_kwargs = {"telemetry_context": telemetry_context} if telemetry_context is not None else {}
 
+    async def post_provider_chat(*args, **kwargs):
+        if exit_gate is not None:
+            await exit_gate()
+        try:
+            if exit_gate is not None:
+                kwargs["exit_gate"] = exit_gate
+            result = await _repo._post_provider_chat(*args, **kwargs)
+        except Exception:
+            if exit_gate is not None:
+                await exit_gate()
+            raise
+        if exit_gate is not None:
+            await exit_gate()
+        return result
+
     if explicit_base:
         resolved_key = explicit_key or str(c.llm_api_key or "").strip()
         resolved_model = explicit_model or str(c.llm_model or "").strip()
-        return await _repo._post_provider_chat(
+        return await post_provider_chat(
             messages,
             base_url=explicit_base,
             api_key=resolved_key,
@@ -100,7 +116,7 @@ async def complete_chat_message(
                 candidate_messages = await prepare_candidate_messages(messages, endpoint, use_model)
             for key_index, use_key in enumerate(keys):
                 try:
-                    return await _repo._post_provider_chat(
+                    return await post_provider_chat(
                         candidate_messages,
                         base_url=endpoint.base_url,
                         api_key=use_key,
@@ -144,7 +160,7 @@ async def complete_chat_message(
     resolved_base = str(c.llm_base_url or "").strip()
     resolved_key = explicit_key or str(c.llm_api_key or "").strip()
     resolved_model = explicit_model or str(c.llm_model or "").strip()
-    return await _repo._post_provider_chat(
+    return await post_provider_chat(
         messages,
         base_url=resolved_base,
         api_key=resolved_key,
@@ -172,7 +188,14 @@ async def _post_provider_chat(
     task: str = "llm_chat",
     provider_id: str = "",
     telemetry_context: dict[str, str] | None = None,
+    exit_gate: Callable[[], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
+    exit_gate_errors: tuple[type[BaseException], ...] = ()
+    if exit_gate is not None:
+        from pallas.product.llm.availability import LlmChatExitGateError
+
+        exit_gate_errors = (LlmChatExitGateError,)
+
     if provider_id and not _repo.provider_daily_budget_ok(provider_id):
         raise _repo.LlmProviderError(
             f"provider [{provider_id}] daily budget exhausted",
@@ -275,10 +298,14 @@ async def _post_provider_chat(
 
     async def request_attempt(options_for_attempt: dict[str, Any]) -> dict[str, Any]:
         nonlocal attempt
+        if exit_gate is not None:
+            await exit_gate()
         attempt += 1
         attempt_started = time.monotonic()
         try:
             result = await request(options_for_attempt)
+        except exit_gate_errors:
+            raise
         except Exception as exc:
             if isinstance(exc, httpx.PoolTimeout):
                 _repo.note_llm_http_pool_timeout()
@@ -293,6 +320,8 @@ async def _post_provider_chat(
                 latency_ms=int((time.monotonic() - attempt_started) * 1000),
                 failure_class=_repo._provider_failure_class(exc),
             )
+            if exit_gate is not None:
+                await exit_gate()
             raise
         _repo.note_llm_http_success()
         _repo._emit_provider_attempt(
@@ -305,17 +334,23 @@ async def _post_provider_chat(
             attempt=attempt,
             latency_ms=int((time.monotonic() - attempt_started) * 1000),
         )
+        if exit_gate is not None:
+            await exit_gate()
         return result
 
     started = time.monotonic()
     try:
         result = await request_attempt(use_options)
+    except exit_gate_errors:
+        raise
     except Exception as exc:
         if tools and requested_tool_choice == "required" and _required_tool_choice_is_incompatible(exc):
             _required_tool_choice_incompatible.add(cache_key)
             retry_options = {**use_options, "tool_choice": "auto"}
             try:
                 result = await request_attempt(retry_options)
+            except exit_gate_errors:
+                raise
             except Exception:
                 pass
             else:

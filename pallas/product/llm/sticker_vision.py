@@ -169,6 +169,9 @@ async def choose_sticker_with_vision(
     user_text: str,
     timeout_sec: float = 8.0,
     observation: dict[str, object] | None = None,
+    llm_origin: bool = False,
+    bot_id: int = 0,
+    group_id: int = 0,
 ) -> str | None:
     details = observation if observation is not None else {}
     details["candidate_count"] = len(candidates)
@@ -176,6 +179,7 @@ async def choose_sticker_with_vision(
         details["state"] = "skipped"
         details["error"] = "候选表情不足 3 张"
         return None
+    from pallas.product.llm.availability import LlmChatExitGateError
     from pallas.product.llm.provider_client import LlmProviderError, complete_chat_message
     from pallas.product.llm.providers_store import resolve_endpoint_for_task
     from pallas.product.llm.vision_messages import openai_vision_user_content
@@ -200,6 +204,15 @@ async def choose_sticker_with_vision(
         '只输出 JSON：{"index":1}；不合适则 {"index":0}。',
         [f"data:image/jpeg;base64,{base64.b64encode(data).decode('ascii')}" for _key, data in candidates],
     )
+
+    async def ensure_exit_gate() -> None:
+        from pallas.product.llm.sticker_followup import llm_sticker_followup_gate_reason
+
+        reason = await llm_sticker_followup_gate_reason(bot_id, group_id)
+        if reason:
+            raise LlmChatExitGateError(reason)
+
+    completion_kwargs = {"exit_gate": ensure_exit_gate} if llm_origin else {}
     try:
         record_bot_llm_task("sticker_vision", "submit_ok")
         result = await asyncio.wait_for(
@@ -219,9 +232,16 @@ async def choose_sticker_with_vision(
                 request_method=endpoint.request_method,
                 task="sticker_vision",
                 provider_id=provider,
+                **completion_kwargs,
             ),
             timeout=max(1.0, float(timeout_sec)),
         )
+    except LlmChatExitGateError as exc:
+        details["state"] = "skipped"
+        details["duration_ms"] = int((time.monotonic() - started) * 1000)
+        details["finished_at"] = time.time()
+        details["error"] = exc.reason
+        return None
     except (LlmProviderError, TimeoutError) as exc:
         details["state"] = "failed"
         details["duration_ms"] = int((time.monotonic() - started) * 1000)
@@ -271,12 +291,19 @@ async def enqueue_sticker_vision_job(
     group_id: int,
     fallback_cq_code: str,
     cooldown_sec: int = 90,
+    llm_origin: bool = False,
 ) -> str:
     """将图片选择交由 work 辅进程执行，返回可轮询的 job id。"""
-    from pallas.product.llm.availability import llm_plugin_disabled_for_scope
+    from pallas.product.llm.availability import LlmChatExitGateError, llm_plugin_disabled_for_scope
     from pallas.product.llm.sticker_label_jobs import StickerLabelSource, enqueue_sticker_label_candidate
 
-    if await llm_plugin_disabled_for_scope(bot_id, group_id):
+    if llm_origin:
+        from pallas.product.llm.sticker_followup import llm_sticker_followup_gate_reason
+
+        reason = await llm_sticker_followup_gate_reason(bot_id, group_id)
+        if reason:
+            raise LlmChatExitGateError(reason)
+    elif await llm_plugin_disabled_for_scope(bot_id, group_id):
         raise RuntimeError("llm_chat plugin disabled for scope")
     source = (
         StickerLabelSource.TEST_CANDIDATE
@@ -304,6 +331,7 @@ async def enqueue_sticker_vision_job(
             "group_id": int(group_id),
             "fallback_cq_code": str(fallback_cq_code),
             "cooldown_sec": max(0, int(cooldown_sec)),
+            "llm_origin": bool(llm_origin),
         },
         "vision_observation": {
             "job_id": job.id,
@@ -326,16 +354,38 @@ async def handle_sticker_vision_select(payload: dict[str, object]) -> None:
     from pallas.core.shared.utils.media_cache import get_image
 
     job_id = str(payload.get("job_id") or "").strip()
+    delivery = payload.get("delivery") if isinstance(payload.get("delivery"), dict) else {}
+    llm_origin = bool(delivery.get("llm_origin", False))
+    bot_id = int(delivery.get("bot_id") or 0)
+    group_id = int(delivery.get("group_id") or 0)
     candidate_codes = [str(item) for item in list(payload.get("candidate_cq_codes") or []) if str(item).strip()]
+    observation = dict(payload.get("vision_observation") or {})
+    observation.update({"job_id": job_id, "candidate_count": len(candidate_codes)})
+
+    async def skip_if_gate_closed() -> bool:
+        if not llm_origin:
+            return False
+        from pallas.product.llm.sticker_followup import llm_sticker_followup_gate_reason
+
+        reason = await llm_sticker_followup_gate_reason(bot_id, group_id)
+        if not reason:
+            return False
+        observation.update({"state": "skipped", "finished_at": time.time(), "error": reason})
+        await save_sticker_vision_result(job_id, dict(payload), None, observation=observation)
+        return True
+
+    if await skip_if_gate_closed():
+        return
     candidates = [(cq_code, image) for cq_code in candidate_codes if (image := await get_image(cq_code))]
     candidates = prepare_sticker_vision_candidates(candidates)
-    observation = dict(payload.get("vision_observation") or {})
     observation.update({
         "job_id": job_id,
         "state": "running",
         "started_at": time.time(),
         "candidate_count": len(candidates),
     })
+    if await skip_if_gate_closed():
+        return
     try:
         async with _VISION_SELECT_SEMAPHORE:
             selected = await choose_sticker_with_vision(
@@ -343,6 +393,9 @@ async def handle_sticker_vision_select(payload: dict[str, object]) -> None:
                 user_text=str(payload.get("user_text") or ""),
                 timeout_sec=float(payload.get("timeout_sec") or 8.0),
                 observation=observation,
+                llm_origin=llm_origin,
+                bot_id=bot_id,
+                group_id=group_id,
             )
     except Exception as exc:
         observation.update({
@@ -352,6 +405,8 @@ async def handle_sticker_vision_select(payload: dict[str, object]) -> None:
         })
         await save_sticker_vision_result(job_id, dict(payload), None, observation=observation)
         raise
+    if await skip_if_gate_closed():
+        return
     await save_sticker_vision_result(job_id, dict(payload), selected, observation=observation)
 
 
@@ -535,6 +590,16 @@ async def dispatch_sticker_vision_delivery_once() -> bool:
     result = payload.get("vision_result") if isinstance(payload.get("vision_result"), dict) else {}
     raw_image = str(result.get("selected_cq_code") or delivery.get("fallback_cq_code") or "")
     job_id = str(payload.get("job_id") or "")
+    llm_origin = bool(delivery.get("llm_origin", False))
+    if llm_origin:
+        from pallas.product.llm.sticker_followup import llm_sticker_followup_gate_reason
+
+        gate_reason = await llm_sticker_followup_gate_reason(
+            int(delivery.get("bot_id") or 0), int(delivery.get("group_id") or 0)
+        )
+        if gate_reason:
+            await save_sticker_vision_delivery(job_id, payload, state="failed", error=gate_reason)
+            return True
     if bot is None or not raw_image:
         await save_sticker_vision_delivery(job_id, payload, state="failed", error="发送目标或图片不可用")
         return True
@@ -561,6 +626,13 @@ async def dispatch_sticker_vision_delivery_once() -> bool:
             await save_sticker_vision_delivery(job_id, payload, state="failed", error="表情图发送条件已失效")
             return True
         message += MessageSegment.image(file=cached)
+    if llm_origin:
+        gate_reason = await llm_sticker_followup_gate_reason(
+            int(delivery.get("bot_id") or 0), int(delivery.get("group_id") or 0)
+        )
+        if gate_reason:
+            await save_sticker_vision_delivery(job_id, payload, state="failed", error=gate_reason)
+            return True
     try:
         await bot.call_api("send_group_msg", group_id=int(delivery.get("group_id") or 0), message=message)
     except Exception as exc:

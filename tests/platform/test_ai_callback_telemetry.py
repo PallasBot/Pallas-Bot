@@ -1,12 +1,21 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
 from pallas.product.llm import delivery as llm_delivery
 from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.turn_telemetry import build_turn_event
+
+
+@pytest.fixture(autouse=True)
+def allow_enabled_llm_delivery(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = LlmConfig(llm_chat_enabled=True)
+    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: cfg)
+    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
+    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", AsyncMock(return_value=False))
 
 
 def _capture_events(events: list[dict[str, object]]):

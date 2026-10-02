@@ -12,6 +12,19 @@ from pallas.core.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE
 from pallas.product.llm import delivery
 
 
+@pytest.fixture(autouse=True)
+def enable_live_llm_exit_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import availability
+    from pallas.product.llm.config import LlmConfig
+
+    async def scope_enabled(_bot_id, _group_id) -> bool:
+        return False
+
+    monkeypatch.setattr(availability, "get_llm_config", lambda: LlmConfig(llm_chat_enabled=True))
+    monkeypatch.setattr(availability, "is_llm_plugin_globally_disabled", lambda: False)
+    monkeypatch.setattr(availability, "llm_plugin_disabled_for_scope", scope_enabled)
+
+
 def test_prepare_sticker_image_shrinks_large_png_without_upscaling_small_png() -> None:
     large = BytesIO()
     Image.new("RGBA", (640, 320), "red").save(large, format="PNG")
@@ -94,7 +107,7 @@ async def test_llm_delivery_schedules_structured_sticker_after_successful_text(
     assert (reply_text, text_delivered, delivered) == ("我听到了。", True, True)
     await asyncio.sleep(0)
     schedule.assert_called_once_with(222, "我听到了。", cooldown_sec=90, max_per_hour=8)
-    send_image.assert_awaited_once_with(bot, 222, 111, 333, "send")
+    send_image.assert_awaited_once_with(bot, 222, 111, 333, "send", llm_origin=True)
 
 
 @pytest.mark.asyncio
@@ -126,17 +139,19 @@ async def test_llm_delivery_skips_sensitive_structured_sticker_at_global_gate(mo
         ),
     )
 
-    assert await delivery.deliver_llm_callback_success(
-        "task-structured-rejected",
-        {"task_type": LLM_CHAT_TASK_TYPE, "group_id": 222, "user_id": 333, "bot_id": 111},
-        bot=bot,
-        group_id=222,
-        bot_id=111,
-        bot_id_str="111",
-        text='{"reply":"权限不足。","sticker":"send"}',
-        parsed_agent_trace=None,
-        history_summary=None,
-        history_keep_messages=None,
+    assert tuple(
+        await delivery.deliver_llm_callback_success(
+            "task-structured-rejected",
+            {"task_type": LLM_CHAT_TASK_TYPE, "group_id": 222, "user_id": 333, "bot_id": 111},
+            bot=bot,
+            group_id=222,
+            bot_id=111,
+            bot_id_str="111",
+            text='{"reply":"权限不足。","sticker":"send"}',
+            parsed_agent_trace=None,
+            history_summary=None,
+            history_keep_messages=None,
+        )
     ) == ("权限不足。", True, True)
     await asyncio.sleep(0)
     send_image.assert_not_awaited()
@@ -163,21 +178,23 @@ async def test_llm_delivery_keeps_text_when_structured_sticker_followup_fails(mo
         ),
     )
 
-    assert await delivery.deliver_llm_callback_success(
-        "task-structured-no-image",
-        {"task_type": LLM_CHAT_TASK_TYPE, "group_id": 222, "user_id": 333, "bot_id": 111, "user_text": "我想你"},
-        bot=bot,
-        group_id=222,
-        bot_id=111,
-        bot_id_str="111",
-        text='{"reply":"我也在。","sticker":{"emotion":"开心","action":"挥手"}}',
-        parsed_agent_trace=None,
-        history_summary=None,
-        history_keep_messages=None,
+    assert tuple(
+        await delivery.deliver_llm_callback_success(
+            "task-structured-no-image",
+            {"task_type": LLM_CHAT_TASK_TYPE, "group_id": 222, "user_id": 333, "bot_id": 111, "user_text": "我想你"},
+            bot=bot,
+            group_id=222,
+            bot_id=111,
+            bot_id_str="111",
+            text='{"reply":"我也在。","sticker":{"emotion":"开心","action":"挥手"}}',
+            parsed_agent_trace=None,
+            history_summary=None,
+            history_keep_messages=None,
+        )
     ) == ("我也在。", True, True)
     send_text.assert_awaited_once()
     await asyncio.sleep(0)
-    send_image.assert_awaited_once_with(bot, 222, 111, 333, "emotion:开心 action:挥手")
+    send_image.assert_awaited_once_with(bot, 222, 111, 333, "emotion:开心 action:挥手", llm_origin=True)
 
 
 @pytest.mark.asyncio
@@ -406,3 +423,84 @@ async def test_cached_sticker_sender_uses_cached_image_bytes(monkeypatch: pytest
 
     assert await delivery.send_cached_sticker_image(bot, 222)
     bot.call_api.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_llm_sticker_is_not_scheduled_if_gate_closes_during_text_send(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import availability
+    from pallas.product.llm.config import LlmConfig
+
+    cfg = LlmConfig(llm_chat_enabled=True, llm_chat_sticker_enabled=True, llm_reply_postprocess_enabled=False)
+    monkeypatch.setattr(delivery, "get_llm_config", lambda: cfg)
+    monkeypatch.setattr(availability, "get_llm_config", lambda: cfg)
+    monkeypatch.setattr(availability, "is_llm_plugin_globally_disabled", lambda: False)
+    monkeypatch.setattr(availability, "llm_plugin_disabled_for_scope", AsyncMock(return_value=False))
+
+    async def send_text(*_args, **_kwargs):
+        cfg.llm_chat_enabled = False
+        return SimpleNamespace(delivered=True, message_id=1)
+
+    monkeypatch.setattr("pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt", send_text)
+    send_image = AsyncMock(return_value=True)
+    monkeypatch.setattr(delivery, "send_repeater_emotion_image", send_image)
+    monkeypatch.setattr("pallas.product.llm.sticker_followup.should_schedule_outgoing_sticker", lambda *a, **k: True)
+    result = await delivery.deliver_llm_callback_success(
+        "review-sticker-gate",
+        {"task_type": LLM_CHAT_TASK_TYPE, "group_id": 222, "bot_id": 111},
+        bot=MagicMock(),
+        group_id=222,
+        bot_id=111,
+        bot_id_str="111",
+        text='{"reply":"我听到了。","sticker":"send"}',
+        parsed_agent_trace=None,
+        history_summary=None,
+        history_keep_messages=None,
+    )
+    await asyncio.sleep(0)
+    assert result == ("我听到了。", True, True)
+    send_image.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_llm_repeater_helper_rechecks_gate_after_image_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    from packages.repeater.model import Chat
+    from pallas.core.shared.utils import media_cache
+    from pallas.product.llm import availability
+    from pallas.product.llm.config import LlmConfig
+
+    raw_image = "[CQ:image,file=sticker.jpg]"
+    cfg = LlmConfig(llm_chat_enabled=True)
+    bot = MagicMock()
+    bot.call_api = AsyncMock()
+    monkeypatch.setattr(delivery, "get_llm_config", lambda: cfg)
+    monkeypatch.setattr(availability, "get_llm_config", lambda: cfg)
+    monkeypatch.setattr(availability, "is_llm_plugin_globally_disabled", lambda: False)
+    monkeypatch.setattr(availability, "llm_plugin_disabled_for_scope", AsyncMock(return_value=False))
+    monkeypatch.setattr(
+        Chat,
+        "find_reply_bundle",
+        AsyncMock(return_value=SimpleNamespace(answer_list=[raw_image], message_pool=[])),
+    )
+    image_reads = 0
+
+    async def get_image(_segment: str) -> bytes:
+        nonlocal image_reads
+        image_reads += 1
+        if image_reads == 2:
+            cfg.llm_chat_enabled = False
+        return b"cached-image"
+
+    monkeypatch.setattr(media_cache, "get_image", get_image)
+    monkeypatch.setattr(
+        delivery,
+        "rank_cached_sticker_candidates",
+        AsyncMock(return_value=([SimpleNamespace(candidate=SimpleNamespace(cq_code=raw_image))], {})),
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.sticker_followup.should_send_repeater_image", lambda *_args, **_kwargs: True
+    )
+
+    sent = await delivery.send_repeater_emotion_image(bot, 222, 111, 333, "hello", llm_origin=True)
+
+    assert not sent
+    bot.call_api.assert_not_awaited()
