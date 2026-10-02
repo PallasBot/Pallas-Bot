@@ -37,6 +37,7 @@ def work_aux_batch_sizes(concurrency: int) -> list[int]:
 
 
 _WORK_HANDLER_TIMEOUT_DEFAULT_SEC = 600.0
+_SHORT_WORK_KINDS = frozenset({"repeater.message", "repeater.learn", "image_cache.capture"})
 
 
 def work_handler_timeout_sec(explicit: float | None) -> float | None:
@@ -123,6 +124,24 @@ async def run_work_service(
     handler_timeout_sec = work_handler_timeout_sec(handler_timeout_sec)
     owner_prefix = f"{socket.gethostname()}:{os.getpid()}"
     batch_sizes = work_aux_batch_sizes(concurrency)
+    excluded = exclude_kinds or frozenset()
+    short_kinds = _SHORT_WORK_KINDS.intersection(handlers).difference(excluded)
+    other_handler_kinds = frozenset(handlers).difference(short_kinds, excluded)
+    if concurrency > 1 and short_kinds and other_handler_kinds:
+        short_capacity = (concurrency + 1) // 2
+        other_capacity = concurrency - short_capacity
+        worker_specs = [
+            (batch_size, short_kinds, exclude_kinds, None) for batch_size in work_aux_batch_sizes(short_capacity)
+        ] + [
+            (batch_size, None, frozenset(excluded | short_kinds), priority_tiers)
+            for batch_size in work_aux_batch_sizes(other_capacity)
+        ]
+    else:
+        # Without two populated lanes, keep all capacity together and use FIFO
+        # whenever short jobs are present to avoid strict-priority starvation.
+        worker_priorities = None if short_kinds else priority_tiers
+        worker_specs = [(batch_size, None, exclude_kinds, worker_priorities) for batch_size in batch_sizes]
+
     from .observability import WorkAuxRuntimeMetrics
 
     metrics = WorkAuxRuntimeMetrics()
@@ -133,11 +152,12 @@ async def run_work_service(
             handlers=handlers,
             batch_size=batch_size,
             metrics=metrics,
-            exclude_kinds=exclude_kinds,
-            priority_tiers=priority_tiers,
+            kinds=kinds,
+            exclude_kinds=worker_excluded,
+            priority_tiers=worker_priorities,
             handler_timeout_sec=handler_timeout_sec,
         )
-        for index, batch_size in enumerate(batch_sizes)
+        for index, (batch_size, kinds, worker_excluded, worker_priorities) in enumerate(worker_specs)
     ]
     logger.info(
         "Work auxiliary service started with handlers [{}], consumers [{}], excluded kinds [{}], "
@@ -147,7 +167,10 @@ async def run_work_service(
         sorted(exclude_kinds) if exclude_kinds else None,
         [sorted(tier) for tier in priority_tiers] if priority_tiers else None,
     )
-    await asyncio.gather(
-        *(run_work_consumer(worker) for worker in workers),
-        run_work_status_publisher(store, consumers=concurrency, metrics=metrics),
-    )
+    async with asyncio.TaskGroup() as task_group:
+        for index, worker in enumerate(workers):
+            task_group.create_task(run_work_consumer(worker), name=f"work_aux_consumer:{index}")
+        task_group.create_task(
+            run_work_status_publisher(store, consumers=concurrency, metrics=metrics),
+            name="work_aux_status_publisher",
+        )

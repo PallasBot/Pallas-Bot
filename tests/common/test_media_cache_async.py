@@ -329,6 +329,30 @@ async def test_image_capture_work_handler_does_not_retry_http_failure(monkeypatc
 
 
 @pytest.mark.asyncio
+async def test_image_capture_work_handler_drops_expired_job_before_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
+    from types import SimpleNamespace
+
+    from pallas.core.shared.utils import media_cache as mod
+
+    now = 2_000_000_000.0
+    repo = SimpleNamespace(find_by_cq_code=AsyncMock(), insert=AsyncMock())
+    fetch = AsyncMock()
+    monkeypatch.setattr(mod, "time", SimpleNamespace(time=lambda: now))
+    monkeypatch.setattr(mod, "image_cache_repo", repo)
+    monkeypatch.setattr(mod, "_fetch_image_bytes", fetch)
+
+    await mod.handle_image_cache_capture({
+        "cq_code": "[CQ:image,file=expired.image]",
+        "url": "https://example.com/expired.png",
+        "created_at": now - mod._IMAGE_CAPTURE_MAX_AGE_SEC - 1,
+    })
+
+    repo.find_by_cq_code.assert_not_awaited()
+    fetch.assert_not_awaited()
+    repo.insert.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_image_capture_work_handler_times_out_hung_download(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.core.shared.utils import media_cache as mod
 
