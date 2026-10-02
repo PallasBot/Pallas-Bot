@@ -65,11 +65,15 @@ jobs:
         run: |
           env -u PG_TEST_DSN uv run pytest \
             tests/common/test_media_cache_async.py \
+            tests/platform/work_jobs/test_entrypoint.py \
+            tests/platform/work_jobs/test_service.py \
             tests/platform/work_jobs/test_pg_store.py \
             tests/platform/message_runtime/test_committer.py \
             tests/platform/ingress/test_send_queue.py \
             tests/platform/ingress/test_send_queue_retry.py \
             tests/plugins/repeater/test_work_enqueue.py \
+            tests/product/llm/test_group_insight_processor.py \
+            tests/product/llm/test_repeater_semantic_style.py \
             tests/product/llm/test_offline_quality_eval.py \
             -q
 
