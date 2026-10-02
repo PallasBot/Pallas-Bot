@@ -77,6 +77,29 @@ jobs:
             tests/product/llm/test_offline_quality_eval.py \
             -q
 
+      - name: Run LLM chat chain regression tests
+        run: |
+          env -u PG_TEST_DSN uv run pytest \
+            tests/product/llm/test_context_assembler.py \
+            tests/product/llm/test_kernel_llm.py \
+            tests/product/llm/test_llm_chain_regression.py \
+            tests/product/llm/test_query_progress.py \
+            tests/product/llm/test_tool_discovery_loop.py \
+            tests/product/llm/test_tool_loop_budget.py \
+            tests/product/llm/test_persona_output_firewall.py \
+            tests/product/llm/test_reply_delivery_segments.py \
+            tests/product/llm/test_emotion_followup.py \
+            tests/product/llm/test_sticker_vision.py \
+            tests/product/llm/test_turn_telemetry.py \
+            tests/product/llm/test_provider_telemetry.py \
+            tests/product/llm/test_provider_api_key_failover.py \
+            tests/product/llm/test_telemetry_task_metadata.py \
+            tests/platform/test_ai_callback_delivery.py \
+            tests/platform/test_ai_callback_telemetry.py \
+            tests/platform/test_llm_emotion_followup_delivery.py \
+            tests/platform/test_ai_callback_runner.py \
+            -p no:nonebug -p no:cacheprovider -q
+
       - name: Check console OpenAPI spec drift
         run: |
           uv run python tools/check_console_openapi_drift.py
