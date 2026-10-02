@@ -659,6 +659,7 @@ async def test_produce_semantic_profile_partial_failure_persists_and_advances(mo
     good_label = sem.SemanticStyleLabel(is_reply_pair=True, transferable=True)
     persisted: list[sem.SemanticStyleExample] = []
     marked: list[tuple[int, int, int, int]] = []
+    timing: list[tuple[str, tuple]] = []
 
     async def fake_rebuild(**kwargs):
         return pairs
@@ -673,6 +674,11 @@ async def test_produce_semantic_profile_partial_failure_persists_and_advances(mo
     monkeypatch.setattr(mod, "_known_bots_in_group", fake_known_bots)
     monkeypatch.setattr(mod, "_rebuild_pairs_from_messages", fake_rebuild)
     monkeypatch.setattr(mod, "make_message_repository", lambda: _EmptyRepo())
+    monkeypatch.setattr(
+        mod,
+        "log_rate_limited",
+        lambda _logger, _level, _key, message, *args: timing.append((message, args)),
+    )
     monkeypatch.setattr(sem, "semantic_style_collection_enabled", lambda *, bot_id, group_id: True)
     monkeypatch.setattr(sem, "semantic_label_budget_ok", lambda: True)
     monkeypatch.setattr(sem, "get_semantic_style_group_cursor", lambda *, bot_id, group_id: (0, 0))
@@ -696,6 +702,10 @@ async def test_produce_semantic_profile_partial_failure_persists_and_advances(mo
     # 全部失败才保留游标待下轮，避免个别失败对卡住整窗反复重发。
     assert [item.example_id for item in persisted] == ["7:101:1", "7:103:1"]
     assert marked == [(1, 7, 1200, 103)]
+    assert len(timing) == 1
+    assert "preparation" in timing[0][0].lower()
+    assert len(timing[0][1]) == 1
+    assert isinstance(timing[0][1][0], int)
 
 
 @pytest.mark.asyncio

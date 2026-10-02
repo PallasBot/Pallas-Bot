@@ -233,6 +233,75 @@ async def test_semantic_style_label_uses_deterministic_short_options(monkeypatch
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("outcome", ["success", "early-return", "failure", "cancel"])
+async def test_semantic_label_timing_is_safe_and_releases_gate(monkeypatch: pytest.MonkeyPatch, outcome: str) -> None:
+    import asyncio
+
+    from pallas.product.llm import repeater_semantic_style as mod
+
+    monkeypatch.setattr(mod, "semantic_style_label_concurrency_limit", lambda: 1)
+    monkeypatch.setattr(mod, "_semantic_style_label_sem", None)
+    monkeypatch.setattr(mod, "_semantic_style_label_sem_limit", None)
+    monkeypatch.setattr(mod, "SEMANTIC_STYLE_LABEL_MAX_RETRIES", 0)
+    monkeypatch.setattr(
+        "pallas.product.llm.config.get_llm_config",
+        lambda: SimpleNamespace(llm_model="test-model"),
+    )
+    monkeypatch.setattr(mod, "claim_semantic_label_budget", lambda: outcome != "early-return")
+
+    provider_started = asyncio.Event()
+
+    async def complete(*_args, **_kwargs):
+        provider_started.set()
+        if outcome == "cancel":
+            await asyncio.Event().wait()
+        if outcome == "failure":
+            raise RuntimeError("provider unavailable")
+        return {"content": "[{}]"}
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", complete)
+    timing: list[tuple[str, tuple]] = []
+    monkeypatch.setattr(
+        mod,
+        "log_rate_limited",
+        lambda _logger, _level, _key, message, *args: timing.append((message, args)),
+    )
+
+    gate = mod.semantic_style_label_sem()
+    if outcome == "success":
+        await gate.acquire()
+    task = asyncio.create_task(
+        mod.label_semantic_style_batch_with_llm([("PAYLOAD_SENTINEL", "SECRET_REPLY", "adjacent")])
+    )
+    if outcome == "success":
+        await asyncio.sleep(0.01)
+        assert not task.done()
+        gate.release()
+        result = await task
+        assert len(result) == 1
+    elif outcome == "cancel":
+        await provider_started.wait()
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    else:
+        result = await task
+        if outcome == "early-return":
+            assert result == []
+        else:
+            assert result == [None]
+
+    assert gate._value == 1
+    assert len(timing) == 1
+    assert "gate" in timing[0][0].lower()
+    assert all(isinstance(value, int) for value in timing[0][1])
+    if outcome == "success":
+        assert timing[0][1][0] >= 1
+    assert "PAYLOAD_SENTINEL" not in repr(timing)
+    assert "SECRET_REPLY" not in repr(timing)
+
+
+@pytest.mark.asyncio
 async def test_collect_backfill_candidates_uses_online_bot_groups_and_verified_reply_samples(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

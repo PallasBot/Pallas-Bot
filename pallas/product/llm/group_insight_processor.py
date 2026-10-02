@@ -91,6 +91,7 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
     group_id = int(payload.get("group_id") or 0)
     if bot_id <= 0 or group_id <= 0:
         return
+    preparation_started = time.monotonic()
     from pallas.product.llm.repeater_semantic_style import (
         SemanticStyleExample,
         get_semantic_style_group_cursor,
@@ -157,6 +158,13 @@ async def _produce_semantic_profile(payload: dict[str, Any]) -> None:
 
     # 一次 LLM 提交标注多个候选对，降低调用成本；预算中途耗尽时返回长度
     # 可能短于 pairs，按前缀对齐只处理已尝试部分。
+    log_rate_limited(
+        logger,
+        "info",
+        "group_insight.semantic.preparation",
+        "Group insight semantic preparation completed in [{}] ms",
+        int((time.monotonic() - preparation_started) * 1000),
+    )
     labeled = await label_semantic_style_batch_with_llm([
         (trigger, reply, pair_relation) for trigger, reply, pair_relation, *_ in pairs
     ])
