@@ -93,6 +93,20 @@ async def test_kernel_passes_turn_linkage_into_tool_loop_without_rewriting_metad
         "pallas.product.llm.persona_output_firewall.resolve_persona_output",
         lambda content, **_kwargs: SimpleNamespace(action="deliver", text=content, trace={}),
     )
+    monkeypatch.setattr(
+        "pallas.product.llm.config.get_llm_config",
+        lambda: LlmConfig(llm_chat_enabled=True),
+    )
+    monkeypatch.setattr(
+        "pallas.product.llm.availability.get_llm_config",
+        lambda: LlmConfig(llm_chat_enabled=True),
+    )
+    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
+
+    async def scope_enabled(_bot_id, _group_id):
+        return False
+
+    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", scope_enabled)
     monkeypatch.setattr("pallas.product.llm.runtime_debug.append_runtime_trace", lambda **_kwargs: None)
     monkeypatch.setattr("pallas.product.llm.kernel_runner.deliver_llm_chat_result", AsyncMock())
 

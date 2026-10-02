@@ -3,6 +3,28 @@ from __future__ import annotations
 from .config import LlmConfig, get_llm_config, resolve_legacy_rwkv_drunk_chat_enabled
 
 
+class LlmChatExitGateError(RuntimeError):
+    def __init__(self, reason: str, *, side_effect_started: bool = False) -> None:
+        super().__init__(reason)
+        self.reason = reason
+        self.side_effect_started = side_effect_started
+
+
+async def llm_chat_exit_gate_reason(
+    bot_id: int | str | None,
+    group_id: int | str | None,
+    *,
+    captured_enabled: bool = True,
+) -> str:
+    if not captured_enabled or not llm_calls_enabled(get_llm_config()):
+        return "global_disabled_after_submit"
+    if await llm_plugin_disabled_for_scope(bot_id, group_id):
+        return "scope_disabled_after_submit"
+    if not llm_calls_enabled(get_llm_config()):
+        return "global_disabled_after_submit"
+    return ""
+
+
 def is_llm_chat_service_enabled(cfg: LlmConfig | None = None) -> bool:
     """智能对话总开关（酒后 LLM 与随时 @ 共用）。
 

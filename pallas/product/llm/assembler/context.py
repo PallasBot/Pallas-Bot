@@ -69,7 +69,7 @@ async def assemble_direct_chat_context(
         cfg=cfg,
     )
     stage_durations_ms["knowledge"] = int((time.perf_counter() - started) * 1000)
-    if group_id is not None and user_id:
+    if allow_persistent_memory and group_id is not None and user_id:
         started = time.perf_counter()
         relationship_result = await enrich_system_with_relationship_context(
             "",
@@ -83,7 +83,13 @@ async def assemble_direct_chat_context(
     else:
         relationship_result = RelationshipInjectionResult(
             system_prompt="",
-            trace={"hit_count": 0, "sources": [], "entries": [], "fallback": False},
+            trace={
+                "hit_count": 0,
+                "sources": [],
+                "entries": [],
+                "fallback": False,
+                **({"skipped_short_social_turn": True} if not allow_persistent_memory else {}),
+            },
         )
         stage_durations_ms["relationship"] = 0
     if allow_persistent_memory:

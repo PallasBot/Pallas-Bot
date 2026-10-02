@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 from nonebot import logger
 
 from pallas.core.foundation.config import TaskManager
+from pallas.product.llm.availability import LlmChatExitGateError, llm_chat_exit_gate_reason
 from pallas.product.llm.execution_budget import (
     LlmExecutionSlot,
     release_llm_execution_slot,
@@ -64,9 +65,12 @@ async def send_query_progress_after_delay(
         from nonebot import get_bot
 
         from pallas.core.platform.ai_callback.delivery import send_group_message
+        from pallas.product.llm.availability import llm_chat_exit_gate_reason
         from pallas.product.llm.tool_loop import has_query_tool_schemas
 
         if not has_query_tool_schemas(metadata.get("tool_schemas")):
+            return
+        if await llm_chat_exit_gate_reason(bot_id, group_id):
             return
         sent = await send_group_message(get_bot(bot_id), group_id, "我查一下。")
         from pallas.product.llm.task_metrics import record_bot_llm_task
@@ -91,7 +95,59 @@ async def run_kernel_chat_job(
     progress_started = asyncio.Event()
     progress_finished = asyncio.Event()
     progress_task: asyncio.Task[None] | None = None
+
+    async def exit_gate_reason() -> str:
+        return await llm_chat_exit_gate_reason(
+            metadata.get("bot_id"),
+            metadata.get("group_id"),
+            captured_enabled=cfg.llm_chat_enabled,
+        )
+
+    async def ensure_exit_gate(*, side_effect_started: bool = False) -> None:
+        if reason := await exit_gate_reason():
+            raise LlmChatExitGateError(reason, side_effect_started=side_effect_started)
+
+    async def record_exit_gate_skip(reason: str, *, side_effect_started: bool = False) -> None:
+        from pallas.product.llm.runtime_debug import append_runtime_trace
+
+        try:
+            append_runtime_trace(
+                request_id=request_id,
+                trace={
+                    "status": "skipped",
+                    "skip_reason": reason,
+                    "side_effect_started": side_effect_started,
+                    "agent_trace": None,
+                },
+            )
+        except Exception:
+            logger.debug("LLM kernel skip trace failed for request [{}]", request_id)
+        turn_id = str(metadata.get("turn_id") or "").strip()
+        if turn_id:
+            try:
+                from pallas.product.llm.turn_telemetry import record_turn_event
+
+                record_turn_event(
+                    turn_id=turn_id,
+                    stage="output",
+                    decision="skipped",
+                    reason=reason,
+                    request_id=request_id,
+                    scope={"bot": metadata.get("bot_id"), "group": metadata.get("group_id")},
+                    speak_trigger=str(metadata.get("speak_trigger") or "") or None,
+                )
+            except Exception:
+                logger.debug("LLM kernel skip telemetry failed for request [{}]", request_id)
+        try:
+            await TaskManager.remove_task(request_id)
+        except Exception:
+            logger.warning("LLM task cleanup failed after exit gate closed for request [{}]", request_id)
+
     try:
+        if gate_reason := await exit_gate_reason():
+            await record_exit_gate_skip(gate_reason)
+            return
+
         from pallas.product.llm.semantic_protocol import claim_protocol_candidate
 
         protocol_candidate = ""
@@ -112,6 +168,9 @@ async def run_kernel_chat_job(
                 trace={"status": "success", "semantic_protocol_direct": True, "agent_trace": None},
             )
             await _mark_delivery_source(request_id, "protocol_direct")
+            if gate_reason := await exit_gate_reason():
+                await record_exit_gate_skip(gate_reason)
+                return
             await deliver_llm_chat_result(request_id, status="success", text=protocol_candidate)
             return
 
@@ -137,6 +196,9 @@ async def run_kernel_chat_job(
                 trace={"status": "success", "semantic_style_direct": True, "agent_trace": None},
             )
             await _mark_delivery_source(request_id, "semantic_direct")
+            if gate_reason := await exit_gate_reason():
+                await record_exit_gate_skip(gate_reason)
+                return
             await deliver_llm_chat_result(request_id, status="success", text=direct_candidate)
             return
         from pallas.product.llm.tool_loop import has_query_tool_schemas
@@ -159,8 +221,12 @@ async def run_kernel_chat_job(
             messages=messages,
             metadata=metadata,
             cfg=cfg,
+            exit_gate=ensure_exit_gate,
             **complete_kwargs,
         )
+        if gate_reason := await exit_gate_reason():
+            await record_exit_gate_skip(gate_reason)
+            return
         generate_ms = int((time.monotonic() - started) * 1000)
         from pallas.product.llm.persona_output_firewall import (
             persona_output_firewall_policy_from_data,
@@ -213,6 +279,9 @@ async def run_kernel_chat_job(
                 reply_target=reply_target,
             )
         elif decision.action == "retry":
+            if gate_reason := await exit_gate_reason():
+                await record_exit_gate_skip(gate_reason)
+                return
             from pallas.product.llm.task_metrics import record_bot_llm_task
 
             record_bot_llm_task(task, "persona_firewall_retry")
@@ -230,7 +299,11 @@ async def run_kernel_chat_job(
                 messages=retry_messages,
                 metadata={**metadata, "persona_output_retry": 1},
                 cfg=cfg,
+                exit_gate=ensure_exit_gate,
             )
+            if gate_reason := await exit_gate_reason():
+                await record_exit_gate_skip(gate_reason)
+                return
             decision = resolve_persona_output(
                 content,
                 policy=policy,
@@ -292,6 +365,8 @@ async def run_kernel_chat_job(
 
             record_bot_llm_task(task, "reply_silenced")
         await deliver_llm_chat_result(request_id, **delivery_kwargs)
+    except LlmChatExitGateError as exc:
+        await record_exit_gate_skip(exc.reason, side_effect_started=exc.side_effect_started)
     except Exception as exc:
         logger.exception("LLM kernel chat failed for request [{}]", request_id)
         try:

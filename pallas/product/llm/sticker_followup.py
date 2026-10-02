@@ -16,6 +16,7 @@ _STICKER_FOLLOWUP_SCHEDULED_AT: dict[int, deque[float]] = defaultdict(deque)
 _SENSITIVE_RESULT_TERMS = ("权限", "封禁", "风控", "安全", "隐私", "密钥", "token", "密码")
 _OUTGOING_HOOK_BOUND = False
 _SUPPRESS_OUTGOING_STICKER_FOLLOWUP: ContextVar[bool] = ContextVar("suppress_outgoing_sticker_followup", default=False)
+_LLM_STICKER_FOLLOWUP_ORIGIN: ContextVar[bool] = ContextVar("llm_sticker_followup_origin", default=False)
 
 
 @contextmanager
@@ -29,6 +30,25 @@ def suppress_outgoing_sticker_followup():
 
 def outgoing_sticker_followup_suppressed() -> bool:
     return _SUPPRESS_OUTGOING_STICKER_FOLLOWUP.get()
+
+
+@contextmanager
+def llm_sticker_followup_origin():
+    token = _LLM_STICKER_FOLLOWUP_ORIGIN.set(True)
+    try:
+        yield
+    finally:
+        _LLM_STICKER_FOLLOWUP_ORIGIN.reset(token)
+
+
+def is_llm_sticker_followup_origin() -> bool:
+    return _LLM_STICKER_FOLLOWUP_ORIGIN.get()
+
+
+async def llm_sticker_followup_gate_reason(bot_id: int, group_id: int) -> str:
+    from pallas.product.llm.availability import llm_chat_exit_gate_reason
+
+    return await llm_chat_exit_gate_reason(bot_id, group_id)
 
 
 def should_handle_outgoing_sticker_followup(exception: Exception | None, api: str) -> bool:
@@ -128,14 +148,25 @@ def bind_outgoing_sticker_followup() -> None:
             max_per_hour=int(getattr(cfg, "llm_chat_sticker_max_per_hour", 8)),
         ):
             return
+        llm_origin = is_llm_sticker_followup_origin()
         asyncio.create_task(
-            send_outgoing_sticker_followup(bot, group_id, message, cooldown_sec=int(cfg.llm_chat_sticker_cooldown_sec)),
+            send_outgoing_sticker_followup(
+                bot,
+                group_id,
+                message,
+                cooldown_sec=int(cfg.llm_chat_sticker_cooldown_sec),
+                llm_origin=llm_origin,
+            ),
             name=f"outgoing_sticker_{bot.self_id}_{group_id}",
         )
 
 
-async def send_outgoing_sticker_followup(bot: Any, group_id: int, text: str, *, cooldown_sec: int) -> None:
+async def send_outgoing_sticker_followup(
+    bot: Any, group_id: int, text: str, *, cooldown_sec: int, llm_origin: bool = False
+) -> None:
     await asyncio.sleep(0.7)
     from pallas.product.llm.delivery import send_repeater_emotion_image
 
-    await send_repeater_emotion_image(bot, group_id, int(bot.self_id), 0, text, cooldown_sec=cooldown_sec)
+    await send_repeater_emotion_image(
+        bot, group_id, int(bot.self_id), 0, text, cooldown_sec=cooldown_sec, llm_origin=llm_origin
+    )

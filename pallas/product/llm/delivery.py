@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import math
 import random
 import re
 import time
@@ -21,7 +22,7 @@ from pallas.core.platform.ai_callback.handlers import (
     should_append_llm_session,
     should_suppress_llm_duplicate_reply,
 )
-from pallas.core.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE
+from pallas.core.platform.ai_callback.task_types import LEGACY_LLM_CHAT_TASK_TYPES, LLM_CHAT_TASK_TYPE
 from pallas.product.llm.behavior import BehaviorAction, BehaviorRun, BehaviorScene
 from pallas.product.llm.behavior_store import append_behavior_run
 from pallas.product.llm.config import get_llm_config
@@ -189,9 +190,21 @@ def prepare_sticker_image(image_bytes: bytes, *, max_side: int = STICKER_IMAGE_M
 
 
 async def send_repeater_emotion_image(
-    bot: Any, group_id: int, bot_id: int, user_id: int, user_text: str, *, cooldown_sec: int | None = None
+    bot: Any,
+    group_id: int,
+    bot_id: int,
+    user_id: int,
+    user_text: str,
+    *,
+    cooldown_sec: int | None = None,
+    llm_origin: bool = False,
 ) -> bool:
     """从 Repeater 命中中取一张图片，作为 LLM 回复的第二气泡。"""
+    from pallas.product.llm.sticker_followup import llm_sticker_followup_gate_reason
+
+    if llm_origin and await llm_sticker_followup_gate_reason(bot_id, group_id):
+        return False
+
     from nonebot.adapters.onebot.v11 import Message, MessageSegment
 
     from packages.repeater.model import Chat, ChatData
@@ -238,6 +251,8 @@ async def send_repeater_emotion_image(
     if not ranked:
         return False
     raw_image = ranked[0].candidate.cq_code
+    if llm_origin and await llm_sticker_followup_gate_reason(bot_id, group_id):
+        return False
 
     cfg = get_llm_config()
     if bool(getattr(cfg, "llm_sticker_vision_enabled", False)) and should_refine_with_vision(ranked, labels):
@@ -260,6 +275,7 @@ async def send_repeater_emotion_image(
                     bot_id=int(bot_id),
                     group_id=int(group_id),
                     fallback_cq_code=raw_image,
+                    llm_origin=llm_origin,
                     cooldown_sec=int(
                         cooldown_sec if cooldown_sec is not None else getattr(cfg, "llm_chat_sticker_cooldown_sec", 90)
                     ),
@@ -281,6 +297,8 @@ async def send_repeater_emotion_image(
         if not cached:
             return False
         message += MessageSegment.image(file=cached)
+    if llm_origin and await llm_sticker_followup_gate_reason(bot_id, group_id):
+        return False
     try:
         await bot.call_api("send_group_msg", message=message, group_id=int(group_id))
     except Exception as e:
@@ -571,6 +589,7 @@ async def deliver_llm_callback_success(
     sleeper: Callable[[float], Awaitable[None] | None] | None = None,
 ) -> DeliveryOutcome:
     """处理 LLM 回调文本并投递到群。"""
+    delivery_started_at = time.monotonic()
     delivered = False
     reply_text = str(text or "").strip()
     text_delivered = False
@@ -712,6 +731,8 @@ async def deliver_llm_callback_success(
     )
     sent_indexes: list[int] = []
     sent_message_ids: list[object] = []
+    first_reply_latency_ms: int | None = None
+    gate_skip_reason = ""
     if delivery_segments and group_id and bot is not None:
         logger.info(
             f"Bot [{getattr(bot, 'self_id', bot_id_str or '<missing>')}] delivering a "
@@ -728,10 +749,19 @@ async def deliver_llm_callback_success(
         for index, segment in enumerate(delivery_segments):
             if index:
                 await sleep_between_bubbles(bubble_delay_seconds(delivery_segments[index - 1]), bubble_sleeper)
+            if task_type in LEGACY_LLM_CHAT_TASK_TYPES:
+                from pallas.product.llm.availability import llm_chat_exit_gate_reason
+
+                gate_skip_reason = await llm_chat_exit_gate_reason(bot_id, group_id)
+                if gate_skip_reason:
+                    break
             from pallas.core.platform.ai_callback.delivery import send_group_message_with_receipt
+            from pallas.product.llm.sticker_followup import llm_sticker_followup_origin
 
             ownership = suppress_outgoing_sticker_followup() if structured_sticker_requested else nullcontext()
-            with ownership:
+            llm_origin = task_type in LEGACY_LLM_CHAT_TASK_TYPES
+            origin = llm_sticker_followup_origin() if llm_origin else nullcontext()
+            with ownership, origin:
                 receipt = await send_group_message_with_receipt(
                     bot,
                     group_id,
@@ -741,6 +771,18 @@ async def deliver_llm_callback_success(
                 )
             if index == 0:
                 bot_message_id = receipt.message_id
+                if receipt.delivered:
+                    raw_task_started_at = task.get("start_time")
+                    try:
+                        task_started_at = 0.0 if isinstance(raw_task_started_at, bool) else float(raw_task_started_at)
+                    except (TypeError, ValueError, OverflowError):
+                        task_started_at = 0.0
+                    if math.isfinite(task_started_at) and task_started_at > 0:
+                        elapsed = time.time() - task_started_at
+                        if math.isfinite(elapsed) and elapsed >= 0:
+                            elapsed_ms = elapsed * 1000
+                            if math.isfinite(elapsed_ms):
+                                first_reply_latency_ms = int(elapsed_ms)
             if receipt.message_id is not None:
                 sent_message_ids.append(receipt.message_id)
             ok = receipt.delivered
@@ -776,8 +818,8 @@ async def deliver_llm_callback_success(
         delivery_reason = "delivery_target_missing"
     elif not sent_indexes:
         delivery_status = "failed"
-        delivery_decision = "failed"
-        delivery_reason = "delivery_failed"
+        delivery_decision = "skipped" if gate_skip_reason else "failed"
+        delivery_reason = gate_skip_reason or "delivery_failed"
     elif text_delivered:
         delivery_status = "sent"
         delivery_decision = "sent"
@@ -785,7 +827,7 @@ async def deliver_llm_callback_success(
     else:
         delivery_status = "partial"
         delivery_decision = "partial"
-        delivery_reason = "delivery_partial"
+        delivery_reason = gate_skip_reason or "delivery_partial"
     emit_turn_delivery_telemetry(
         task_id,
         task,
@@ -799,6 +841,8 @@ async def deliver_llm_callback_success(
         sent_bubble_count=len(sent_indexes),
         total_bubble_count=len(delivery_segments),
         sent_message_ids=sent_message_ids,
+        first_reply_latency_ms=first_reply_latency_ms,
+        delivery_latency_ms=max(0, int((time.monotonic() - delivery_started_at) * 1000)),
     )
     if text_delivered and should_append_llm_session(task) and learned_reply_text:
         raw_group_id = task.get("group_id")
@@ -837,9 +881,14 @@ async def deliver_llm_callback_success(
             semantic_source_bound=semantic_source_bound,
         )
     if text_delivered and structured_sticker_requested:
-        from pallas.product.llm.sticker_followup import should_schedule_outgoing_sticker
+        from pallas.product.llm.sticker_followup import (
+            llm_sticker_followup_gate_reason,
+            should_schedule_outgoing_sticker,
+        )
 
-        if should_schedule_outgoing_sticker(
+        llm_origin = task_type in LEGACY_LLM_CHAT_TASK_TYPES
+        gate_reason = await llm_sticker_followup_gate_reason(int(bot_id), int(group_id)) if llm_origin else ""
+        if not gate_reason and should_schedule_outgoing_sticker(
             int(group_id),
             learned_reply_text,
             cooldown_sec=int(getattr(cfg, "llm_chat_sticker_cooldown_sec", 90)),
@@ -852,6 +901,7 @@ async def deliver_llm_callback_success(
                     int(bot_id),
                     int(task.get("user_id") or 0),
                     sticker_intent,
+                    llm_origin=llm_origin,
                 ),
                 name=f"llm_sticker_followup:{task_id}",
             )

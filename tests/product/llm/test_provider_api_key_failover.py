@@ -235,3 +235,94 @@ def test_provider_daily_budget_ok_unlimited_when_no_caps(monkeypatch) -> None:
         lambda pid: {"daily_tokens_cap": 0, "daily_cost_cap": 0.0},
     )
     assert provider_daily_budget_ok("ds") is True
+
+
+@pytest.mark.asyncio
+async def test_tool_choice_retry_stops_when_exit_gate_closes(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import provider_client as pc
+    from pallas.product.llm.availability import LlmChatExitGateError
+
+    enabled = True
+    calls = []
+
+    async def gate() -> None:
+        if not enabled:
+            raise LlmChatExitGateError("global_disabled_after_submit")
+
+    async def post(*args, **kwargs):
+        nonlocal enabled
+        calls.append(kwargs["options"]["tool_choice"])
+        enabled = False
+        raise LlmProviderError("tool_choice required is unsupported", status=400)
+
+    monkeypatch.setattr(pc, "_post_chat_completions", post)
+    monkeypatch.setattr(pc, "provider_daily_budget_ok", lambda _: True)
+    monkeypatch.setattr("pallas.product.llm.providers_store.find_provider", lambda _: None)
+    pc.clear_tool_choice_compatibility_cache()
+    try:
+        with pytest.raises(LlmChatExitGateError):
+            await pc.complete_chat_message(
+                [{"role": "user", "content": "hi"}],
+                cfg=SimpleNamespace(llm_chat_enabled=True, llm_api_key="", chat_timeout_sec=10),
+                base_url="https://example.com/v1",
+                model="review-model",
+                options={"tool_choice": "required"},
+                tools=[{"type": "function", "function": {"name": "lookup"}}],
+                exit_gate=gate,
+            )
+        assert calls == ["required"]
+    finally:
+        pc.clear_tool_choice_compatibility_cache()
+
+
+@pytest.mark.asyncio
+async def test_exit_gate_stops_api_key_and_provider_failover(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import provider_client as pc
+    from pallas.product.llm.availability import LlmChatExitGateError
+    from pallas.product.llm.providers_store import ResolvedLlmEndpoint
+
+    enabled = True
+    calls: list[tuple[str, str]] = []
+
+    async def gate() -> None:
+        if not enabled:
+            raise LlmChatExitGateError("global_disabled_after_submit")
+
+    async def fail_request(*_args, **kwargs):
+        nonlocal enabled
+        calls.append((kwargs["provider_id"], kwargs["api_key"]))
+        enabled = False
+        raise LlmProviderError("unauthorized", status=401)
+
+    endpoints = [
+        ResolvedLlmEndpoint(
+            provider_id="primary",
+            base_url="https://primary.example/v1",
+            api_key="sk-first",
+            model="m1",
+            api_keys=("sk-first", "sk-second"),
+        ),
+        ResolvedLlmEndpoint(
+            provider_id="backup",
+            base_url="https://backup.example/v1",
+            api_key="sk-backup",
+            model="m2",
+            api_keys=("sk-backup",),
+        ),
+    ]
+    monkeypatch.setattr(pc, "_post_chat_completions", fail_request)
+    monkeypatch.setattr(pc, "provider_daily_budget_ok", lambda _: True)
+    monkeypatch.setattr("pallas.product.llm.providers_store.find_provider", lambda _: None)
+    monkeypatch.setattr("pallas.product.llm.providers_store.resolve_endpoint_candidates_for_task", lambda _: endpoints)
+    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
+
+    with pytest.raises(LlmChatExitGateError):
+        await pc.complete_chat_message(
+            [{"role": "user", "content": "hi"}],
+            cfg=SimpleNamespace(llm_chat_enabled=True, llm_api_key="", chat_timeout_sec=10),
+            model="m1",
+            task="llm_chat",
+            exit_gate=gate,
+        )
+
+    assert calls == [("primary", "sk-first")]

@@ -22,6 +22,19 @@ from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.output_filter import CHAT_HARD_BLOCK_PHRASES
 
 
+@pytest.fixture(autouse=True)
+def allow_enabled_llm_delivery(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = LlmConfig(llm_chat_enabled=True)
+    monkeypatch.setattr(llm_delivery, "get_llm_config", lambda: cfg)
+    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: cfg)
+    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
+
+    async def scope_enabled(_bot_id, _group_id):
+        return False
+
+    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", scope_enabled)
+
+
 def test_llm_delivery_import_does_not_eagerly_import_callback_runner() -> None:
     result = subprocess.run(
         [sys.executable, "-c", "import pallas.product.llm.delivery"],
@@ -314,7 +327,7 @@ async def test_run_ai_callback_appends_repeater_feedback_when_enabled(
     monkeypatch.setattr(
         llm_delivery,
         "get_llm_config",
-        lambda: LlmConfig(llm_repeater_feedback_enabled=True),
+        lambda: LlmConfig(llm_chat_enabled=True, llm_repeater_feedback_enabled=True),
     )
     appended: list[object] = []
     monkeypatch.setattr(
@@ -358,7 +371,7 @@ async def test_run_ai_callback_disabled_repeater_feedback_does_not_append(
     monkeypatch.setattr(
         llm_delivery,
         "get_llm_config",
-        lambda: LlmConfig(llm_repeater_feedback_enabled=False),
+        lambda: LlmConfig(llm_chat_enabled=True, llm_repeater_feedback_enabled=False),
     )
     append_feedback_entry = MagicMock()
     monkeypatch.setattr("pallas.product.llm.repeater_feedback.append_feedback_entry", append_feedback_entry)
@@ -393,7 +406,7 @@ async def test_run_ai_callback_feedback_write_failure_does_not_break_success(
     monkeypatch.setattr(
         llm_delivery,
         "get_llm_config",
-        lambda: LlmConfig(llm_repeater_feedback_enabled=True),
+        lambda: LlmConfig(llm_chat_enabled=True, llm_repeater_feedback_enabled=True),
     )
 
     def raise_append(_entry) -> None:
@@ -429,7 +442,7 @@ async def test_run_ai_callback_delivery_failure_does_not_append_repeater_feedbac
     monkeypatch.setattr(
         llm_delivery,
         "get_llm_config",
-        lambda: LlmConfig(llm_repeater_feedback_enabled=True),
+        lambda: LlmConfig(llm_chat_enabled=True, llm_repeater_feedback_enabled=True),
     )
     monkeypatch.setattr(
         "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
@@ -579,6 +592,7 @@ async def test_run_ai_callback_chat_output_filter_blocks_service_tone(
         llm_delivery,
         "get_llm_config",
         lambda: LlmConfig(
+            llm_chat_enabled=True,
             llm_output_filter_enabled=True,
             llm_output_filter_chat_hard_phrases=list(CHAT_HARD_BLOCK_PHRASES),
         ),
@@ -641,6 +655,8 @@ async def test_run_ai_callback_draw_image_success(monkeypatch: pytest.MonkeyPatc
 
     from fastapi import UploadFile
 
+    from pallas.product.llm.config import LlmConfig
+
     pytest.importorskip("pallas_plugin_draw")
     import pallas_plugin_draw.startup  # noqa: F401 — 注册 media task hooks
 
@@ -651,6 +667,10 @@ async def test_run_ai_callback_draw_image_success(monkeypatch: pytest.MonkeyPatc
         return importlib.import_module(f"pallas_plugin_draw.{submodule}")
 
     monkeypatch.setattr("pallas.core.platform.plugin_runtime.resolve.import_plugin_submodule", draw_submodule)
+    disabled_llm = LlmConfig(llm_chat_enabled=False)
+    monkeypatch.setattr("pallas.product.llm.delivery.get_llm_config", lambda: disabled_llm)
+    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: disabled_llm)
+    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: True)
 
     bot = MagicMock()
     bot.call_api = AsyncMock(return_value=None)

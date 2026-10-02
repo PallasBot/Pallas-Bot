@@ -13,6 +13,14 @@ from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.repeater_feedback import is_feedback_task_type
 
 
+@pytest.fixture(autouse=True)
+def allow_enabled_llm_delivery(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = LlmConfig(llm_chat_enabled=True)
+    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: cfg)
+    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
+    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", AsyncMock(return_value=False))
+
+
 @pytest.mark.parametrize(
     ("value", "expected"),
     [

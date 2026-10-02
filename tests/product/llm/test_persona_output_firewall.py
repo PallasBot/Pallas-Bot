@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -10,6 +11,14 @@ from pallas.product.llm.persona_output_firewall import (
     inspect_persona_output,
     resolve_persona_output,
 )
+
+
+@pytest.fixture(autouse=True)
+def allow_enabled_kernel_turns(monkeypatch: pytest.MonkeyPatch) -> None:
+    cfg = LlmConfig(llm_chat_enabled=True)
+    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: cfg)
+    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
+    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", AsyncMock(return_value=False))
 
 
 def enabled_policy(**updates: object) -> PersonaFirewallPolicy:
@@ -701,7 +710,7 @@ async def test_kernel_retries_short_vent_overexplained_reply(monkeypatch: pytest
             "conversation_fallback_text": "没绷住。",
             "reply_target": "emotion",
         },
-        cfg=LlmConfig(llm_persona_output_firewall={"enabled": True, "max_retries": 1}),
+        cfg=LlmConfig(llm_chat_enabled=True, llm_persona_output_firewall={"enabled": True, "max_retries": 1}),
     )
 
     assert delivered == ["没绷住。"]
@@ -771,6 +780,16 @@ async def test_kernel_persona_retry_plain_text_drops_group_timeline_images(
         "deliver_llm_chat_result",
         fake_deliver,
     )
+    monkeypatch.setattr(
+        "pallas.product.llm.config.get_llm_config",
+        lambda: LlmConfig(llm_chat_enabled=True),
+    )
+    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
+
+    async def scope_enabled(_bot_id, _group_id):
+        return False
+
+    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", scope_enabled)
     monkeypatch.setattr("pallas.product.llm.runtime_debug.append_runtime_trace", lambda **_kwargs: None)
 
     await kernel_runner.run_kernel_chat_job(
@@ -831,7 +850,7 @@ async def test_kernel_keeps_short_social_reply_silent_after_two_quality_failures
         system_prompt="sys",
         messages=[{"role": "user", "content": "就是骂你"}],
         metadata={"self_aliases": [], "social_action": "ACK"},
-        cfg=LlmConfig(llm_persona_output_firewall={"enabled": True, "max_retries": 1}),
+        cfg=LlmConfig(llm_chat_enabled=True, llm_persona_output_firewall={"enabled": True, "max_retries": 1}),
     )
 
     assert delivered == [""]
@@ -867,7 +886,7 @@ async def test_kernel_retries_then_silences_unrelated_persona_topic(monkeypatch:
         system_prompt="sys",
         messages=[{"role": "user", "content": "就是骂你"}],
         metadata={"self_aliases": [], "social_action": "JOKE"},
-        cfg=LlmConfig(llm_persona_output_firewall={"enabled": True, "max_retries": 1}),
+        cfg=LlmConfig(llm_chat_enabled=True, llm_persona_output_firewall={"enabled": True, "max_retries": 1}),
     )
 
     assert delivered == [""]
@@ -908,7 +927,7 @@ async def test_kernel_retries_bare_question_for_short_vent_ack(monkeypatch: pyte
             "conversation_fallback_text": "又改了啊。",
             "social_action": "ACK",
         },
-        cfg=LlmConfig(llm_persona_output_firewall={"enabled": True, "max_retries": 1}),
+        cfg=LlmConfig(llm_chat_enabled=True, llm_persona_output_firewall={"enabled": True, "max_retries": 1}),
     )
 
     assert delivered == ["又改了啊。"]
@@ -946,7 +965,7 @@ async def test_kernel_retries_overexplained_presence_check(monkeypatch: pytest.M
         system_prompt="sys",
         messages=[{"role": "user", "content": "你还在吗"}],
         metadata={"self_aliases": [], "social_action": "ACK"},
-        cfg=LlmConfig(llm_persona_output_firewall={"enabled": True, "max_retries": 1}),
+        cfg=LlmConfig(llm_chat_enabled=True, llm_persona_output_firewall={"enabled": True, "max_retries": 1}),
     )
 
     assert delivered == ["在。"]
@@ -982,7 +1001,7 @@ async def test_kernel_falls_back_to_brief_presence_confirmation_after_second_fai
         system_prompt="sys",
         messages=[{"role": "user", "content": "你还在吗"}],
         metadata={"self_aliases": [], "social_action": "ACK", "reply_target": "fact"},
-        cfg=LlmConfig(llm_persona_output_firewall={"enabled": True, "max_retries": 1}),
+        cfg=LlmConfig(llm_chat_enabled=True, llm_persona_output_firewall={"enabled": True, "max_retries": 1}),
     )
 
     assert delivered == ["在"]
@@ -1018,7 +1037,7 @@ async def test_kernel_retries_ungrounded_praise_in_fact_reply(monkeypatch: pytes
         system_prompt="sys",
         messages=[{"role": "user", "content": "这也能改？"}],
         metadata={"self_aliases": [], "social_action": "ACK", "reply_target": "fact"},
-        cfg=LlmConfig(llm_persona_output_firewall={"enabled": True, "max_retries": 1}),
+        cfg=LlmConfig(llm_chat_enabled=True, llm_persona_output_firewall={"enabled": True, "max_retries": 1}),
     )
 
     assert delivered == ["能改。"]
@@ -1094,12 +1113,13 @@ async def test_kernel_retries_once_for_tool_loop_final_output(monkeypatch: pytes
         lambda **kwargs: traces.append(kwargs["trace"]),
     )
     cfg = LlmConfig(
+        llm_chat_enabled=True,
         llm_persona_output_firewall={
             "version": 1,
             "enabled": True,
             "strategy": "retry_then_fallback",
             "max_retries": 1,
-        }
+        },
     )
 
     await kernel_runner.run_kernel_chat_job(
@@ -1197,6 +1217,7 @@ async def test_kernel_does_not_replay_side_effect_tool_after_firewall_violation(
         lambda **kwargs: traces.append(kwargs["trace"]),
     )
     cfg = LlmConfig(
+        llm_chat_enabled=True,
         llm_base_url="http://example.test/v1",
         llm_model="demo",
         llm_tools_enabled=True,
