@@ -15,6 +15,7 @@ from pallas.product.persona.scorer import scaled_speak_threshold, speak_keyword_
 
 from .activity_gate import blocks_proactive_speak
 from .ban_manager import BanManager
+from .message_payload import parse_replayable_message
 from .message_store import MessageStore
 from .model import Chat, ChatData
 from .responder import Responder
@@ -160,15 +161,6 @@ class Speaker:
             if cur_time - latest_time < avg_interval * eff_speak_threshold + basic_delay:
                 continue
 
-            async with reply_lock:
-                group_replies_front.append({
-                    "time": int(cur_time),
-                    "pre_raw_message": Speaker.SPEAK_FLAG,
-                    "pre_keywords": Speaker.SPEAK_FLAG,
-                    "reply": Speaker.SPEAK_FLAG,
-                    "reply_keywords": Speaker.SPEAK_FLAG,
-                })
-
             from pallas.core.platform.multi_bot.platform_utils import pick_connected_bot_id
 
             picked = pick_connected_bot_id(candidate_bot_ids, log_tag="repeater.speak")
@@ -187,11 +179,21 @@ class Speaker:
                     and not cur_raw_message.startswith("牛牛")
                     and not cur_raw_message.startswith("[CQ:xml")
                     and "\n" not in cur_raw_message
+                    and parse_replayable_message(cur_raw_message) is not None
                 )
 
             available_messages = list(filter(msg_filter, group_msgs))
             if not available_messages:
                 continue
+
+            async with reply_lock:
+                group_replies_front.append({
+                    "time": int(cur_time),
+                    "pre_raw_message": Speaker.SPEAK_FLAG,
+                    "pre_keywords": Speaker.SPEAK_FLAG,
+                    "reply": Speaker.SPEAK_FLAG,
+                    "reply_keywords": Speaker.SPEAK_FLAG,
+                })
 
             taken_name = await BotConfig(bot_id, group_id).taken_name()
             pretend_msg = list(filter(lambda msg: msg.user_id == taken_name, available_messages))

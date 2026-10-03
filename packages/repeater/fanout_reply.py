@@ -21,6 +21,7 @@ from pallas.api.logging import format_plugin_event
 from pallas.api.platform import GROUP_ONLINE_TTL_SEC
 from pallas.core.foundation.config import BotConfig
 from pallas.core.platform.bot_runtime.send_unavailable import BOT_SEND_UNAVAILABLE_ERRORS, log_bot_send_unavailable
+from pallas.core.platform.ingress.message_payload import event_message_to_cq
 from pallas.core.platform.multi_bot.dedup import try_claim_group_message_once
 from pallas.core.platform.shard import context as shard_ctx
 from pallas.product.llm.task_metrics import record_bot_llm_route
@@ -101,7 +102,7 @@ def fanout_payload_from_event(
     return {
         "group_id": int(event.group_id),
         "user_id": int(event.user_id),
-        "raw_message": event.raw_message,
+        "raw_message": event_message_to_cq(event),
         "plain_text": (event.get_plaintext() or "").strip(),
         "time": int(event.time),
         "fanout_bot_ids": [int(x) for x in (fanout_bot_ids or ()) if int(x) > 0],

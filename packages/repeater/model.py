@@ -14,6 +14,7 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 from pallas.core.foundation.config import BotConfig
 from pallas.core.foundation.db import Message as MessageModel
 from pallas.core.foundation.db.context_repo_access import context_repo
+from pallas.core.platform.ingress.message_payload import event_message_to_cq
 from pallas.core.shared.reply_command_rule import extract_reply_id_from_raw_message
 
 from .ban_manager import BanManager
@@ -159,17 +160,18 @@ class Chat:
             self.chat_data = data
             self.config = BotConfig(data.bot_id, data.group_id)
         elif isinstance(data, GroupMessageEvent):
+            raw_message = re.sub(r"\.image,.+?\]", ".image]", event_message_to_cq(data))
             self.chat_data = ChatData(
                 group_id=data.group_id,
                 user_id=data.user_id,
                 # 删除图片子类型字段，同一张图子类型经常不一样，影响判断
-                raw_message=re.sub(r"\.image,.+?\]", ".image]", data.raw_message),
+                raw_message=raw_message,
                 plain_text=data.get_plaintext(),
                 time=data.time,
                 bot_id=data.self_id,
                 sender_name=str(data.sender.card or data.sender.nickname or ""),
                 message_id=int(data.message_id),
-                reply_to_message_id=extract_reply_id_from_raw_message(data.raw_message),
+                reply_to_message_id=extract_reply_id_from_raw_message(raw_message),
             )
             self.config = BotConfig(data.self_id, data.group_id)
 

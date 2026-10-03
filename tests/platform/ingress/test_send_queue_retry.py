@@ -39,6 +39,19 @@ def test_is_retryable_classifies_network_and_media_errors() -> None:
     )
 
 
+def test_invalid_message_payload_is_not_retryable_or_risk_limited() -> None:
+    from nonebot.adapters.onebot.v11 import ActionFailed
+
+    error = ActionFailed(
+        retcode=1400,
+        message='message element "markdown" field "text" must not be empty',
+    )
+
+    assert send_queue.classify_send_queue_error("send_group_msg", error) == "invalid_message_payload"
+    assert send_queue.is_retryable_send_error("send_group_msg", error) is False
+    assert send_queue.is_risk_limited_send_error("send_group_msg", error) is False
+
+
 def test_websocket_timeout_is_not_retryable() -> None:
     from nonebot.adapters.onebot.v11 import NetworkError
 

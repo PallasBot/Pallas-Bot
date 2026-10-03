@@ -34,6 +34,80 @@ async def test_swr_first_load_awaits_and_dedups_concurrent(tmp_path, monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_cancelling_loader_owner_does_not_cancel_other_waiters(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    clear_extended_read_cache()
+    loader_started = asyncio.Event()
+    second_waiter_entered = asyncio.Event()
+    loader_cancelled = asyncio.Event()
+    release_loader = asyncio.Event()
+
+    async def loader() -> dict[str, int]:
+        loader_started.set()
+        try:
+            await release_loader.wait()
+        except asyncio.CancelledError:
+            loader_cancelled.set()
+            raise
+        return {"value": 1}
+
+    async def second_waiter() -> dict[str, int]:
+        second_waiter_entered.set()
+        return await cached_read(key="cancel-k", loader=loader, ttl_sec=60)
+
+    owner = asyncio.create_task(cached_read(key="cancel-k", loader=loader, ttl_sec=60))
+    waiter = None
+    try:
+        await loader_started.wait()
+        waiter = asyncio.create_task(second_waiter())
+        await second_waiter_entered.wait()
+        owner.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await owner
+        assert not loader_cancelled.is_set()
+        release_loader.set()
+        assert await waiter == {"value": 1}
+    finally:
+        release_loader.set()
+        await asyncio.gather(owner, *([waiter] if waiter is not None else []), return_exceptions=True)
+        clear_extended_read_cache()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_cache_waiters_receive_isolated_copies(tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    clear_extended_read_cache()
+    loader_started = asyncio.Event()
+    waiter_entered = asyncio.Event()
+    release_loader = asyncio.Event()
+
+    async def loader() -> dict[str, list[int]]:
+        loader_started.set()
+        await release_loader.wait()
+        return {"values": [1]}
+
+    async def wait_for_value() -> dict[str, list[int]]:
+        waiter_entered.set()
+        return await cached_read(key="copy-k", loader=loader, ttl_sec=60)
+
+    owner = asyncio.create_task(cached_read(key="copy-k", loader=loader, ttl_sec=60))
+    waiter = None
+    try:
+        await loader_started.wait()
+        waiter = asyncio.create_task(wait_for_value())
+        await waiter_entered.wait()
+        release_loader.set()
+        first, second = await asyncio.gather(owner, waiter)
+        first["values"].append(2)
+        assert second == {"values": [1]}
+        assert await cached_read(key="copy-k", loader=loader, ttl_sec=60) == {"values": [1]}
+    finally:
+        release_loader.set()
+        await asyncio.gather(owner, *([waiter] if waiter is not None else []), return_exceptions=True)
+        clear_extended_read_cache()
+
+
+@pytest.mark.asyncio
 async def test_swr_serves_stale_then_refreshes_in_background(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
     clear_extended_read_cache()

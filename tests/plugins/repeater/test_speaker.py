@@ -216,3 +216,64 @@ async def test_speak_recent_dedup_avoids_same_message_twice(beanie_fixture):
         MessageStore._message_dict.clear()
         Speaker._recent_speak.clear()
         reply_dict.clear()
+
+
+@pytest.mark.asyncio
+async def test_speak_excludes_invalid_payload_before_selection_and_dedup(monkeypatch) -> None:
+    from packages.repeater.message_store import MessageStore
+    from packages.repeater.speaker import Speaker
+    from pallas.core.foundation.db import Message as MessageModel
+
+    group_id = 39393
+    bot_id = 10001
+
+    def build_message(user_id: int, raw_message: str, keywords: str, timestamp: int):
+        return MessageModel.model_construct(
+            group_id=group_id,
+            user_id=user_id,
+            bot_id=bot_id,
+            raw_message=raw_message,
+            is_plain_text=True,
+            plain_text=raw_message,
+            keywords=keywords,
+            time=timestamp,
+        )
+
+    invalid = build_message(20021, "[CQ:markdown]", "invalid", 9)
+    valid = build_message(20022, "allowed-content", "allowed", 10)
+    messages = [build_message(20001 + i, f"牛牛-warmup-{i}", f"warmup-{i}", i + 1) for i in range(8)]
+    messages.extend([invalid, valid])
+    monkeypatch.setattr(MessageStore, "_message_dict", defaultdict(list, {group_id: messages}))
+    monkeypatch.setattr(Speaker, "_recent_speak", defaultdict(lambda: deque(maxlen=Speaker.DUPLICATE_REPLY)))
+    reply_dict = defaultdict(lambda: defaultdict(list))
+    reply_dict[group_id][bot_id] = [{"time": 1, "reply": "previous", "reply_keywords": "previous"}]
+
+    def choose_valid(_persona, candidate_pool, *_args, **_kwargs):
+        assert [message.raw_message for message in candidate_pool] == ["allowed-content"]
+        return candidate_pool[0]
+
+    async def resolve_persona(*_args, **_kwargs):
+        from pallas.product.persona.model import ResolvedPersona
+
+        return ResolvedPersona(speak_bias=2.0, chaos_bias=0.1, length_pref="short")
+
+    monkeypatch.setattr("packages.repeater.speaker.blocks_proactive_speak", lambda _group_id: False)
+    monkeypatch.setattr("packages.repeater.speaker.resolve_persona", resolve_persona)
+    monkeypatch.setattr("packages.repeater.speaker.Speaker._pick_speak_message", choose_valid)
+    monkeypatch.setattr("packages.repeater.speaker.BanManager.find_ban_keywords", AsyncMock(return_value=set()))
+    monkeypatch.setattr("packages.repeater.speaker.BotConfig.taken_name", AsyncMock(return_value=-1))
+    monkeypatch.setattr("pallas.core.platform.shard.registry.config.is_sharding_active", lambda: False)
+    monkeypatch.setattr(
+        "pallas.core.platform.multi_bot.platform_utils.pick_connected_bot_id", lambda *_args, **_kwargs: bot_id
+    )
+    monkeypatch.setattr("packages.repeater.reply_record_sync.publish_reply_record", lambda *_args: None)
+    monkeypatch.setattr("pallas.product.llm.proactive_emitter.emit_proactive", AsyncMock())
+    monkeypatch.setattr("packages.repeater.speaker.time.time", lambda: 10000)
+    monkeypatch.setattr("packages.repeater.speaker.random.random", lambda: 1.0)
+
+    result = await Speaker.speak(reply_dict, asyncio.Lock(), defaultdict(lambda: deque(maxlen=16)), asyncio.Lock())
+
+    assert result is not None
+    assert str(result[2][0]) == "allowed-content"
+    assert list(Speaker._recent_speak[group_id]) == ["allowed-content"]
+    assert all(record["reply"] != "[CQ:markdown]" for record in reply_dict[group_id][bot_id])

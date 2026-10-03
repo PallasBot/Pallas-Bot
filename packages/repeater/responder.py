@@ -25,6 +25,7 @@ from pallas.product.persona.scorer import freshness_multiplier, message_weight_m
 
 from .ban_manager import BanManager
 from .config import get_repeater_config
+from .message_payload import parse_replayable_message
 from .opportunity_trace import append_repeater_opportunity_trace
 from .topic_utils import filtered_recent_topics
 
@@ -460,6 +461,14 @@ class Responder:
         if not answer_list:
             return None
 
+        replayable_answers = []
+        for item in answer_list:
+            message = parse_replayable_message(item)
+            if message is not None:
+                replayable_answers.append((item, message))
+        if not replayable_answers:
+            return None
+
         group_id = chat_data.group_id
         bot_id = chat_data.bot_id
         group_bot_replies = reply_dict[group_id][bot_id]
@@ -477,11 +486,10 @@ class Responder:
                 "reply_keywords": Responder.REPLY_FLAG,
             })
 
-        async def yield_results(results: tuple[list[str], str]) -> AsyncGenerator[Message, None]:
-            answer_list, answer_keywords = results
+        async def yield_results() -> AsyncGenerator[Message, None]:
             group_bot_replies = reply_dict[group_id][bot_id]
             try:
-                for item in answer_list:
+                for item, message in replayable_answers:
                     async with reply_lock:
                         group_bot_replies.append({
                             "time": int(time.time()),
@@ -496,12 +504,12 @@ class Responder:
                             recent_topics[group_id] += filtered_recent_topics(answer_keywords.split(" "))
                     async with topics_lock:
                         recent_topics[group_id] += filtered_recent_topics(chat_data._keywords_list)
-                    yield Message(item)
+                    yield message
             finally:
                 async with reply_lock:
                     reply_dict[group_id][bot_id][:] = reply_dict[group_id][bot_id][-Responder.SAVE_RESERVED_SIZE :]
 
-        return yield_results((answer_list, answer_keywords))
+        return yield_results()
 
     @staticmethod
     async def find_reply_bundle(
