@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Pallas-Bot 控制台 API",
-    "version": "v4.4.1-12-g4b6d6d2a-dirty",
+    "version": "v4.4.3-26-g80d664ff-dirty",
     "description": "仅包含控制台 API 前缀下的接口。"
   },
   "paths": {
@@ -11061,7 +11061,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse_list_PluginCatalogRow__"
+                }
               }
             }
           },
@@ -11652,7 +11654,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse_PluginGovernanceUpdateData_"
+                }
               }
             }
           },
@@ -15736,7 +15740,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse_PluginConfigData_"
+                }
               }
             }
           },
@@ -15832,7 +15838,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse_PluginConfigData_"
+                }
               }
             }
           },
@@ -26892,7 +26900,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/_ApiOkResponse_InstancesData_"
+                }
               }
             }
           },
@@ -31656,6 +31666,45 @@
         "type": "object",
         "title": "AccountPersonaProfile"
       },
+      "AccountPersonaProfileData": {
+        "properties": {
+          "energy": {
+            "type": "number",
+            "title": "Energy"
+          },
+          "warmth": {
+            "type": "number",
+            "title": "Warmth"
+          },
+          "mischief": {
+            "type": "number",
+            "title": "Mischief"
+          },
+          "restraint": {
+            "type": "number",
+            "title": "Restraint"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "derived",
+              "manual",
+              "legacy_migrated"
+            ],
+            "title": "Source"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "energy",
+          "warmth",
+          "mischief",
+          "restraint",
+          "source"
+        ],
+        "title": "AccountPersonaProfileData"
+      },
       "Body__community_gallery_create_pallas_api_community_gallery_post": {
         "properties": {
           "text": {
@@ -31723,6 +31772,94 @@
           "file"
         ],
         "title": "Body__files_upload_pallas_api_files_upload_post"
+      },
+      "BotConfigPublicData": {
+        "properties": {
+          "account": {
+            "type": "integer",
+            "title": "Account"
+          },
+          "admins": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Admins"
+          },
+          "auto_accept_friend": {
+            "type": "boolean",
+            "title": "Auto Accept Friend"
+          },
+          "auto_accept_group": {
+            "type": "boolean",
+            "title": "Auto Accept Group"
+          },
+          "security": {
+            "type": "boolean",
+            "title": "Security"
+          },
+          "taken_name": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Taken Name"
+          },
+          "drunk": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Drunk"
+          },
+          "disabled_plugins": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Disabled Plugins"
+          },
+          "community_roster_show_qq": {
+            "type": "boolean",
+            "title": "Community Roster Show Qq"
+          },
+          "persona": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Persona"
+          },
+          "account_profile_effective": {
+            "$ref": "#/components/schemas/AccountPersonaProfileData"
+          },
+          "group_style_enabled": {
+            "type": "boolean",
+            "title": "Group Style Enabled"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "account",
+          "admins",
+          "auto_accept_friend",
+          "auto_accept_group",
+          "security",
+          "taken_name",
+          "drunk",
+          "disabled_plugins",
+          "community_roster_show_qq",
+          "persona",
+          "account_profile_effective",
+          "group_style_enabled"
+        ],
+        "title": "BotConfigPublicData"
       },
       "BotFavoritesUpdate": {
         "properties": {
@@ -32468,6 +32605,205 @@
         ],
         "title": "InjectionGovernanceManageRequest"
       },
+      "InstanceBotProfileData": {
+        "properties": {
+          "nickname": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nickname"
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "connection_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Key"
+          },
+          "adapter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Adapter"
+          },
+          "shard_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shard Id"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "InstanceBotProfileData"
+      },
+      "InstanceBotRow": {
+        "properties": {
+          "connection_key": {
+            "type": "string",
+            "title": "Connection Key"
+          },
+          "self_id": {
+            "type": "string",
+            "title": "Self Id"
+          },
+          "adapter": {
+            "type": "string",
+            "title": "Adapter"
+          },
+          "connected_at_unix": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connected At Unix"
+          },
+          "ws_port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ws Port"
+          },
+          "shard_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shard Id"
+          },
+          "nickname": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nickname"
+          },
+          "online": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Online"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "connection_key",
+          "self_id",
+          "adapter"
+        ],
+        "title": "InstanceBotRow"
+      },
+      "InstancesData": {
+        "properties": {
+          "nonebot_bots": {
+            "items": {
+              "$ref": "#/components/schemas/InstanceBotRow"
+            },
+            "type": "array",
+            "title": "Nonebot Bots"
+          },
+          "db_bot_configs": {
+            "items": {
+              "$ref": "#/components/schemas/BotConfigPublicData"
+            },
+            "type": "array",
+            "title": "Db Bot Configs"
+          },
+          "pallas_protocol": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PallasProtocolSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "protocol_extension": {
+            "$ref": "#/components/schemas/ProtocolExtensionStatusData"
+          },
+          "bot_profiles": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/InstanceBotProfileData"
+            },
+            "type": "object",
+            "title": "Bot Profiles"
+          },
+          "napcat": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PallasProtocolSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "nonebot_bots",
+          "db_bot_configs",
+          "pallas_protocol",
+          "protocol_extension",
+          "bot_profiles"
+        ],
+        "title": "InstancesData"
+      },
       "LifecycleCatalogModel": {
         "properties": {
           "backend": {
@@ -33084,6 +33420,491 @@
         "type": "object",
         "title": "MessageLengthDistribution"
       },
+      "PallasProtocolSnapshot": {
+        "properties": {
+          "plugin": {
+            "type": "string",
+            "title": "Plugin"
+          },
+          "webui_enabled": {
+            "type": "boolean",
+            "title": "Webui Enabled"
+          },
+          "webui_path": {
+            "type": "string",
+            "title": "Webui Path"
+          },
+          "console_auth_configured": {
+            "type": "boolean",
+            "title": "Console Auth Configured"
+          },
+          "accounts": {
+            "items": {
+              "$ref": "#/components/schemas/ProtocolAccountSnapshot"
+            },
+            "type": "array",
+            "title": "Accounts"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "plugin",
+          "webui_enabled",
+          "webui_path",
+          "console_auth_configured",
+          "accounts"
+        ],
+        "title": "PallasProtocolSnapshot"
+      },
+      "PluginCatalogMetadata": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "usage": {
+            "type": "string",
+            "title": "Usage",
+            "default": ""
+          },
+          "extra": {
+            "title": "Extra"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "default": ""
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "PluginCatalogMetadata"
+      },
+      "PluginCatalogRow": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "nb_plugin_name": {
+            "type": "string",
+            "title": "Nb Plugin Name"
+          },
+          "module": {
+            "type": "string",
+            "title": "Module"
+          },
+          "resolved_plugin_id": {
+            "type": "string",
+            "title": "Resolved Plugin Id"
+          },
+          "resolved_module": {
+            "type": "string",
+            "title": "Resolved Module"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PluginCatalogMetadata"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "load_role": {
+            "type": "string",
+            "title": "Load Role"
+          },
+          "loaded_in_process": {
+            "type": "boolean",
+            "title": "Loaded In Process"
+          },
+          "has_config": {
+            "type": "boolean",
+            "title": "Has Config"
+          },
+          "configurable": {
+            "type": "boolean",
+            "title": "Configurable"
+          },
+          "help_visible": {
+            "type": "boolean",
+            "title": "Help Visible"
+          },
+          "help_ignored": {
+            "type": "boolean",
+            "title": "Help Ignored"
+          },
+          "help_hidden": {
+            "type": "boolean",
+            "title": "Help Hidden"
+          },
+          "globally_disabled": {
+            "type": "boolean",
+            "title": "Globally Disabled"
+          },
+          "global_disable_protected": {
+            "type": "boolean",
+            "title": "Global Disable Protected"
+          },
+          "plugin_source": {
+            "type": "string",
+            "title": "Plugin Source"
+          },
+          "plugin_source_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugin Source Dir"
+          },
+          "plugin_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugin Version"
+          },
+          "extra_package": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra Package"
+          },
+          "uninstallable": {
+            "type": "boolean",
+            "title": "Uninstallable"
+          },
+          "uninstall_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uninstall Kind"
+          },
+          "uninstall_target": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uninstall Target"
+          },
+          "deps_missing": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Deps Missing"
+          },
+          "avatar": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar"
+          },
+          "icon": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon"
+          },
+          "cover": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover"
+          },
+          "catalog_process_role": {
+            "type": "string",
+            "title": "Catalog Process Role"
+          },
+          "expected_in_catalog_process": {
+            "type": "boolean",
+            "title": "Expected In Catalog Process"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "name",
+          "nb_plugin_name",
+          "module",
+          "resolved_plugin_id",
+          "resolved_module",
+          "metadata",
+          "load_role",
+          "loaded_in_process",
+          "has_config",
+          "configurable",
+          "help_visible",
+          "help_ignored",
+          "help_hidden",
+          "globally_disabled",
+          "global_disable_protected",
+          "plugin_source",
+          "plugin_source_dir",
+          "plugin_version",
+          "extra_package",
+          "uninstallable",
+          "uninstall_kind",
+          "uninstall_target",
+          "deps_missing",
+          "avatar",
+          "icon",
+          "cover",
+          "catalog_process_role",
+          "expected_in_catalog_process"
+        ],
+        "title": "PluginCatalogRow"
+      },
+      "PluginCommandLimitCommandData": {
+        "properties": {
+          "command_id": {
+            "type": "string",
+            "title": "Command Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "default_cd_sec": {
+            "type": "integer",
+            "title": "Default Cd Sec"
+          },
+          "effective_cd_sec": {
+            "type": "integer",
+            "title": "Effective Cd Sec"
+          },
+          "trigger_condition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Condition"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "command_id",
+          "label",
+          "default_cd_sec",
+          "effective_cd_sec"
+        ],
+        "title": "PluginCommandLimitCommandData"
+      },
+      "PluginCommandLimitPluginData": {
+        "properties": {
+          "plugin": {
+            "type": "string",
+            "title": "Plugin"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "commands": {
+            "items": {
+              "$ref": "#/components/schemas/PluginCommandLimitCommandData"
+            },
+            "type": "array",
+            "title": "Commands"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "plugin",
+          "title",
+          "commands"
+        ],
+        "title": "PluginCommandLimitPluginData"
+      },
+      "PluginCommandLimitsUiData": {
+        "properties": {
+          "plugins": {
+            "items": {
+              "$ref": "#/components/schemas/PluginCommandLimitPluginData"
+            },
+            "type": "array",
+            "title": "Plugins"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "plugins"
+        ],
+        "title": "PluginCommandLimitsUiData"
+      },
+      "PluginCommandPermCommandData": {
+        "properties": {
+          "command_id": {
+            "type": "string",
+            "title": "Command Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "default_level": {
+            "type": "string",
+            "title": "Default Level"
+          },
+          "effective_level": {
+            "type": "string",
+            "title": "Effective Level"
+          },
+          "trigger_condition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Condition"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "command_id",
+          "label",
+          "default_level",
+          "effective_level"
+        ],
+        "title": "PluginCommandPermCommandData"
+      },
+      "PluginCommandPermLevelData": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "PluginCommandPermLevelData"
+      },
+      "PluginCommandPermPluginData": {
+        "properties": {
+          "plugin": {
+            "type": "string",
+            "title": "Plugin"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "commands": {
+            "items": {
+              "$ref": "#/components/schemas/PluginCommandPermCommandData"
+            },
+            "type": "array",
+            "title": "Commands"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "plugin",
+          "title",
+          "commands"
+        ],
+        "title": "PluginCommandPermPluginData"
+      },
+      "PluginCommandPermUiData": {
+        "properties": {
+          "levels": {
+            "items": {
+              "$ref": "#/components/schemas/PluginCommandPermLevelData"
+            },
+            "type": "array",
+            "title": "Levels"
+          },
+          "plugins": {
+            "items": {
+              "$ref": "#/components/schemas/PluginCommandPermPluginData"
+            },
+            "type": "array",
+            "title": "Plugins"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "levels",
+          "plugins"
+        ],
+        "title": "PluginCommandPermUiData"
+      },
       "PluginConfigData": {
         "properties": {
           "plugin": {
@@ -33097,26 +33918,21 @@
           },
           "fields": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/PluginConfigFieldData"
             },
             "type": "array",
             "title": "Fields"
           },
           "unexpected_keys": {
             "items": {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/PluginConfigUnexpectedKeyData"
             },
             "type": "array",
             "title": "Unexpected Keys"
           },
           "field_groups": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/PluginConfigFieldGroupData"
             },
             "type": "array",
             "title": "Field Groups"
@@ -33179,16 +33995,74 @@
           "command_perm_ui": {
             "anyOf": [
               {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/PluginCommandPermUiData"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Command Perm Ui"
+            ]
           },
           "command_limits_ui": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PluginCommandLimitsUiData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "plugin",
+          "fields"
+        ],
+        "title": "PluginConfigData",
+        "description": "插件 / 通用配置表单载荷。须声明 field_groups 等扩展键，否则 GET 的 response_model 会剥掉分组。"
+      },
+      "PluginConfigFieldData": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "kind": {
+            "type": "string",
+            "title": "Kind"
+          },
+          "required": {
+            "type": "boolean",
+            "title": "Required"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "env_key": {
+            "type": "string",
+            "title": "Env Key"
+          },
+          "default": {
+            "title": "Default"
+          },
+          "current": {
+            "title": "Current"
+          },
+          "ui_group": {
+            "title": "Ui Group"
+          },
+          "ui_order": {
+            "title": "Ui Order"
+          },
+          "ui_hidden": {
+            "title": "Ui Hidden"
+          },
+          "ui_widget": {
+            "title": "Ui Widget"
+          },
+          "ui_gateway": {
             "anyOf": [
               {
                 "additionalProperties": true,
@@ -33198,16 +34072,48 @@
                 "type": "null"
               }
             ],
-            "title": "Command Limits Ui"
+            "title": "Ui Gateway"
           }
         },
         "additionalProperties": true,
         "type": "object",
         "required": [
-          "plugin"
+          "name",
+          "kind",
+          "required",
+          "description",
+          "env_key",
+          "default",
+          "current"
         ],
-        "title": "PluginConfigData",
-        "description": "插件 / 通用配置表单载荷。须声明 field_groups 等扩展键，否则 GET 的 response_model 会剥掉分组。"
+        "title": "PluginConfigFieldData"
+      },
+      "PluginConfigFieldGroupData": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "field_names": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Field Names"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "field_names"
+        ],
+        "title": "PluginConfigFieldGroupData"
       },
       "PluginConfigRawData": {
         "properties": {
@@ -33220,6 +34126,98 @@
         "type": "object",
         "title": "PluginConfigRawData"
       },
+      "PluginConfigUnexpectedKeyData": {
+        "properties": {
+          "env_key": {
+            "type": "string",
+            "title": "Env Key"
+          },
+          "value_preview": {
+            "type": "string",
+            "title": "Value Preview"
+          }
+        },
+        "type": "object",
+        "required": [
+          "env_key",
+          "value_preview"
+        ],
+        "title": "PluginConfigUnexpectedKeyData"
+      },
+      "PluginGovernanceCommandData": {
+        "properties": {
+          "command_id": {
+            "type": "string",
+            "title": "Command Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "trigger_condition": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Condition"
+          },
+          "default_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Level"
+          },
+          "effective_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Level"
+          },
+          "default_cd_sec": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Cd Sec"
+          },
+          "effective_cd_sec": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective Cd Sec"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "command_id",
+          "label"
+        ],
+        "title": "PluginGovernanceCommandData"
+      },
       "PluginGovernanceData": {
         "properties": {
           "plugin": {
@@ -33228,21 +34226,18 @@
           },
           "title": {
             "type": "string",
-            "title": "Title",
-            "default": ""
+            "title": "Title"
           },
           "commands": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/PluginGovernanceCommandData"
             },
             "type": "array",
             "title": "Commands"
           },
           "menu_items": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/PluginGovernanceMenuItemData"
             },
             "type": "array",
             "title": "Menu Items"
@@ -33251,14 +34246,10 @@
             "$ref": "#/components/schemas/PluginGovernanceRuntimeData"
           },
           "perm_ui_filtered": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Perm Ui Filtered"
+            "$ref": "#/components/schemas/PluginCommandPermUiData"
           },
           "limits_ui_filtered": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Limits Ui Filtered"
+            "$ref": "#/components/schemas/PluginCommandLimitsUiData"
           },
           "blocked_user_ids": {
             "items": {
@@ -33290,43 +34281,286 @@
             "title": "Activation Policy"
           }
         },
+        "additionalProperties": true,
         "type": "object",
         "required": [
           "plugin",
-          "runtime"
+          "title",
+          "commands",
+          "menu_items",
+          "runtime",
+          "perm_ui_filtered",
+          "limits_ui_filtered",
+          "blocked_user_ids",
+          "reload_policy",
+          "activation_policy"
         ],
         "title": "PluginGovernanceData"
+      },
+      "PluginGovernanceMenuItemData": {
+        "properties": {
+          "func": {
+            "title": "Func"
+          },
+          "group": {
+            "title": "Group"
+          },
+          "trigger_method": {
+            "title": "Trigger Method"
+          },
+          "trigger_scene": {
+            "title": "Trigger Scene"
+          },
+          "trigger_condition": {
+            "title": "Trigger Condition"
+          },
+          "brief_des": {
+            "title": "Brief Des"
+          },
+          "detail_des": {
+            "title": "Detail Des"
+          },
+          "command_permission": {
+            "title": "Command Permission"
+          },
+          "command_permissions": {
+            "title": "Command Permissions"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "PluginGovernanceMenuItemData"
       },
       "PluginGovernanceRuntimeData": {
         "properties": {
           "global_disable": {
             "type": "boolean",
-            "title": "Global Disable",
-            "default": false
+            "title": "Global Disable"
           },
           "global_disable_revision": {
             "type": "string",
-            "title": "Global Disable Revision",
-            "default": ""
+            "title": "Global Disable Revision"
           },
           "help_hidden": {
             "type": "boolean",
-            "title": "Help Hidden",
-            "default": false
+            "title": "Help Hidden"
           },
           "global_disable_protected": {
             "type": "boolean",
-            "title": "Global Disable Protected",
-            "default": false
+            "title": "Global Disable Protected"
           },
           "help_ignored": {
             "type": "boolean",
-            "title": "Help Ignored",
-            "default": false
+            "title": "Help Ignored"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "global_disable",
+          "global_disable_revision",
+          "help_hidden",
+          "global_disable_protected",
+          "help_ignored"
+        ],
+        "title": "PluginGovernanceRuntimeData"
+      },
+      "PluginGovernanceUpdateData": {
+        "properties": {
+          "plugin": {
+            "type": "string",
+            "title": "Plugin"
+          },
+          "command_permission_overrides": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Command Permission Overrides"
+          },
+          "command_limit_overrides": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Command Limit Overrides"
+          },
+          "blocked_user_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Blocked User Ids"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/PluginGovernanceUpdateRuntimeData"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "plugin",
+          "command_permission_overrides",
+          "command_limit_overrides",
+          "blocked_user_ids",
+          "runtime"
+        ],
+        "title": "PluginGovernanceUpdateData"
+      },
+      "PluginGovernanceUpdateRuntimeData": {
+        "properties": {
+          "global_disable": {
+            "type": "boolean",
+            "title": "Global Disable"
+          },
+          "global_disable_revision": {
+            "type": "string",
+            "title": "Global Disable Revision"
+          },
+          "help_hidden": {
+            "type": "boolean",
+            "title": "Help Hidden"
           }
         },
         "type": "object",
-        "title": "PluginGovernanceRuntimeData"
+        "required": [
+          "global_disable",
+          "global_disable_revision",
+          "help_hidden"
+        ],
+        "title": "PluginGovernanceUpdateRuntimeData"
+      },
+      "ProtocolAccountSnapshot": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
+          "qq": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qq"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "webui_port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Webui Port"
+          },
+          "ws_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ws Url"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "ProtocolAccountSnapshot"
+      },
+      "ProtocolExtensionStatusData": {
+        "properties": {
+          "installed": {
+            "type": "boolean",
+            "title": "Installed"
+          },
+          "package": {
+            "type": "string",
+            "title": "Package"
+          },
+          "uv_extra": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Uv Extra"
+          },
+          "install_cli": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Install Cli"
+          },
+          "activation_policy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Activation Policy"
+          },
+          "repository_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Repository Url"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "installed",
+          "package",
+          "uv_extra",
+          "install_cli",
+          "activation_policy",
+          "repository_url"
+        ],
+        "title": "ProtocolExtensionStatusData"
       },
       "SemanticExamplesSummary": {
         "properties": {
@@ -34148,6 +35382,28 @@
         ],
         "title": "_ApiOkResponse[IngressDispatchHistoryData]"
       },
+      "_ApiOkResponse_InstancesData_": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/InstancesData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "_ApiOkResponse[InstancesData]"
+      },
       "_ApiOkResponse_LogsData_": {
         "properties": {
           "ok": {
@@ -34235,6 +35491,28 @@
           "data"
         ],
         "title": "_ApiOkResponse[PluginGovernanceData]"
+      },
+      "_ApiOkResponse_PluginGovernanceUpdateData_": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "$ref": "#/components/schemas/PluginGovernanceUpdateData"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "_ApiOkResponse[PluginGovernanceUpdateData]"
       },
       "_ApiOkResponse_ShardObservabilityData_": {
         "properties": {
@@ -34672,6 +35950,32 @@
           "data"
         ],
         "title": "_ApiOkResponse[_StickerLabelOverviewData]"
+      },
+      "_ApiOkResponse_list_PluginCatalogRow__": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "const": true,
+            "title": "Ok",
+            "default": true
+          },
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/PluginCatalogRow"
+            },
+            "type": "array",
+            "title": "Data"
+          },
+          "error": {
+            "type": "null",
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "_ApiOkResponse[list[PluginCatalogRow]]"
       },
       "_BasePromptEnabledBody": {
         "properties": {
