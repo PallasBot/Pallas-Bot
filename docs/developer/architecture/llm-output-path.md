@@ -47,11 +47,13 @@ Repeater 回放入站消息时优先将 OneBot `original_message`（入站结构
 | 多气泡投递 | `delivery.py` `deliver_llm_callback_success` | 每个气泡发送前复核 live 开关；返回 `DeliveryOutcome`，`sent` / `partial` / `failed` / `silent` 由真实回执推导。部分发送保留已发事实且不写完整会话历史；气泡间按上句长度叠加随机抖动（0.5~3.5s） |
 | 学习回写 | 会话 / `behavior_store` / `repeater_feedback` / `auto_episode` | 投递成功后写历史、行为与表达 |
 
+发送队列的 `errors` 与 `errors_by_operation` 统计每次失败的适配器调用；重试后最终成功仍会保留先前失败次数。`message`、`interaction`、`other` 分桶用于区分正文投递、表情 / 戳一戳等互动和未分类 API，不等价于最终投递结果；`DeliveryOutcome` 仍按真实回执判断。
+
 LLM 回调的文本发送会用异步上下文标记来源，供 `BaseBot.on_called_api` 的普通表情跟随后续任务继承；结构化表情走同一来源标记。LLM 来源在取图前及缓存读取后、实际发图前复核共享出口门禁。视觉表情任务将可选 `delivery.llm_origin` 持久化，work handler 与最终 dispatcher 继续检查；关闸时以固定原因落为 `failed`，不伪报 `sent`。缺少来源标记的既有视觉任务和 Repeater 发送保持原行为。
 
 ## LLM turn telemetry
 
-LLM turn telemetry 从消息进入 `llm_chat` handler 后开始，以随机 `turn_id` 关联 `ingress`、speak perception、reply gate、necessity、submit、Provider、output 和 delivery 各阶段。首期不覆盖完全未匹配 `llm_chat` rule 的入站消息，也不改变任何门控、生成或投递决策。
+LLM turn telemetry 从消息进入 `llm_chat` handler 后开始，以随机 `turn_id` 关联 `ingress`、speak perception、reply gate、necessity、submit、Provider、output 和 delivery 各阶段。Provider 保持空可用输出校验，并仅按协议结构把失败归为固定类别；拒绝、纯思考、截断、失败、无输出及未知原因不会把上游正文写入事件或作为 Bot 答复。首期不覆盖完全未匹配 `llm_chat` rule 的入站消息，也不改变任何门控、生成或投递决策。
 
 事件写入独立的 `data/pb_webui/llm_telemetry/` JSONL 文件，并由按日 report 聚合。事件只保留固定 allowlist、文本形态与长度分桶，以及运行时 HMAC hash；不写入用户消息、Bot 回复、prompt、异常正文或原始 Bot/群/用户/消息 ID。`turn_id` 会随异步 TaskManager metadata 贯穿到 Provider 和 callback delivery。数值延迟分别表示上下文装配、每次 Provider 请求、任务登记至首条成功发送的文本气泡（不含进度泡）及投递入口至最后一次文本气泡发送尝试；发送队列等待目前无法按 LLM 请求拆分，保持未知。旧事件缺少新字段时不回填为 0。
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -36,6 +37,8 @@ _STATS = {
     "risk_cooldowns": 0,
     "depth": 0,
 }
+_ERROR_OPERATIONS = ("message", "interaction", "other")
+_ERRORS_BY_OPERATION = dict.fromkeys(_ERROR_OPERATIONS, 0)
 _ERROR_DIMENSION_LIMIT = 16
 _ERRORS_BY_API: dict[str, int] = {}
 _ERRORS_BY_CLASS: dict[str, int] = {}
@@ -201,6 +204,7 @@ def send_queue_status() -> dict[str, Any]:
         **dict(_STATS),
         "errors_by_api": dict(_ERRORS_BY_API),
         "errors_by_class": dict(_ERRORS_BY_CLASS),
+        "errors_by_operation": dict(_ERRORS_BY_OPERATION),
         "errors_by_retcode": dict(_ERRORS_BY_RETCODE),
         "errors_by_reason": dict(_ERRORS_BY_REASON),
         "last_error": last_error,
@@ -215,6 +219,8 @@ def reset_send_queue_for_tests() -> None:
     _ORIGINAL_CALL_API = None
     for key in _STATS:
         _STATS[key] = 0
+    for key in _ERRORS_BY_OPERATION:
+        _ERRORS_BY_OPERATION[key] = 0
     _ERRORS_BY_API.clear()
     _ERRORS_BY_CLASS.clear()
     _ERRORS_BY_RETCODE.clear()
@@ -227,30 +233,86 @@ def reset_send_queue_for_tests() -> None:
     _RETRY_COUNTS.clear()
 
 
-def classify_send_queue_error(api: str, exc: Exception) -> str:
-    info = getattr(exc, "info", None)
-    detail = ""
-    if isinstance(info, dict):
-        detail = " ".join(str(info.get(key) or "") for key in ("message", "wording", "msg")).lower()
-    if api == "set_msg_emoji_like" and ("already set" in detail or "已经设置过" in detail or "65002" in detail):
-        return "already_reacted"
-    if api == "set_msg_emoji_like" and "message not found" in detail:
-        return "message_not_found"
-    if api in _HIGH_PRIORITY_APIS and (
+def _classify_interaction_send_error(api: str, detail: str, compact: str) -> str | None:
+    if api == "set_msg_emoji_like":
+        if "already set" in detail or "alreadyset" in compact or "已经设置过" in detail or "65002" in detail:
+            return "already_reacted"
+        if "oidb0x9082_1" in compact and any(
+            marker in detail for marker in ("downstream group authentication failed", "下游群鉴权失败")
+        ):
+            return "interaction_auth_failed"
+        if "message not found" in detail:
+            return "message_not_found"
+    if api == "group_poke" and (
+        "process_nudge" in detail
+        and "0xed3_1" in compact
+        and re.search(r"\b(?:code\s*[:=]?\s*|error\s+)(?:1007|1004|1002)\b", detail)
+    ):
+        return "poke_rejected"
+    return None
+
+
+def _classify_message_send_error(api: str, retcode: Any, detail: str, compact: str) -> str | None:
+    if api not in _HIGH_PRIORITY_APIS:
+        return None
+    if (
         'message element "markdown" field "text" must not be empty' in detail
         or 'message segment "mface" is missing required or usable fields' in detail
         or 'message element "mface" field "emojiid" must be exactly 32 hexadecimal characters' in detail
     ):
         return "invalid_message_payload"
-    if api in _HIGH_PRIORITY_APIS and ("removed from the group" in detail or "已被移出该群" in detail):
+    if (
+        "removed from the group" in detail
+        or "moved out of the group" in detail
+        or "已被移出该群" in detail
+        or (retcode == 110 and "group" in detail and "moved out" in detail)
+    ):
         return "bot_not_in_group"
-    if api in _HIGH_PRIORITY_APIS and "http download failed" in detail:
+    empty_err = "empty err" in detail or detail.rstrip().endswith(("err=", "err:", 'err=""', "err=''"))
+    if (
+        api == "send_group_msg"
+        and (retcode == 120 or re.search(r"\bresult\s*[:=]?\s*120\b", detail))
+        and "sendgroupmessagerejected" in compact
+        and empty_err
+    ):
+        return "message_rejected"
+    if (
+        (retcode == 103 or re.search(r"\bresult\s*[:=]?\s*103\b", detail))
+        and any(marker in detail for marker in ("temporary session", "temp session", "临时会话"))
+        and any(marker in detail for marker in ("group owner", "群主"))
+        and any(marker in detail for marker in ("forbid", "not allowed", "禁止"))
+    ):
+        return "temporary_session_forbidden"
+    if "http download failed" in detail:
         return "media_download_failed"
+    return None
+
+
+def classify_send_queue_error(api: str, exc: Exception) -> str:
+    info = getattr(exc, "info", None)
+    detail = ""
+    if isinstance(info, dict):
+        detail = " ".join(str(info.get(key) or "") for key in ("message", "wording", "msg")).lower()
+    compact = "".join(detail.split())
+    retcode = info.get("retcode") if isinstance(info, dict) else None
+    return (
+        _classify_interaction_send_error(api, detail, compact)
+        or _classify_message_send_error(api, retcode, detail, compact)
+        or "other"
+    )
+
+
+def send_queue_error_operation(api: str) -> str:
+    if api in _HIGH_PRIORITY_APIS:
+        return "message"
+    if api in _DROPPABLE_APIS or api == "group_poke":
+        return "interaction"
     return "other"
 
 
 def record_send_queue_error(api: str, exc: Exception) -> None:
     global _LAST_ERROR, _LAST_ERROR_AT
+    _STATS["errors"] += 1
     error_class = type(exc).__name__
     info = getattr(exc, "info", None)
     retcode = info.get("retcode") if isinstance(info, dict) else None
@@ -265,6 +327,8 @@ def record_send_queue_error(api: str, exc: Exception) -> None:
 
     increment(_ERRORS_BY_API, str(api))
     increment(_ERRORS_BY_CLASS, error_class)
+    operation = send_queue_error_operation(api)
+    _ERRORS_BY_OPERATION[operation] += 1
     if retcode is not None:
         increment(_ERRORS_BY_RETCODE, str(retcode))
     increment(_ERRORS_BY_REASON, reason)
@@ -436,7 +500,6 @@ async def _execute_queue_item(item: SendQueueItem) -> None:
     except Exception as exc:
         if item.completed:
             return
-        _STATS["errors"] += 1
         record_send_queue_error(item.api, exc)
         retryable = is_retryable_send_error(item.api, exc) or is_risk_limited_send_error(item.api, exc)
         if (

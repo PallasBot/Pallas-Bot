@@ -230,6 +230,7 @@ async def test_retries_exhausted_then_fails(monkeypatch: pytest.MonkeyPatch) -> 
     status = send_queue.send_queue_status()
     assert status["retries"] == 2
     assert status["errors"] == 3
+    assert status["errors_by_operation"] == {"message": 3, "interaction": 0, "other": 0}
     await send_queue.stop_send_queue_workers()
 
 
