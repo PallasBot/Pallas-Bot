@@ -239,7 +239,8 @@ async def ingress_group_message_gate(bot, event) -> None:
                 record_ingress_early_discard("not_at_target")
             raise IgnoredException("not at-target bot")
 
-        safe_before_host_gates = ingress_once_claim_safe_before_host_gates(
+        safe_before_host_gates = await asyncio.to_thread(
+            ingress_once_claim_safe_before_host_gates,
             int(event.group_id),
             plain,
             at_fleet_bot=at_fleet,
@@ -251,7 +252,8 @@ async def ingress_group_message_gate(bot, event) -> None:
         )
 
         alias_matched_bot_ids = fleet_bots_matching_plain(plain)
-        alias_target_is_hosted = hosted_activity_claim_is_hosted(
+        alias_target_is_hosted = await asyncio.to_thread(
+            hosted_activity_claim_is_hosted,
             int(event.group_id),
             plain,
             at_fleet_bot=at_fleet,
@@ -279,7 +281,8 @@ async def ingress_group_message_gate(bot, event) -> None:
                     record_ingress_claim(won=False)
                 raise IgnoredException(str(err)) from err
 
-        if not hosted_activity_ingress_passes(
+        if not await asyncio.to_thread(
+            hosted_activity_ingress_passes,
             self_id,
             int(event.group_id),
             plain,
