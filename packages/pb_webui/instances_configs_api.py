@@ -13,6 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from pallas.product.persona.account_profile import AccountPersonaProfile  # noqa: TC001
 
+from .console_openapi_models import InstancesData as _InstancesData
+from .console_openapi_models import _ApiOkResponse
 from .console_read_cache import cached_read, drop_read_cache
 from .extended_common import (
     check_pallas_write_token,
@@ -265,7 +267,11 @@ def register_instances_configs_router(
 ) -> None:
     """Register console routes."""
 
-    @router.get(f"{x}/instances", include_in_schema=True)
+    @router.get(
+        f"{x}/instances",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_InstancesData],
+    )
     async def _instances() -> JSONResponse:
         try:
             payload = await cached_read(

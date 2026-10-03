@@ -17,6 +17,7 @@ from packages.pb_webui.console_openapi_models import (
 from packages.pb_webui.console_openapi_models import (
     _ApiOkResponse,
 )
+from packages.pb_webui.console_openapi_models import plugin_config_response as _plugin_config_response
 from pallas.product.llm.ops_api import BehaviorPattern, BehaviorScene, ensure_default_behavior_patterns
 from pallas.product.persona.account_profile import AccountPersonaProfile
 
@@ -503,7 +504,11 @@ def register_common_config_router(
 
         return JSONResponse({"ok": True, "data": list_webui_env_sections()})
 
-    @router.get(f"{x}/common-config/{{section_id}}", include_in_schema=True)
+    @router.get(
+        f"{x}/common-config/{{section_id}}",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_PluginConfigData],
+    )
     async def _common_config_get(section_id: str) -> JSONResponse:
         from pallas.console.webui.env_sections import webui_env_section_payload
 
@@ -513,7 +518,11 @@ def register_common_config_router(
             raise HTTPException(status_code=404, detail=str(e)) from e
         return JSONResponse({"ok": True, "data": data})
 
-    @router.put(f"{x}/common-config/{{section_id}}", include_in_schema=True)
+    @router.put(
+        f"{x}/common-config/{{section_id}}",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_PluginConfigData],
+    )
     async def _common_config_put(
         section_id: str,
         body: CommonConfigSectionPatchBody,
@@ -548,7 +557,8 @@ def register_common_config_router(
     @router.put(
         f"{x}/common-config/{{section_id}}/raw",
         include_in_schema=True,
-        response_model=_ApiOkResponse[_PluginConfigData],
+        response_model=None,
+        responses={200: {"model": _ApiOkResponse[_PluginConfigData]}},
     )
     async def _common_config_raw_put(
         section_id: str,
@@ -563,7 +573,7 @@ def register_common_config_router(
             data = apply_webui_env_section_raw_toml(section_id, str(body.toml or ""))
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
-        return {"ok": True, "data": data}
+        return _plugin_config_response(data)
 
     @router.post(
         f"{x}/common-config/service_gateways/connectivity-check",
