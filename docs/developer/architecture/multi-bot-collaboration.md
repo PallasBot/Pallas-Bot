@@ -54,8 +54,8 @@ worker 的 WS 连接状态：
 同一个 federate 池内多个 deployment（各可持多牛）在同一群协作，**全基于 Redis TTL 心跳发布 + SCAN 前缀发现**，无清单式名单。
 
 - **配置**：`PALLAS_FEDERATE_ID`、`PALLAS_FEDERATE_INGRESS_ENABLED`（auto：有 ID 即开）、`PALLAS_FEDERATE_INGRESS_BYPASS_UNIFIED`（单进程时跳过）、`PALLAS_FEDERATE_REDIS_PREFIX`、`PALLAS_FEDERATE_OWNER_ROTATE_SEC`（默认 7200）、`PALLAS_FEDERATE_PREFER_LOCAL_OWNER`（默认关）。`PALLAS_CONTROL_PLANE_ENABLED=false` 禁用联邦。coord Redis URL：显式 `PALLAS_FEDERATE_COORD_REDIS_URL` → bootstrap 落盘 → 无则禁用；`federate_redis_prefix()`：bootstrap coord prefix → 显式 prefix → `pallas:fed:{safe_fid}`。
-- **peer 名册**：心跳发布 `publish_local_federate_peer_bot_ids_sync`（SET ex=180s，最小 60），payload 含 `bot_ids / online_bot_ids / public_bot_ids / public_online_bot_names / present_group_ids / group_admin_bot_ids / command_capabilities / command_permission_levels / capability_protocol(v2) / ingress_protocol(v2) / ingress_capabilities`；对端 SCAN `pallas:fed:*:peer_bots:*` 解析。同步循环默认每 60s；连接钩子与启动即时同步。
-- **在场群**：`touch_federate_present_group` 每群消息 touch 写 ZSET（score=时间戳，窗口默认 300s、上限 2000）。
+- **peer 名册**：心跳发布 `publish_local_federate_peer_bot_ids_sync`（SET ex=180s，最小 60），payload 含 `bot_ids / online_bot_ids / public_bot_ids / public_online_bot_names / present_group_ids / group_admin_bot_ids / command_capabilities / command_permission_levels / capability_protocol(v2) / ingress_protocol(v2) / ingress_capabilities`；对端 SCAN `pallas:fed:*:peer_bots:*` 解析。同步循环默认每 60s；连接钩子与启动触发共享刷新，刷新中新增变化合并为后续一轮。Redis 发布、SCAN 与共同在场读取都在线程中执行，异步入口不阻塞事件循环；失败保留最后一次成功的对端缓存。关闭时拒绝新后台触发，关闭期触碰仅更新本地窗口且不保证远端可见；用世代隔离晚返回，并等待在途刷新和线程 I/O 结束。线程 I/O 不可强杀，关闭耗时取决于其返回时间，不保证 3 秒内完成。
+- **在场群**：`touch_federate_present_group` 收到消息时立即更新本地窗口，再将远端 ZSET touch 合并到单 writer；pending 总量及每批均不超过 `_PRESENT_GROUP_PUBLISH_CAP`，按群合并最新时间并清除过期项。超量时丢弃最旧的待写观察：本地在场不丢，但被挤出的群不会即时进入远端 ZSET，后续消息/心跳可再次传播；只有实测该上限造成影响时才考虑 spill/backpressure。保留每群远端降频，线程只执行 Redis I/O。
 - **公开面**：`get_federate_peer_bot_ids`、`get_federate_bot_rosters`（WebUI 多机协同页）、`federate_peer_bot_ids_contains(qq)`（友军互认）、`federate_peer_declared_command_plaintext(plain)`（对端宣告能力覆盖时当命令流量）。
 
 ### 群归属（命令路由）

@@ -18,6 +18,7 @@ from pallas.core.platform.federate.peer_bots import (
     should_process_federate_group_on_current_deployment,
     should_yield_federate_ingress_for_peer_command,
     start_federate_peer_bot_sync_loop,
+    stop_federate_peer_bot_sync_loop,
     sync_federate_peer_bot_roster,
     touch_federate_present_group,
 )
@@ -432,5 +433,9 @@ def register_ingress_gate_runtime() -> None:
     @driver.on_startup
     async def ingress_gate_startup_log() -> None:
         await log_ingress_gate_startup()
+
+    @driver.on_shutdown
+    async def federate_peer_sync_shutdown() -> None:
+        await stop_federate_peer_bot_sync_loop()
 
     _GATE_REGISTERED = True

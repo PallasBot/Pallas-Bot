@@ -8,6 +8,8 @@ import json
 import os
 import time
 from dataclasses import dataclass, field
+from itertools import islice
+from operator import itemgetter
 from typing import Any
 
 from nonebot import logger
@@ -15,9 +17,11 @@ from nonebot import logger
 from pallas.core.foundation.command_prefix import matches_command_prefix
 from pallas.core.platform.federate.config import (
     federate_ingress_active,
+    federate_ingress_enabled,
     federate_owner_rotate_sec,
     federate_prefer_local_owner,
     federate_redis_prefix,
+    resolved_federate_id,
 )
 from pallas.core.platform.federate.deployment import load_or_create_deployment_id
 from pallas.core.platform.federate.redis_settings import get_federate_redis_client
@@ -83,6 +87,13 @@ _local_command_permission_levels_cache: dict[str, str] | None = None
 _local_command_plaintext_to_id_cache: dict[str, str] | None = None
 _cache_updated_mono: float = 0.0
 _sync_task: asyncio.Task[None] | None = None
+_roster_sync_task: asyncio.Task[None] | None = None
+_roster_sync_running = False
+_roster_sync_requested = False
+_roster_sync_generation = 0
+_federate_peer_sync_stopping = False
+_present_touch_task: asyncio.Task[None] | None = None
+_pending_present_group_touches: dict[int, float] = {}
 _last_incompatible_capability_peers: tuple[str, ...] = ()
 _last_incompatible_ingress_peers: tuple[str, ...] = ()
 
@@ -96,6 +107,20 @@ class FederatePeerBotRoster:
     online_bot_ids: frozenset[int] | None
     public_bot_ids: frozenset[int]
     public_online_bot_names: dict[int, str] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class _FederatePeerBotCacheSnapshot:
+    ids: frozenset[int]
+    deployment_ids: frozenset[str]
+    capabilities: dict[str, frozenset[str] | None]
+    capability_protocols: dict[str, int | None]
+    permission_levels: dict[str, dict[str, str] | None]
+    ingress_capabilities: dict[str, frozenset[str] | None]
+    ingress_protocols: dict[str, int | None]
+    present_groups: dict[str, frozenset[int] | None]
+    group_admin_bot_ids: dict[str, dict[int, frozenset[int]] | None]
+    rosters: dict[str, FederatePeerBotRoster]
 
 
 def clear_federate_peer_bot_cache_for_tests() -> None:
@@ -118,7 +143,9 @@ def clear_federate_peer_bot_cache_for_tests() -> None:
         _cache_updated_mono, \
         _local_present_groups, \
         _last_remote_present_touch_ts, \
-        _sync_task, \
+        _roster_sync_generation, \
+        _roster_sync_requested, \
+        _federate_peer_sync_stopping, \
         _last_incompatible_capability_peers, \
         _last_incompatible_ingress_peers
     _cache_ids = frozenset()
@@ -139,9 +166,13 @@ def clear_federate_peer_bot_cache_for_tests() -> None:
     _local_command_permission_levels_cache = None
     _local_command_plaintext_to_id_cache = None
     _cache_updated_mono = 0.0
-    _sync_task = None
+    _roster_sync_generation += 1
+    _roster_sync_requested = False
     _last_incompatible_capability_peers = ()
     _last_incompatible_ingress_peers = ()
+    _pending_present_group_touches.clear()
+    if not any(task is not None and not task.done() for task in (_sync_task, _roster_sync_task, _present_touch_task)):
+        _federate_peer_sync_stopping = False
 
 
 def clear_local_federate_metadata_cache() -> None:
@@ -494,42 +525,109 @@ def touch_federate_present_group(group_id: int) -> None:
     stale = [g for g, ts in _local_present_groups.items() if ts < cutoff]
     for g in stale:
         _local_present_groups.pop(g, None)
+        _pending_present_group_touches.pop(g, None)
 
-    # 远端写按群降频：成功后每群至多每降频间隔写一次，其余只更新本地在场表。
-    # 在场窗口（默认 300s）远大于该间隔，语义不受影响，避免热路径同步网络往返。
+    if _federate_peer_sync_stopping:
+        return
+
+    # 远端写按群尝试降频，其余只更新本地在场表。
+    # 在场窗口（默认 300s）远大于该间隔，语义不受影响，避免热路径网络往返。
     interval = float(_PRESENT_GROUP_REMOTE_TOUCH_INTERVAL_SEC)
+    if len(_last_remote_present_touch_ts) > 4096:
+        cutoff_allow = now - max(float(_PRESENT_GROUP_WINDOW_SEC), interval)
+        for g in [k for k, ts in _last_remote_present_touch_ts.items() if ts < cutoff_allow]:
+            _last_remote_present_touch_ts.pop(g, None)
+    if gid in _pending_present_group_touches:
+        _pending_present_group_touches[gid] = now
+        return
     if now - _last_remote_present_touch_ts.get(gid, 0.0) < interval:
-        if len(_last_remote_present_touch_ts) > 4096:
-            cutoff_allow = now - max(float(_PRESENT_GROUP_WINDOW_SEC), float(_PRESENT_GROUP_REMOTE_TOUCH_INTERVAL_SEC))
-            for g in [k for k, ts in _last_remote_present_touch_ts.items() if ts < cutoff_allow]:
-                _last_remote_present_touch_ts.pop(g, None)
         return
 
-    client = get_federate_redis_client()
-    prefix = federate_redis_prefix()
-    deployment_id = load_or_create_deployment_id().strip().lower()
-    if client is None or not prefix or not deployment_id:
-        return
-    key = federate_present_groups_redis_key(deployment_id)
     try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        _last_remote_present_touch_ts[gid] = now
+        _write_federate_present_group_touches_sync(((gid, now),))
+        return
+
+    # Record the attempt before queueing, so messages during a slow write retain
+    # the same per-group success/failure throttle without creating more work.
+    _last_remote_present_touch_ts[gid] = now
+    _pending_present_group_touches[gid] = now
+    overflow = len(_pending_present_group_touches) - _PRESENT_GROUP_PUBLISH_CAP
+    if overflow > 0:
+        # ponytail: keep the newest published-cap observations; spill only if deferred presence becomes material.
+        oldest = sorted(_pending_present_group_touches.items(), key=itemgetter(1))[:overflow]
+        for dropped, _timestamp in oldest:
+            _pending_present_group_touches.pop(dropped, None)
+
+    global _present_touch_task
+    if _present_touch_task is None or _present_touch_task.done():
+        _present_touch_task = loop.create_task(
+            _drain_federate_present_group_touches(),
+            name="federate_present_group_writer",
+        )
+
+
+def _write_federate_present_group_touches_sync(group_timestamps: tuple[tuple[int, float], ...]) -> bool:
+    if not group_timestamps:
+        return True
+    try:
+        client = get_federate_redis_client()
+        prefix = federate_redis_prefix()
+        deployment_id = load_or_create_deployment_id().strip().lower()
+        if client is None or not prefix or not deployment_id:
+            return False
+        key = federate_present_groups_redis_key(deployment_id)
+        cutoff = time.time() - float(_PRESENT_GROUP_WINDOW_SEC)
         pipe = client.pipeline()
-        pipe.zadd(key, {str(gid): now})
+        pipe.zadd(key, {str(gid): timestamp for gid, timestamp in group_timestamps})
         pipe.zremrangebyscore(key, "-inf", cutoff)
         pipe.expire(key, int(_PRESENT_GROUP_WINDOW_SEC) + int(_PUBLISH_TTL_SEC))
         pipe.execute()
+        return True
     except Exception:
-        # 失败也记录尝试时间：上游抖动时不至于每条消息都同步重试。
-        attempt_ts = _last_remote_present_touch_ts.get(gid, 0.0)
-        _last_remote_present_touch_ts[gid] = max(attempt_ts, now)
-        return
-    _last_remote_present_touch_ts[gid] = now
+        return False
 
 
-def collect_local_present_group_ids() -> list[int]:
+async def _await_federate_thread_io(function: Any, *args: Any, **kwargs: Any) -> Any:
+    work = asyncio.create_task(asyncio.to_thread(function, *args, **kwargs))
+    while True:
+        try:
+            return await asyncio.shield(work)
+        except asyncio.CancelledError:
+            if work.cancelled():
+                raise
+            # Executor threads cannot be killed; keep ownership until this I/O returns.
+            continue
+
+
+async def _drain_federate_present_group_touches() -> None:
+    global _present_touch_task
+    task = asyncio.current_task()
+    try:
+        while _pending_present_group_touches:
+            # ponytail: one writer caps thread count; shard only if backlog becomes measurable.
+            batch = tuple(islice(_pending_present_group_touches.items(), _PRESENT_GROUP_PUBLISH_CAP))
+            for gid, _timestamp in batch:
+                _pending_present_group_touches.pop(gid, None)
+            try:
+                await _await_federate_thread_io(_write_federate_present_group_touches_sync, batch)
+            except Exception:
+                pass
+    finally:
+        if _present_touch_task is task:
+            _present_touch_task = None
+
+
+def collect_local_present_group_ids(
+    local_present_snapshot: tuple[tuple[int, float], ...] | None = None,
+) -> list[int]:
     """心跳用：本机近期在场群（本地 + Redis 合并，有上限）。"""
     now = time.time()
     cutoff = now - float(_PRESENT_GROUP_WINDOW_SEC)
-    ids: set[int] = {gid for gid, ts in _local_present_groups.items() if ts >= cutoff}
+    local_times = dict(local_present_snapshot) if local_present_snapshot is not None else dict(_local_present_groups)
+    ids: set[int] = {gid for gid, ts in local_times.items() if ts >= cutoff}
 
     client = get_federate_redis_client()
     prefix = federate_redis_prefix()
@@ -550,7 +648,7 @@ def collect_local_present_group_ids() -> list[int]:
     if len(ordered) > _PRESENT_GROUP_PUBLISH_CAP:
         # 保留最近碰过的：按本地时间戳优先，其余按群号截断
         scored = sorted(
-            ((_local_present_groups.get(g, 0.0), g) for g in ordered),
+            ((local_times.get(g, 0.0), g) for g in ordered),
             reverse=True,
         )
         ordered = sorted(g for _, g in scored[:_PRESENT_GROUP_PUBLISH_CAP])
@@ -563,11 +661,30 @@ def publish_local_federate_peer_bot_ids_sync(
     public_bot_ids: frozenset[int] | None = None,
     public_online_bot_names: dict[int, str] | None = None,
 ) -> bool:
+    published, _present_groups = _publish_local_federate_peer_bot_ids_with_groups_sync(
+        bot_ids,
+        public_bot_ids=public_bot_ids,
+        public_online_bot_names=public_online_bot_names,
+    )
+    return published
+
+
+def _publish_local_federate_peer_bot_ids_with_groups_sync(
+    bot_ids: set[int] | frozenset[int] | None = None,
+    *,
+    public_bot_ids: frozenset[int] | None = None,
+    public_online_bot_names: dict[int, str] | None = None,
+    local_present_snapshot: tuple[tuple[int, float], ...] | None = None,
+) -> tuple[bool, tuple[int, ...]]:
+    if local_present_snapshot is None:
+        present_groups = collect_local_present_group_ids()
+    else:
+        present_groups = collect_local_present_group_ids(local_present_snapshot)
     client = get_federate_redis_client()
     prefix = federate_redis_prefix()
     deployment_id = load_or_create_deployment_id().strip().lower()
     if client is None or not prefix or not deployment_id:
-        return False
+        return False, tuple(present_groups)
     ids = sorted(int(qq) for qq in (bot_ids if bot_ids is not None else get_catalog_bot_ids()))
     id_set = frozenset(ids)
     online_ids = sorted(id_set & collect_local_federate_online_bot_ids())
@@ -580,7 +697,6 @@ def publish_local_federate_peer_bot_ids_sync(
         )
     capabilities = sorted(collect_local_federate_command_capabilities())
     permission_levels = collect_local_command_permission_levels()
-    present_groups = collect_local_present_group_ids()
     group_admin_bot_ids = {
         str(group_id): sorted(admin_ids)
         for group_id in present_groups
@@ -618,9 +734,10 @@ def publish_local_federate_peer_bot_ids_sync(
         separators=(",", ":"),
     )
     try:
-        return bool(client.set(federate_peer_redis_key(deployment_id), payload, ex=_PUBLISH_TTL_SEC))
+        published = bool(client.set(federate_peer_redis_key(deployment_id), payload, ex=_PUBLISH_TTL_SEC))
+        return published, tuple(present_groups)
     except Exception:
-        return False
+        return False, tuple(present_groups)
 
 
 def _parse_command_capabilities(data: dict[str, Any]) -> frozenset[str] | None:
@@ -760,34 +877,12 @@ def _parse_public_online_bot_names(data: dict[str, Any], allowed_ids: frozenset[
     return names
 
 
-def refresh_federate_peer_bot_ids_sync() -> frozenset[int]:
-    global \
-        _cache_deployment_capabilities, \
-        _cache_deployment_capability_protocols, \
-        _cache_deployment_ingress_capabilities, \
-        _cache_deployment_ingress_protocols, \
-        _cache_deployment_ids, \
-        _cache_deployment_permission_levels, \
-        _cache_deployment_present_groups, \
-        _cache_deployment_group_admin_bot_ids, \
-        _cache_deployment_rosters, \
-        _cache_ids, \
-        _cache_updated_mono
+def _read_federate_peer_bot_cache_sync() -> tuple[bool, _FederatePeerBotCacheSnapshot | None]:
     client = get_federate_redis_client()
     prefix = federate_redis_prefix()
     deployment_id = load_or_create_deployment_id().strip().lower()
     if client is None or not prefix or not deployment_id:
-        _cache_ids = frozenset()
-        _cache_deployment_ids = frozenset()
-        _cache_deployment_capabilities = {}
-        _cache_deployment_ingress_capabilities = {}
-        _cache_deployment_ingress_protocols = {}
-        _cache_deployment_permission_levels = {}
-        _cache_deployment_present_groups = {}
-        _cache_deployment_group_admin_bot_ids = {}
-        _cache_deployment_rosters = {}
-        _cache_updated_mono = time.monotonic()
-        return _cache_ids
+        return False, None
     peer_deployment_ids: set[str] = set()
     peer_ids: set[int] = set()
     peer_capabilities: dict[str, frozenset[str] | None] = {}
@@ -838,27 +933,91 @@ def refresh_federate_peer_bot_ids_sync() -> frozenset[int]:
                 )
                 peer_ids.update(bot_ids)
     except Exception:
-        return _cache_ids
-    _cache_ids = frozenset(peer_ids)
-    _cache_deployment_ids = frozenset(peer_deployment_ids)
-    _cache_deployment_capabilities = peer_capabilities
-    _cache_deployment_capability_protocols = peer_protocols
-    _cache_deployment_permission_levels = peer_permission_levels
-    _cache_deployment_ingress_capabilities = peer_ingress_capabilities
-    _cache_deployment_ingress_protocols = peer_ingress_protocols
-    _cache_deployment_present_groups = peer_present
-    _cache_deployment_group_admin_bot_ids = peer_group_admin
-    _cache_deployment_rosters = peer_rosters
+        return True, None
+    return True, _FederatePeerBotCacheSnapshot(
+        ids=frozenset(peer_ids),
+        deployment_ids=frozenset(peer_deployment_ids),
+        capabilities=peer_capabilities,
+        capability_protocols=peer_protocols,
+        permission_levels=peer_permission_levels,
+        ingress_capabilities=peer_ingress_capabilities,
+        ingress_protocols=peer_ingress_protocols,
+        present_groups=peer_present,
+        group_admin_bot_ids=peer_group_admin,
+        rosters=peer_rosters,
+    )
+
+
+def _install_federate_peer_bot_cache(snapshot: _FederatePeerBotCacheSnapshot) -> None:
+    global \
+        _cache_deployment_capabilities, \
+        _cache_deployment_capability_protocols, \
+        _cache_deployment_ingress_capabilities, \
+        _cache_deployment_ingress_protocols, \
+        _cache_deployment_ids, \
+        _cache_deployment_permission_levels, \
+        _cache_deployment_present_groups, \
+        _cache_deployment_group_admin_bot_ids, \
+        _cache_deployment_rosters, \
+        _cache_ids, \
+        _cache_updated_mono
+    _cache_ids = snapshot.ids
+    _cache_deployment_ids = snapshot.deployment_ids
+    _cache_deployment_capabilities = snapshot.capabilities
+    _cache_deployment_capability_protocols = snapshot.capability_protocols
+    _cache_deployment_permission_levels = snapshot.permission_levels
+    _cache_deployment_ingress_capabilities = snapshot.ingress_capabilities
+    _cache_deployment_ingress_protocols = snapshot.ingress_protocols
+    _cache_deployment_present_groups = snapshot.present_groups
+    _cache_deployment_group_admin_bot_ids = snapshot.group_admin_bot_ids
+    _cache_deployment_rosters = snapshot.rosters
     _cache_updated_mono = time.monotonic()
+
+
+def refresh_federate_peer_bot_ids_sync() -> frozenset[int]:
+    global \
+        _cache_deployment_capabilities, \
+        _cache_deployment_capability_protocols, \
+        _cache_deployment_ids, \
+        _cache_deployment_ingress_capabilities, \
+        _cache_deployment_ingress_protocols, \
+        _cache_deployment_permission_levels, \
+        _cache_deployment_present_groups, \
+        _cache_deployment_group_admin_bot_ids, \
+        _cache_deployment_rosters, \
+        _cache_ids, \
+        _cache_updated_mono
+    available, snapshot = _read_federate_peer_bot_cache_sync()
+    if not available:
+        _cache_ids = frozenset()
+        _cache_deployment_ids = frozenset()
+        _cache_deployment_capabilities = {}
+        _cache_deployment_capability_protocols = {}
+        _cache_deployment_permission_levels = {}
+        _cache_deployment_ingress_capabilities = {}
+        _cache_deployment_ingress_protocols = {}
+        _cache_deployment_present_groups = {}
+        _cache_deployment_group_admin_bot_ids = {}
+        _cache_deployment_rosters = {}
+        _cache_updated_mono = time.monotonic()
+    if snapshot is not None:
+        _install_federate_peer_bot_cache(snapshot)
     return _cache_ids
 
 
-def log_incompatible_federate_command_capability_peers() -> None:
+def _federate_peer_sync_status() -> tuple[bool, bool]:
+    configured = federate_ingress_enabled() and bool(resolved_federate_id())
+    return configured, configured and federate_ingress_active()
+
+
+def log_incompatible_federate_command_capability_peers(
+    local_present_group_ids: tuple[int, ...] | None = None,
+) -> None:
     global _last_incompatible_capability_peers
     peers = tuple(
         deployment_id
         for deployment_id in get_incompatible_federate_command_capability_peers()
-        if _federate_peer_shares_present_group(deployment_id)
+        if _federate_peer_shares_present_group(deployment_id, local_present_group_ids=local_present_group_ids)
     )
     if peers == _last_incompatible_capability_peers:
         return
@@ -871,12 +1030,18 @@ def log_incompatible_federate_command_capability_peers() -> None:
         )
 
 
-def _federate_peer_shares_present_group(deployment_id: str) -> bool:
+def _federate_peer_shares_present_group(
+    deployment_id: str,
+    *,
+    local_present_group_ids: tuple[int, ...] | None = None,
+) -> bool:
     """对端与本机是否在至少一个共同群里（均有号在场）。"""
     peer_groups = get_federate_peer_present_groups(deployment_id)
     if not peer_groups:
         return False
-    local_groups = frozenset(collect_local_present_group_ids())
+    local_groups = frozenset(
+        collect_local_present_group_ids() if local_present_group_ids is None else local_present_group_ids
+    )
     return bool(peer_groups & local_groups)
 
 
@@ -888,9 +1053,15 @@ def _federate_peer_display_label(deployment_id: str) -> str:
     return deployment_id
 
 
-def log_incompatible_federate_ingress_peers() -> None:
+def log_incompatible_federate_ingress_peers(
+    local_present_group_ids: tuple[int, ...] | None = None,
+) -> None:
     global _last_incompatible_ingress_peers
-    peers = tuple(dep for dep in get_incompatible_federate_ingress_peers() if _federate_peer_shares_present_group(dep))
+    peers = tuple(
+        dep
+        for dep in get_incompatible_federate_ingress_peers()
+        if _federate_peer_shares_present_group(dep, local_present_group_ids=local_present_group_ids)
+    )
     if peers == _last_incompatible_ingress_peers:
         return
     _last_incompatible_ingress_peers = peers
@@ -1236,38 +1407,89 @@ def should_yield_federate_ingress_for_peer_command(
     return False
 
 
-async def sync_federate_peer_bot_roster() -> None:
-    global \
-        _cache_ids, \
-        _cache_deployment_capability_protocols, \
-        _cache_deployment_ingress_capabilities, \
-        _cache_deployment_ingress_protocols, \
-        _cache_deployment_present_groups, \
-        _cache_local_roster, \
-        _cache_deployment_rosters, \
-        _cache_updated_mono
-    if not federate_ingress_active():
-        _cache_ids = frozenset()
-        _cache_deployment_capability_protocols = {}
-        _cache_deployment_ingress_capabilities = {}
-        _cache_deployment_ingress_protocols = {}
-        _cache_deployment_present_groups = {}
-        _cache_local_roster = None
-        _cache_deployment_rosters = {}
-        _cache_updated_mono = time.monotonic()
+async def _sync_federate_peer_bot_roster_once(generation: int) -> None:
+    global _cache_deployment_ids, _cache_local_roster, _cache_ids, _cache_updated_mono
+    configured, active = await _await_federate_thread_io(_federate_peer_sync_status)
+    if generation != _roster_sync_generation:
+        return
+    if not configured:
+        if generation == _roster_sync_generation:
+            _cache_ids = frozenset()
+            _cache_deployment_ids = frozenset()
+            _cache_deployment_capabilities.clear()
+            _cache_deployment_capability_protocols.clear()
+            _cache_deployment_permission_levels.clear()
+            _cache_deployment_ingress_capabilities.clear()
+            _cache_deployment_ingress_protocols.clear()
+            _cache_deployment_present_groups.clear()
+            _cache_deployment_group_admin_bot_ids.clear()
+            _cache_deployment_rosters.clear()
+            _cache_local_roster = None
+            _cache_updated_mono = time.monotonic()
+        return
+    if not active:
         return
     local_roster = await _build_local_federate_bot_roster(resolve_login_nicknames=True)
+    if generation != _roster_sync_generation:
+        return
     _cache_local_roster = local_roster
-    await asyncio.to_thread(
-        publish_local_federate_peer_bot_ids_sync,
+    _published, local_present_groups = await _await_federate_thread_io(
+        _publish_local_federate_peer_bot_ids_with_groups_sync,
         local_roster.bot_ids,
         public_bot_ids=local_roster.public_bot_ids,
         public_online_bot_names=local_roster.public_online_bot_names,
+        local_present_snapshot=tuple(_local_present_groups.items()),
     )
-    peer_ids = await asyncio.to_thread(refresh_federate_peer_bot_ids_sync)
-    log_incompatible_federate_command_capability_peers()
-    log_incompatible_federate_ingress_peers()
-    logger.debug("Federate peer bots synchronized [{}] peers.", len(peer_ids))
+    if generation != _roster_sync_generation:
+        return
+    cache_available, peer_cache = await _await_federate_thread_io(_read_federate_peer_bot_cache_sync)
+    if generation != _roster_sync_generation or not cache_available or peer_cache is None:
+        return
+    _install_federate_peer_bot_cache(peer_cache)
+    log_incompatible_federate_command_capability_peers(local_present_groups)
+    log_incompatible_federate_ingress_peers(local_present_groups)
+    logger.debug("Federate peer bots synchronized [{}] peers.", len(peer_cache.ids))
+
+
+async def _run_coalesced_federate_peer_bot_sync(generation: int) -> None:
+    global _roster_sync_task, _roster_sync_running, _roster_sync_requested
+    task = asyncio.current_task()
+    try:
+        while True:
+            if _federate_peer_sync_stopping or generation != _roster_sync_generation:
+                return
+            _roster_sync_requested = False
+            _roster_sync_running = True
+            try:
+                await _sync_federate_peer_bot_roster_once(generation)
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.debug("Federate peer bot synchronization failed: {}", e)
+            if _federate_peer_sync_stopping or not _roster_sync_requested:
+                return
+            generation = _roster_sync_generation
+    finally:
+        if _roster_sync_task is task:
+            _roster_sync_task = None
+        _roster_sync_running = False
+
+
+async def sync_federate_peer_bot_roster() -> None:
+    global _roster_sync_task, _roster_sync_requested
+    if _federate_peer_sync_stopping:
+        return
+    task = _roster_sync_task
+    if task is None or task.done():
+        generation = _roster_sync_generation
+        task = asyncio.get_running_loop().create_task(
+            _run_coalesced_federate_peer_bot_sync(generation),
+            name="federate_peer_bot_roster_sync",
+        )
+        _roster_sync_task = task
+    elif _roster_sync_running:
+        _roster_sync_requested = True
+    await asyncio.shield(task)
 
 
 async def run_federate_peer_bot_sync_loop() -> None:
@@ -1282,7 +1504,11 @@ async def run_federate_peer_bot_sync_loop() -> None:
 
 
 def start_federate_peer_bot_sync_loop() -> None:
-    global _sync_task
+    global _sync_task, _federate_peer_sync_stopping
+    if _federate_peer_sync_stopping:
+        if any(task is not None and not task.done() for task in (_sync_task, _roster_sync_task, _present_touch_task)):
+            return
+        _federate_peer_sync_stopping = False
     if _sync_task is not None and not _sync_task.done():
         return
     try:
@@ -1290,3 +1516,23 @@ def start_federate_peer_bot_sync_loop() -> None:
     except RuntimeError:
         return
     _sync_task = loop.create_task(run_federate_peer_bot_sync_loop(), name="federate_peer_bot_sync")
+
+
+async def stop_federate_peer_bot_sync_loop() -> None:
+    global _sync_task, _roster_sync_generation, _roster_sync_requested, _federate_peer_sync_stopping
+    if not _federate_peer_sync_stopping:
+        _federate_peer_sync_stopping = True
+        _roster_sync_generation += 1
+        _roster_sync_requested = False
+    periodic_task = _sync_task
+    if periodic_task is not None and not periodic_task.done():
+        periodic_task.cancel()
+        await asyncio.gather(periodic_task, return_exceptions=True)
+    if _sync_task is periodic_task:
+        _sync_task = None
+    roster_task = _roster_sync_task
+    if roster_task is not None:
+        await asyncio.shield(roster_task)
+    touch_task = _present_touch_task
+    if touch_task is not None:
+        await asyncio.shield(touch_task)

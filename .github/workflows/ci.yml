@@ -84,10 +84,13 @@ jobs:
             tests/product/llm/test_offline_quality_eval.py \
             -q
 
-      - name: Run Redis ingress and ban snapshot regressions
+      - name: Run Redis ingress, federate roster and ban snapshot regressions
         run: |
           env -u PG_TEST_DSN uv run pytest \
             tests/platform/ingress/test_ingress_redis_nonblocking.py \
+            tests/common/federate/test_peer_bots.py \
+            tests/common/federate/test_peer_bots_sync.py \
+            tests/platform/test_connected_roster.py \
             tests/plugins/blacklist/test_ban_gate_snapshot_sync.py \
             -p no:nonebug -p no:cacheprovider -q
 
