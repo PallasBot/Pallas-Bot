@@ -47,6 +47,8 @@ Repeater 回放入站消息时优先将 OneBot `original_message`（入站结构
 | 多气泡投递 | `delivery.py` `deliver_llm_callback_success` | 每个气泡发送前复核 live 开关；返回 `DeliveryOutcome`，`sent` / `partial` / `failed` / `silent` 由真实回执推导。部分发送保留已发事实且不写完整会话历史；气泡间按上句长度叠加随机抖动（0.5~3.5s） |
 | 学习回写 | 会话 / `behavior_store` / `repeater_feedback` / `auto_episode` | 投递成功后写历史、行为与表达 |
 
+发送队列的 `errors` 与 `errors_by_operation` 统计每次失败的适配器调用；重试后最终成功仍会保留先前失败次数。`message`、`interaction`、`other` 分桶用于区分正文投递、表情 / 戳一戳等互动和未分类 API，不等价于最终投递结果；`DeliveryOutcome` 仍按真实回执判断。
+
 LLM 回调的文本发送会用异步上下文标记来源，供 `BaseBot.on_called_api` 的普通表情跟随后续任务继承；结构化表情走同一来源标记。LLM 来源在取图前及缓存读取后、实际发图前复核共享出口门禁。视觉表情任务将可选 `delivery.llm_origin` 持久化，work handler 与最终 dispatcher 继续检查；关闸时以固定原因落为 `failed`，不伪报 `sent`。缺少来源标记的既有视觉任务和 Repeater 发送保持原行为。
 
 ## LLM turn telemetry

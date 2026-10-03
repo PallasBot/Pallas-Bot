@@ -287,6 +287,8 @@ def merge_send_queue_snapshots(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "depth_live": 0,
         "sent": 0,
         "dropped": 0,
+        "errors": 0,
+        "errors_by_operation": {"message": 0, "interaction": 0, "other": 0},
         "max_depth": 0,
         "workers": 0,
     }
@@ -300,6 +302,17 @@ def merge_send_queue_snapshots(rows: list[dict[str, Any]]) -> dict[str, Any]:
         merged["depth_live"] += int(row.get("depth_live") or row.get("depth") or 0)
         merged["sent"] += int(row.get("sent") or 0)
         merged["dropped"] += int(row.get("dropped") or 0)
+        row_errors = int(row.get("errors") or 0)
+        merged["errors"] += row_errors
+        operation_counts = row.get("errors_by_operation")
+        row_counted_errors = 0
+        if isinstance(operation_counts, dict):
+            for operation in merged["errors_by_operation"]:
+                count = int(operation_counts.get(operation) or 0)
+                merged["errors_by_operation"][operation] += count
+                row_counted_errors += count
+        if row_errors > row_counted_errors:
+            merged["errors_by_operation"]["other"] += row_errors - row_counted_errors
         merged["max_depth"] += int(row.get("max_depth") or 0)
         merged["workers"] += int(row.get("workers") or 0)
     return merged

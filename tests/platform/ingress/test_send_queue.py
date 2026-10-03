@@ -252,6 +252,8 @@ async def test_send_queue_attributes_failures_without_exposing_payload(monkeypat
     assert status["last_error"]["error_class"] == "ActionFailed"
     assert status["last_error"]["retcode"] == 1200
     assert status["last_error"]["reason"] == "other"
+    assert status["errors_by_operation"] == {"message": 1, "interaction": 0, "other": 0}
+    assert status["errors"] == sum(status["errors_by_operation"].values())
     assert "sensitive" not in str(status)
     assert "private content" not in str(status)
 
@@ -279,6 +281,8 @@ def test_send_queue_error_dimensions_are_bounded_and_resettable() -> None:
     assert status["errors_by_class"] == {}
     assert status["errors_by_retcode"] == {}
     assert status["errors_by_reason"] == {}
+    assert status["errors_by_operation"] == {"message": 0, "interaction": 0, "other": 0}
+    assert status["errors"] == 0
     assert status["last_error"] is None
 
 
@@ -319,12 +323,125 @@ def test_send_queue_classifies_failure_reason_without_exposing_wording(api: str,
     assert message not in str(status)
 
 
+@pytest.mark.parametrize(
+    ("api", "wording", "reason"),
+    [
+        ("group_poke", "OIDB error 1007 on 0xed3_1: Process_Nudge failed", "poke_rejected"),
+        ("group_poke", "OIDB error 1004 on 0xed3_1: Process_Nudge failed", "poke_rejected"),
+        ("group_poke", "OIDB error 1002 on 0xed3_1: Process_Nudge failed", "poke_rejected"),
+        ("group_poke", "Process_Nudge failed 0xed3_1 code: 1007", "poke_rejected"),
+        ("group_poke", "Process_Nudge failed 0xed3_1 code10070", "other"),
+        ("group_poke", "OIDB error 1007 on 0x9999_1: Process_Nudge failed", "other"),
+        ("send_group_msg", "OIDB error 1007 on 0xed3_1: Process_Nudge failed", "other"),
+    ],
+)
+def test_nudge_wording_is_scoped_to_known_operation_and_exact_code(api: str, wording: str, reason: str) -> None:
+    from nonebot.adapters.onebot.v11 import ActionFailed
+
+    error = ActionFailed(retcode=100, wording=wording)
+    assert send_queue.classify_send_queue_error(api, error) == reason
+    assert not send_queue.is_retryable_send_error(api, error)
+    assert not send_queue.is_risk_limited_send_error(api, error)
+
+
+@pytest.mark.parametrize(
+    ("wording", "reason"),
+    [
+        ("send group message rejected: result=120 err=", "message_rejected"),
+        ("send group message rejected: result=1200 err=", "other"),
+        ("send group message rejected: result=120 err=unknown", "other"),
+        ("send temp message rejected: result=103 err=群主禁止成员临时会话", "temporary_session_forbidden"),
+        ("send temp message rejected: result=1030 err=群主禁止成员临时会话", "other"),
+    ],
+)
+def test_message_rejection_wording_requires_exact_result_code(wording: str, reason: str) -> None:
+    from nonebot.adapters.onebot.v11 import ActionFailed
+
+    error = ActionFailed(retcode=100, wording=wording)
+    assert send_queue.classify_send_queue_error("send_group_msg", error) == reason
+    assert not send_queue.is_retryable_send_error("send_group_msg", error)
+    assert not send_queue.is_risk_limited_send_error("send_group_msg", error)
+
+
 def test_retcode_1400_alone_does_not_classify_as_invalid_payload() -> None:
     from nonebot.adapters.onebot.v11 import ActionFailed
 
     send_queue.record_send_queue_error("send_group_msg", ActionFailed(retcode=1400, message="Bad Request"))
 
     assert send_queue.send_queue_status()["errors_by_reason"] == {"other": 1}
+
+
+@pytest.mark.asyncio
+async def test_send_queue_attributes_exact_interaction_and_message_failures_by_attempt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from nonebot.adapters.onebot.v11 import ActionFailed
+
+    failures = [
+        (
+            "set_msg_emoji_like",
+            ActionFailed(retcode=100, message="OIDB0x9082_1 downstream group authentication failed"),
+            "interaction_auth_failed",
+        ),
+        ("set_msg_emoji_like", ActionFailed(retcode=100, message="emoji already set"), "already_reacted"),
+        (
+            "group_poke",
+            ActionFailed(retcode=100, message="Process_Nudge failed 0xed3_1 code1007"),
+            "poke_rejected",
+        ),
+        (
+            "send_group_msg",
+            ActionFailed(retcode=120, message="send group message rejected result120 err="),
+            "message_rejected",
+        ),
+        (
+            "send_group_msg",
+            ActionFailed(retcode=110, message="send group message rejected result110; moved out of the group"),
+            "bot_not_in_group",
+        ),
+        (
+            "send_private_msg",
+            ActionFailed(retcode=103, message="temporary session rejected result103; group owner forbids"),
+            "temporary_session_forbidden",
+        ),
+        ("send_group_msg", ActionFailed(retcode=100, message="unclassified sentinel"), "other"),
+    ]
+    pending = iter(failures)
+
+    async def original(_adapter, _bot, api: str, **_data):
+        next_api, error, _reason = next(pending)
+        assert api == next_api
+        raise error
+
+    monkeypatch.setattr(send_queue, "_ORIGINAL_CALL_API", original)
+    monkeypatch.setattr(send_queue, "send_queue_retry_max", lambda: 2)
+    monkeypatch.setattr(send_queue, "send_queue_min_interval_sec", lambda: 0.0)
+    await send_queue.start_send_queue_workers()
+
+    try:
+        for api, error, _reason in failures:
+            with pytest.raises(ActionFailed) as caught:
+                await send_queue.enqueue_call_api(MagicMock(), MagicMock(self_id="123"), api)
+            assert caught.value is error
+
+        status = send_queue.send_queue_status()
+        assert status["errors"] == 7
+        assert status["errors_by_operation"] == {"message": 4, "interaction": 3, "other": 0}
+        assert sum(status["errors_by_operation"].values()) == status["errors"]
+        assert status["errors_by_reason"] == {
+            "interaction_auth_failed": 1,
+            "already_reacted": 1,
+            "poke_rejected": 1,
+            "message_rejected": 1,
+            "bot_not_in_group": 1,
+            "temporary_session_forbidden": 1,
+            "other": 1,
+        }
+        assert status["retries"] == 0
+        assert send_queue.is_risk_limited_send_error("send_group_msg", failures[-1][1]) is False
+        assert "sentinel" not in str(status)
+    finally:
+        await send_queue.stop_send_queue_workers()
 
 
 @pytest.mark.asyncio
