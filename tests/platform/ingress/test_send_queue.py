@@ -289,6 +289,22 @@ def test_send_queue_error_dimensions_are_bounded_and_resettable() -> None:
         ("set_msg_emoji_like", "message not found", "message_not_found"),
         ("send_group_msg", "发送失败，你已被移出该群，请重新加群。", "bot_not_in_group"),
         ("send_group_msg", "HTTP download failed: 404", "media_download_failed"),
+        (
+            "send_group_msg",
+            'message element "markdown" field "text" must not be empty',
+            "invalid_message_payload",
+        ),
+        (
+            "send_group_msg",
+            'message segment "mface" is missing required or usable fields',
+            "invalid_message_payload",
+        ),
+        (
+            "send_group_msg",
+            'message element "mface" field "emojiId" must be exactly 32 hexadecimal characters',
+            "invalid_message_payload",
+        ),
+        ("send_group_msg", "message rejected with retcode 1400", "other"),
         ("send_group_msg", "unclassified sensitive wording", "other"),
     ],
 )
@@ -301,6 +317,14 @@ def test_send_queue_classifies_failure_reason_without_exposing_wording(api: str,
     assert status["errors_by_reason"] == {reason: 1}
     assert status["last_error"]["reason"] == reason
     assert message not in str(status)
+
+
+def test_retcode_1400_alone_does_not_classify_as_invalid_payload() -> None:
+    from nonebot.adapters.onebot.v11 import ActionFailed
+
+    send_queue.record_send_queue_error("send_group_msg", ActionFailed(retcode=1400, message="Bad Request"))
+
+    assert send_queue.send_queue_status()["errors_by_reason"] == {"other": 1}
 
 
 @pytest.mark.asyncio

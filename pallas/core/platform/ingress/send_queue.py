@@ -236,6 +236,12 @@ def classify_send_queue_error(api: str, exc: Exception) -> str:
         return "already_reacted"
     if api == "set_msg_emoji_like" and "message not found" in detail:
         return "message_not_found"
+    if api in _HIGH_PRIORITY_APIS and (
+        'message element "markdown" field "text" must not be empty' in detail
+        or 'message segment "mface" is missing required or usable fields' in detail
+        or 'message element "mface" field "emojiid" must be exactly 32 hexadecimal characters' in detail
+    ):
+        return "invalid_message_payload"
     if api in _HIGH_PRIORITY_APIS and ("removed from the group" in detail or "已被移出该群" in detail):
         return "bot_not_in_group"
     if api in _HIGH_PRIORITY_APIS and "http download failed" in detail:

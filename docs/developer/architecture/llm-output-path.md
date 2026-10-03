@@ -23,6 +23,8 @@
 
 普通聊天在 Bot 进程内执行：`submit_chat_task` 安排 `kernel_runner`。入口提交与异步 kernel 启动时检查总开关及 bot/群作用域；Provider 请求前后、工具执行前后、persona retry 前后和投递前也复核，避免排队或生成期间关闸后继续产生副作用。跳过时记录原因并清理任务；工具副作用已开始则只标记边界，不声称可回滚。通常由 kernel 调用 Provider、运行工具循环，并通过 `pallas/product/llm/delivery.py` 的 `deliver_llm_chat_result` 交给既有投递入口；若 semantic style 给出通过相关性与近期回复去重的 `direct_candidate`，并通过滚动窗口 15% 配额，kernel 会直接投递该真实语料而不调用 Provider。该判断不对语料内容作额外价值判断。Repeater 日常接话自身不创建 LLM 任务。
 
+Repeater 回放入站消息时优先将 OneBot `original_message`（入站结构快照）序列化为 CQ；`get_message()` 返回的可变 `message` 可能已被预处理器修改。学习与 message outbox、扇出 payload 和全局消息记录共用这一原始结构，保留 Markdown、mface、mention 与 reply 字段。历史答案只在回复记录前跳过已确认无效的空 Markdown / 不可用 mface 整条消息；合法后续答案与未知扩展段仍保留，主动发言则在选择和去重记录前过滤同类无效句子。
+
 工具循环会在模型提出 tool call 后执行工具、将结果追加回上下文并继续补全。默认工具集会按场景选择；延迟公开的工具可由 `tools.find` 发现，并在后续轮次加入可调用集合。查询工具有单轮调用预算、重复参数去重和最终回答阶段；副作用工具成功后才允许静默。延迟完成的外部工具只派发任务；任务结果由其自身通道回传，不阻塞当前 LLM 回复。
 
 显式查询超过 3 秒且已经开始实际工具调用时，kernel 最多发送一次“我查一下。”进度气泡；发送前重新检查 live 开关。该气泡不写入会话历史、表达学习或最终答案上下文。
