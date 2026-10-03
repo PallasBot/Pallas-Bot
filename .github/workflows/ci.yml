@@ -84,6 +84,13 @@ jobs:
             tests/product/llm/test_offline_quality_eval.py \
             -q
 
+      - name: Run Redis ingress and ban snapshot regressions
+        run: |
+          env -u PG_TEST_DSN uv run pytest \
+            tests/platform/ingress/test_ingress_redis_nonblocking.py \
+            tests/plugins/blacklist/test_ban_gate_snapshot_sync.py \
+            -p no:nonebug -p no:cacheprovider -q
+
       - name: Run LLM chat chain regression tests
         run: |
           env -u PG_TEST_DSN uv run pytest \
