@@ -8,11 +8,35 @@ import httpx
 
 from pallas.product.llm import provider_client as _repo
 
+_PROVIDER_OUTPUT_FAILURE_CLASSES = frozenset({
+    "refusal",
+    "reasoning_only",
+    "incomplete",
+    "incomplete_token_limit",
+    "provider_failed",
+    "no_output",
+    "invalid_payload",
+    "unknown",
+})
+
 
 class LlmProviderError(Exception):
-    def __init__(self, message: str, *, status: int | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: int | None = None,
+        failure_class: str | None = None,
+    ) -> None:
         super().__init__(message)
         self.status = status
+        self.failure_class = (
+            failure_class
+            if failure_class is None
+            or isinstance(failure_class, str)
+            and failure_class in _PROVIDER_OUTPUT_FAILURE_CLASSES
+            else "unknown"
+        )
 
 
 # 同 Provider 内换下一把密钥；400 等业务错误不换
@@ -26,6 +50,13 @@ def should_failover_api_key(exc: BaseException) -> bool:
 def _provider_failure_class(exc: BaseException) -> str:
     if isinstance(exc, LlmProviderError) and exc.status is not None:
         return f"http_{exc.status}"
+    if isinstance(exc, LlmProviderError) and exc.failure_class is not None:
+        failure_class = exc.failure_class
+        return (
+            failure_class
+            if isinstance(failure_class, str) and failure_class in _PROVIDER_OUTPUT_FAILURE_CLASSES
+            else "unknown"
+        )
     if isinstance(exc, TimeoutError):
         return "timeout"
     return "provider_error"

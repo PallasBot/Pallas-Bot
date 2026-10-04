@@ -61,6 +61,63 @@ jobs:
             -q
           uv run pytest tests/common/test_plugin_loader_unified.py -q
 
+      - name: Run runtime reliability regression tests
+        run: |
+          env -u PG_TEST_DSN uv run pytest \
+            tests/common/test_media_cache_async.py \
+            tests/platform/work_jobs/test_entrypoint.py \
+            tests/platform/work_jobs/test_service.py \
+            tests/platform/work_jobs/test_pg_store.py \
+            tests/platform/message_runtime/test_committer.py \
+            tests/platform/ingress/test_send_queue.py \
+            tests/platform/ingress/test_send_queue_retry.py \
+            tests/plugins/pb_webui/test_console_read_cache_snapshot.py \
+            tests/plugins/repeater/test_work_enqueue.py \
+            tests/plugins/repeater/test_payload_replay.py \
+            tests/plugins/repeater/test_fanout_reply.py \
+            tests/plugins/repeater/test_message_runtime_handler.py \
+            tests/plugins/repeater/test_responder.py \
+            tests/plugins/repeater/test_speaker.py \
+            tests/plugins/repeater/test_work_payload.py \
+            tests/product/llm/test_group_insight_processor.py \
+            tests/product/llm/test_repeater_semantic_style.py \
+            tests/product/llm/test_offline_quality_eval.py \
+            -q
+
+      - name: Run Redis ingress, federate roster and ban snapshot regressions
+        run: |
+          env -u PG_TEST_DSN uv run pytest \
+            tests/platform/ingress/test_ingress_redis_nonblocking.py \
+            tests/common/federate/test_peer_bots.py \
+            tests/common/federate/test_peer_bots_sync.py \
+            tests/platform/test_connected_roster.py \
+            tests/plugins/blacklist/test_ban_gate_snapshot_sync.py \
+            -p no:nonebug -p no:cacheprovider -q
+
+      - name: Run LLM chat chain regression tests
+        run: |
+          env -u PG_TEST_DSN uv run pytest \
+            tests/product/llm/test_context_assembler.py \
+            tests/product/llm/test_kernel_llm.py \
+            tests/product/llm/test_llm_chain_regression.py \
+            tests/product/llm/test_query_progress.py \
+            tests/product/llm/test_tool_discovery_loop.py \
+            tests/product/llm/test_tool_loop_budget.py \
+            tests/product/llm/test_persona_output_firewall.py \
+            tests/product/llm/test_reply_delivery_segments.py \
+            tests/product/llm/test_emotion_followup.py \
+            tests/product/llm/test_sticker_vision.py \
+            tests/product/llm/test_turn_telemetry.py \
+            tests/product/llm/test_provider_telemetry.py \
+            tests/product/llm/test_provider_empty_output_attribution.py \
+            tests/product/llm/test_provider_api_key_failover.py \
+            tests/product/llm/test_telemetry_task_metadata.py \
+            tests/platform/test_ai_callback_delivery.py \
+            tests/platform/test_ai_callback_telemetry.py \
+            tests/platform/test_llm_emotion_followup_delivery.py \
+            tests/platform/test_ai_callback_runner.py \
+            -p no:nonebug -p no:cacheprovider -q
+
       - name: Check console OpenAPI spec drift
         run: |
           uv run python tools/check_console_openapi_drift.py

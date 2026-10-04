@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 
 import pallas.product.llm.turn_telemetry as turn_telemetry
 from pallas.product.llm.turn_telemetry import (
@@ -36,11 +37,15 @@ def test_build_event_does_not_accept_arbitrary_payload_fields() -> None:
         decision="skip",
         reason="noise",
         text="???",
+        context_assembly_ms=18,
+        delivery_latency_ms=30,
         extra={"prompt": "must not persist"},
     )
     assert "prompt" not in event
     assert "text" not in event
     assert event["shape"]["punctuation_only"] is True
+    assert event["context_assembly_ms"] == 18
+    assert event["delivery_latency_ms"] == 30
 
 
 def test_writer_emits_one_privacy_safe_json_line(tmp_path) -> None:
@@ -178,3 +183,63 @@ def test_report_counts_incomplete_turns_and_ignores_bad_lines(tmp_path, monkeypa
     assert report["funnel"]["completed"] == 0
     assert report["incomplete_turns"] == 1
     assert report["missing_stages"] == {"delivery": 1, "output": 1}
+
+
+def test_offline_latency_report_keeps_missing_fields_unknown() -> None:
+    from tools.report_llm_latency import summarize_latency_events
+
+    report = summarize_latency_events(
+        [
+            {"stage": "submit", "context_assembly_ms": 12},
+            {"stage": "provider", "latency_ms": 10},
+            {"stage": "provider", "latency_ms": 20},
+            {
+                "stage": "delivery",
+                "decision": "partial",
+                "delivery_status": "partial",
+                "first_reply_latency_ms": 40,
+                "delivery_latency_ms": 8,
+            },
+            {"stage": "delivery", "decision": "silent", "delivery_status": "silent"},
+            {"stage": "delivery", "decision": "failed", "delivery_status": "failed", "delivery_latency_ms": 15},
+            {"stage": "delivery", "decision": "sent", "delivery_status": "sent", "text": "private"},
+        ],
+        day_key="2026-10-02",
+        source_file_count=2,
+    )
+
+    assert report["window"] == {"local_day": "2026-10-02", "source_files": 2}
+    assert report["metrics"]["context_assembly_ms"]["sample_count"] == 1
+    assert report["metrics"]["provider_request_ms"]["p50_ms"] == 10
+    assert report["metrics"]["provider_request_ms"]["p95_ms"] == 20
+    assert report["metrics"]["first_effective_reply_ms"]["sample_count"] == 1
+    assert report["metrics"]["first_effective_reply_ms"]["unknown_count"] == 3
+    assert report["metrics"]["delivery_ms"]["p50_ms"] == 8
+    assert report["metrics"]["send_queue_wait_ms"]["status"] == "unknown"
+    assert report["delivery_metrics_by_status"]["partial"]["first_effective_reply_ms"]["sample_count"] == 1
+    assert report["delivery_metrics_by_status"]["silent"]["first_effective_reply_ms"]["unknown_count"] == 1
+    assert report["delivery_metrics_by_status"]["failed"]["delivery_ms"]["p50_ms"] == 15
+    assert report["delivery_metrics_by_status"]["sent"]["delivery_ms"]["unknown_count"] == 1
+    serialized = json.dumps(report, ensure_ascii=False)
+    assert "private" not in serialized
+    assert "first_effective_reply_ms" in serialized
+
+
+def test_latency_report_cli_skips_bad_jsonl_and_never_emits_body(tmp_path, monkeypatch, capsys) -> None:
+    from tools.report_llm_latency import main
+
+    day = "2026-10-02"
+    event_file = tmp_path / f"turn_events-{day}-test.jsonl"
+    event_file.write_text(
+        '{"stage":"delivery","delivery_status":"sent","first_reply_latency_ms":17,"text":"private body"}\n{bad json\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sys, "argv", ["report_llm_latency", "--root", str(tmp_path), "--day", day])
+
+    main()
+
+    output = capsys.readouterr().out
+    report = json.loads(output)
+    assert report["metrics"]["first_effective_reply_ms"]["p50_ms"] == 17
+    assert report["metrics"]["first_effective_reply_ms"]["unknown_count"] == 0
+    assert "private body" not in output

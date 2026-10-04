@@ -74,7 +74,7 @@ def main() -> None:
     install_uvloop()
     from pallas.core.platform.work_jobs.result_committer import SEND_JOB_KIND
 
-    # 按用户等待程度分桶：交互任务 > 消息落库 > 复读学习 > 其他后台任务。
+    # 其他任务按等待程度分桶；短链路池使用 FIFO，避免图片被消息或学习任务饿死。
     priority_tiers = (
         frozenset({
             SEND_JOB_KIND,

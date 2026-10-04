@@ -39,6 +39,117 @@ def _required_tool_choice_is_incompatible(exc: BaseException) -> bool:
     )
 
 
+def _provider_response_json(response: httpx.Response) -> Any:
+    try:
+        return response.json()
+    except ValueError:
+        # Raise outside the handler so the decoder exception cannot retain its body as context.
+        pass
+    raise _repo.LlmProviderError("invalid provider payload", failure_class="invalid_payload") from None
+
+
+def _provider_response_is_refusal(method: str, data: dict[str, Any], message_obj: dict[str, Any]) -> bool:
+    if method == "responses":
+        output = data.get("output")
+        for item in output if isinstance(output, list) else []:
+            if not isinstance(item, dict):
+                continue
+            if str(item.get("type") or "").strip().lower() == "refusal":
+                return True
+            content = item.get("content")
+            if isinstance(content, list) and any(
+                isinstance(part, dict) and str(part.get("type") or "").strip().lower() == "refusal" for part in content
+            ):
+                return True
+        return False
+    if method == "chat_completions":
+        choices = data.get("choices")
+        choice = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], dict) else {}
+        message = choice.get("message") if isinstance(choice.get("message"), dict) else {}
+        finish_reason = str(choice.get("finish_reason") or "").strip().lower()
+        return bool(str(message.get("refusal") or "").strip()) or finish_reason == "content_filter"
+    if method == "anthropic_messages":
+        content = data.get("content")
+        return (
+            str(data.get("stop_reason") or "").strip().lower() == "refusal"
+            or isinstance(content, list)
+            and any(isinstance(block, dict) and str(block.get("type") or "").lower() == "refusal" for block in content)
+        )
+    done_reason = str(data.get("done_reason") or "").strip().lower()
+    return bool(str(message_obj.get("refusal") or "").strip()) or done_reason in {"refusal", "content_filter"}
+
+
+def _provider_empty_completion_failure_class(method: str, data: dict[str, Any]) -> str | None:
+    if method == "responses":
+        status = str(data.get("status") or "").strip().lower()
+        if status == "incomplete":
+            details = data.get("incomplete_details")
+            reason = details.get("reason") if isinstance(details, dict) else None
+            if reason == "max_output_tokens":
+                return "incomplete_token_limit"
+            return "incomplete" if reason is None else "unknown"
+        return "unknown" if status and status != "completed" else None
+    if method == "chat_completions":
+        choices = data.get("choices")
+        choice = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], dict) else {}
+        finish_reason = str(choice.get("finish_reason") or "").strip().lower()
+        if finish_reason == "length":
+            return "incomplete_token_limit"
+        return "unknown" if finish_reason and finish_reason not in {"stop", "tool_calls", "function_call"} else None
+    if method == "anthropic_messages":
+        stop_reason = str(data.get("stop_reason") or "").strip().lower()
+        if stop_reason == "max_tokens":
+            return "incomplete_token_limit"
+        return "unknown" if stop_reason and stop_reason not in {"end_turn", "stop_sequence", "tool_use"} else None
+    done_reason = str(data.get("done_reason") or "").strip().lower()
+    if done_reason == "length":
+        return "incomplete_token_limit"
+    return "unknown" if done_reason and done_reason != "stop" else None
+
+
+def _provider_output_failure_class(method: str, data: dict[str, Any], message_obj: dict[str, Any]) -> str | None:
+    if method == "responses" and str(data.get("status") or "").strip().lower() == "failed":
+        return "provider_failed"
+    if _provider_response_is_refusal(method, data, message_obj):
+        return "refusal"
+    if str(message_obj.get("content") or "").strip() or message_obj.get("tool_calls"):
+        return None
+    failure_class = _provider_empty_completion_failure_class(method, data)
+    if failure_class:
+        return failure_class
+    if str(message_obj.get("reasoning_content") or message_obj.get("reasoning") or "").strip():
+        return "reasoning_only"
+    if method == "responses":
+        output = data.get("output")
+        if isinstance(output, list) and any(
+            isinstance(item, dict) and str(item.get("type") or "").strip().lower() == "reasoning" for item in output
+        ):
+            return "reasoning_only"
+    if method == "anthropic_messages":
+        content = data.get("content")
+        if isinstance(content, list) and any(
+            isinstance(block, dict)
+            and str(block.get("type") or "").strip().lower() in {"thinking", "redacted_thinking"}
+            for block in content
+        ):
+            return "reasoning_only"
+    return "no_output"
+
+
+def _raise_provider_output_error(failure_class: str) -> None:
+    messages = {
+        "refusal": "provider refused output",
+        "provider_failed": "provider response failed",
+        "incomplete": "provider response incomplete",
+        "incomplete_token_limit": "provider response incomplete",
+        "invalid_payload": "invalid provider payload",
+    }
+    raise _repo.LlmProviderError(
+        messages.get(failure_class, "empty provider content"),
+        failure_class=failure_class,
+    )
+
+
 async def complete_chat_message(
     messages: list[dict[str, Any]],
     *,
@@ -54,6 +165,7 @@ async def complete_chat_message(
     prepare_candidate_messages: Callable[[list[dict[str, Any]], Any, str], Awaitable[list[dict[str, Any]]]]
     | None = None,
     telemetry_context: dict[str, str] | None = None,
+    exit_gate: Callable[[], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
     c = cfg or _repo.get_llm_config()
     from pallas.product.llm.availability import llm_calls_enabled
@@ -67,10 +179,25 @@ async def complete_chat_message(
     method = str(request_method or opts.get("request_method") or "chat_completions").strip().lower()
     telemetry_kwargs = {"telemetry_context": telemetry_context} if telemetry_context is not None else {}
 
+    async def post_provider_chat(*args, **kwargs):
+        if exit_gate is not None:
+            await exit_gate()
+        try:
+            if exit_gate is not None:
+                kwargs["exit_gate"] = exit_gate
+            result = await _repo._post_provider_chat(*args, **kwargs)
+        except Exception:
+            if exit_gate is not None:
+                await exit_gate()
+            raise
+        if exit_gate is not None:
+            await exit_gate()
+        return result
+
     if explicit_base:
         resolved_key = explicit_key or str(c.llm_api_key or "").strip()
         resolved_model = explicit_model or str(c.llm_model or "").strip()
-        return await _repo._post_provider_chat(
+        return await post_provider_chat(
             messages,
             base_url=explicit_base,
             api_key=resolved_key,
@@ -100,7 +227,7 @@ async def complete_chat_message(
                 candidate_messages = await prepare_candidate_messages(messages, endpoint, use_model)
             for key_index, use_key in enumerate(keys):
                 try:
-                    return await _repo._post_provider_chat(
+                    return await post_provider_chat(
                         candidate_messages,
                         base_url=endpoint.base_url,
                         api_key=use_key,
@@ -144,7 +271,7 @@ async def complete_chat_message(
     resolved_base = str(c.llm_base_url or "").strip()
     resolved_key = explicit_key or str(c.llm_api_key or "").strip()
     resolved_model = explicit_model or str(c.llm_model or "").strip()
-    return await _repo._post_provider_chat(
+    return await post_provider_chat(
         messages,
         base_url=resolved_base,
         api_key=resolved_key,
@@ -172,7 +299,14 @@ async def _post_provider_chat(
     task: str = "llm_chat",
     provider_id: str = "",
     telemetry_context: dict[str, str] | None = None,
+    exit_gate: Callable[[], Awaitable[None]] | None = None,
 ) -> dict[str, Any]:
+    exit_gate_errors: tuple[type[BaseException], ...] = ()
+    if exit_gate is not None:
+        from pallas.product.llm.availability import LlmChatExitGateError
+
+        exit_gate_errors = (LlmChatExitGateError,)
+
     if provider_id and not _repo.provider_daily_budget_ok(provider_id):
         raise _repo.LlmProviderError(
             f"provider [{provider_id}] daily budget exhausted",
@@ -275,10 +409,14 @@ async def _post_provider_chat(
 
     async def request_attempt(options_for_attempt: dict[str, Any]) -> dict[str, Any]:
         nonlocal attempt
+        if exit_gate is not None:
+            await exit_gate()
         attempt += 1
         attempt_started = time.monotonic()
         try:
             result = await request(options_for_attempt)
+        except exit_gate_errors:
+            raise
         except Exception as exc:
             if isinstance(exc, httpx.PoolTimeout):
                 _repo.note_llm_http_pool_timeout()
@@ -293,6 +431,8 @@ async def _post_provider_chat(
                 latency_ms=int((time.monotonic() - attempt_started) * 1000),
                 failure_class=_repo._provider_failure_class(exc),
             )
+            if exit_gate is not None:
+                await exit_gate()
             raise
         _repo.note_llm_http_success()
         _repo._emit_provider_attempt(
@@ -305,17 +445,23 @@ async def _post_provider_chat(
             attempt=attempt,
             latency_ms=int((time.monotonic() - attempt_started) * 1000),
         )
+        if exit_gate is not None:
+            await exit_gate()
         return result
 
     started = time.monotonic()
     try:
         result = await request_attempt(use_options)
+    except exit_gate_errors:
+        raise
     except Exception as exc:
         if tools and requested_tool_choice == "required" and _required_tool_choice_is_incompatible(exc):
             _required_tool_choice_incompatible.add(cache_key)
             retry_options = {**use_options, "tool_choice": "auto"}
             try:
                 result = await request_attempt(retry_options)
+            except exit_gate_errors:
+                raise
             except Exception:
                 pass
             else:
@@ -387,9 +533,11 @@ async def _post_anthropic_messages(
             len(response.content),
         )
         _repo.raise_provider_http_error(response)
-    data = response.json()
+    data = _provider_response_json(response)
     if not isinstance(data, dict):
-        raise _repo.LlmProviderError("invalid anthropic messages payload")
+        _raise_provider_output_error("invalid_payload")
+    if data.get("content") is not None and not isinstance(data.get("content"), (list, str)):
+        _raise_provider_output_error("invalid_payload")
     _repo._record_usage_from_payload(
         data,
         task=task,
@@ -398,8 +546,9 @@ async def _post_anthropic_messages(
         telemetry_context=telemetry_context,
     )
     message_obj = _repo.parse_anthropic_message(data)
-    if not str(message_obj.get("content", "") or "").strip() and not message_obj.get("tool_calls"):
-        raise _repo.LlmProviderError("empty provider content")
+    failure_class = _provider_output_failure_class("anthropic_messages", data, message_obj)
+    if failure_class:
+        _raise_provider_output_error(failure_class)
     return message_obj
 
 
@@ -435,9 +584,11 @@ async def _post_responses(
             f"provider status {response.status_code}",
             status=response.status_code,
         )
-    data = response.json()
+    data = _provider_response_json(response)
     if not isinstance(data, dict):
-        raise _repo.LlmProviderError("invalid responses payload")
+        _raise_provider_output_error("invalid_payload")
+    if data.get("output") is not None and not isinstance(data.get("output"), list):
+        _raise_provider_output_error("invalid_payload")
     _repo._record_usage_from_payload(
         data,
         task=task,
@@ -446,8 +597,9 @@ async def _post_responses(
         telemetry_context=telemetry_context,
     )
     message_obj = _repo.parse_responses_message(data)
-    if not str(message_obj.get("content", "") or "").strip() and not message_obj.get("tool_calls"):
-        raise _repo.LlmProviderError("empty provider content")
+    failure_class = _provider_output_failure_class("responses", data, message_obj)
+    if failure_class:
+        _raise_provider_output_error(failure_class)
     return message_obj
 
 
@@ -498,23 +650,29 @@ async def _post_chat_completions(
         )
         _repo.raise_provider_http_error(response)
 
-    data = response.json()
-    if isinstance(data, dict):
-        _repo._record_usage_from_payload(
-            data,
-            task=task,
-            provider_id=provider_id,
-            model=model_name,
-            telemetry_context=telemetry_context,
-        )
-    choices = data.get("choices") if isinstance(data, dict) else None
-    if not isinstance(choices, list) or not choices:
-        raise _repo.LlmProviderError("empty provider choices")
-    message_obj = choices[0].get("message") if isinstance(choices[0], dict) else {}
+    data = _provider_response_json(response)
+    if not isinstance(data, dict):
+        _raise_provider_output_error("invalid_payload")
+    _repo._record_usage_from_payload(
+        data,
+        task=task,
+        provider_id=provider_id,
+        model=model_name,
+        telemetry_context=telemetry_context,
+    )
+    choices = data.get("choices")
+    if not isinstance(choices, list):
+        _raise_provider_output_error("invalid_payload")
+    if not choices:
+        _raise_provider_output_error("no_output")
+    if not isinstance(choices[0], dict):
+        _raise_provider_output_error("invalid_payload")
+    message_obj = choices[0].get("message")
     if not isinstance(message_obj, dict):
-        raise _repo.LlmProviderError("invalid provider message")
-    if not str(message_obj.get("content", "") or "").strip() and not message_obj.get("tool_calls"):
-        raise _repo.LlmProviderError("empty provider content")
+        _raise_provider_output_error("invalid_payload")
+    failure_class = _provider_output_failure_class("chat_completions", data, message_obj)
+    if failure_class:
+        _raise_provider_output_error(failure_class)
     return message_obj
 
 
@@ -564,9 +722,9 @@ async def _post_ollama_chat(
             len(response.content),
         )
         _repo.raise_provider_http_error(response)
-    data = response.json()
+    data = _provider_response_json(response)
     if not isinstance(data, dict):
-        raise _repo.LlmProviderError("invalid ollama chat payload")
+        _raise_provider_output_error("invalid_payload")
     _repo._record_usage_from_payload(
         data,
         task=task,
@@ -577,8 +735,10 @@ async def _post_ollama_chat(
     )
     message_obj = data.get("message")
     if not isinstance(message_obj, dict):
-        raise _repo.LlmProviderError("invalid ollama message")
+        _raise_provider_output_error("invalid_payload")
     content = message_obj.get("content")
+    if content is not None and not isinstance(content, (list, str)):
+        _raise_provider_output_error("invalid_payload")
     if isinstance(content, list):
         texts = [
             str(part.get("text") or "").strip()
@@ -592,8 +752,9 @@ async def _post_ollama_chat(
     if isinstance(thinking, str) and thinking.strip():
         message_obj["reasoning_content"] = thinking.strip()
     message_obj.pop("thinking", None)
-    if not message_obj["content"] and not message_obj.get("tool_calls"):
-        raise _repo.LlmProviderError("empty provider content")
+    failure_class = _provider_output_failure_class("ollama_chat", data, message_obj)
+    if failure_class:
+        _raise_provider_output_error(failure_class)
     return message_obj
 
 

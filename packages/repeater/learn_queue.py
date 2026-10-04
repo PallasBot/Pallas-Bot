@@ -7,9 +7,11 @@ from typing import TYPE_CHECKING
 
 from nonebot import get_driver, logger
 
+from pallas.core.foundation.db.runtime import is_postgresql_backend
+from pallas.core.foundation.logging.throttle import log_rate_limited
 from pallas.core.foundation.startup_report import register_startup_ready
 from pallas.core.platform.multi_bot.group import claim_group_message_event
-from pallas.core.platform.work_jobs.models import WorkJob
+from pallas.core.platform.work_jobs.models import InvalidWorkJobPayloadError, WorkJob, normalize_work_job_batch
 from pallas.core.platform.work_jobs.runtime import build_work_job_store
 
 from .learn_runtime_config import get_repeater_learn_runtime_config
@@ -29,6 +31,8 @@ _learn_pool_wait_spins: int = 0
 _LIFECYCLE_BOUND = False
 _FLUSH_BATCH_SIZE = 64
 _SHUTDOWN_DRAIN_SEC = 0.2
+_OUTBOX_RETRY_BASE_SEC = 0.2
+_OUTBOX_RETRY_MAX_SEC = 30.0
 
 
 def drain_learn_pause_stats() -> int:
@@ -130,32 +134,65 @@ async def run_learn_consumer() -> None:
                     jobs.append(_next_outbox_job_nowait())
                 except asyncio.QueueEmpty:
                     break
-            await wait_pg_pool_headroom_for_learn()
-            await build_work_job_store().enqueue_many(jobs)
-            from pallas.core.platform.ingress.hotpath_metrics import record_learn_persisted
+            pending, invalid_count = normalize_work_job_batch(jobs) if is_postgresql_backend() else (jobs, 0)
+            if invalid_count:
+                log_rate_limited(
+                    logger,
+                    "warning",
+                    "repeater.learn.outbox.invalid_payload",
+                    "Repeater outbox discarded [{}] permanently invalid jobs",
+                    invalid_count,
+                )
+            retry_delay = min(_OUTBOX_RETRY_BASE_SEC, _OUTBOX_RETRY_MAX_SEC)
+            while pending:
+                try:
+                    await wait_pg_pool_headroom_for_learn()
+                    await build_work_job_store().enqueue_many(pending)
+                    from pallas.core.platform.ingress.hotpath_metrics import record_learn_persisted
 
-            record_learn_persisted(len(jobs))
+                    record_learn_persisted(len(pending))
+                    break
+                except InvalidWorkJobPayloadError as exc:
+                    pending, invalid_count = normalize_work_job_batch(pending)
+                    if invalid_count:
+                        log_rate_limited(
+                            logger,
+                            "warning",
+                            "repeater.learn.outbox.invalid_payload",
+                            "Repeater outbox discarded [{}] permanently invalid jobs",
+                            invalid_count,
+                        )
+                        continue
+                    error_class = type(exc).__name__
+                except Exception as exc:
+                    if is_postgresql_backend() and is_nul_payload_error(exc):
+                        pending, invalid_count = normalize_work_job_batch(pending)
+                        if invalid_count:
+                            log_rate_limited(
+                                logger,
+                                "warning",
+                                "repeater.learn.outbox.invalid_payload",
+                                "Repeater outbox discarded [{}] permanently invalid jobs",
+                                invalid_count,
+                            )
+                            if not pending:
+                                break
+                    error_class = type(exc).__name__
+                log_rate_limited(
+                    logger,
+                    "warning",
+                    "repeater.learn.outbox.retry",
+                    "Repeater outbox batch with [{}] jobs failed ([{}]); retrying",
+                    len(pending),
+                    error_class,
+                )
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, _OUTBOX_RETRY_MAX_SEC)
         except asyncio.CancelledError:
             from pallas.core.platform.ingress.hotpath_metrics import record_learn_dropped_shutdown
 
             record_learn_dropped_shutdown(len(jobs))
             raise
-        except Exception as exc:
-            logger.warning("Repeater learn outbox batch failed for [{}] jobs: [{}]", len(jobs), exc)
-            if is_nul_payload_error(exc):
-                logger.warning("Repeater learn outbox dropped NUL payloads for [{}] jobs", len(jobs))
-                continue
-            while True:
-                await asyncio.sleep(0.2)
-                try:
-                    await build_work_job_store().enqueue_many(jobs)
-                except Exception as retry_exc:
-                    logger.warning("Repeater learn outbox batch retry failed for [{}] jobs: [{}]", len(jobs), retry_exc)
-                    continue
-                from pallas.core.platform.ingress.hotpath_metrics import record_learn_persisted
-
-                record_learn_persisted(len(jobs))
-                break
         finally:
             for _job in jobs:
                 _source_queue_for(_job).task_done()

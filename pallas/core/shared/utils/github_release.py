@@ -25,7 +25,7 @@ import httpx
 from pallas.core.shared.utils.git_mirror import iter_mirrors_for_failover, request_with_mirrors
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator
 
 _RELEASE_TYPE_FOOTER_RE = re.compile(r"^>\s*\*\*类型\*\*[：:].*$", re.MULTILINE)
 _DEFAULT_NOTES_MAX = 12000
@@ -34,7 +34,7 @@ _DEFAULT_RELEASES_FETCH_LIMIT = 30
 
 
 @contextlib.contextmanager
-def github_request_ssl_env() -> Iterator[None]:
+def github_request_ssl_env() -> Generator[None, None, None]:
     """若 ``SSL_CERT_FILE`` / ``REQUESTS_CA_BUNDLE`` / ``CURL_CA_BUNDLE`` 指向不存在的路径，
 
     OpenSSL 会在加载 CA 时抛 ``FileNotFoundError``，导致 GitHub 更新检查失败。临时移除无效项。

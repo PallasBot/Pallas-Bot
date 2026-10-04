@@ -35,6 +35,8 @@ ACCOUNTS_JSON = PROJECT_ROOT / "data" / "pallas_protocol" / "accounts.json"
 PID_FILE = RUN_DIR / "bot.pid"
 LOG_FILE = LOG_DIR / "bot.log"
 LOG_RETENTION_DAYS = 14
+STARTUP_TIMEOUT_S = 60.0
+STARTUP_POLL_INTERVAL_S = 0.25
 ENV_PATH = PROJECT_ROOT / ".env"
 
 
@@ -116,7 +118,7 @@ def bot_environment(port: int) -> dict[str, str]:
 
 
 def launcher_log_path() -> Path:
-    stamp = datetime.now(UTC).strftime("%Y-%m-%d_%H-%M-%S")
+    stamp = datetime.now(UTC).strftime("%Y-%m-%d_%H-%M-%S_%f")
     return LOG_DIR / f"bot_{stamp}.log"
 
 
@@ -128,6 +130,36 @@ def cleanup_launcher_logs() -> None:
                 path.unlink()
         except OSError:
             continue
+
+
+def wait_for_bot_startup(log_path: Path) -> bool | None:
+    deadline = time.monotonic() + STARTUP_TIMEOUT_S
+    while True:
+        try:
+            log = log_path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            log = ""
+        if "Application startup failed. Exiting." in log:
+            return False
+        if "Application startup complete." in log:
+            return True
+        if not is_bot_running():
+            return False
+        if time.monotonic() >= deadline:
+            return None
+        time.sleep(STARTUP_POLL_INTERVAL_S)
+
+
+def print_startup_failure(log_path: Path) -> None:
+    print(f"unified 启动失败，启动器日志 {log_path}", file=sys.stderr)
+    try:
+        lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return
+    errors = [line for line in lines if "[ERROR" in line and "Traceback" not in line]
+    details = errors[:5] if errors else lines[-8:]
+    for line in details:
+        print(f"  {line}", file=sys.stderr)
 
 
 def start_bot(*, skip_port_sync: bool = False, detach: bool = False) -> int:
@@ -175,24 +207,34 @@ def start_bot(*, skip_port_sync: bool = False, detach: bool = False) -> int:
 
         cleanup_launcher_logs()
         cmd = uv_run_python_cmd("bot.py")
+        log_path = launcher_log_path()
         try:
-            pid = spawn_detached(cmd, cwd=PROJECT_ROOT, env=env, log_path=launcher_log_path())
+            pid = spawn_detached(cmd, cwd=PROJECT_ROOT, env=env, log_path=log_path)
         except OSError as err:
             print(f"unified 启动失败: {err}", file=sys.stderr)
             return 1
         write_pid_file(PID_FILE, pid)
         time.sleep(2)
-        if is_bot_running():
-            print(f"unified 已转入后台 · pid {read_pid_file(PID_FILE)} · port {port}")
-            print(f"控制台 http://127.0.0.1:{port}/pallas/")
-            print(f"启动器日志 {LOG_DIR}")
-            if start_aux_services() == 0:
-                return 0
+        if not is_bot_running():
+            clear_pid_file(PID_FILE)
+            print_startup_failure(log_path)
+            return 1
+        if start_aux_services() != 0:
             stop_bot()
             return 1
-        print(f"unified 启动失败，查看 {LOG_DIR}", file=sys.stderr)
-        clear_pid_file(PID_FILE)
-        return 1
+
+        startup = wait_for_bot_startup(log_path)
+        if startup is False:
+            stop_bot()
+            print_startup_failure(log_path)
+            return 1
+        if startup is True:
+            print(f"unified 已转入后台 · pid {read_pid_file(PID_FILE)} · port {port}")
+            print(f"控制台 http://127.0.0.1:{port}/pallas/")
+            print(f"启动器日志 {log_path}")
+        else:
+            print(f"unified 仍在后台启动，尚未确认就绪；启动器日志 {log_path}")
+        return 0
     finally:
         for key, value in old_env.items():
             if value is None:

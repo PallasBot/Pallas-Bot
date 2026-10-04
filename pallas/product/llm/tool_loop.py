@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pallas.product.llm.config import LlmConfig, get_llm_config
 from pallas.product.llm.event_observation import record_provider_prompt_hit
@@ -11,6 +11,9 @@ from pallas.product.llm.provider_client import complete_chat_message
 from pallas.product.llm.tools.context import ToolInvokeContext
 from pallas.product.llm.tools.registry import execute_tool_async
 from pallas.product.llm.turn_telemetry import telemetry_metadata
+
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
 
 
 def parse_tool_arguments(raw: Any) -> dict[str, Any]:
@@ -274,6 +277,7 @@ async def complete_with_tool_loop(
     metadata: dict[str, Any] | None = None,
     cfg: LlmConfig | None = None,
     tool_call_started: Any | None = None,
+    exit_gate: Callable[..., Awaitable[None]] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     c = cfg or get_llm_config()
     meta = metadata if isinstance(metadata, dict) else {}
@@ -281,6 +285,20 @@ async def complete_with_tool_loop(
     tools_enabled = bool(meta.get("tools_enabled")) and bool(tool_schemas) and bool(c.llm_tools_enabled)
     working = build_working_messages(system_prompt=system_prompt, messages=messages)
     task = str(meta.get("task") or "llm_chat").strip() or "llm_chat"
+    side_effect_started = False
+
+    async def check_exit_gate() -> None:
+        if exit_gate is not None:
+            await exit_gate(side_effect_started=side_effect_started)
+
+    async def complete_active_chat_message(*args, **kwargs):
+        await check_exit_gate()
+        if exit_gate is not None:
+            kwargs["exit_gate"] = check_exit_gate
+        result = await complete_chat_message(*args, **kwargs)
+        await check_exit_gate()
+        return result
+
     from pallas.product.llm.providers_store import find_provider, resolve_endpoint_for_task
     from pallas.product.llm.vision_messages import prepare_messages_for_provider_capabilities
 
@@ -365,7 +383,7 @@ async def complete_with_tool_loop(
 
     if not tools_enabled:
         record_provider_prompt_hit(working)
-        last_message = await complete_chat_message(
+        last_message = await complete_active_chat_message(
             working,
             model=model,
             options=options,
@@ -460,7 +478,7 @@ async def complete_with_tool_loop(
         if not working or str(working[-1].get("content") or "") != final_answer_instruction:
             working.append({"role": "user", "content": final_answer_instruction})
         record_provider_prompt_hit(working)
-        final_message = await complete_chat_message(
+        final_message = await complete_active_chat_message(
             working,
             model=model,
             options=dict(options),
@@ -500,7 +518,7 @@ async def complete_with_tool_loop(
             # DeepSeek thinking 模式不支持 tool_choice=required
             round_options["model_effort"] = "disable"
         record_provider_prompt_hit(working)
-        last_message = await complete_chat_message(
+        last_message = await complete_active_chat_message(
             working,
             model=model,
             options=round_options,
@@ -596,7 +614,11 @@ async def complete_with_tool_loop(
                 execute_kwargs = {"context": context}
                 if run_in_background:
                     execute_kwargs["background"] = True
+                await check_exit_gate()
+                if is_side_effect:
+                    side_effect_started = True
                 tool_result = await execute_tool_async(resolved_name, args, **execute_kwargs)
+                await check_exit_gate()
             result_dict = tool_result if isinstance(tool_result, dict) else {"ok": True, "result": tool_result}
             summary = summarize_tool_result(result_dict)
             round_trace["calls"].append({

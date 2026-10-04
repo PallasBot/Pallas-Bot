@@ -113,7 +113,7 @@ async def test_choose_sticker_with_vision_skips_without_vision_endpoint(monkeypa
 @pytest.mark.asyncio
 async def test_choose_sticker_with_vision_falls_back_to_none_on_provider_timeout(monkeypatch) -> None:
     from types import SimpleNamespace
-    from unittest.mock import AsyncMock
+    from unittest.mock import MagicMock
 
     from pallas.product.llm import sticker_vision
 
@@ -133,7 +133,7 @@ async def test_choose_sticker_with_vision_falls_back_to_none_on_provider_timeout
         raise TimeoutError("slow")
 
     monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", slow_complete)
-    metric = AsyncMock()
+    metric = MagicMock()
     monkeypatch.setattr("pallas.product.llm.task_metrics.record_bot_llm_task", metric)
 
     observation: dict[str, object] = {}
@@ -186,7 +186,7 @@ async def test_choose_sticker_with_vision_falls_back_to_none_on_provider_error(m
 @pytest.mark.asyncio
 async def test_choose_sticker_with_vision_reports_no_match_on_invalid_json(monkeypatch) -> None:
     from types import SimpleNamespace
-    from unittest.mock import AsyncMock
+    from unittest.mock import MagicMock
 
     from pallas.product.llm import sticker_vision
 
@@ -206,7 +206,7 @@ async def test_choose_sticker_with_vision_reports_no_match_on_invalid_json(monke
         return {"content": "我选第二张"}
 
     monkeypatch.setattr("pallas.product.llm.provider_client.complete_chat_message", invalid_complete)
-    metric = AsyncMock()
+    metric = MagicMock()
     monkeypatch.setattr("pallas.product.llm.task_metrics.record_bot_llm_task", metric)
 
     observation: dict[str, object] = {}
@@ -247,7 +247,69 @@ async def test_enqueue_sticker_vision_job_records_durable_delivery_target(monkey
         "group_id": 200,
         "fallback_cq_code": "[CQ:image,file=a.jpg]",
         "cooldown_sec": 90,
+        "llm_origin": False,
     }
+
+
+@pytest.mark.asyncio
+async def test_enqueue_sticker_vision_job_persists_llm_origin(monkeypatch) -> None:
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    from pallas.product.llm import sticker_vision
+    from pallas.product.llm.config import LlmConfig
+
+    store = SimpleNamespace(enqueue=AsyncMock(side_effect=lambda job: job))
+    monkeypatch.setattr(sticker_vision, "build_work_job_store", lambda: store)
+    monkeypatch.setattr(
+        "pallas.product.llm.sticker_label_jobs.enqueue_sticker_label_candidate", AsyncMock(return_value=True)
+    )
+    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: LlmConfig(llm_chat_enabled=True))
+    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
+    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", AsyncMock(return_value=False))
+
+    await sticker_vision.enqueue_sticker_vision_job(
+        [("[CQ:image,file=a.jpg]", b"a")],
+        user_text="笑死",
+        timeout_sec=8,
+        idempotency_key="sticker_vision.select:test",
+        bot_id=100,
+        group_id=200,
+        fallback_cq_code="[CQ:image,file=a.jpg]",
+        llm_origin=True,
+    )
+
+    job = next(call.args[0] for call in store.enqueue.await_args_list if call.args[0].kind == "sticker_vision.select")
+    assert job.payload["delivery"]["llm_origin"] is True
+
+
+@pytest.mark.asyncio
+async def test_llm_vision_handler_skips_closed_origin_before_loading_images(monkeypatch) -> None:
+    from unittest.mock import AsyncMock
+
+    from pallas.product.llm import sticker_vision
+    from pallas.product.llm.config import LlmConfig
+
+    payload = {
+        "job_id": "job-closed-origin",
+        "candidate_cq_codes": ["[CQ:image,file=one.jpg]"],
+        "delivery": {"bot_id": 100, "group_id": 200, "llm_origin": True},
+    }
+    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: LlmConfig(llm_chat_enabled=False))
+    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
+    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", AsyncMock(return_value=False))
+    get_image = AsyncMock()
+    monkeypatch.setattr("pallas.core.shared.utils.media_cache.get_image", get_image)
+    save = AsyncMock()
+    monkeypatch.setattr(sticker_vision, "save_sticker_vision_result", save)
+
+    await sticker_vision.handle_sticker_vision_select(payload)
+
+    get_image.assert_not_awaited()
+    save.assert_awaited_once()
+    assert save.await_args.args[:3] == ("job-closed-origin", payload, None)
+    assert save.await_args.kwargs["observation"]["state"] == "skipped"
+    assert save.await_args.kwargs["observation"]["error"] == "global_disabled_after_submit"
 
 
 @pytest.mark.asyncio
@@ -326,6 +388,10 @@ async def test_vision_dispatch_falls_back_to_original_candidate_when_selection_m
     monkeypatch.setattr(
         "pallas.product.llm.sticker_followup.should_send_repeater_image", lambda *_args, **_kwargs: True
     )
+    from pallas.product.llm.config import LlmConfig
+
+    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: LlmConfig(llm_chat_enabled=False))
+    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
     save = AsyncMock()
     monkeypatch.setattr(sticker_vision, "save_sticker_vision_delivery", save)
 
@@ -335,6 +401,48 @@ async def test_vision_dispatch_falls_back_to_original_candidate_when_selection_m
     assert sent.kwargs["group_id"] == 200
     assert "image" in str(sent.kwargs["message"])
     save.assert_awaited_once_with("job-fallback", payload, state="sent")
+
+
+@pytest.mark.asyncio
+async def test_llm_vision_dispatch_marks_failed_if_gate_closes_during_image_fetch(monkeypatch) -> None:
+    from unittest.mock import AsyncMock, MagicMock
+
+    from pallas.product.llm import sticker_vision
+    from pallas.product.llm.config import LlmConfig
+
+    cfg = LlmConfig(llm_chat_enabled=True)
+    bot = MagicMock()
+    bot.call_api = AsyncMock()
+    payload = {
+        "job_id": "job-llm-gate",
+        "vision_result": {"selected_cq_code": "[CQ:image,file=selected.jpg]"},
+        "delivery": {
+            "bot_id": 100,
+            "group_id": 200,
+            "cooldown_sec": 90,
+            "llm_origin": True,
+        },
+    }
+    monkeypatch.setattr(sticker_vision, "claim_sticker_vision_delivery", AsyncMock(return_value=payload))
+    monkeypatch.setattr("nonebot.get_bots", lambda: {"100": bot})
+    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: cfg)
+    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
+    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", AsyncMock(return_value=False))
+    monkeypatch.setattr(
+        "pallas.product.llm.sticker_followup.should_send_repeater_image", lambda *_args, **_kwargs: True
+    )
+
+    async def get_image(_segment: str) -> bytes:
+        cfg.llm_chat_enabled = False
+        return b"selected-image"
+
+    monkeypatch.setattr("pallas.core.shared.utils.media_cache.get_image", get_image)
+    save = AsyncMock()
+    monkeypatch.setattr(sticker_vision, "save_sticker_vision_delivery", save)
+
+    assert await sticker_vision.dispatch_sticker_vision_delivery_once()
+    bot.call_api.assert_not_awaited()
+    save.assert_awaited_once_with("job-llm-gate", payload, state="failed", error="global_disabled_after_submit")
 
 
 @pytest.mark.asyncio

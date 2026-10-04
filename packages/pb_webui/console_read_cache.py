@@ -129,7 +129,8 @@ async def cached_read(
 
     inflight = _READ_INFLIGHT.get(key)
     if inflight is not None and not inflight.done():
-        return await inflight
+        data = await asyncio.shield(inflight)
+        return await asyncio.to_thread(cache_value_copy, data)
 
     if swr:
         stale_data = hit["data"] if hit is not None else None
@@ -141,14 +142,16 @@ async def cached_read(
                 _spawn_background_refresh(key, loader, ttl_sec, stale_sec, persist_snapshot)
             return await asyncio.to_thread(cache_value_copy, stale_data)
 
-    task = asyncio.create_task(
-        _load_and_store(key, loader, ttl_sec, stale_sec, persist_snapshot, swallow=False, swr=swr)
-    )
+    async def load() -> Any:
+        try:
+            return await _load_and_store(key, loader, ttl_sec, stale_sec, persist_snapshot, swallow=False, swr=swr)
+        finally:
+            if _READ_INFLIGHT.get(key) is asyncio.current_task():
+                _READ_INFLIGHT.pop(key, None)
+
+    task = asyncio.create_task(load())
     _READ_INFLIGHT[key] = task
-    try:
-        return await task
-    finally:
-        _READ_INFLIGHT.pop(key, None)
+    return await asyncio.shield(task)
 
 
 async def _load_and_store(
@@ -197,7 +200,8 @@ def _spawn_background_refresh(
         try:
             return await _load_and_store(key, loader, ttl_sec, stale_sec, persist_snapshot, swallow=True, swr=True)
         finally:
-            _READ_INFLIGHT.pop(key, None)
+            if _READ_INFLIGHT.get(key) is asyncio.current_task():
+                _READ_INFLIGHT.pop(key, None)
 
     task = asyncio.create_task(run())
     _READ_INFLIGHT[key] = task

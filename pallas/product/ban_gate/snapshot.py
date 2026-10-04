@@ -5,6 +5,10 @@ from __future__ import annotations
 import asyncio
 import os
 import time
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 from nonebot import logger
 
@@ -26,8 +30,12 @@ _refresh_failures: int = 0
 _ready: bool = False
 _lock = asyncio.Lock()
 _refresh_task: asyncio.Task[None] | None = None
+_background_tasks: set[asyncio.Task[None]] = set()
+_redis_io_tasks: set[asyncio.Task] = set()
 _synced_redis_gen: int = -1
 _remote_gen_checked_at: float = 0.0
+_lifecycle_generation = 0
+_snapshot_stopping = False
 
 
 def bump_ban_gate_snapshot_remote_generation() -> None:
@@ -47,34 +55,73 @@ def bump_ban_gate_snapshot_remote_generation() -> None:
         )
 
 
+def _read_remote_generation() -> int | None:
+    try:
+        from pallas.core.platform.coord.redis_claim import get_coord_redis_client
+
+        client = get_coord_redis_client()
+        if client is None:
+            return None
+        raw = client.get(_REDIS_GEN_KEY)
+        return int(raw) if raw else 0
+    except Exception:
+        return None
+
+
+async def _run_redis_io[T](func: Callable[[], T]) -> T:
+    task = asyncio.create_task(asyncio.to_thread(func))
+    _redis_io_tasks.add(task)
+    task.add_done_callback(_redis_io_tasks.discard)
+    return await asyncio.shield(task)
+
+
+async def _wait_for_redis_io() -> None:
+    if _redis_io_tasks:
+        await asyncio.wait(tuple(_redis_io_tasks))
+
+
 def sync_ban_gate_snapshot_remote_generation() -> bool:
     """对比 Redis 世代；变化时返回 True。"""
     global _synced_redis_gen, _remote_gen_checked_at
     now = time.monotonic()
     if _remote_gen_checked_at and now - _remote_gen_checked_at < _REMOTE_GEN_SYNC_TTL_SEC:
         return False
-    try:
-        from pallas.core.platform.coord.redis_claim import get_coord_redis_client
-
-        client = get_coord_redis_client()
-        if client is None:
-            _remote_gen_checked_at = now
-            return False
-        raw = client.get(_REDIS_GEN_KEY)
-        _remote_gen_checked_at = now
-        remote = int(raw) if raw else 0
-        if remote == _synced_redis_gen:
-            return False
-        _synced_redis_gen = remote
-        return True
-    except Exception:
-        _remote_gen_checked_at = now
+    remote = _read_remote_generation()
+    _remote_gen_checked_at = now
+    if remote is None or remote == _synced_redis_gen:
         return False
+    _synced_redis_gen = remote
+    return True
+
+
+async def _sync_ban_gate_snapshot_remote_generation() -> bool:
+    global _synced_redis_gen, _remote_gen_checked_at
+    now = time.monotonic()
+    if _remote_gen_checked_at and now - _remote_gen_checked_at < _REMOTE_GEN_SYNC_TTL_SEC:
+        return False
+    remote = await _run_redis_io(_read_remote_generation)
+    _remote_gen_checked_at = now
+    if remote is None or remote == _synced_redis_gen:
+        return False
+    _synced_redis_gen = remote
+    return True
+
+
+async def _schedule_snapshot_refresh(generation: int) -> None:
+    await _run_redis_io(bump_ban_gate_snapshot_remote_generation)
+    if generation == _lifecycle_generation:
+        await refresh_ban_gate_snapshot()
 
 
 def schedule_ban_gate_snapshot_refresh() -> None:
-    bump_ban_gate_snapshot_remote_generation()
-    asyncio.create_task(refresh_ban_gate_snapshot())
+    if _snapshot_stopping:
+        return
+    task = asyncio.create_task(
+        _schedule_snapshot_refresh(_lifecycle_generation),
+        name="ban_gate_snapshot_scheduled_refresh",
+    )
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
 
 
 def snapshot_ready() -> bool:
@@ -164,6 +211,7 @@ async def refresh_ban_gate_snapshot() -> None:
         _ready, \
         _last_failure_mono, \
         _refresh_failures
+    generation = _lifecycle_generation
     backend = get_db_backend()
     try:
         if backend == "mongodb":
@@ -176,12 +224,16 @@ async def refresh_ban_gate_snapshot() -> None:
     except asyncio.CancelledError:
         raise
     except Exception:
+        if generation != _lifecycle_generation:
+            return
         _refresh_failures += 1
         _last_failure_mono = time.monotonic()
         logger.exception("ban_gate_snapshot: refresh failed")
         return
 
     async with _lock:
+        if generation != _lifecycle_generation:
+            return
         _global_banned = users
         _group_blocked = groups
         _banned_groups = banned_groups
@@ -251,35 +303,48 @@ async def _load_snapshot_postgresql() -> tuple[frozenset[int], dict[int, frozens
 
 
 async def _refresh_loop() -> None:
-    while True:
-        await asyncio.shield(refresh_ban_gate_snapshot())
+    generation = _lifecycle_generation
+    while generation == _lifecycle_generation:
+        await refresh_ban_gate_snapshot()
+        if generation != _lifecycle_generation:
+            return
         waited = 0.0
         while waited < _SNAPSHOT_REFRESH_SEC:
             chunk = min(_REMOTE_GEN_SYNC_TTL_SEC, _SNAPSHOT_REFRESH_SEC - waited)
             await asyncio.sleep(chunk)
             waited += chunk
-            if sync_ban_gate_snapshot_remote_generation():
+            if await _sync_ban_gate_snapshot_remote_generation():
                 break
 
 
 async def start_ban_gate_snapshot() -> None:
-    global _refresh_task
+    global _lifecycle_generation, _refresh_task, _snapshot_stopping
+    if _snapshot_stopping:
+        _lifecycle_generation += 1
+        _snapshot_stopping = False
+    generation = _lifecycle_generation
+    await _wait_for_redis_io()
     await refresh_ban_gate_snapshot()
+    if generation != _lifecycle_generation:
+        return
     if _refresh_task is None or _refresh_task.done():
         _refresh_task = asyncio.create_task(_refresh_loop(), name="ban_gate_snapshot_refresh")
+        _background_tasks.add(_refresh_task)
+        _refresh_task.add_done_callback(_background_tasks.discard)
 
 
 async def stop_ban_gate_snapshot() -> None:
-    global _refresh_task
-    if _refresh_task is not None:
-        task = _refresh_task
-        _refresh_task = None
-        task.cancel()
-        try:
-            # cancel 后 asyncpg/连接池可能不立即中断，限时等待避免拖住进程关闭
-            await asyncio.wait_for(task, timeout=3.0)
-        except (asyncio.CancelledError, TimeoutError):
-            pass
+    global _lifecycle_generation, _refresh_task, _snapshot_stopping
+    _lifecycle_generation += 1
+    _snapshot_stopping = True
+    _refresh_task = None
+    tasks = tuple(_background_tasks)
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+    if tasks:
+        await asyncio.wait(tasks, timeout=3.0)
+    await _wait_for_redis_io()
 
 
 async def reset_ban_gate_snapshot_for_tests() -> None:
@@ -287,8 +352,12 @@ async def reset_ban_gate_snapshot_for_tests() -> None:
     global _global_banned, _group_blocked, _banned_groups, _last_refresh_mono, _ready  # noqa: FURB154
     global _last_failure_mono, _refresh_failures  # noqa: FURB154
     global _synced_redis_gen, _remote_gen_checked_at  # noqa: FURB154
+    global _snapshot_stopping  # noqa: FURB154
+    generation = _lifecycle_generation + 1
     await stop_ban_gate_snapshot()
     async with _lock:
+        if generation != _lifecycle_generation:
+            return
         _global_banned = frozenset()
         _group_blocked = {}
         _banned_groups = frozenset()
@@ -298,3 +367,4 @@ async def reset_ban_gate_snapshot_for_tests() -> None:
         _ready = False
     _synced_redis_gen = -1
     _remote_gen_checked_at = 0.0
+    _snapshot_stopping = False

@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 from nonebot.log import logger
 
 from pallas.core.foundation.db import Message, make_message_repository
+from pallas.core.platform.ingress.message_payload import event_message_to_cq
 from pallas.core.shared.reply_command_rule import extract_reply_id_from_raw_message
 
 if TYPE_CHECKING:
@@ -33,7 +34,7 @@ def build_message(event: GroupMessageEvent, bot: Bot) -> Message:
     """从群消息事件构造 message 表记录（字段对齐 Message 模型）。"""
     sender = getattr(event, "sender", None)
     sender_name = getattr(sender, "card", "") or getattr(sender, "nickname", "") or ""
-    raw_message = str(getattr(event, "raw_message", "") or "")
+    raw_message = event_message_to_cq(event)
     plain_text = str(event.get_plaintext() or "")
     return Message.model_construct(
         group_id=int(getattr(event, "group_id", 0) or 0),

@@ -2752,53 +2752,67 @@ async def label_semantic_style_batch_with_llm(
     from pallas.product.llm.config import get_llm_config
     from pallas.product.llm.provider_client import complete_chat_message
 
-    async with semantic_style_label_sem():
-        results: list[tuple[SemanticStyleLabel, BehaviorStrategy | None] | None] = []
-        remaining = list(pairs)
-        while remaining:
-            chunk = remaining[:max_batch]
-            remaining = remaining[max_batch:]
-            prompt_items = []
-            for index, (trigger_text, reply_text, pair_relation) in enumerate(chunk):
-                relation = "明确引用前句" if pair_relation == "quoted" else "仅时间相邻"
-                prompt_items.append(
-                    f"[{index}] 关联：{relation}\n前：{_short_text(trigger_text, 72)}"
-                    f"\n后：{_short_text(reply_text, 72)}"
+    gate = semantic_style_label_sem()
+    gate_wait_started = time.monotonic()
+    async with gate:
+        gate_wait_ms = int((time.monotonic() - gate_wait_started) * 1000)
+        model_started = time.monotonic()
+        try:
+            results: list[tuple[SemanticStyleLabel, BehaviorStrategy | None] | None] = []
+            remaining = list(pairs)
+            while remaining:
+                chunk = remaining[:max_batch]
+                remaining = remaining[max_batch:]
+                prompt_items = []
+                for index, (trigger_text, reply_text, pair_relation) in enumerate(chunk):
+                    relation = "明确引用前句" if pair_relation == "quoted" else "仅时间相邻"
+                    prompt_items.append(
+                        f"[{index}] 关联：{relation}\n前：{_short_text(trigger_text, 72)}"
+                        f"\n后：{_short_text(reply_text, 72)}"
+                    )
+                cfg = get_llm_config()
+                prompt = _label_semantic_style_batch_prompt(len(chunk)) + "\n\n" + "\n\n".join(prompt_items)
+                if not claim_semantic_label_budget():
+                    return results
+                try:
+                    response = await complete_chat_message(
+                        [{"role": "user", "content": prompt}],
+                        model=str(cfg.llm_model or ""),
+                        # 思考模型预留思考+回答余量；max_tokens 按实际用量计费，stop 时不会多收
+                        options={"temperature": 0, "max_tokens": 256 * len(chunk)},
+                        cfg=cfg,
+                        task="repeater.semantic_style",
+                    )
+                    parsed = _parse_label_batch_response(str(response.get("content") or ""), len(chunk))
+                except Exception as exc:
+                    logger.warning("repeater semantic style batch label failed: {}", exc)
+                    parsed = []
+                if len(parsed) == len(chunk):
+                    results.extend(parsed)
+                    continue
+                # 批量解析不完整（缺项/异常）时，仅对缺失下标逐对回退单对标注；
+                # 已解析出的项按位置直接保留，避免整批重标放大调用量。
+                logger.debug(
+                    "Repeater semantic style batch incomplete ([{}]/[{}]); falling back for missing",
+                    len(parsed),
+                    len(chunk),
                 )
-            cfg = get_llm_config()
-            prompt = _label_semantic_style_batch_prompt(len(chunk)) + "\n\n" + "\n\n".join(prompt_items)
-            if not claim_semantic_label_budget():
-                return results
-            try:
-                response = await complete_chat_message(
-                    [{"role": "user", "content": prompt}],
-                    model=str(cfg.llm_model or ""),
-                    # 思考模型预留思考+回答余量；max_tokens 按实际用量计费，stop 时不会多收
-                    options={"temperature": 0, "max_tokens": 256 * len(chunk)},
-                    cfg=cfg,
-                    task="repeater.semantic_style",
-                )
-                parsed = _parse_label_batch_response(str(response.get("content") or ""), len(chunk))
-            except Exception as exc:
-                logger.warning("repeater semantic style batch label failed: {}", exc)
-                parsed = []
-            if len(parsed) == len(chunk):
                 results.extend(parsed)
-                continue
-            # 批量解析不完整（缺项/异常）时，仅对缺失下标逐对回退单对标注；
-            # 已解析出的项按位置直接保留，避免整批重标放大调用量。
-            logger.debug(
-                "Repeater semantic style batch incomplete ([{}]/[{}]); falling back for missing",
-                len(parsed),
-                len(chunk),
+                for item in chunk[len(parsed) :]:
+                    fallback = await label_semantic_style_with_retry(
+                        trigger_text=item[0], reply_text=item[1], pair_relation=item[2]
+                    )
+                    results.append(fallback)
+            return results
+        finally:
+            log_rate_limited(
+                logger,
+                "info",
+                "repeater_semantic_style.batch_timing",
+                "Semantic style batch waited for its gate [{}] ms; model calls and fallback took [{}] ms",
+                max(0, gate_wait_ms),
+                max(0, int((time.monotonic() - model_started) * 1000)),
             )
-            results.extend(parsed)
-            for item in chunk[len(parsed) :]:
-                fallback = await label_semantic_style_with_retry(
-                    trigger_text=item[0], reply_text=item[1], pair_relation=item[2]
-                )
-                results.append(fallback)
-        return results
 
 
 def _label_semantic_style_batch_prompt(count: int) -> str:

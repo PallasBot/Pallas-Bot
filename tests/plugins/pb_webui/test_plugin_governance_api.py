@@ -397,7 +397,39 @@ def test_plugin_governance_put_keeps_existing_overrides_and_honors_alias_prefix(
     }
 
 
-def test_plugin_config_get_resolves_official_pip_plugin_short_name(monkeypatch) -> None:
+def test_plugin_config_get_resolves_official_pip_plugin_short_name(tmp_path, monkeypatch) -> None:
+    import sys
+    from importlib.machinery import ModuleSpec
+    from types import ModuleType
+
+    from pydantic import BaseModel
+
+    from pallas.console.webui import plugin_api, plugin_catalog
+    from pallas.core.foundation.config import repo_settings
+    from pallas.core.platform.plugin_runtime import resolve
+
+    class DrawConfig(BaseModel):
+        enabled: bool = True
+        endpoint: str = "https://example.invalid"
+
+    package = ModuleType("pallas_plugin_draw")
+    package.__path__ = []
+    package.__spec__ = ModuleSpec("pallas_plugin_draw", loader=None, is_package=True)
+    config_module = ModuleType("pallas_plugin_draw.config")
+    config_module.Config = DrawConfig
+    config_module.migrate_legacy_gateway_config = lambda config: config
+    monkeypatch.setitem(sys.modules, "pallas_plugin_draw", package)
+    monkeypatch.setitem(sys.modules, "pallas_plugin_draw.config", config_module)
+
+    repo_root = tmp_path / "repo"
+    monkeypatch.setattr(repo_settings, "_REPO_ROOT", repo_root)
+    monkeypatch.setattr(plugin_catalog, "PROJECT_ROOT", repo_root)
+    monkeypatch.setattr(plugin_catalog, "_PLUGINS_ROOT", repo_root / "packages")
+    monkeypatch.setattr(plugin_catalog, "_loaded_plugin_index", lambda: ({}, {}))
+    monkeypatch.setattr(plugin_catalog, "discover_extra_plugin_packages", dict)
+    monkeypatch.setattr(plugin_api, "get_loaded_plugins", list)
+    monkeypatch.setattr(resolve, "get_loaded_plugins", list)
+
     client = _build_client(monkeypatch)
     response = client.get("/pallas/api/plugins/draw/config")
 
@@ -415,7 +447,15 @@ def test_plugin_config_get_preserves_field_groups_in_response_model(monkeypatch)
         lambda _name: {
             "plugin": "pb_core",
             "module": "pb_core.config",
-            "fields": [{"name": "enabled", "type": "bool", "value": True}],
+            "fields": [{
+                "name": "enabled",
+                "kind": "bool",
+                "required": False,
+                "description": "",
+                "env_key": "PB_CORE_ENABLED",
+                "default": False,
+                "current": True,
+            }],
             "unexpected_keys": [],
             "field_groups": [
                 {"id": "core", "title": "核心", "field_names": ["enabled"]},

@@ -21,6 +21,10 @@ flowchart LR
 
 入口位于现有 OneBot / NoneBot 入站门控之后。它保留协议适配、插件加载和 NoneBot 生命周期，只将适合的消息提前交给受约束的 direct handler。`ActionCommitter` 负责 direct 的结构化结果；matcher 仍按 NoneBot 语义执行，二者随后共用发送队列等既有设施。
 
+入站门控中的主持活动判定保留同步规则与原执行顺序，但可能访问分片 Redis 的三处决策经 `asyncio.to_thread` 执行，避免 socket 等待阻塞消息事件循环。黑名单快照轮询的远端世代 GET 与变更通知 INCR 也在工作线程执行；本地快照 patch 仍先立即生效。
+
+黑名单快照停止或重置时取消后台任务，并等待已提交的 Redis 线程操作结束；生命周期世代校验阻止旧刷新覆盖新快照。线程中的同步操作不能强制取消，线程池排队与 Redis 超时可能延长停止等待，3 秒的后台任务等待不是整个停止过程的总时限。
+
 ## 规划与执行
 
 direct 路径按以下顺序工作：
@@ -48,6 +52,10 @@ planner、registry、`HandlingPlan`、`HandlingOutcome` 和 `ActionCommitter` �
 一旦 `ActionCommitter` 开始提交，下游可能已经接受任务或发送动作。此时提交失败会记录为 `SideEffectCommitError`，但运行时仍把本次消息视为已经由 direct 取得所有权，不再用 matcher 重试。这避免“发送成功但确认失败”一类情况造成重复回复或重复执行。
 
 durable work handler 可以返回 `DirectWorkResult`，其中的 `DirectBotAction` 由 work auxiliary 按顺序交给现有 `bot_action` 设施，单机直接投递，分片时路由到持有目标 Bot 连接的 worker。handler 在返回结果前失败仍使用 work job 的重试策略；结果提交一旦开始便可能已经产生可见动作，此后失败会直接 dead-letter，不再重跑整个 job。
+
+## 出站发送队列
+
+发送队列的 `depth` / `depth_live` 统计所有已接纳任务，包括排队、执行与退避中的重试，`max_depth` 限制接纳总量。高优先级发送在满载时等待至 `PALLAS_SEND_QUEUE_ENQUEUE_TIMEOUT_SEC`，超时明确失败；低优先级丢弃策略不变。停止时先拒绝新任务，结束容量等待者与已接纳调用，并取消延迟重试；重启会建立新生命周期，旧重试不会进入新队列。回执超时仍按“结果不明确”处理，不盲目再次发送。
 
 ## fallback 与 continuation
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import contextvars
+import re
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -18,7 +19,14 @@ _BYPASS = contextvars.ContextVar("_ingress_send_queue_bypass", default=False)
 
 _QUEUE: asyncio.PriorityQueue[tuple[int, int, SendQueueItem]] | None = None
 _WORKERS: list[asyncio.Task[None]] = []
+_RETRY_TASKS: set[asyncio.Task[None]] = set()
+_ACTIVE_ITEMS: set[SendQueueItem] = set()
+_CAPACITY_CHANGED: asyncio.Event | None = None
+_STOP_COMPLETE: asyncio.Event | None = None
+_STOP_TASK: asyncio.Task[None] | None = None
 _SEQ = 0
+_GENERATION = 0
+_STOPPING = False
 _STATS = {
     "enqueued": 0,
     "sent": 0,
@@ -29,6 +37,8 @@ _STATS = {
     "risk_cooldowns": 0,
     "depth": 0,
 }
+_ERROR_OPERATIONS = ("message", "interaction", "other")
+_ERRORS_BY_OPERATION = dict.fromkeys(_ERROR_OPERATIONS, 0)
 _ERROR_DIMENSION_LIMIT = 16
 _ERRORS_BY_API: dict[str, int] = {}
 _ERRORS_BY_CLASS: dict[str, int] = {}
@@ -55,7 +65,7 @@ _DROPPABLE_APIS = frozenset({
 _QUEUED_APIS = _HIGH_PRIORITY_APIS | _DROPPABLE_APIS | frozenset({"group_poke"})
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, eq=False)
 class SendQueueItem:
     adapter: Any
     bot: Any
@@ -63,6 +73,9 @@ class SendQueueItem:
     data: dict[str, Any]
     future: asyncio.Future[Any]
     attempt: int = 0
+    generation: int = 0
+    completed: bool = False
+    retry_task: asyncio.Task[None] | None = None
 
 
 def send_queue_enabled() -> bool:
@@ -170,8 +183,7 @@ def is_droppable_api(api: str) -> bool:
 
 
 def send_queue_status() -> dict[str, Any]:
-    queue = _QUEUE
-    depth = queue.qsize() if queue is not None else 0
+    depth = _STATS["depth"]
     last_error = None
     if _LAST_ERROR is not None:
         last_error = {
@@ -192,6 +204,7 @@ def send_queue_status() -> dict[str, Any]:
         **dict(_STATS),
         "errors_by_api": dict(_ERRORS_BY_API),
         "errors_by_class": dict(_ERRORS_BY_CLASS),
+        "errors_by_operation": dict(_ERRORS_BY_OPERATION),
         "errors_by_retcode": dict(_ERRORS_BY_RETCODE),
         "errors_by_reason": dict(_ERRORS_BY_REASON),
         "last_error": last_error,
@@ -206,6 +219,8 @@ def reset_send_queue_for_tests() -> None:
     _ORIGINAL_CALL_API = None
     for key in _STATS:
         _STATS[key] = 0
+    for key in _ERRORS_BY_OPERATION:
+        _ERRORS_BY_OPERATION[key] = 0
     _ERRORS_BY_API.clear()
     _ERRORS_BY_CLASS.clear()
     _ERRORS_BY_RETCODE.clear()
@@ -218,24 +233,86 @@ def reset_send_queue_for_tests() -> None:
     _RETRY_COUNTS.clear()
 
 
+def _classify_interaction_send_error(api: str, detail: str, compact: str) -> str | None:
+    if api == "set_msg_emoji_like":
+        if "already set" in detail or "alreadyset" in compact or "已经设置过" in detail or "65002" in detail:
+            return "already_reacted"
+        if "oidb0x9082_1" in compact and any(
+            marker in detail for marker in ("downstream group authentication failed", "下游群鉴权失败")
+        ):
+            return "interaction_auth_failed"
+        if "message not found" in detail:
+            return "message_not_found"
+    if api == "group_poke" and (
+        "process_nudge" in detail
+        and "0xed3_1" in compact
+        and re.search(r"\b(?:code\s*[:=]?\s*|error\s+)(?:1007|1004|1002)\b", detail)
+    ):
+        return "poke_rejected"
+    return None
+
+
+def _classify_message_send_error(api: str, retcode: Any, detail: str, compact: str) -> str | None:
+    if api not in _HIGH_PRIORITY_APIS:
+        return None
+    if (
+        'message element "markdown" field "text" must not be empty' in detail
+        or 'message segment "mface" is missing required or usable fields' in detail
+        or 'message element "mface" field "emojiid" must be exactly 32 hexadecimal characters' in detail
+    ):
+        return "invalid_message_payload"
+    if (
+        "removed from the group" in detail
+        or "moved out of the group" in detail
+        or "已被移出该群" in detail
+        or (retcode == 110 and "group" in detail and "moved out" in detail)
+    ):
+        return "bot_not_in_group"
+    empty_err = "empty err" in detail or detail.rstrip().endswith(("err=", "err:", 'err=""', "err=''"))
+    if (
+        api == "send_group_msg"
+        and (retcode == 120 or re.search(r"\bresult\s*[:=]?\s*120\b", detail))
+        and "sendgroupmessagerejected" in compact
+        and empty_err
+    ):
+        return "message_rejected"
+    if (
+        (retcode == 103 or re.search(r"\bresult\s*[:=]?\s*103\b", detail))
+        and any(marker in detail for marker in ("temporary session", "temp session", "临时会话"))
+        and any(marker in detail for marker in ("group owner", "群主"))
+        and any(marker in detail for marker in ("forbid", "not allowed", "禁止"))
+    ):
+        return "temporary_session_forbidden"
+    if "http download failed" in detail:
+        return "media_download_failed"
+    return None
+
+
 def classify_send_queue_error(api: str, exc: Exception) -> str:
     info = getattr(exc, "info", None)
     detail = ""
     if isinstance(info, dict):
         detail = " ".join(str(info.get(key) or "") for key in ("message", "wording", "msg")).lower()
-    if api == "set_msg_emoji_like" and ("already set" in detail or "已经设置过" in detail or "65002" in detail):
-        return "already_reacted"
-    if api == "set_msg_emoji_like" and "message not found" in detail:
-        return "message_not_found"
-    if api in _HIGH_PRIORITY_APIS and ("removed from the group" in detail or "已被移出该群" in detail):
-        return "bot_not_in_group"
-    if api in _HIGH_PRIORITY_APIS and "http download failed" in detail:
-        return "media_download_failed"
+    compact = "".join(detail.split())
+    retcode = info.get("retcode") if isinstance(info, dict) else None
+    return (
+        _classify_interaction_send_error(api, detail, compact)
+        or _classify_message_send_error(api, retcode, detail, compact)
+        or "other"
+    )
+
+
+def send_queue_error_operation(api: str) -> str:
+    if api in _HIGH_PRIORITY_APIS:
+        return "message"
+    if api in _DROPPABLE_APIS or api == "group_poke":
+        return "interaction"
     return "other"
 
 
 def record_send_queue_error(api: str, exc: Exception) -> None:
     global _LAST_ERROR, _LAST_ERROR_AT
+    _STATS["errors"] += 1
     error_class = type(exc).__name__
     info = getattr(exc, "info", None)
     retcode = info.get("retcode") if isinstance(info, dict) else None
@@ -250,6 +327,8 @@ def record_send_queue_error(api: str, exc: Exception) -> None:
 
     increment(_ERRORS_BY_API, str(api))
     increment(_ERRORS_BY_CLASS, error_class)
+    operation = send_queue_error_operation(api)
+    _ERRORS_BY_OPERATION[operation] += 1
     if retcode is not None:
         increment(_ERRORS_BY_RETCODE, str(retcode))
     increment(_ERRORS_BY_REASON, reason)
@@ -339,42 +418,97 @@ async def _rate_limit_wait(bot_self_id: str) -> None:
     _LAST_SEND_AT[bot_self_id] = time.monotonic()
 
 
+def _finish_queue_item(item: SendQueueItem, *, result: Any = None, error: BaseException | None = None) -> None:
+    if item.completed:
+        return
+    item.completed = True
+    if item not in _ACTIVE_ITEMS:
+        return
+    _ACTIVE_ITEMS.remove(item)
+    _STATS["depth"] = max(0, _STATS["depth"] - 1)
+    if _CAPACITY_CHANGED is not None:
+        _CAPACITY_CHANGED.set()
+    if not item.future.done():
+        if error is not None:
+            item.future.set_exception(error)
+        else:
+            item.future.set_result(result)
+
+
 async def _requeue_item_with_delay(item: SendQueueItem, delay: float) -> None:
-    await asyncio.sleep(delay)
+    try:
+        await asyncio.sleep(delay)
+    except asyncio.CancelledError:
+        _finish_queue_item(item, error=RuntimeError("send_queue stopped during retry"))
+        raise
+    finally:
+        if item.retry_task is asyncio.current_task():
+            item.retry_task = None
     queue = _QUEUE
-    if queue is None:
-        if not item.future.done():
-            item.future.set_exception(RuntimeError("send_queue stopped during retry"))
+    if queue is None or _STOPPING or item.generation != _GENERATION:
+        _finish_queue_item(item, error=RuntimeError("send_queue stopped during retry"))
+        return
+    if item.future.cancelled():
+        _finish_queue_item(item)
         return
     global _SEQ
     _SEQ += 1
-    _STATS["depth"] += 1
     queue.put_nowait((api_send_priority(item.api), _SEQ, item))
+
+
+def _schedule_queue_retry(item: SendQueueItem, delay: float) -> None:
+    task = asyncio.create_task(_requeue_item_with_delay(item, delay), name="ingress_send_queue_retry")
+    item.retry_task = task
+    _RETRY_TASKS.add(task)
+    task.add_done_callback(_RETRY_TASKS.discard)
+
+
+def _cancel_item_retry_if_cancelled(item: SendQueueItem) -> None:
+    if item.future.cancelled() and item.retry_task is not None:
+        item.retry_task.cancel()
 
 
 async def _execute_queue_item(item: SendQueueItem) -> None:
     global _ORIGINAL_CALL_API
+    if item.completed:
+        return
+    if item.future.cancelled():
+        _finish_queue_item(item)
+        return
+    if item.generation != _GENERATION or _STOPPING:
+        _finish_queue_item(item, error=RuntimeError("send_queue stopped before send"))
+        return
     if _ORIGINAL_CALL_API is None:
-        item.future.set_exception(RuntimeError("send_queue original _call_api missing"))
+        _finish_queue_item(item, error=RuntimeError("send_queue original _call_api missing"))
         return
     bot_self_id = str(getattr(item.bot, "self_id", ""))
     cooldown_left = is_send_bot_in_risk_cooldown(bot_self_id)
     if cooldown_left > 0:
-        _STATS["depth"] = max(0, _STATS["depth"] - 1)
-        asyncio.create_task(_requeue_item_with_delay(item, cooldown_left))
+        _schedule_queue_retry(item, cooldown_left)
         return
     token = _BYPASS.set(True)
     try:
         await _rate_limit_wait(bot_self_id)
+        if item.future.cancelled() or item.completed:
+            _finish_queue_item(item)
+            return
         result = await _ORIGINAL_CALL_API(item.adapter, item.bot, item.api, **item.data)
+        if item.completed:
+            return
         _STATS["sent"] += 1
-        if not item.future.done():
-            item.future.set_result(result)
+        _finish_queue_item(item, result=result)
     except Exception as exc:
-        _STATS["errors"] += 1
+        if item.completed:
+            return
         record_send_queue_error(item.api, exc)
         retryable = is_retryable_send_error(item.api, exc) or is_risk_limited_send_error(item.api, exc)
-        if retryable and item.attempt < send_queue_retry_max():
+        if (
+            retryable
+            and item.attempt < send_queue_retry_max()
+            and not item.future.done()
+            and item.generation == _GENERATION
+            and not _STOPPING
+        ):
             item.attempt += 1
             delay = send_error_retry_delay_sec(item.api, exc, item.attempt)
             _STATS["retries"] += 1
@@ -394,7 +528,7 @@ async def _execute_queue_item(item: SendQueueItem) -> None:
                     error=exc,
                 ),
             )
-            asyncio.create_task(_requeue_item_with_delay(item, delay))
+            _schedule_queue_retry(item, delay)
             return
         if is_risk_limited_send_error(item.api, exc):
             note_send_risk_failure(bot_self_id)
@@ -411,11 +545,12 @@ async def _execute_queue_item(item: SendQueueItem) -> None:
                 error=exc,
             ),
         )
-        if not item.future.done():
-            item.future.set_exception(exc)
+        _finish_queue_item(item, error=exc)
+    except asyncio.CancelledError:
+        _finish_queue_item(item, error=RuntimeError("send_queue stopped during send"))
+        raise
     finally:
         _BYPASS.reset(token)
-        _STATS["depth"] = max(0, _STATS["depth"] - 1)
 
 
 async def _send_queue_worker(_worker_id: int) -> None:
@@ -433,7 +568,9 @@ async def _send_queue_worker(_worker_id: int) -> None:
 async def enqueue_call_api(adapter: Any, bot: Any, api: str, **data: Any) -> Any:
     global _SEQ
     queue = _QUEUE
-    if queue is None:
+    changed = _CAPACITY_CHANGED
+    generation = _GENERATION
+    if queue is None or changed is None or _STOPPING:
         raise RuntimeError("send_queue not started")
 
     max_depth = send_queue_max_depth()
@@ -451,7 +588,7 @@ async def enqueue_call_api(adapter: Any, bot: Any, api: str, **data: Any) -> Any
         )
         return None
 
-    if depth >= max_depth and api not in _HIGH_PRIORITY_APIS:
+    if api not in _HIGH_PRIORITY_APIS and depth >= max_depth:
         _STATS["dropped"] += 1
         log_rate_limited(
             logger,
@@ -464,24 +601,33 @@ async def enqueue_call_api(adapter: Any, bot: Any, api: str, **data: Any) -> Any
         )
         return None
 
+    if api in _HIGH_PRIORITY_APIS:
+        deadline = asyncio.get_running_loop().time() + send_queue_enqueue_timeout_sec()
+        while _STATS["depth"] >= max_depth:
+            if _QUEUE is not queue or _GENERATION != generation or _STOPPING:
+                raise RuntimeError("send_queue stopped while waiting for capacity")
+            changed.clear()
+            remaining = deadline - asyncio.get_running_loop().time()
+            if remaining <= 0:
+                _STATS["dropped"] += 1
+                raise TimeoutError("send_queue enqueue timed out")
+            try:
+                await asyncio.wait_for(changed.wait(), timeout=remaining)
+            except TimeoutError as exc:
+                _STATS["dropped"] += 1
+                raise TimeoutError("send_queue enqueue timed out") from exc
+        if _QUEUE is not queue or _GENERATION != generation or _STOPPING:
+            raise RuntimeError("send_queue stopped while waiting for capacity")
+
     loop = asyncio.get_running_loop()
     future: asyncio.Future[Any] = loop.create_future()
-    item = SendQueueItem(adapter, bot, api, dict(data), future)
+    item = SendQueueItem(adapter, bot, api, dict(data), future, generation=generation)
+    future.add_done_callback(lambda _future: _cancel_item_retry_if_cancelled(item))
     _SEQ += 1
+    _ACTIVE_ITEMS.add(item)
     _STATS["enqueued"] += 1
     _STATS["depth"] += 1
-
-    try:
-        await asyncio.wait_for(
-            queue.put((api_send_priority(api), _SEQ, item)),
-            timeout=send_queue_enqueue_timeout_sec(),
-        )
-    except TimeoutError:
-        _STATS["depth"] = max(0, _STATS["depth"] - 1)
-        _STATS["dropped"] += 1
-        if is_droppable_api(api):
-            return None
-        raise
+    queue.put_nowait((api_send_priority(api), _SEQ, item))
 
     from pallas.core.platform.ingress.message_load import record_send_queue_pressure
 
@@ -497,9 +643,15 @@ async def patched_call_api(adapter: Any, bot: Any, api: str, **data: Any) -> Any
 
 
 async def start_send_queue_workers() -> None:
-    global _QUEUE, _WORKERS
+    global _QUEUE, _WORKERS, _CAPACITY_CHANGED, _STOP_COMPLETE, _GENERATION, _STOPPING
     if _QUEUE is not None:
         return
+    if _STOPPING:
+        raise RuntimeError("send_queue is stopping")
+    _GENERATION += 1
+    _STOPPING = False
+    _CAPACITY_CHANGED = asyncio.Event()
+    _STOP_COMPLETE = asyncio.Event()
     _QUEUE = asyncio.PriorityQueue(maxsize=0)
     worker_count = send_queue_worker_count()
     _WORKERS = [
@@ -507,15 +659,64 @@ async def start_send_queue_workers() -> None:
     ]
 
 
+async def _finish_send_queue_stop(
+    queue: asyncio.PriorityQueue[tuple[int, int, SendQueueItem]] | None,
+    tasks: list[asyncio.Task[None]],
+    retry_tasks: list[asyncio.Task[None]],
+    complete: asyncio.Event,
+) -> None:
+    global _STOPPING, _STOP_TASK
+    try:
+        for task in (*tasks, *retry_tasks):
+            task.cancel()
+        if tasks or retry_tasks:
+            await asyncio.gather(*tasks, *retry_tasks, return_exceptions=True)
+        if queue is not None:
+            while True:
+                try:
+                    queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+                else:
+                    queue.task_done()
+            await queue.join()
+    finally:
+        _STOPPING = False
+        complete.set()
+        _STOP_TASK = None
+
+
 async def stop_send_queue_workers() -> None:
-    global _QUEUE, _WORKERS
+    global _QUEUE, _WORKERS, _CAPACITY_CHANGED, _GENERATION, _STOPPING, _STOP_COMPLETE, _STOP_TASK
+    if _STOPPING:
+        if _STOP_TASK is not None:
+            await asyncio.shield(_STOP_TASK)
+        elif _STOP_COMPLETE is not None:
+            await _STOP_COMPLETE.wait()
+        return
+    queue = _QUEUE
+    changed = _CAPACITY_CHANGED
     tasks = list(_WORKERS)
-    _WORKERS = []
-    for task in tasks:
-        task.cancel()
-    if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
+    retry_tasks = list(_RETRY_TASKS)
+    if queue is None and not tasks and not retry_tasks and not _ACTIVE_ITEMS:
+        return
+    _STOPPING = True
+    _GENERATION += 1
     _QUEUE = None
+    _WORKERS = []
+    _CAPACITY_CHANGED = None
+    if changed is not None:
+        changed.set()
+    for item in tuple(_ACTIVE_ITEMS):
+        _finish_queue_item(item, error=RuntimeError("send_queue stopped"))
+    complete = _STOP_COMPLETE
+    if complete is None:
+        complete = _STOP_COMPLETE = asyncio.Event()
+    _STOP_TASK = asyncio.create_task(
+        _finish_send_queue_stop(queue, tasks, retry_tasks, complete),
+        name="ingress_send_queue_stop",
+    )
+    await asyncio.shield(_STOP_TASK)
 
 
 def install_send_queue() -> None:

@@ -38,6 +38,34 @@ def test_peer_without_group_admin_field_is_unknown(monkeypatch):
     assert mod.get_federate_peer_group_admin_bot_ids("dep-legacy", 123) is None
 
 
+def test_legacy_roster_refresh_clears_cache_when_redis_is_unavailable(monkeypatch):
+    monkeypatch.setattr(mod, "get_federate_redis_client", lambda: None)
+    monkeypatch.setattr(mod, "federate_redis_prefix", lambda _cfg=None: "pallas:fed:pool-1")
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "_cache_ids", frozenset({20001}))
+    monkeypatch.setattr(mod, "_cache_deployment_ids", frozenset({"dep-peer"}))
+    monkeypatch.setattr(mod, "_cache_deployment_capabilities", {"dep-peer": frozenset({"help"})})
+
+    assert mod.refresh_federate_peer_bot_ids_sync() == frozenset()
+    assert mod.get_federate_peer_deployment_ids() == frozenset()
+    assert mod.get_federate_peer_command_capabilities("dep-peer") is None
+
+
+def test_legacy_roster_refresh_keeps_cache_on_scan_failure(monkeypatch):
+    class BrokenRedis:
+        def scan_iter(self, **_kwargs):
+            raise OSError("simulated Redis failure")
+
+    monkeypatch.setattr(mod, "get_federate_redis_client", BrokenRedis)
+    monkeypatch.setattr(mod, "federate_redis_prefix", lambda _cfg=None: "pallas:fed:pool-1")
+    monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(mod, "_cache_ids", frozenset({20001}))
+    monkeypatch.setattr(mod, "_cache_deployment_ids", frozenset({"dep-peer"}))
+
+    assert mod.refresh_federate_peer_bot_ids_sync() == frozenset({20001})
+    assert mod.get_federate_peer_deployment_ids() == frozenset({"dep-peer"})
+
+
 def test_group_admin_owner_is_stable_for_same_group(monkeypatch):
     monkeypatch.setattr(mod, "load_or_create_deployment_id", lambda: "dep-local")
     monkeypatch.setattr(mod, "collect_local_federate_command_capabilities", lambda: frozenset({"牛牛轮盘"}))

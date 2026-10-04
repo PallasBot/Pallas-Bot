@@ -11,6 +11,9 @@ from nonebot import logger
 from pydantic import BaseModel, ConfigDict, Field
 
 from packages.pb_webui.console_openapi_models import (
+    PluginCatalogRow as _PluginCatalogRow,
+)
+from packages.pb_webui.console_openapi_models import (
     PluginConfigData as _PluginConfigData,
 )
 from packages.pb_webui.console_openapi_models import (
@@ -20,8 +23,12 @@ from packages.pb_webui.console_openapi_models import (
     PluginGovernanceData as _PluginGovernanceData,
 )
 from packages.pb_webui.console_openapi_models import (
+    PluginGovernanceUpdateData as _PluginGovernanceUpdateData,
+)
+from packages.pb_webui.console_openapi_models import (
     _ApiOkResponse,
 )
+from packages.pb_webui.console_openapi_models import plugin_config_response as _plugin_config_response
 from pallas.console.webui import apply_plugin_config_patch, plugin_config_payload
 
 from .config import Config
@@ -212,7 +219,11 @@ def register_plugins_console_router(
 ) -> None:
     """Register console routes."""
 
-    @router.get(f"{x}/plugins", include_in_schema=True)
+    @router.get(
+        f"{x}/plugins",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[list[_PluginCatalogRow]],
+    )
     async def _plugins() -> JSONResponse:
         async def _load() -> list[dict[str, Any]]:
             return await asyncio.to_thread(_list_plugins_dict)
@@ -309,7 +320,8 @@ def register_plugins_console_router(
     @router.get(
         f"{x}/plugins/{{plugin_name}}/governance",
         include_in_schema=True,
-        response_model=_ApiOkResponse[_PluginGovernanceData],
+        response_model=None,
+        responses={200: {"model": _ApiOkResponse[_PluginGovernanceData]}},
     )
     async def _plugin_governance_get(plugin_name: str) -> dict[str, Any]:
         from packages.help.global_disable import global_disabled_plugins_revision, load_global_disabled_plugins
@@ -390,6 +402,7 @@ def register_plugins_console_router(
         blocked_user_ids = await list_plugin_blocked_user_ids(target)
         return {
             "ok": True,
+            "error": None,
             "data": {
                 "plugin": target,
                 "title": str(plugin_row.get("title") or target),
@@ -415,7 +428,11 @@ def register_plugins_console_router(
             },
         }
 
-    @router.put(f"{x}/plugins/{{plugin_name}}/governance", include_in_schema=True)
+    @router.put(
+        f"{x}/plugins/{{plugin_name}}/governance",
+        include_in_schema=True,
+        response_model=_ApiOkResponse[_PluginGovernanceUpdateData],
+    )
     async def _plugin_governance_put(
         plugin_name: str,
         body: PluginGovernanceBody,
@@ -1380,7 +1397,8 @@ def register_plugins_console_router(
     @router.get(
         f"{x}/plugins/{{plugin_name}}/config",
         include_in_schema=True,
-        response_model=_ApiOkResponse[_PluginConfigData],
+        response_model=None,
+        responses={200: {"model": _ApiOkResponse[_PluginConfigData]}},
     )
     async def _plugin_config_get(plugin_name: str) -> dict[str, Any]:
         try:
@@ -1390,7 +1408,7 @@ def register_plugins_console_router(
             data = {"plugin": plugin_name, "module": "", "fields": [], "unexpected_keys": []}
         except Exception as e:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(e)) from e
-        return {"ok": True, "data": data}
+        return _plugin_config_response(data)
 
     @router.get(
         f"{x}/plugins/{{plugin_name}}/config/raw",
@@ -1409,7 +1427,8 @@ def register_plugins_console_router(
     @router.put(
         f"{x}/plugins/{{plugin_name}}/config/raw",
         include_in_schema=True,
-        response_model=_ApiOkResponse[_PluginConfigData],
+        response_model=None,
+        responses={200: {"model": _ApiOkResponse[_PluginConfigData]}},
     )
     async def _plugin_config_raw_put(
         plugin_name: str,
@@ -1424,7 +1443,7 @@ def register_plugins_console_router(
             data = apply_plugin_config_raw_toml(plugin_name, str(body.toml or ""))
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
-        return {"ok": True, "data": data}
+        return _plugin_config_response(data)
 
     @router.put(
         f"{x}/plugins/{{plugin_name}}/config",

@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 from pallas.core.foundation.paths import plugin_data_dir
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator
     from pathlib import Path
 
 _TRACE_LOCK = threading.Lock()
@@ -63,7 +63,7 @@ def _note_trace_append(path: Path, line_count: int) -> None:
 
 
 @contextmanager
-def interprocess_trace_lock(path: Path) -> Iterator[None]:
+def interprocess_trace_lock(path: Path) -> Generator[None, None, None]:
     """跨 hub/worker 互斥，避免共用固定 .tmp 时 os.replace 竞态。"""
     from pallas.core.foundation.fs_lock import interprocess_file_lock
 
