@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 from .data_dir import pb_webui_data_dir
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator
     from pathlib import Path
 
 INGRESS_HISTORY_RETENTION_SEC = 7 * 24 * 60 * 60
@@ -59,7 +59,7 @@ def ingress_metrics_history_path() -> Path:
 
 
 @contextmanager
-def _interprocess_history_lock(path: Path) -> Iterator[None]:
+def _interprocess_history_lock(path: Path) -> Generator[None, None, None]:
     from pallas.core.foundation.fs_lock import interprocess_file_lock
 
     with interprocess_file_lock(path.with_suffix(path.suffix + ".lock")):

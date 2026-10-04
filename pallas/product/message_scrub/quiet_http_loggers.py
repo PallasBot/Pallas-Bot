@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncGenerator
 
 _lock = asyncio.Lock()
 _depth = 0
@@ -14,7 +14,7 @@ _saved_levels: tuple[int, int] | None = None
 
 
 @asynccontextmanager
-async def scrub_http_log_noise() -> AsyncIterator[None]:
+async def scrub_http_log_noise() -> AsyncGenerator[None, None]:
     """审查出站 HTTP 期间将 ``httpx`` / ``httpcore`` 调至 WARNING，避免 DEBUG 刷屏；退出后恢复原级别。"""
     global _depth, _saved_levels
     httpx_logger = logging.getLogger("httpx")
