@@ -276,6 +276,7 @@ def test_semantic_style_manage_openapi_has_typed_actions() -> None:
         "disable",
         "enable",
         "set_governance",
+        "rollback_v2",
     }
     assert body_schema["additionalProperties"] is False
     response_ref = operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"]

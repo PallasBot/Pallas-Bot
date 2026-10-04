@@ -164,6 +164,12 @@ async def test_repeater_semantic_style_manage_api_dispatches_actions(monkeypatch
         lambda enabled: calls.append(("disable", enabled)) or {"enabled": enabled},
         raising=False,
     )
+    monkeypatch.setattr(
+        semantic_style,
+        "set_semantic_style_active_pipeline",
+        lambda pipeline: calls.append(("rollback_v2", pipeline)) or {"enabled": True, "active_pipeline": pipeline},
+        raising=False,
+    )
     app = _build_app(monkeypatch)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         for body in (
@@ -173,6 +179,7 @@ async def test_repeater_semantic_style_manage_api_dispatches_actions(monkeypatch
             {"action": "quality"},
             {"action": "recover"},
             {"action": "disable"},
+            {"action": "rollback_v2"},
         ):
             response = await client.post("/pallas/api/llm/repeater-semantic-style/manage", json=body)
             assert response.status_code == 200, response.text
@@ -185,6 +192,7 @@ async def test_repeater_semantic_style_manage_api_dispatches_actions(monkeypatch
         ("quality", None),
         ("recover", None),
         ("disable", False),
+        ("rollback_v2", "v2"),
     ]
 
 
