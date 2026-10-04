@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator
     from pathlib import Path
 
 
@@ -39,7 +39,7 @@ def _release_win32_lock(fd: int) -> None:
 
 
 @contextmanager
-def interprocess_file_lock(lock_path: Path) -> Iterator[None]:
+def interprocess_file_lock(lock_path: Path) -> Generator[None, None, None]:
     """跨进程排他锁；Unix 用 fcntl，Windows 用 msvcrt。"""
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR)

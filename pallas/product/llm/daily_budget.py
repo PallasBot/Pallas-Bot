@@ -25,7 +25,7 @@ from pallas.core.foundation.fs_lock import interprocess_file_lock
 from pallas.core.foundation.paths import plugin_data_dir
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator
 
 _BEIJING_TZ = ZoneInfo("Asia/Shanghai")
 
@@ -62,7 +62,7 @@ def _thread_lock(name: str) -> threading.RLock:
 
 
 @contextmanager
-def _budget_lock(name: str) -> Iterator[None]:
+def _budget_lock(name: str) -> Generator[None, None, None]:
     with _thread_lock(name), interprocess_file_lock(_budget_lock_path(name)):
         yield
 
