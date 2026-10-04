@@ -116,7 +116,7 @@ class UserStickerStatRepository:
             if limit is not None:
                 statement = statement.limit(max(1, min(int(limit), 100)))
             rows = (await session.execute(statement)).scalars().all()
-        return [self._row_to_stat(row) for row in rows]
+            return [self._row_to_stat(row) for row in rows]
 
     async def delete_cold(self, *, before_ts: int, max_count: int) -> int:
         async with self.session() as session:

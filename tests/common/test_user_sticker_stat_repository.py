@@ -7,6 +7,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.dialects.postgresql import dialect as postgresql_dialect
 from sqlalchemy.orm import Session
 
+from pallas.core.foundation.db.modules import UserStickerStat
 from pallas.core.foundation.db.repository_pg import Base
 from pallas.core.foundation.db.user_sticker_stat_repository import UserStickerStatRepository
 
@@ -43,8 +44,14 @@ class AsyncSqliteSession:
 
 @asynccontextmanager
 async def sqlite_session_scope(engine):
-    with Session(engine) as session:
+    session = Session(engine)
+    try:
         yield AsyncSqliteSession(session)
+    finally:
+        try:
+            session.rollback()
+        finally:
+            session.close()
 
 
 @pytest.fixture
@@ -74,6 +81,24 @@ async def test_sqlite_increment_accumulates_and_lists_group_candidates(sqlite_re
     assert [(int(row.user_id), str(row.content_hash), int(row.send_count)) for row in candidates] == [(10, "a" * 64, 5)]
     assert len(await repository.list_group_candidates(group_id=1, min_count=1, limit=5)) == 2
     assert await repository.list_group_candidates(group_id=2, min_count=5, limit=5) == []
+
+
+@pytest.mark.asyncio
+async def test_sqlite_list_group_candidates_returns_plain_stats_after_session_close(sqlite_repository) -> None:
+    repository, _ = sqlite_repository
+    await repository.increment(group_id=1, user_id=10, content_hash="a" * 64, sent_at=100, count=2)
+
+    candidates = await repository.list_group_candidates(group_id=1, min_count=2, limit=None)
+
+    assert len(candidates) == 1
+    assert isinstance(candidates[0], UserStickerStat)
+    assert (
+        candidates[0].group_id,
+        candidates[0].user_id,
+        candidates[0].content_hash,
+        candidates[0].send_count,
+        candidates[0].last_sent_at,
+    ) == (1, 10, "a" * 64, 2, 100)
 
 
 @pytest.mark.asyncio
