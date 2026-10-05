@@ -50,6 +50,10 @@ Pallas-Bot 的可执行边界是：主仓承载运行时与产品语义；WebUI�
 | `local/plugins/` | 站点私有插件（不入库） |
 | `data/` | 运行时数据（不入库） |
 
+## 数据库逻辑备份
+
+`pallas/core/foundation/db/backup.py` 与 `backup_jobs.py` 负责 CLI/WebUI 共用的 MongoDB、PostgreSQL 逻辑备份。任务先写入备份父目录内的隐藏暂存目录，通过产物检查与 SHA-256 清单后再原子发布；旧备份仍按可识别产物兼容读取。下载 ZIP 使用父目录内独立临时目录并在响应结束或中断时清理。PostgreSQL custom/directory 的 `archive_read_check`（不带 `-d` 的 `pg_restore --file` 输出到 `os.devnull`）仅为离线归档读取/解压 smoke check，不保证可复原。
+
 ## LLM Agent
 
 通用 LLM 聊天完整运行在 `pallas/product/llm`。`packages/llm_chat`、接话等入口调用

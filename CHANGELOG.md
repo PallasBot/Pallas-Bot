@@ -13,6 +13,7 @@
 
 ### Fixed
 
+* fix(db): 校验备份文件完整性并清理下载临时文件
 * fix(commands): 修复插件命令冷却配置覆盖
 * fix(commands): 支持静态命令声明引用常量
 * fix(plugins): 严格校验作者索引与社区插件导入边界
