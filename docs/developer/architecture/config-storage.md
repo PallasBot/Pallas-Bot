@@ -32,6 +32,8 @@ pallas.toml  →  .env / .env.{ENVIRONMENT}  →  webui.json
 
 启动：`bot.py` / `bot_hub.py` / `bot_worker.py` 在 `nonebot.init()` 前调用 `apply_repo_settings_to_environ()`，仅填充环境中尚未存在的键（保留 Docker Compose 注入）。
 
+数据库备份 CLI 在解析参数后也调用 `apply_repo_settings_to_environ()`，读取同一合并配置；它不初始化 NoneBot，已有进程环境变量仍优先。
+
 ## 读取入口
 
 | 场景 | API |

@@ -30,9 +30,12 @@ def main() -> int:
         help="PostgreSQL pg_dump 格式",
     )
     args = parser.parse_args()
-    from pallas.core.foundation.db.backup import run_database_backup
-
     try:
+        from pallas.core.foundation.config.repo_settings import apply_repo_settings_to_environ
+
+        apply_repo_settings_to_environ()
+        from pallas.core.foundation.db.backup import run_database_backup
+
         result = run_database_backup(
             output_parent=args.output_parent.strip() or None,
             label=args.label,

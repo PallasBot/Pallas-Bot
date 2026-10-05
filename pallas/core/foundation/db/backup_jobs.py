@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import secrets
+import shutil
 import threading
 import time
 from dataclasses import dataclass, field
@@ -156,6 +157,7 @@ def run_backup_job_sync(job_id: str) -> None:
         job.status = "running"
         job.started_at = time.time()
 
+    run_dir: Path | None = None
     try:
         run_dir = prepare_database_backup_run_dir(
             output_parent=job.output_parent,
@@ -175,11 +177,15 @@ def run_backup_job_sync(job_id: str) -> None:
         )
         with _lock:
             job.result = result
+            job.output_dir = result.output_dir
             job.status = "completed"
             job.finished_at = time.time()
-        logger.info("数据库备份完成，job [{}]、输出到 [{}]", job_id, run_dir)
+        logger.info("数据库备份完成，job [{}]、输出到 [{}]", job_id, result.output_dir)
     except Exception as e:  # noqa: BLE001
+        if run_dir is not None and not run_dir.is_symlink():
+            shutil.rmtree(run_dir, ignore_errors=True)
         with _lock:
+            job.output_dir = ""
             job.status = "failed"
             job.error = str(e)
             job.finished_at = time.time()

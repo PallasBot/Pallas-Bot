@@ -18,6 +18,7 @@
 | GET | `/db/backup/jobs/active` | | 进行中任务 |
 | GET | `/db/backup/jobs/{job_id}` | | 单任务状态 |
 | GET | `/db/backup/runs` | | 历史备份记录 |
+| GET | `/db/backup/runs/download` | | 打包并下载备份 ZIP |
 | POST | `/db/backup/runs/delete` | 是 | 删除备份文件 |
 | POST | `/db/mongodb/aggregate` | 是 | Mongo 聚合查询（遗留后端） |
 | GET | `/db/table-row` | | 读 config 表行 |
@@ -28,6 +29,8 @@
 `/db/table-row` 的写入参数仍仅支持前三种 config 表，黑名单审计只读。
 
 备份为异步 job；大表读取有超时（WebUI 使用 `DB_HEAVY_READ_TIMEOUT_MS`）。
+
+备份先写入隐藏暂存目录，完成产物检查并生成 SHA-256 清单后才发布；下载 ZIP 在备份父目录的独立临时目录中生成并随响应清理。清单校验用于发现文件改动，不等同于数据库复原测试。PostgreSQL custom/directory 使用不带 `-d` 的 `pg_restore --file`，将输出指向 `os.devnull` 做归档读取/解压 smoke check，清单标记为 `archive_read_check`，不保证可成功复原或 SQL 语义正确；单独的 `pg_restore --list` 只读取 TOC。plain 格式只检查 `pg_dump` 完成标记，没有等价的离线语义检查。
 
 ## 前端对应
 

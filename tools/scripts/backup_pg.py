@@ -29,10 +29,13 @@ def main() -> int:
         help="pg_dump 格式：custom=.dump，plain=.sql，directory=目录格式",
     )
     args = parser.parse_args()
-    from pallas.core.foundation.db.backup import run_postgres_backup
-
     parent = args.output_parent.strip() or None
     try:
+        from pallas.core.foundation.config.repo_settings import apply_repo_settings_to_environ
+
+        apply_repo_settings_to_environ()
+        from pallas.core.foundation.db.backup import run_postgres_backup
+
         result = run_postgres_backup(
             output_parent=parent,
             label=args.label,

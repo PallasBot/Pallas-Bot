@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+import errno
+import hashlib
+import json
 import os
 import re
+import secrets
 import shutil
+import stat
 import subprocess
 import tempfile
 import zipfile
 from dataclasses import dataclass, field
 from datetime import datetime
-from pathlib import Path
+from operator import itemgetter
+from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
 from pallas.core.foundation.db import _cfg, get_db_backend
@@ -53,6 +59,9 @@ _MONGO_IMPORTANT_COLLECTIONS: tuple[str, ...] = (
 )
 
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
+_BACKUP_MANIFEST_NAME = "manifest.json"
+_BACKUP_MANIFEST_SCHEMA = "pallas-db-backup/v1"
+_STAGING_MARKER = ".staging-"
 
 
 @dataclass
@@ -94,6 +103,275 @@ def make_backup_run_dir(parent: Path, backend: str, *, label: str = "") -> Path:
     return dest
 
 
+def _unique_backup_target(parent: Path, backend: str, label: str) -> Path:
+    stamp = datetime.now().strftime("%Y_%m_%d_%H_%M_%S")
+    suffix = re.sub(r"[^\w\-]+", "_", label.strip())[:40] if label.strip() else ""
+    name = f"{backend}_{stamp}" + (f"_{suffix}" if suffix else "") + f"_{secrets.token_hex(4)}"
+    return parent / name
+
+
+def _new_backup_staging(target: Path) -> Path:
+    staging = target.with_name(f".{target.name}{_STAGING_MARKER}{secrets.token_hex(4)}")
+    staging.mkdir(mode=0o700)
+    return staging
+
+
+def _staging_target(staging: Path) -> Path | None:
+    name = staging.name
+    if not name.startswith(".") or _STAGING_MARKER not in name:
+        return None
+    return staging.with_name(name[1:].rsplit(_STAGING_MARKER, 1)[0])
+
+
+def _validate_backup_run_dir(parent: Path, backend: str, run_dir: Path | None) -> Path | None:
+    if run_dir is None:
+        return None
+    if run_dir.is_symlink():
+        raise ValueError("备份输出目录不能是符号链接")
+    requested = run_dir.absolute()
+    if not requested.is_dir():
+        raise ValueError("备份输出目录不存在")
+    target = _staging_target(requested)
+    if requested.name.startswith("."):
+        if target is None:
+            raise ValueError("无效的隐藏备份暂存目录")
+        if requested.parent != parent or not target.name.startswith(f"{backend}_"):
+            raise ValueError("备份暂存目录不在目标文件系统内")
+        if any(requested.iterdir()):
+            raise ValueError("显式备份暂存目录必须为空")
+        if target.exists() or target.is_symlink():
+            raise FileExistsError(f"备份目标已存在: {target}")
+        return requested
+    if any(requested.iterdir()):
+        raise ValueError("显式备份输出目录必须为空")
+    return requested
+
+
+def _remove_owned_staging(staging: Path) -> None:
+    if not staging.is_symlink():
+        shutil.rmtree(staging, ignore_errors=True)
+
+
+def _begin_backup_run(
+    parent: Path,
+    backend: str,
+    label: str,
+    run_dir: Path | None,
+) -> tuple[Path, Path, bool]:
+    if run_dir is None:
+        while True:
+            target = _unique_backup_target(parent, backend, label)
+            if target.exists() or target.is_symlink():
+                continue
+            try:
+                return _new_backup_staging(target), target, True
+            except FileExistsError:
+                continue
+
+    requested = _validate_backup_run_dir(parent, backend, run_dir)
+    assert requested is not None
+    target = _staging_target(requested)
+    if target is not None:
+        return requested, target, False
+    try:
+        staging = _new_backup_staging(requested)
+    except OSError as e:
+        raise _friendly_backup_error(e, requested.parent) from e
+    return staging, requested, True
+
+
+def _publish_backup(staging: Path, target: Path) -> None:
+    if staging.is_symlink() or target.is_symlink():
+        raise ValueError("备份路径不能是符号链接")
+    removed_empty_target = False
+    if target.exists():
+        if not target.is_dir() or any(target.iterdir()):
+            raise ValueError("备份目标已存在且非空")
+        target.rmdir()
+        removed_empty_target = True
+    try:
+        staging.rename(target)
+    except BaseException:
+        if removed_empty_target and not target.exists():
+            target.mkdir()
+        raise
+
+
+def _friendly_backup_error(error: OSError, target: Path) -> RuntimeError:
+    if error.errno == errno.ENOSPC:
+        return RuntimeError(f"备份目标磁盘空间不足：{target}")
+    if error.errno in (errno.EACCES, errno.EROFS):
+        return RuntimeError(f"备份目标不可写：{target}")
+    return RuntimeError(f"备份目标操作失败：{target}（{error.strerror or error}）")
+
+
+def _check_backup_target(staging: Path) -> None:
+    target_fs = staging.parent
+    try:
+        with tempfile.NamedTemporaryFile(prefix=".pallas-backup-write-test-", dir=target_fs) as probe:
+            probe.write(b"\0")
+            probe.flush()
+        free_bytes = shutil.disk_usage(target_fs).free
+    except OSError as e:
+        raise _friendly_backup_error(e, target_fs) from e
+    if free_bytes <= 0:
+        raise RuntimeError(f"备份目标磁盘空间不足：{target_fs}")
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _backup_file_entries(run_dir: Path) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for root, dirs, files in os.walk(run_dir, followlinks=False):
+        base = Path(root)
+        if any((base / name).is_symlink() for name in dirs):
+            raise ValueError("备份产物不能包含符号链接")
+        for name in files:
+            path = base / name
+            if path.is_symlink() or not path.is_file():
+                raise ValueError("备份产物包含不支持的文件类型")
+            if path == run_dir / _BACKUP_MANIFEST_NAME:
+                continue
+            entries.append({
+                "path": path.relative_to(run_dir).as_posix(),
+                "size_bytes": path.stat().st_size,
+                "sha256": _sha256(path),
+            })
+    return sorted(entries, key=itemgetter("path"))
+
+
+def _write_backup_manifest(
+    run_dir: Path,
+    *,
+    backend: str,
+    backup_format: str,
+    scope: str,
+    tool_name: str,
+    tool_version: str,
+    server_version: str,
+    validation_method: str,
+) -> None:
+    _secure_backup_tree(run_dir)
+    manifest = {
+        "schema": _BACKUP_MANIFEST_SCHEMA,
+        "backend": backend,
+        "format": backup_format,
+        "scope": scope,
+        "tool": {"name": tool_name, "version": tool_version},
+        "server_version": server_version,
+        "files": _backup_file_entries(run_dir),
+        "validation_method": validation_method,
+    }
+    path = run_dir / _BACKUP_MANIFEST_NAME
+    if path.exists():
+        raise ValueError("备份产物占用了 manifest.json")
+    tmp_path = run_dir / f".{_BACKUP_MANIFEST_NAME}.{secrets.token_hex(4)}.tmp"
+    try:
+        tmp_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        tmp_path.chmod(0o600)
+        tmp_path.replace(path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
+
+
+def _verify_backup_manifest(run_dir: Path) -> bool:
+    path = run_dir / _BACKUP_MANIFEST_NAME
+    if path.is_symlink():
+        raise ValueError("备份清单无效")
+    if not path.exists():
+        return False
+    if not path.is_file():
+        raise ValueError("备份清单无效")
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as e:
+        raise ValueError("备份清单无法读取") from e
+    if not isinstance(manifest, dict) or manifest.get("schema") != _BACKUP_MANIFEST_SCHEMA:
+        return False
+    if (
+        manifest.get("backend") not in ("postgres", "mongodb")
+        or manifest.get("backend") != backup_run_backend(run_dir)
+        or not isinstance(manifest.get("format"), str)
+        or not isinstance(manifest.get("scope"), str)
+        or not isinstance(manifest.get("tool"), dict)
+        or not isinstance(manifest["tool"].get("name"), str)
+        or not isinstance(manifest["tool"].get("version"), str)
+        or not isinstance(manifest.get("server_version"), str)
+        or not isinstance(manifest.get("validation_method"), str)
+        or not isinstance(manifest.get("files"), list)
+    ):
+        raise ValueError("备份清单格式无效")
+
+    actual = {entry["path"]: entry for entry in _backup_file_entries(run_dir)}
+    declared: set[str] = set()
+    for item in manifest["files"]:
+        if not isinstance(item, dict) or not isinstance(item.get("path"), str):
+            raise ValueError("备份清单文件路径无效")
+        raw_path = item["path"]
+        relative = PurePosixPath(raw_path)
+        if (
+            not raw_path
+            or "\\" in raw_path
+            or relative.is_absolute()
+            or any(part in ("", ".", "..") for part in relative.parts)
+            or relative.as_posix() != raw_path
+            or raw_path in declared
+        ):
+            raise ValueError("备份清单包含越界或重复路径")
+        declared.add(raw_path)
+        if not isinstance(item.get("size_bytes"), int) or item["size_bytes"] < 0:
+            raise ValueError("备份清单文件大小无效")
+        expected_hash = item.get("sha256")
+        if not isinstance(expected_hash, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_hash):
+            raise ValueError("备份清单校验值无效")
+        recorded = actual.get(raw_path)
+        if recorded is None or recorded["size_bytes"] != item["size_bytes"] or recorded["sha256"] != expected_hash:
+            raise ValueError(f"备份文件校验失败：{raw_path}")
+    if declared != set(actual):
+        raise ValueError("备份文件与清单不一致")
+    return True
+
+
+def _assert_no_symlinks(path: Path) -> None:
+    if path.is_symlink():
+        raise ValueError("备份产物不能包含符号链接")
+    if not path.is_dir():
+        return
+    for root, dirs, files in os.walk(path, followlinks=False):
+        base = Path(root)
+        for name in dirs:
+            mode = (base / name).lstat().st_mode
+            if stat.S_ISLNK(mode):
+                raise ValueError("备份产物不能包含符号链接")
+            if not stat.S_ISDIR(mode):
+                raise ValueError("备份产物包含不支持的文件类型")
+        for name in files:
+            mode = (base / name).lstat().st_mode
+            if stat.S_ISLNK(mode):
+                raise ValueError("备份产物不能包含符号链接")
+            if not stat.S_ISREG(mode):
+                raise ValueError("备份产物包含不支持的文件类型")
+
+
+def _secure_backup_tree(path: Path) -> None:
+    if path.is_symlink() or not path.is_dir():
+        raise ValueError("备份暂存目录无效")
+    _assert_no_symlinks(path)
+    path.chmod(0o700, follow_symlinks=False)
+    for root, dirs, files in os.walk(path, followlinks=False):
+        base = Path(root)
+        for name in dirs:
+            (base / name).chmod(0o700, follow_symlinks=False)
+        for name in files:
+            (base / name).chmod(0o600, follow_symlinks=False)
+
+
 def dir_size_bytes(path: Path) -> int:
     if path.is_file():
         return path.stat().st_size
@@ -109,6 +387,133 @@ def dir_size_bytes(path: Path) -> int:
 
 def tool_on_path(name: str) -> bool:
     return shutil.which(name) is not None
+
+
+def pg_tool_candidates(tool: str) -> list[Path]:
+    """Find PostgreSQL client tools without relying on the first PATH match."""
+    candidates: list[Path] = []
+    bindirs: set[Path] = set()
+    path_dirs = [Path(part or ".") for part in os.environ.get("PATH", "").split(os.pathsep)]
+    candidates.extend(directory / tool for directory in path_dirs)
+    found_on_path = shutil.which(tool)
+    if found_on_path:
+        candidates.append(Path(found_on_path))
+    pg_config_paths = [directory / "pg_config" for directory in path_dirs]
+    pg_config = shutil.which("pg_config")
+    if pg_config:
+        pg_config_paths.append(Path(pg_config))
+    for pg_config_path in pg_config_paths:
+        if not pg_config_path.is_file() or not os.access(pg_config_path, os.X_OK):
+            continue
+        try:
+            result = subprocess.run(
+                [str(pg_config_path), "--bindir"],
+                capture_output=True,
+                text=True,
+                timeout=3,
+                check=False,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                bindirs.add(Path(result.stdout.strip()))
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    bindirs.update(Path("/usr/lib/postgresql").glob("*/bin"))
+    candidates.extend(directory / tool for directory in sorted(bindirs))
+
+    found: list[Path] = []
+    seen: set[Path] = set()
+    for path in candidates:
+        try:
+            resolved = path.resolve()
+            if resolved in seen or not resolved.is_file() or not os.access(resolved, os.X_OK):
+                continue
+            seen.add(resolved)
+            found.append(path.absolute())
+        except OSError:
+            continue
+    return found
+
+
+def pg_tool_version(path: Path) -> tuple[str, int] | None:
+    try:
+        result = subprocess.run(
+            [str(path), "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode != 0:
+        return None
+    match = re.search(r"\(PostgreSQL\)\s+(\d+(?:\.\d+){0,2})", result.stdout or result.stderr)
+    if not match:
+        return None
+    version = match.group(1)
+    try:
+        major = int(version.split(".", 1)[0])
+    except ValueError:
+        return None
+    return version, major
+
+
+def select_pg_tool(
+    tool: str,
+    server_major: int | None = None,
+    *,
+    exact_major: bool = False,
+) -> tuple[Path, str, int]:
+    available = [(path, *version) for path in pg_tool_candidates(tool) if (version := pg_tool_version(path))]
+    if not available:
+        raise RuntimeError(missing_tool_message(tool))
+    if server_major is None:
+        return max(available, key=lambda item: tuple(int(part) for part in item[1].split(".")))
+    exact = [item for item in available if item[2] == server_major]
+    if exact:
+        return max(exact, key=lambda item: tuple(int(part) for part in item[1].split(".")))
+    if exact_major:
+        raise RuntimeError(f"未找到与 PostgreSQL {server_major} 同主版本的 {tool}，无法验证备份")
+    newer = [item for item in available if item[2] > server_major]
+    if newer:
+        return min(newer, key=lambda item: (item[2], tuple(int(part) for part in item[1].split("."))))
+    raise RuntimeError(f"未找到兼容 PostgreSQL {server_major} 的 {tool}（不接受低版本客户端）")
+
+
+def _psql_query(query: str) -> str:
+    psql, _version, _major = select_pg_tool("psql")
+    env = os.environ.copy()
+    env.update(_postgres_restore_env())
+    env["PGCONNECT_TIMEOUT"] = "5"
+    try:
+        result = subprocess.run(
+            [str(psql), "-X", "-A", "-t", "-w", *_postgres_base_cmd(), "-c", query],
+            env=env,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as e:
+        raise RuntimeError("PostgreSQL 只读探测超时") from e
+    if result.returncode:
+        detail = (result.stderr or "").strip()
+        raise RuntimeError(f"PostgreSQL 只读探测失败：{detail or result.returncode}")
+    return result.stdout.strip()
+
+
+def postgres_server_info() -> tuple[int, str]:
+    raw_version = _psql_query("SHOW server_version_num")
+    try:
+        version_num = int(raw_version)
+    except ValueError as e:
+        raise RuntimeError("PostgreSQL 返回了无效的 server_version_num") from e
+    major = version_num // 10000
+    minor = version_num % 10000 if major >= 10 else (version_num % 10000) // 100
+    version = f"{major}.{minor}"
+    return major, version
 
 
 def backup_info() -> dict[str, Any]:
@@ -132,11 +537,25 @@ def backup_info() -> dict[str, Any]:
             "user": _cfg("MONGO_USER", "") or None,
         }
     meta = _TOOL_DOWNLOAD.get(tool, {})
-    available = tool_on_path(tool)
     restore_tool = "pg_restore" if b == "postgres" else "mongorestore"
-    restore_available = tool_on_path(restore_tool)
-    if b == "postgres" and not restore_available:
-        restore_available = tool_on_path("psql")
+    if b == "postgres":
+        try:
+            select_pg_tool(tool)
+            available = True
+        except RuntimeError:
+            available = False
+        try:
+            select_pg_tool(restore_tool)
+            restore_available = True
+        except RuntimeError:
+            try:
+                select_pg_tool("psql")
+                restore_available = True
+            except RuntimeError:
+                restore_available = False
+    else:
+        available = tool_on_path(tool)
+        restore_available = tool_on_path(restore_tool)
     return {
         "backend": b,
         "default_output_parent": str(default_backup_parent()),
@@ -175,20 +594,33 @@ def _run_checked(cmd: list[str], *, env: dict[str, str] | None = None) -> None:
     merged = os.environ.copy()
     if env:
         merged.update(env)
-    proc = subprocess.run(
-        cmd,
-        env=merged,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-        timeout=3600,
-        check=False,
-    )
+    try:
+        proc = subprocess.run(
+            cmd,
+            env=merged,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=3600,
+            check=False,
+        )
+    except subprocess.TimeoutExpired:
+        tool = Path(cmd[0]).name if cmd else "数据库工具"
+        raise RuntimeError(f"{tool} 执行超时") from None
     if proc.returncode != 0:
         err = (proc.stderr or proc.stdout or "").strip() or f"退出码 {proc.returncode}"
-        cmd_hint = " ".join(cmd[:6])
-        if len(cmd) > 6:
+        cmd_hint_parts: list[str] = []
+        redact_next = False
+        for part in cmd:
+            if redact_next:
+                cmd_hint_parts.append("******")
+                redact_next = False
+            else:
+                cmd_hint_parts.append(part)
+                redact_next = part == "--password"
+        cmd_hint = " ".join(cmd_hint_parts[:6])
+        if len(cmd_hint_parts) > 6:
             cmd_hint += " …"
         raise RuntimeError(f"{err}（命令: {cmd_hint}）")
 
@@ -224,7 +656,7 @@ def list_backup_runs(*, output_parent: str | None = None) -> list[dict[str, Any]
         return []
     entries: list[dict[str, Any]] = []
     for child in parent.iterdir():
-        if not child.is_dir() or not is_backup_run_dir(child):
+        if not child.is_dir() or not is_backup_run_dir(child) or not _has_recognized_backup_artifacts(child):
             continue
         try:
             mtime = child.stat().st_mtime
@@ -343,20 +775,40 @@ def prepare_backup_download(path: str, *, output_parent: str | None = None) -> t
     parent = resolve_backup_parent(output_parent)
     target = Path(path.strip()).resolve()
     assert_deletable_backup_run(target, parent)
+    _assert_no_symlinks(target)
+    _verify_backup_manifest(target)
     zip_name = f"{target.name}.zip"
-    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
-    tmp.close()
-    zip_path = Path(tmp.name)
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for root, _dirs, files in os.walk(target):
-            for fn in files:
-                fp = Path(root) / fn
-                try:
-                    arcname = fp.relative_to(target)
-                except ValueError:
-                    continue
-                zf.write(fp, arcname)
-    return zip_path, zip_name
+    work_dir: Path | None = None
+    try:
+        work_dir = Path(tempfile.mkdtemp(prefix=".pallas-backup-download-", dir=parent))
+        work_dir.chmod(0o700)
+        zip_path = work_dir / zip_name
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for root, _dirs, files in os.walk(target):
+                for fn in files:
+                    fp = Path(root) / fn
+                    try:
+                        arcname = fp.relative_to(target)
+                    except ValueError:
+                        continue
+                    zf.write(fp, arcname)
+        zip_path.chmod(0o600)
+        return zip_path, zip_name
+    except BaseException as e:
+        if work_dir is not None:
+            shutil.rmtree(work_dir, ignore_errors=True)
+        if isinstance(e, OSError) and e.errno == errno.ENOSPC:
+            raise _friendly_backup_error(e, parent) from e
+        raise
+
+
+def cleanup_backup_download(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+        if path.parent.name.startswith(".pallas-backup-download-"):
+            path.parent.rmdir()
+    except OSError:
+        pass
 
 
 def delete_backup_runs(
@@ -388,16 +840,14 @@ def run_postgres_backup(
     pg_tables: list[str] | None = None,
     run_dir: Path | None = None,
 ) -> BackupResult:
-    if not tool_on_path("pg_dump"):
-        raise RuntimeError(missing_tool_message("pg_dump"))
     tables = normalize_pg_tables(pg_tables)
     parent = resolve_backup_parent(output_parent)
-    if run_dir is None:
-        run_dir = make_backup_run_dir(parent, "postgres", label=label)
-    else:
-        run_dir = run_dir.resolve()
-        if not run_dir.is_dir():
-            raise ValueError("备份输出目录不存在")
+    run_dir = _validate_backup_run_dir(parent, "postgres", run_dir)
+    server_major, server_version = postgres_server_info()
+    dump_tool, dump_version, dump_major = select_pg_tool("pg_dump", server_major)
+    restore_tool: Path | None = None
+    if pg_format != "plain":
+        restore_tool, _restore_version, _restore_major = select_pg_tool("pg_restore", dump_major, exact_major=True)
     host = _pg_host()
     port = str(int(_cfg("PG_PORT", "5432")))
     user = _cfg("PG_USER", "").strip()
@@ -408,39 +858,80 @@ def run_postgres_backup(
         env["PGPASSWORD"] = password
     safe_db = re.sub(r"[^\w\-]+", "_", db_name)
     targets = tables or [None]
-    artifacts: list[str] = []
+    staged_artifacts: list[Path] = []
     commands: list[list[str]] = []
-    for table in targets:
-        safe_name = re.sub(r"[^\w\-]+", "_", table) if table else safe_db
-        cmd = ["pg_dump", "-h", host, "-p", port, "-d", db_name]
-        if user:
-            cmd.extend(["-U", user])
-        if table:
-            cmd.extend(["-t", table])
-        if pg_format == "custom":
-            artifact = run_dir / f"{safe_name}.dump"
-            cmd.extend(["-Fc", "-f", str(artifact)])
-        elif pg_format == "plain":
-            artifact = run_dir / f"{safe_name}.sql"
-            cmd.extend(["-f", str(artifact)])
-        else:
-            artifact = run_dir / f"pg_directory_{safe_name}"
-            artifact.mkdir(parents=True, exist_ok=True)
-            cmd.extend(["-Fd", "-f", str(artifact)])
-        _run_checked(cmd, env=env)
-        artifacts.append(str(artifact))
-        commands.append(cmd)
-    size = dir_size_bytes(run_dir)
     scope = "tables" if tables else pg_format
+    staging, target, owned_staging = _begin_backup_run(parent, "postgres", label, run_dir)
+    try:
+        _check_backup_target(staging)
+        for table in targets:
+            safe_name = re.sub(r"[^\w\-]+", "_", table) if table else safe_db
+            cmd = [str(dump_tool), "-h", host, "-p", port, "-d", db_name]
+            if user:
+                cmd.extend(["-U", user])
+            if table:
+                cmd.extend(["-t", table])
+            if pg_format == "custom":
+                artifact = staging / f"{safe_name}.dump"
+                cmd.extend(["-Fc", "-f", str(artifact)])
+            elif pg_format == "plain":
+                artifact = staging / f"{safe_name}.sql"
+                cmd.extend(["-f", str(artifact)])
+            else:
+                artifact = staging / f"pg_directory_{safe_name}"
+                cmd.extend(["-Fd", "-f", str(artifact)])
+            _run_checked(cmd, env=env)
+            staged_artifacts.append(artifact)
+            commands.append(cmd)
+
+        validation_methods: set[str] = set()
+        for artifact in staged_artifacts:
+            if pg_format == "plain":
+                _validate_plain_postgres_dump(artifact)
+                validation_methods.add("plain_dump_completion_check")
+            else:
+                assert restore_tool is not None
+                _validate_postgres_archive(artifact, restore_tool)
+                validation_methods.add("archive_read_check")
+        _write_backup_manifest(
+            staging,
+            backend="postgres",
+            backup_format=pg_format,
+            scope=scope,
+            tool_name="pg_dump",
+            tool_version=dump_version,
+            server_version=server_version,
+            validation_method="; ".join(sorted(validation_methods)),
+        )
+        _publish_backup(staging, target)
+    except BaseException as e:
+        if owned_staging:
+            _remove_owned_staging(staging)
+        if isinstance(e, OSError):
+            raise _friendly_backup_error(e, target.parent) from e
+        if isinstance(e, RuntimeError) and re.search(r"ENOSPC|No space left on device", str(e), re.IGNORECASE):
+            raise RuntimeError(f"备份目标磁盘空间不足：{target.parent}") from e
+        raise
+
+    artifacts = [str(target / path.relative_to(staging)) for path in staged_artifacts]
+    command = []
+    if commands:
+        for value in commands[-1]:
+            try:
+                relative = Path(value).relative_to(staging)
+            except ValueError:
+                command.append(value)
+            else:
+                command.append(str(target / relative))
     return BackupResult(
         ok=True,
         backend="postgres",
         scope=scope,
-        output_dir=str(run_dir),
+        output_dir=str(target),
         artifacts=artifacts,
-        size_bytes=size,
+        size_bytes=dir_size_bytes(target),
         message="PostgreSQL 备份完成",
-        command=commands[-1] if commands else [],
+        command=command,
     )
 
 
@@ -452,23 +943,20 @@ def run_mongodb_backup(
     mongo_collections: list[str] | None = None,
     run_dir: Path | None = None,
 ) -> BackupResult:
-    if not tool_on_path("mongodump"):
-        raise RuntimeError(missing_tool_message("mongodump"))
     collections = normalize_mongo_collections(mongo_collections)
     parent = resolve_backup_parent(output_parent)
-    if run_dir is None:
-        run_dir = make_backup_run_dir(parent, "mongodb", label=label)
-    else:
-        run_dir = run_dir.resolve()
-        if not run_dir.is_dir():
-            raise ValueError("备份输出目录不存在")
-    out_root = run_dir / "mongodb"
+    run_dir = _validate_backup_run_dir(parent, "mongodb", run_dir)
+    if not tool_on_path("mongodump"):
+        raise RuntimeError(missing_tool_message("mongodump"))
+    tool_version = _command_version("mongodump")
+    server_version = mongo_server_info()
     host = _cfg("MONGO_HOST", "127.0.0.1")
     port = str(int(_cfg("MONGO_PORT", "27017")))
     user = _cfg("MONGO_USER", "").strip()
     password = _cfg("MONGO_PASSWORD", "")
     db_name = _cfg("MONGO_DB", "PallasBot")
     auth_source = (_cfg("MONGO_AUTH_SOURCE", "") or db_name).strip() or db_name
+    staging, target, owned_staging = _begin_backup_run(parent, "mongodb", label, run_dir)
     base: list[str] = ["mongodump", "--host", f"{host}:{port}"]
     if user:
         base.extend(["--username", user])
@@ -478,28 +966,58 @@ def run_mongodb_backup(
     commands: list[list[str]] = []
     if collections:
         for coll in collections:
-            cmd = [*base, "--db", db_name, "--collection", coll, "-o", str(out_root)]
+            cmd = [*base, "--db", db_name, "--collection", coll, "-o", str(staging / "mongodb")]
             commands.append(cmd)
     elif scope == "important":
         for coll in _MONGO_IMPORTANT_COLLECTIONS:
-            cmd = [*base, "--db", db_name, "--collection", coll, "-o", str(out_root)]
+            cmd = [*base, "--db", db_name, "--collection", coll, "-o", str(staging / "mongodb")]
             commands.append(cmd)
     else:
-        cmd = [*base, "--db", db_name, "-o", str(out_root)]
+        cmd = [*base, "--db", db_name, "-o", str(staging / "mongodb")]
         commands.append(cmd)
-    for cmd in commands:
-        _run_checked(cmd)
-    size = dir_size_bytes(out_root)
     resolved_scope = "collections" if collections else scope
+    try:
+        _check_backup_target(staging)
+        for cmd in commands:
+            _run_checked(cmd)
+        _mongo_backup_files(staging / "mongodb")
+        _write_backup_manifest(
+            staging,
+            backend="mongodb",
+            backup_format="mongodump-directory",
+            scope=resolved_scope,
+            tool_name="mongodump",
+            tool_version=tool_version,
+            server_version=server_version,
+            validation_method="mongodump exit status and expected BSON structure with per-file SHA-256",
+        )
+        _publish_backup(staging, target)
+    except BaseException as e:
+        if owned_staging:
+            _remove_owned_staging(staging)
+        if isinstance(e, OSError):
+            raise _friendly_backup_error(e, target.parent) from e
+        if isinstance(e, RuntimeError) and re.search(r"ENOSPC|No space left on device", str(e), re.IGNORECASE):
+            raise RuntimeError(f"备份目标磁盘空间不足：{target.parent}") from e
+        raise
+
+    published_command = []
+    for value in commands[-1] if commands else []:
+        try:
+            relative = Path(value).relative_to(staging)
+        except ValueError:
+            published_command.append(value)
+        else:
+            published_command.append(str(target / relative))
     return BackupResult(
         ok=True,
         backend="mongodb",
         scope=resolved_scope,
-        output_dir=str(run_dir),
-        artifacts=[str(out_root)],
-        size_bytes=size,
+        output_dir=str(target),
+        artifacts=[str(target / "mongodb")],
+        size_bytes=dir_size_bytes(target),
         message="MongoDB 备份完成",
-        command=commands[-1] if commands else [],
+        command=published_command,
     )
 
 
@@ -554,6 +1072,121 @@ def _postgres_base_cmd() -> list[str]:
     return cmd
 
 
+def _validate_plain_postgres_dump(path: Path) -> None:
+    _assert_no_symlinks(path)
+    if not path.is_file() or path.stat().st_size == 0:
+        raise ValueError(f"PostgreSQL plain 备份为空或不存在：{path.name}")
+    with path.open("rb") as stream:
+        stream.seek(max(0, path.stat().st_size - 4096))
+        trailer = stream.read()
+    if b"-- PostgreSQL database dump complete" not in trailer:
+        raise ValueError(f"PostgreSQL plain 备份缺少完成标记：{path.name}")
+
+
+def _validate_postgres_archive(path: Path, pg_restore: Path) -> None:
+    _assert_no_symlinks(path)
+    if path.is_dir():
+        if not (path / "toc.dat").is_file():
+            raise ValueError(f"PostgreSQL directory 备份缺少 toc.dat：{path.name}")
+        format_args = ["-Fd", str(path)]
+    else:
+        if not path.is_file() or path.stat().st_size == 0:
+            raise ValueError(f"PostgreSQL archive 为空或不存在：{path.name}")
+        format_args = ["-Fc", str(path)]
+    _run_checked([str(pg_restore), "--file", os.devnull, *format_args])
+
+
+def _command_version(command: str) -> str:
+    path = shutil.which(command)
+    if not path:
+        raise RuntimeError(missing_tool_message(command))
+    try:
+        result = subprocess.run(
+            [path, "--version"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as e:
+        raise RuntimeError(f"读取 {command} 版本失败") from e
+    if result.returncode:
+        raise RuntimeError(f"读取 {command} 版本失败")
+    output = (result.stdout or result.stderr).strip()
+    match = re.search(r"\bversion:?\s*([0-9]+(?:\.[0-9]+)+)", output, re.IGNORECASE)
+    if not match:
+        match = re.search(r"\b([0-9]+(?:\.[0-9]+){1,2})\b", output)
+    if not match:
+        raise RuntimeError(f"无法识别 {command} 版本")
+    return match.group(1)
+
+
+def mongo_server_info() -> str:
+    from pymongo import MongoClient
+
+    host = _cfg("MONGO_HOST", "127.0.0.1")
+    user = _cfg("MONGO_USER", "").strip()
+    db_name = _cfg("MONGO_DB", "PallasBot")
+    options: dict[str, Any] = {"serverSelectionTimeoutMS": 5000, "connectTimeoutMS": 3000}
+    if user:
+        options.update(
+            username=user,
+            password=_cfg("MONGO_PASSWORD", ""),
+            authSource=(_cfg("MONGO_AUTH_SOURCE", "") or db_name).strip() or db_name,
+        )
+    client = MongoClient(host, int(_cfg("MONGO_PORT", "27017")), **options)
+    try:
+        return str(client.admin.command("buildInfo")["version"])
+    finally:
+        client.close()
+
+
+def _mongo_backup_files(dump_root: Path) -> list[Path]:
+    if not dump_root.is_dir():
+        raise ValueError("MongoDB 备份缺少 mongodb 数据目录")
+    files: list[Path] = []
+    for root, dirs, names in os.walk(dump_root, followlinks=False):
+        base = Path(root)
+        if any((base / name).is_symlink() for name in dirs):
+            raise ValueError("MongoDB 备份包含符号链接目录")
+        for name in names:
+            path = base / name
+            if path.is_symlink() or not path.is_file():
+                raise ValueError("MongoDB 备份包含不支持的文件类型")
+            relative = path.relative_to(dump_root)
+            if len(relative.parts) != 2 or not name.endswith((".bson", ".metadata.json")):
+                raise ValueError(f"MongoDB 备份文件结构无效：{relative.as_posix()}")
+            files.append(path)
+    if not any(path.name.endswith(".bson") for path in files):
+        raise ValueError("MongoDB 备份中未找到 BSON 集合文件")
+    return files
+
+
+def _has_recognized_backup_artifacts(run_dir: Path) -> bool:
+    if backup_run_backend(run_dir) == "postgres":
+        try:
+            for artifact in _iter_postgres_restore_artifacts(run_dir):
+                if artifact.is_dir() and (artifact / "toc.dat").is_file():
+                    return True
+                if artifact.suffix == ".sql":
+                    try:
+                        _validate_plain_postgres_dump(artifact)
+                    except (OSError, ValueError):
+                        continue
+                    return True
+                if artifact.is_file() and artifact.stat().st_size > 0:
+                    return True
+        except OSError:
+            pass
+        return False
+    try:
+        return bool(_mongo_backup_files(run_dir / "mongodb"))
+    except (OSError, ValueError):
+        return False
+
+
 def _iter_postgres_restore_artifacts(run_dir: Path) -> list[Path]:
     artifacts: list[Path] = []
     for child in sorted(run_dir.iterdir(), key=lambda p: p.name.lower()):
@@ -568,19 +1201,61 @@ def run_postgres_restore(*, run_dir: Path) -> BackupResult:
     artifacts = _iter_postgres_restore_artifacts(run_dir)
     if not artifacts:
         raise ValueError("备份目录中未找到可复原的 PostgreSQL 产物")
+    _assert_no_symlinks(run_dir)
+    has_manifest = _verify_backup_manifest(run_dir)
+    has_archives = any(artifact.suffix == ".dump" or artifact.is_dir() for artifact in artifacts)
+    restore_tools: list[tuple[Path, str, int]] = []
+    if has_archives:
+        restore_tools = [
+            (path, *version) for path in pg_tool_candidates("pg_restore") if (version := pg_tool_version(path))
+        ]
+        restore_tools.sort(key=lambda item: tuple(int(part) for part in item[1].split(".")), reverse=True)
+        if not restore_tools:
+            raise RuntimeError(missing_tool_message("pg_restore"))
+    psql_tool: Path | None = None
+    if any(artifact.suffix == ".sql" for artifact in artifacts):
+        psql_tool, _version, _major = select_pg_tool("psql")
+
+    # Check every file/archive before the first command that can modify the target database.
+    artifact_restore_tools: dict[Path, Path] = {}
+    for artifact in artifacts:
+        if artifact.suffix == ".sql":
+            if has_manifest:
+                _validate_plain_postgres_dump(artifact)
+            elif not artifact.is_file() or artifact.stat().st_size == 0:
+                raise ValueError(f"PostgreSQL plain 备份为空或不存在：{artifact.name}")
+        else:
+            last_error: RuntimeError | None = None
+            for restore_tool, _version, _major in restore_tools:
+                try:
+                    _validate_postgres_archive(artifact, restore_tool)
+                except RuntimeError as e:
+                    last_error = e
+                    continue
+                artifact_restore_tools[artifact] = restore_tool
+                break
+            else:
+                detail = f"：{last_error}" if last_error else ""
+                raise RuntimeError(f"没有可用的 pg_restore 客户端能读取归档 {artifact.name}{detail}") from last_error
+
     env = _postgres_restore_env()
     commands: list[list[str]] = []
     for artifact in artifacts:
         if artifact.suffix == ".sql":
-            if not tool_on_path("psql"):
-                raise RuntimeError(missing_tool_message("psql"))
-            cmd = ["psql", *_postgres_base_cmd(), "-f", str(artifact)]
+            assert psql_tool is not None
+            cmd = [str(psql_tool), *_postgres_base_cmd(), "-f", str(artifact)]
             _run_checked(cmd, env=env)
             commands.append(cmd)
             continue
-        if not tool_on_path("pg_restore"):
-            raise RuntimeError(missing_tool_message("pg_restore"))
-        cmd = ["pg_restore", *_postgres_base_cmd(), "--clean", "--if-exists", "--no-owner", "--no-privileges"]
+        restore_tool = artifact_restore_tools[artifact]
+        cmd = [
+            str(restore_tool),
+            *_postgres_base_cmd(),
+            "--clean",
+            "--if-exists",
+            "--no-owner",
+            "--no-privileges",
+        ]
         if artifact.is_dir():
             cmd.extend(["-Fd", str(artifact)])
         else:
@@ -605,6 +1280,8 @@ def run_mongodb_restore(*, run_dir: Path) -> BackupResult:
     dump_root = run_dir / "mongodb"
     if not dump_root.is_dir():
         raise ValueError("未找到 mongodb 备份数据目录")
+    _verify_backup_manifest(run_dir)
+    _mongo_backup_files(dump_root)
     host = _cfg("MONGO_HOST", "127.0.0.1")
     port = str(int(_cfg("MONGO_PORT", "27017")))
     user = _cfg("MONGO_USER", "").strip()
@@ -648,8 +1325,15 @@ def prepare_database_backup_run_dir(
     output_parent: str | None = None,
     label: str = "",
 ) -> Path:
-    """创建本次备份输出目录。"""
+    """创建当前任务的隐藏暂存目录；成功备份后再原子发布。"""
     backend = get_db_backend()
     parent = resolve_backup_parent(output_parent)
     backend_name = "postgres" if backend in ("postgres", "postgresql", "pg") else "mongodb"
-    return make_backup_run_dir(parent, backend_name, label=label)
+    while True:
+        target = _unique_backup_target(parent, backend_name, label)
+        if target.exists():
+            continue
+        try:
+            return _new_backup_staging(target)
+        except FileExistsError:
+            continue
