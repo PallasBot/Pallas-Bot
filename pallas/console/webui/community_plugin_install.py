@@ -9,9 +9,11 @@ import shutil
 from typing import TYPE_CHECKING
 
 from nonebot import logger
+from packaging.version import InvalidVersion, Version
 
 from pallas.console.cli.bot_process import bot_lifecycle_available
 from pallas.console.webui.community_plugin_deps import install_missing_dependencies
+from pallas.console.webui.community_plugin_index import load_community_plugin_index_safe
 from pallas.core.foundation.paths import PROJECT_ROOT
 from pallas.core.shared.utils.git_mirror import (
     BUILTIN_MIRRORS,
@@ -77,6 +79,47 @@ def validate_git_repository(url: str) -> str:
     if ".." in repo or "\0" in repo:
         raise CommunityPluginInstallError("非法仓库地址")
     return repo
+
+
+async def ensure_community_plugin_compatible(plugin_id: str) -> str | None:
+    from pallas import __version__
+
+    try:
+        current_version = Version(__version__)
+    except InvalidVersion as e:
+        raise CommunityPluginInstallError(f"当前 Pallas-Bot 版本无效：{__version__}") from e
+
+    try:
+        index = await load_community_plugin_index_safe()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("社区插件兼容性索引加载失败：{}", e)
+        return "兼容性未验证（索引加载失败）"
+    if not isinstance(index, dict) or index.get("error"):
+        return "兼容性未验证（索引加载失败）"
+    entries = index.get("plugins")
+    if not isinstance(entries, list):
+        return "兼容性未验证（索引加载失败）"
+
+    entry = next(
+        (row for row in entries if isinstance(row, dict) and str(row.get("plugin_id") or "").strip() == plugin_id),
+        None,
+    )
+    if entry is None:
+        return "兼容性未验证（索引中未找到该插件）"
+    minimum = str(entry.get("min_pallas_version") or "").strip()
+    if not minimum:
+        return "兼容性未验证（索引未声明最低 Pallas 版本）"
+    try:
+        minimum_version = Version(minimum)
+    except InvalidVersion as e:
+        raise CommunityPluginInstallError(
+            f"插件 {plugin_id} 的最低版本声明无效：{minimum}",
+        ) from e
+    if current_version < minimum_version:
+        raise CommunityPluginInstallError(
+            f"插件 {plugin_id} 需要 Pallas-Bot >= {minimum}，当前版本为 {__version__}",
+        )
+    return None
 
 
 def webui_community_install_enabled() -> bool:
@@ -213,6 +256,7 @@ async def install_community_plugin(
             f"local/plugins/{pid} 已存在，请先卸载或手工更新",
             status_code=409,
         )
+    compatibility_warning = await ensure_community_plugin_compatible(pid)
     dest.parent.mkdir(parents=True, exist_ok=True)
     logger.info(
         "Community plugin [{}] is being installed from repository [{}] at ref [{}]",
@@ -273,6 +317,8 @@ async def install_community_plugin(
     _report(on_progress, 92, "依赖安装完成")
     dirs_ready = extra_plugin_dirs_ready()
     msg = f"已安装到 local/plugins/{pid}/。"
+    if compatibility_warning:
+        msg += f" {compatibility_warning}。"
     if not dirs_ready:
         msg += ' 请在 config/pallas.toml 的 [bootstrap].extra_plugin_dirs 加入 "local/plugins"。'
     _report(on_progress, 95, "安装完成")
@@ -302,6 +348,7 @@ async def update_community_plugin(
     _report(on_progress, 5, "准备更新…")
     if not local_plugin_installed(pid):
         raise CommunityPluginInstallError(f"local/plugins/{pid} 未安装，无法更新")
+    compatibility_warning = await ensure_community_plugin_compatible(pid)
     logger.info("Community plugin [{}] is being updated to ref [{}]", pid, branch)
     code, remote_url, err = await run_git_command(
         INSTALL_TIMEOUT_S,
@@ -387,6 +434,8 @@ async def update_community_plugin(
     _report(on_progress, 94, "依赖安装完成")
     dirs_ready = extra_plugin_dirs_ready()
     msg = f"已更新 local/plugins/{pid}/。"
+    if compatibility_warning:
+        msg += f" {compatibility_warning}。"
     if not dirs_ready:
         msg += ' 请在 config/pallas.toml 的 [bootstrap].extra_plugin_dirs 加入 "local/plugins"。'
     _report(on_progress, 95, "更新完成")

@@ -366,6 +366,7 @@ async def test_install_community_plugin_uses_rewritten_clone_url(monkeypatch, tm
     )
 
     assert result["installed"] is True
+    assert "兼容性未验证" in str(result["message"])
     assert len(clone_urls) == 1
     assert clone_urls[0] == "https://ghproxy.vip/https://github.com/acme/demo"
 

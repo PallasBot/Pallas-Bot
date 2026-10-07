@@ -68,6 +68,17 @@ def _reset_common_runtime_state():
     shard_config.get_shard_registry_settings.cache_clear()
 
 
+@pytest.fixture(autouse=True)
+def _stub_community_install_compatibility_index(monkeypatch):
+    """Direct installer tests remain offline unless they explicitly exercise the index gate."""
+    from pallas.console.webui import community_plugin_install
+
+    async def empty_index():
+        return {"plugins": []}
+
+    monkeypatch.setattr(community_plugin_install, "load_community_plugin_index_safe", empty_index)
+
+
 @pytest.fixture
 def isolated_nonebot_plugin_state():
     """隔离会实际加载 NoneBot 插件的测试，并恢复原模块身份。"""

@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from pallas.console.webui.community_plugin_assets import infer_community_plugin_icon, parse_git_host_repo
-from pallas.console.webui.community_plugin_index import normalize_index_entry, parse_index_document
+from pallas.console.webui.community_plugin_index import normalize_index_entry
 from pallas.console.webui.community_plugin_install import PLUGIN_ID_RE
 
 if TYPE_CHECKING:
@@ -22,6 +22,7 @@ ICON_ASSET_PATHS = (
     "assets/avatar.png",
     "assets/avatar.jpg",
 )
+INDEX_VERSION_RE = re.compile(r"^v?\d+\.\d+\.\d+([.-].+)?$")
 
 # ---- import 规则（L1 社区插件） ----
 FORBIDDEN_PREFIXES_L1 = (
@@ -447,24 +448,49 @@ def format_index_entry_json(entry: dict[str, Any], *, indent: int = 2) -> str:
 
 def validate_index_file(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
     raw = json.loads(path.read_text(encoding="utf-8"))
-    meta, plugins = parse_index_document(raw)
+    if not isinstance(raw, dict):
+        raise ValueError("根对象须为 JSON 对象")
+    if type(raw.get("version")) is not int or raw["version"] != 1:
+        raise ValueError("version 须为整数 1")
+    entries = raw.get("plugins")
+    if not isinstance(entries, list):
+        raise ValueError("plugins 须为数组")
+
+    meta = {key: raw.get(key) for key in ("version", "updated_at", "description")}
+    plugins: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index, item in enumerate(entries):
+        location = f"plugins[{index}]"
+        if not isinstance(item, dict):
+            raise ValueError(f"{location} 须为对象")
+        pid = str(item.get("id") or "").strip()
+        if not PLUGIN_ID_RE.fullmatch(pid):
+            raise ValueError(f"{location}.id 非法：{pid!r}")
+        if pid in seen:
+            raise ValueError(f"重复 plugin id：{pid}")
+        seen.add(pid)
+        repo = str(item.get("repository") or "").strip()
+        if not repo.startswith(("https://", "git@")):
+            raise ValueError(f"{location}.repository 须为 https:// 或 git@ 开头")
+        ref = item.get("ref")
+        if ref is not None and not str(ref).strip():
+            raise ValueError(f"{location}.ref 不能为空字符串")
+        version = item.get("version")
+        if version is not None and not INDEX_VERSION_RE.fullmatch(str(version).strip()):
+            raise ValueError(f"{location}.version 非法（应为语义化版本，如 0.1.0）：{version!r}")
+        normalized = normalize_index_entry(item)
+        if normalized is None:
+            raise ValueError(f"{location} 无法归一化")
+        plugins.append(normalized)
+
     issues: list[str] = []
     for entry in plugins:
         pid = entry["plugin_id"]
-        repo = entry.get("repository_url") or ""
+        repo = entry["repository_url"]
         if not entry.get("icon") and parse_git_host_repo(str(repo)):
             issues.append(
                 f"{pid}: 未设置 icon，将自动推断 {ICON_ASSET_PATHS[0]}（请确保仓库中存在该文件）",
             )
-        normalized = normalize_index_entry(
-            {
-                "id": pid,
-                "repository": repo,
-                **{k: v for k, v in entry.items() if k not in {"plugin_id", "repository_url"}},
-            },
-        )
-        if normalized is None:
-            issues.append(f"{pid}: 条目无效")
     return meta, plugins, issues
 
 

@@ -12,7 +12,11 @@ from nonebot.adapters.onebot.v11 import MessageEvent  # noqa: TC002
 from nonebot.matcher import Matcher  # noqa: TC002
 from nonebot.permission import Permission  # noqa: TC002
 
-from pallas.core.limits import is_command_cooldown_ready, refresh_command_cooldown
+from pallas.core.limits import (
+    get_command_cooldown_sec,
+    is_command_cooldown_ready,
+    refresh_command_cooldown,
+)
 from pallas.core.perm import (
     group_message_permission_for_command,
     group_or_private_message_permission_for_command,
@@ -47,18 +51,11 @@ class PluginCommand:
         def decorator(handler: HandlerFunc) -> HandlerFunc:
             @self.matcher.handle()
             async def _wrapper(bot: Bot, event: MessageEvent) -> None:
-                if self.default_cd_sec is not None and self.default_cd_sec > 0:
-                    if not await is_command_cooldown_ready(
-                        event,
-                        self.command_id,
-                        default_cd_sec=self.default_cd_sec,
-                    ):
+                cd_sec = get_command_cooldown_sec(self.command_id, self.default_cd_sec)
+                if cd_sec is not None and cd_sec > 0:
+                    if not await is_command_cooldown_ready(event, self.command_id, cd_sec=cd_sec):
                         return
-                    await refresh_command_cooldown(
-                        event,
-                        self.command_id,
-                        default_cd_sec=self.default_cd_sec,
-                    )
+                    await refresh_command_cooldown(event, self.command_id, cd_sec=cd_sec)
                 ctx = PluginHandlerContext(
                     bot=bot,
                     event=event,
