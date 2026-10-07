@@ -61,7 +61,7 @@ def module_names_from_import(node: ast.AST) -> list[str]:
 
 def is_forbidden_module(mod: str, forbidden: tuple[str, ...]) -> bool:
     for prefix in forbidden:
-        if mod == prefix or mod.startswith(f"{prefix}."):
+        if mod == prefix.rstrip(".") or mod.startswith(prefix if prefix.endswith(".") else f"{prefix}."):
             return True
     return False
 
