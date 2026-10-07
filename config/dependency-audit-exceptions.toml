@@ -1,0 +1,6 @@
+# Add only temporary, reviewed vulnerability exceptions with a reason and expiry.
+# Example (pip-audit filters this ID natively before producing JSON):
+# [[vulnerability]]
+# id = "CVE-YYYY-NNNN"
+# reason = "Why this temporary exception is needed"
+# expires = "YYYY-MM-DD"

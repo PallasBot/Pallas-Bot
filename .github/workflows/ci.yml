@@ -138,9 +138,10 @@ jobs:
 
       - name: Check dependency vulnerabilities
         run: |
-          uv sync  --dev
-          # 检查已知漏洞
-          uv run pip-audit || true
+          uv sync --locked --dev
+          env -u PG_TEST_DSN uv run --locked pytest tests/common/test_dependency_audit.py \
+            -p no:nonebug -p no:cacheprovider -q
+          uv run --locked python tools/audit_dependencies.py
 
   build-test:
     runs-on: ubuntu-latest
