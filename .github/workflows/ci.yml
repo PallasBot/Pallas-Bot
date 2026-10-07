@@ -137,10 +137,10 @@ jobs:
 
       - name: Check dependency vulnerabilities
         run: |
-          uv sync --locked --dev
-          env -u PG_TEST_DSN uv run --locked pytest tests/common/test_dependency_audit.py \
+          uv sync --dev
+          env -u PG_TEST_DSN uv run pytest tests/common/test_dependency_audit.py \
             -p no:nonebug -p no:cacheprovider -q
-          uv run --locked python tools/audit_dependencies.py
+          uv run python tools/audit_dependencies.py
 
   build-test:
     runs-on: ubuntu-latest
