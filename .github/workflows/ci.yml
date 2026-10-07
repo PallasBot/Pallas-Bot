@@ -88,6 +88,7 @@ jobs:
         run: |
           env -u PG_TEST_DSN uv run pytest \
             tests/platform/ingress/test_ingress_redis_nonblocking.py \
+            tests/common/test_federate_ingress_cache.py \
             tests/common/federate/test_peer_bots.py \
             tests/common/federate/test_peer_bots_sync.py \
             tests/platform/test_connected_roster.py \
