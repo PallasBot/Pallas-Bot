@@ -82,14 +82,17 @@ def _parse_plugin_metadata_stub(init_path: Path) -> dict[str, Any] | None:
                 if key == "extra":
                     extra = literalish(kw.value)
                     if isinstance(extra, dict) and extra:
+                        filtered_extra = {}
                         menu_data = extra.get("menu_data")
                         if isinstance(menu_data, list):
-                            extra = {"menu_data": menu_data}
-                        else:
-                            extra = {}
+                            filtered_extra["menu_data"] = menu_data
+                        version = extra.get("version")
+                        if isinstance(version, str):
+                            filtered_extra["version"] = version
+                        extra = filtered_extra
                         if extra:
                             meta["extra"] = extra
-            if meta.get("name"):
+            if meta.get("name") or meta.get("extra"):
                 return meta
     return None
 
