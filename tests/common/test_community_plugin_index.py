@@ -71,3 +71,25 @@ async def test_local_community_index_returns_without_waiting_for_remote_refresh(
     await asyncio.wait_for(remote_started.wait(), timeout=0.05)
     release_remote.set()
     await asyncio.sleep(0)
+
+
+def test_normalize_and_cache_preserve_index_version(tmp_path, monkeypatch) -> None:
+    monkeypatch.setattr(community_plugin_index, "PROJECT_ROOT", tmp_path)
+    entry = community_plugin_index.normalize_index_entry(
+        {"id": "demo", "repository": "https://example.test/demo", "version": "2.3.4"},
+    )
+    assert entry["version"] == "2.3.4"
+
+    community_plugin_index.cache_community_plugin_index({}, [entry])
+
+    cached = json.loads((tmp_path / community_plugin_index.LOCAL_INDEX_REL).read_text(encoding="utf-8"))
+    assert cached["plugins"][0]["version"] == "2.3.4"
+    assert community_plugin_index.normalize_index_entry(cached["plugins"][0])["version"] == "2.3.4"
+
+
+def test_normalize_old_index_entry_has_nullable_version():
+    entry = community_plugin_index.normalize_index_entry(
+        {"id": "demo", "repository": "https://example.test/demo"},
+    )
+
+    assert entry["version"] is None

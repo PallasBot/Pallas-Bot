@@ -48,7 +48,9 @@ my_plugin/
 1. **版本号**：遵循[语义化版本](https://semver.org/lang/zh-CN/)（如 `0.1.0`）。`index.json` 可选字段 `version` 应与 git tag、`CHANGELOG.md` 对应。
 2. **git tag**：发布时打 `vX.Y.Z`（如 `v0.1.0`），便于按 ref 安装。
 3. **`CHANGELOG.md`**：仓库根目录维护，推荐 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)：日常记到 `## [Unreleased]`，发布时按版本归档。
-4. **已收录插件**：发版后还须更新索引里自己那条的 `version`（见 [步骤 6](#步骤-6发版后同步索引)）；商店展示的版本以索引为准。
+4. **已收录插件**：发版后还须更新索引里自己那条的 `version`（见 [步骤 6](#步骤-6发版后同步索引)）；商店分别展示索引版本与本地安装版本。
+
+本地安装版本优先读取插件根目录 `pyproject.toml` 的 `[project].version`；没有有效声明时读取 `__plugin_meta__.extra['version']` 字面量。没有声明时返回空版本，界面显示提交或未知；不会用索引版本冒充。
 
 控制台 **插件商店 → 详情 → 更新日志** 取值顺序：
 
@@ -191,7 +193,7 @@ uv run python tools/community_plugin_author.py validate-index /path/to/index.jso
 5. 向索引仓提 PR，标题建议：`chore(index): <id> 升至 vX.Y.Z`。
 
 ::: tip
-`ref` 若指向 `main`，用户重装会拉到最新代码；**商店展示的版本号仍以索引 `version` 为准**。不要新增第二条同 `id` 条目，只改已有那条。
+`ref` 若指向 `main`，用户重装会拉到最新代码；**索引版本以索引 `version` 为准，本地版本以安装目录中的声明为准**。不要新增第二条同 `id` 条目，只改已有那条。
 :::
 
 本仓可放一份与索引对齐的 `community-index.entry.json`（见示范仓），发版时先改它，再复制字段到索引 PR，减少漏改。
