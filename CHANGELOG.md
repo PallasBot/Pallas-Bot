@@ -1,5 +1,24 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+* feat(plugins): 提供可复制的社区插件仓库模板
+* feat(plugins): 区分社区插件索引版本与本地安装版本
+
+### Changed
+
+* docs(plugins): 说明 Memes 社区索引自动 PR 试点
+
+### Fixed
+
+* fix(commands): 修复插件命令冷却配置覆盖
+* fix(commands): 支持静态命令声明引用常量
+* fix(plugins): 严格校验作者索引与社区插件导入边界
+* fix(plugins): 安装前拦截超出当前 Bot 版本要求的插件
+* fix(plugins): 按解析后的提交判断社区标签更新
+
 ## [4.4.4] - 2026-10-04
 
 ### 更新公告
