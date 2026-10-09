@@ -88,6 +88,7 @@ jobs:
         run: |
           env -u PG_TEST_DSN uv run pytest \
             tests/platform/ingress/test_ingress_redis_nonblocking.py \
+            tests/common/test_federate_ingress_cache.py \
             tests/common/federate/test_peer_bots.py \
             tests/common/federate/test_peer_bots_sync.py \
             tests/platform/test_connected_roster.py \
@@ -137,9 +138,10 @@ jobs:
 
       - name: Check dependency vulnerabilities
         run: |
-          uv sync  --dev
-          # 检查已知漏洞
-          uv run pip-audit || true
+          uv sync --dev
+          env -u PG_TEST_DSN uv run pytest tests/common/test_dependency_audit.py \
+            -p no:nonebug -p no:cacheprovider -q
+          uv run python tools/audit_dependencies.py
 
   build-test:
     runs-on: ubuntu-latest

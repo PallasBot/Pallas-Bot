@@ -10,9 +10,14 @@
 ### Changed
 
 * docs(plugins): 明确社区索引自动 PR 为默认关闭的可选接入方式，目前仅 Memes 完成集成
+* docs(plugins): 说明 Memes 社区索引自动 PR 试点
+* chore(deps): 依赖审计发现漏洞或审计覆盖不完整时阻断 CI
+* fix(ci): 依赖审计兼容无锁安装环境
+* chore(deps): 移除网易云客户端依赖
 
 ### Fixed
 
+* fix(federation): 保护共享消息 claim 状态，避免并发重复领取
 * fix(commands): 修复插件命令冷却配置覆盖
 * fix(commands): 支持静态命令声明引用常量
 * fix(plugins): 严格校验作者索引与社区插件导入边界
