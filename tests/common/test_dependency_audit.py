@@ -26,15 +26,17 @@ def dependency(
     return {"name": name, "version": "1.0", "vulns": vulns or [], "skip_reason": skip_reason}
 
 
-def mock_result(monkeypatch: pytest.MonkeyPatch, stdout: str, returncode: int = 0, stderr: str = "") -> list[list[str]]:
-    commands: list[list[str]] = []
+def mock_result(
+    monkeypatch: pytest.MonkeyPatch, stdout: str, returncode: int = 0, stderr: str = ""
+) -> list[tuple[list[str], dict[str, object]]]:
+    calls: list[tuple[list[str], dict[str, object]]] = []
 
-    def run(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        commands.append(command)
+    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append((command, kwargs))
         return subprocess.CompletedProcess(command, returncode, stdout, stderr)
 
     monkeypatch.setattr(audit_dependencies.subprocess, "run", run)
-    return commands
+    return calls
 
 
 def test_audit_accepts_clean_report_and_root_editable(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -108,12 +110,24 @@ def test_audit_passes_exception_id_to_pip_audit(monkeypatch: pytest.MonkeyPatch,
         encoding="utf-8",
     )
     # pip-audit applies --ignore-vuln before formatting; ignored findings are absent from JSON.
-    commands = mock_result(monkeypatch, report(dependency()))
+    calls = mock_result(monkeypatch, report(dependency()))
 
     assert audit_dependencies.run_audit(config, today=date(2026, 10, 7)) == 0
-    command = commands[0]
-    assert command[0:3] == [audit_dependencies.sys.executable, "-m", "pip_audit"]
-    assert command[command.index("--ignore-vuln") + 1] == "CVE-2026-1234"
+    command, options = calls[0]
+    assert command == [
+        audit_dependencies.sys.executable,
+        "-m",
+        "pip_audit",
+        "--local",
+        "--skip-editable",
+        "--progress-spinner",
+        "off",
+        "--format",
+        "json",
+        "--ignore-vuln",
+        "CVE-2026-1234",
+    ]
+    assert options["shell"] is False
 
 
 @pytest.mark.parametrize(
