@@ -101,9 +101,14 @@ async def test_federate_ingress_cancelled_owner_releases_inflight_claim(monkeypa
     monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.federate.ingress.load_or_create_deployment_id", lambda: "deploy-test")
     started = asyncio.Event()
+    calls = 0
 
     async def blocked_claim(*_args, **_kwargs) -> bool:
+        nonlocal calls
+        calls += 1
         started.set()
+        if calls > 1:
+            return True
         await asyncio.Event().wait()
         return True
 
@@ -128,10 +133,57 @@ async def test_federate_ingress_cancelled_owner_releases_inflight_claim(monkeypa
         await owner
 
     assert fed_ingress._inflight_claims == {}
+    assert await fed_ingress.claim_federate_group_message_ingress(event) is True
+    assert calls == 2
+    assert fed_ingress._inflight_claims == {}
 
 
 @pytest.mark.asyncio
-async def test_federate_ingress_follower_timeout_clears_inflight_claim(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_federate_ingress_old_owner_does_not_cache_replacement_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fed_ingress.reset_federate_ingress_win_cache_for_tests()
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_bypass_unified", lambda: False)
+    monkeypatch.setattr(fed_ingress.shard_ctx, "sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.load_or_create_deployment_id", lambda: "deploy-test")
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def blocked_claim(*_args, **_kwargs) -> bool:
+        started.set()
+        await release.wait()
+        return True
+
+    monkeypatch.setattr(fed_ingress, "try_claim_cross_federate_message", blocked_claim)
+    event = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=12345,
+        message_id=1,
+        message=Message("hi"),
+        raw_message="hi",
+    )
+
+    owner = asyncio.create_task(fed_ingress.claim_federate_group_message_ingress(event))
+    await started.wait()
+    cache_key = next(iter(fed_ingress._inflight_claims))
+    replacement = asyncio.get_running_loop().create_future()
+    fed_ingress._inflight_claims[cache_key] = replacement
+
+    release.set()
+    assert await owner is True
+    assert fed_ingress._inflight_claims[cache_key] is replacement
+    assert not replacement.done()
+    assert cache_key not in fed_ingress._win_cache
+
+
+@pytest.mark.asyncio
+async def test_federate_ingress_follower_timeout_keeps_owner_claim(monkeypatch: pytest.MonkeyPatch) -> None:
     fed_ingress.reset_federate_ingress_win_cache_for_tests()
     monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_bypass_unified", lambda: False)
     monkeypatch.setattr(fed_ingress.shard_ctx, "sharding_active", lambda: False)
@@ -139,10 +191,11 @@ async def test_federate_ingress_follower_timeout_clears_inflight_claim(monkeypat
     monkeypatch.setattr("pallas.core.platform.federate.ingress.load_or_create_deployment_id", lambda: "deploy-test")
     monkeypatch.setattr(fed_ingress, "_INFLIGHT_CLAIM_WAIT_SEC", 0.01)
     started = asyncio.Event()
+    release = asyncio.Event()
 
     async def blocked_claim(*_args, **_kwargs) -> bool:
         started.set()
-        await asyncio.Event().wait()
+        await release.wait()
         return True
 
     monkeypatch.setattr(fed_ingress, "try_claim_cross_federate_message", blocked_claim)
@@ -163,11 +216,111 @@ async def test_federate_ingress_follower_timeout_clears_inflight_claim(monkeypat
     await started.wait()
 
     assert await fed_ingress.claim_federate_group_message_ingress(event) is False
+    assert len(fed_ingress._inflight_claims) == 1
+
+    # A later follower still joins the original owner instead of starting a duplicate claim.
+    monkeypatch.setattr(fed_ingress, "_INFLIGHT_CLAIM_WAIT_SEC", 1.0)
+    follower = asyncio.create_task(fed_ingress.claim_federate_group_message_ingress(event))
+    await asyncio.sleep(0)
+    release.set()
+    assert await owner is True
+    assert await follower is True
     assert fed_ingress._inflight_claims == {}
 
-    owner.cancel()
+
+@pytest.mark.asyncio
+async def test_federate_ingress_follower_cancellation_does_not_cancel_shared_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fed_ingress.reset_federate_ingress_win_cache_for_tests()
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_bypass_unified", lambda: False)
+    monkeypatch.setattr(fed_ingress.shard_ctx, "sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.load_or_create_deployment_id", lambda: "deploy-test")
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def blocked_claim(*_args, **_kwargs) -> bool:
+        started.set()
+        await release.wait()
+        return True
+
+    monkeypatch.setattr(fed_ingress, "try_claim_cross_federate_message", blocked_claim)
+    event = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=12345,
+        message_id=1,
+        message=Message("hi"),
+        raw_message="hi",
+    )
+
+    owner = asyncio.create_task(fed_ingress.claim_federate_group_message_ingress(event))
+    await started.wait()
+    cancelled_follower = asyncio.create_task(fed_ingress.claim_federate_group_message_ingress(event))
+    survivor = asyncio.create_task(fed_ingress.claim_federate_group_message_ingress(event))
+    await asyncio.sleep(0)
+    cancelled_follower.cancel()
     with pytest.raises(asyncio.CancelledError):
-        await owner
+        await cancelled_follower
+    assert len(fed_ingress._inflight_claims) == 1
+
+    release.set()
+    assert await owner is True
+    assert await survivor is True
+    assert fed_ingress._inflight_claims == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", [TimeoutError, ConnectionError])
+async def test_federate_ingress_failed_claim_releases_for_recovery(
+    monkeypatch: pytest.MonkeyPatch, failure: type[Exception]
+) -> None:
+    fed_ingress.reset_federate_ingress_win_cache_for_tests()
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_bypass_unified", lambda: False)
+    monkeypatch.setattr(fed_ingress.shard_ctx, "sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.load_or_create_deployment_id", lambda: "deploy-test")
+    if failure is TimeoutError:
+        monkeypatch.setattr(fed_ingress, "_REDIS_CLAIM_TIMEOUT_SEC", 0.01)
+
+    calls = 0
+
+    async def failing_once(*_args, **_kwargs) -> bool:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            if failure is TimeoutError:
+                await asyncio.Event().wait()
+            raise ConnectionError("redis unavailable")
+        return True
+
+    monkeypatch.setattr(fed_ingress, "try_claim_cross_federate_message", failing_once)
+    event = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=12345,
+        message_id=1,
+        message=Message("hi"),
+        raw_message="hi",
+    )
+
+    if failure is ConnectionError:
+        with pytest.raises(ConnectionError):
+            await fed_ingress.claim_federate_group_message_ingress(event)
+    else:
+        assert await fed_ingress.claim_federate_group_message_ingress(event) is False
+    assert fed_ingress._inflight_claims == {}
+    assert await fed_ingress.claim_federate_group_message_ingress(event) is True
+    assert calls == 2
 
 
 @pytest.mark.asyncio
