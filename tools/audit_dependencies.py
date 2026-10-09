@@ -122,7 +122,9 @@ def run_audit(
     for vulnerability_id in ignored:
         command.extend(("--ignore-vuln", vulnerability_id))
     try:
-        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        # Fixed argv; only validated TOML vulnerability IDs are dynamic argument values.
+        # nosemgrep: python.lang.security.audit.dangerous-subprocess-use-audit
+        result = subprocess.run(command, capture_output=True, text=True, check=False, shell=False)
     except OSError as exc:
         print(f"Could not run pip-audit: {exc}", file=sys.stderr)
         return 2

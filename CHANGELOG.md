@@ -1,5 +1,30 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+* feat(plugins): 提供可复制的社区插件仓库模板
+* feat(plugins): 区分社区插件索引版本与本地安装版本
+
+### Changed
+
+* docs(plugins): 明确社区索引自动 PR 为默认关闭的可选接入方式，目前仅 Memes 完成集成
+* docs(plugins): 说明 Memes 社区索引自动 PR 试点
+* chore(deps): 依赖审计发现漏洞或审计覆盖不完整时阻断 CI
+* fix(ci): 依赖审计兼容无锁安装环境
+* chore(deps): 移除网易云客户端依赖
+
+### Fixed
+
+* fix(db): 校验备份文件完整性并清理下载临时文件
+* fix(federation): 保护共享消息 claim 状态，避免并发重复领取
+* fix(commands): 修复插件命令冷却配置覆盖
+* fix(commands): 支持静态命令声明引用常量
+* fix(plugins): 严格校验作者索引与社区插件导入边界
+* fix(plugins): 安装前拦截超出当前 Bot 版本要求的插件
+* fix(plugins): 按解析后的提交判断社区标签更新
+
 ## [4.4.4] - 2026-10-04
 
 ### 更新公告

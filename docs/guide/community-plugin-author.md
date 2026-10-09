@@ -198,18 +198,18 @@ uv run python tools/community_plugin_author.py validate-index /path/to/index.jso
 
 本仓可放一份与索引对齐的 `community-index.entry.json`（见示范仓），发版时先改它，再复制字段到索引 PR，减少漏改。
 
-### 自动同步试点：Memes
+### 可选接入方式：发布后自动创建索引 PR
 
-目前仅 `TogetsuDo/pallas-plugin-memes` 试点，不是所有社区插件通用能力，也不是官方 PyPI 发版通道。部署并启用后才生效；默认关闭，本说明不代为配置。
+这是可选接入方式，不替代上文的手工索引 PR 流程，也不是官方 PyPI 发版通道。目前只有 `TogetsuDo/pallas-plugin-memes` 完成集成，并非全部 9 个仓库均已接入。默认关闭；要使用时，插件仓与索引仓都须各自部署工作流并配置所需 token、变量和 environment，本说明不代为启用或配置。
 
 启用步骤：
 
-1. 在 Memes 仓与索引仓部署各自的工作流。
+1. 在插件仓与索引仓分别部署并配置各自的工作流。
 2. 在索引仓创建 `community-index-release` environment，仅允许 `main` 分支部署；将 `INDEX_PR_TOKEN` 配置为 environment secret。该凭据仅需索引仓 `Contents: read/write` 与 `Pull requests: read/write` 权限，不可使用默认 `GITHUB_TOKEN` 替代。
-3. 在 Memes 仓配置 `COMMUNITY_INDEX_DISPATCH_TOKEN`，其 fine-grained PAT 仅授予目标索引仓 `Actions: write` 权限。当前 workflow 直接使用 secret，不负责签发或刷新 GitHub App 安装 token；若使用 App，须另行实现即时签发/刷新，本试点不包含该能力，不要将短期 App token 长期存为 secret。
+3. 在每个采用该接入方式的插件仓配置 `COMMUNITY_INDEX_DISPATCH_TOKEN`，其 fine-grained PAT 仅授予目标索引仓 `Actions: write` 权限。当前 workflow 直接使用 secret，不负责签发或刷新 GitHub App 安装 token；若使用 App，须另行实现即时签发/刷新，本试点不包含该能力，不要将短期 App token 长期存为 secret。
 4. 在两仓分别设置 `COMMUNITY_INDEX_SYNC_ENABLED=true`。
 
-触发 tag、插件元数据版本与 CHANGELOG 版本须一致，格式为正式 `vX.Y.Z`。自动流程只更新索引版本并创建 PR，不会自动合并；需 CI 通过后人工审阅合并。条目的 `ref=main` 仍指向主分支，不会因发布自动固定到 tag。失败时可能留下自动 PR 分支，可重试，不会强推覆盖；未启用时继续按上文手工同步。
+触发 tag、插件元数据版本与 CHANGELOG 版本须一致，格式为正式 `vX.Y.Z`。自动流程只更新索引版本并创建 PR；CI 通过后仍须人工审核并合并，不会自动合并。条目的 `ref=main` 仍指向主分支，不会因发布自动固定到 tag。失败时可能留下自动 PR 分支，可重试，不会强推覆盖；未启用或未接入时继续按上文手工同步。
 
 ## 成功信号
 
