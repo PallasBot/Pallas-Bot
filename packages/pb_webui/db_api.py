@@ -11,6 +11,7 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
 from nonebot import logger
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.background import BackgroundTask
 
 from .console_read_cache import cached_read, drop_read_cache
 from .extended_common import (
@@ -20,6 +21,37 @@ from .extended_common import (
 
 if TYPE_CHECKING:
     from .config import Config
+
+
+class _BackupDownloadResponse(FileResponse):
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            from pallas.core.foundation.db.backup import cleanup_backup_download
+
+            cleanup_backup_download(Path(self.path))
+
+
+def _cleanup_cancelled_download(task: asyncio.Task[tuple[Path, str]]) -> None:
+    try:
+        zip_path, _filename = task.result()
+    except BaseException:
+        return
+    from pallas.core.foundation.db.backup import cleanup_backup_download
+
+    cleanup_backup_download(zip_path)
+
+
+async def _prepare_backup_download_async(path: str, output_parent: str | None) -> tuple[Path, str]:
+    from pallas.core.foundation.db.backup import prepare_backup_download
+
+    worker = asyncio.create_task(asyncio.to_thread(prepare_backup_download, path, output_parent=output_parent))
+    try:
+        return await asyncio.shield(worker)
+    except asyncio.CancelledError:
+        worker.add_done_callback(_cleanup_cancelled_download)
+        raise
 
 
 def _normalize_table_name(raw: str) -> str:
@@ -706,25 +738,25 @@ def register_db_router(
         path: str = Query(..., min_length=1, max_length=2048),
         output_parent: str | None = Query(default=None, max_length=1024),
     ) -> FileResponse:
-        from pallas.core.foundation.db.backup import prepare_backup_download
-
         try:
-            zip_path, filename = await asyncio.to_thread(
-                prepare_backup_download,
-                path,
-                output_parent=output_parent,
-            )
+            zip_path, filename = await _prepare_backup_download_async(path, output_parent)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
         except Exception as e:  # noqa: BLE001
             logger.exception("[WebUI] 打包备份下载失败")
             raise HTTPException(status_code=500, detail=str(e)) from e
-        return FileResponse(
-            zip_path,
-            filename=filename,
-            media_type="application/zip",
-            background=None,
-        )
+        from pallas.core.foundation.db.backup import cleanup_backup_download
+
+        try:
+            return _BackupDownloadResponse(
+                zip_path,
+                filename=filename,
+                media_type="application/zip",
+                background=BackgroundTask(cleanup_backup_download, zip_path),
+            )
+        except BaseException:
+            cleanup_backup_download(zip_path)
+            raise
 
     @router.post(f"{x}/db/backup/runs/delete", include_in_schema=True)
     async def _db_backup_runs_delete(

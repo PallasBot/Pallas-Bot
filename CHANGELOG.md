@@ -17,6 +17,7 @@
 
 ### Fixed
 
+* fix(db): 校验备份文件完整性并清理下载临时文件
 * fix(federation): 保护共享消息 claim 状态，避免并发重复领取
 * fix(commands): 修复插件命令冷却配置覆盖
 * fix(commands): 支持静态命令声明引用常量

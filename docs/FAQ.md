@@ -99,7 +99,9 @@ WHERE account = 3888888888;
 
 ### 如何备份 MongoDB / PostgreSQL？
 
-A: **WebUI「数据库」页**有「数据库备份」面板；若未检测到 `mongodump` / `pg_dump`，页面会给出官方下载链接。也可在仓库根执行：`uv run python tools/scripts/backup_database.py`（按当前 `db_backend`），PostgreSQL 专用：`uv run python tools/scripts/backup_pg.py`（或 `sh tools/scripts/backup_pg.sh`）。
+A: **WebUI「数据库」页**有「数据库备份」面板；若未检测到 `mongodump` / `pg_dump`，页面会给出官方下载链接。也可在仓库根执行：`uv run python tools/scripts/backup_database.py`（按当前 `db_backend`），PostgreSQL 专用：`uv run python tools/scripts/backup_pg.py`（或 `sh tools/scripts/backup_pg.sh`）。CLI 会读取仓库合并配置，同时保留已有进程环境变量。
+
+备份先写入隐藏暂存目录，完成产物检查并生成 SHA-256 清单后才会出现在历史列表；下载 ZIP 的临时文件会在响应结束或中断时清理。清单校验用于发现产物损坏或改动，不等同于数据库复原测试。PostgreSQL custom/directory 使用不带 `-d` 的 `pg_restore --file`，将输出指向 `os.devnull` 做归档读取/解压 smoke check，清单标记为 `archive_read_check`；这不保证可成功复原或 SQL 语义正确。单独的 `pg_restore --list` 只读取 TOC；plain 格式仅检查 `pg_dump` 完成标记，没有等价的离线语义检查。
 
 ## 更新与版本问题
 
