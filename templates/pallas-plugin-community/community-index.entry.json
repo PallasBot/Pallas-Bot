@@ -1,0 +1,10 @@
+{
+  "id": "example_plugin",
+  "name": "示例社区插件",
+  "description": "演示社区插件的最小群命令。",
+  "repository": "https://github.com/YOUR_ORG/example_plugin.git",
+  "ref": "main",
+  "version": "0.1.0",
+  "author": "YOUR_GITHUB_ID",
+  "tags": ["示例"]
+}
