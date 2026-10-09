@@ -366,6 +366,7 @@ async def test_install_community_plugin_uses_rewritten_clone_url(monkeypatch, tm
     )
 
     assert result["installed"] is True
+    assert "兼容性未验证" in str(result["message"])
     assert len(clone_urls) == 1
     assert clone_urls[0] == "https://ghproxy.vip/https://github.com/acme/demo"
 
@@ -408,3 +409,92 @@ async def test_update_community_plugin_fetches_mirror_url(monkeypatch, tmp_path)
     assert result["installed"] is True
     assert ("fetch", "https://ghproxy.vip/https://github.com/example/demo.git", "main") in git_calls
     assert ("reset", "--hard", "FETCH_HEAD") in git_calls
+
+
+def test_community_store_distinguishes_index_and_installed_versions(monkeypatch, tmp_path):
+    from pallas.console.webui import community_plugin_registry as registry
+    from pallas.console.webui import plugin_catalog
+
+    root = tmp_path / "plugins"
+    plugin = root / "demo"
+    plugin.mkdir(parents=True)
+    (plugin / "__init__.py").write_text(
+        "__plugin_meta__ = PluginMetadata(name='Demo', extra={'version': '1.2.3'})\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(registry, "community_plugins_root", lambda: root)
+    monkeypatch.setattr(registry, "local_plugin_installed", lambda _plugin_id: True)
+    monkeypatch.setattr(registry, "loaded_extra_plugin_ids", lambda _plugin_ids: [])
+    monkeypatch.setattr(registry, "webui_community_install_enabled", lambda: True)
+    monkeypatch.setattr(registry, "bot_lifecycle_available", lambda: True)
+    monkeypatch.setattr(registry, "extra_plugin_dirs_ready", lambda: True)
+    monkeypatch.setattr(registry, "resolve_community_plugin_icon", lambda _entry: None)
+    monkeypatch.setattr(plugin_catalog, "installed_distribution_version", lambda *_args, **_kwargs: "99.0.0")
+
+    row = registry.build_community_plugin_row(
+        {"plugin_id": "demo", "version": "9.8.7", "repository_url": "https://example.test/demo"},
+        update_snapshot={"community": {"demo": {"installed_ref": "abc", "latest_ref": "def"}}},
+    )
+
+    assert row["index_version"] == "9.8.7"
+    assert row["installed_version"] == "1.2.3"
+    assert row["installed_ref"] == "abc"
+    assert row["latest_ref"] == "def"
+
+
+def test_community_store_installed_version_reads_actual_local_files_each_time(monkeypatch, tmp_path):
+    from pallas.console.webui import community_plugin_registry as registry
+
+    root = tmp_path / "plugins"
+    plugin = root / "demo"
+    plugin.mkdir(parents=True)
+    init_path = plugin / "__init__.py"
+    init_path.write_text("__plugin_meta__ = PluginMetadata(name='Demo', extra={'version': '1.0'})\n", encoding="utf-8")
+    monkeypatch.setattr(registry, "community_plugins_root", lambda: root)
+    monkeypatch.setattr(registry, "local_plugin_installed", lambda _plugin_id: True)
+    monkeypatch.setattr(registry, "loaded_extra_plugin_ids", lambda _plugin_ids: [])
+    monkeypatch.setattr(registry, "webui_community_install_enabled", lambda: True)
+    monkeypatch.setattr(registry, "bot_lifecycle_available", lambda: True)
+    monkeypatch.setattr(registry, "extra_plugin_dirs_ready", lambda: True)
+    monkeypatch.setattr(registry, "resolve_community_plugin_icon", lambda _entry: None)
+    entry = {"plugin_id": "demo", "repository_url": "https://example.test/demo"}
+
+    first = registry.build_community_plugin_row(entry)
+    init_path.write_text("__plugin_meta__ = PluginMetadata(name='Demo', extra={'version': '2.0'})\n", encoding="utf-8")
+    second = registry.build_community_plugin_row(entry)
+
+    assert first["installed_version"] == "1.0"
+    assert second["installed_version"] == "2.0"
+
+
+@pytest.mark.parametrize(
+    ("pyproject", "metadata", "expected"),
+    [
+        ("[project]\nversion = '3.0'\n", "4.0", "3.0"),
+        ("invalid toml [", "4.0", "4.0"),
+        ("[project]\n", None, None),
+        ("invalid toml [", None, None),
+    ],
+)
+def test_community_store_version_sources_and_uninstalled_none(monkeypatch, tmp_path, pyproject, metadata, expected):
+    from pallas.console.webui import community_plugin_registry as registry
+
+    root = tmp_path / "plugins"
+    plugin = root / "demo"
+    plugin.mkdir(parents=True)
+    (plugin / "pyproject.toml").write_text(pyproject, encoding="utf-8")
+    extra = f", extra={{'version': '{metadata}'}}" if metadata is not None else ""
+    (plugin / "__init__.py").write_text(f"__plugin_meta__ = PluginMetadata(name='Demo'{extra})\n", encoding="utf-8")
+    monkeypatch.setattr(registry, "community_plugins_root", lambda: root)
+    monkeypatch.setattr(registry, "loaded_extra_plugin_ids", lambda _plugin_ids: [])
+    monkeypatch.setattr(registry, "webui_community_install_enabled", lambda: True)
+    monkeypatch.setattr(registry, "bot_lifecycle_available", lambda: True)
+    monkeypatch.setattr(registry, "extra_plugin_dirs_ready", lambda: True)
+    monkeypatch.setattr(registry, "resolve_community_plugin_icon", lambda _entry: None)
+    monkeypatch.setattr(registry, "local_plugin_installed", lambda _plugin_id: True)
+    installed = registry.build_community_plugin_row({"plugin_id": "demo"})
+    monkeypatch.setattr(registry, "local_plugin_installed", lambda _plugin_id: False)
+    uninstalled = registry.build_community_plugin_row({"plugin_id": "demo"})
+
+    assert installed["installed_version"] == expected
+    assert uninstalled["installed_version"] is None

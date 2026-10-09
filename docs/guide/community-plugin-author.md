@@ -48,7 +48,9 @@ my_plugin/
 1. **版本号**：遵循[语义化版本](https://semver.org/lang/zh-CN/)（如 `0.1.0`）。`index.json` 可选字段 `version` 应与 git tag、`CHANGELOG.md` 对应。
 2. **git tag**：发布时打 `vX.Y.Z`（如 `v0.1.0`），便于按 ref 安装。
 3. **`CHANGELOG.md`**：仓库根目录维护，推荐 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)：日常记到 `## [Unreleased]`，发布时按版本归档。
-4. **已收录插件**：发版后还须更新索引里自己那条的 `version`（见 [步骤 6](#步骤-6发版后同步索引)）；商店展示的版本以索引为准。
+4. **已收录插件**：发版后还须更新索引里自己那条的 `version`（见 [步骤 6](#步骤-6发版后同步索引)）；商店分别展示索引版本与本地安装版本。
+
+本地安装版本优先读取插件根目录 `pyproject.toml` 的 `[project].version`；没有有效声明时读取 `__plugin_meta__.extra['version']` 字面量。没有声明时返回空版本，界面显示提交或未知；不会用索引版本冒充。
 
 控制台 **插件商店 → 详情 → 更新日志** 取值顺序：
 
@@ -103,6 +105,8 @@ my_plugin/
 ```
 
 提 PR 前更新根级 **`updated_at`**（ISO 日期），便于客户端刷新图标缓存。
+
+索引条目声明 `min_pallas_version` 后，Bot 的社区 Git 安装和更新（包括自动更新）会在改动本地插件前校验当前版本；低于下限或当前版本 / 非空下限无法解析时拒绝。缺少声明、插件未收录或索引暂不可用时仍可操作，但成功结果会提示兼容性未验证。
 
 ## 步骤 4：用作者工具 CLI 自检
 
@@ -189,12 +193,23 @@ uv run python tools/community_plugin_author.py validate-index /path/to/index.jso
 5. 向索引仓提 PR，标题建议：`chore(index): <id> 升至 vX.Y.Z`。
 
 ::: tip
-`ref` 若指向 `main`，用户重装会拉到最新代码；**商店展示的版本号仍以索引 `version` 为准**。不要新增第二条同 `id` 条目，只改已有那条。
+`ref` 若指向 `main`，用户重装会拉到最新代码；**索引版本以索引 `version` 为准，本地版本以安装目录中的声明为准**。不要新增第二条同 `id` 条目，只改已有那条。
 :::
 
 本仓可放一份与索引对齐的 `community-index.entry.json`（见示范仓），发版时先改它，再复制字段到索引 PR，减少漏改。
 
-当前**没有**「打 tag 后自动向索引开 PR」的官方 hook；发版同步仍靠作者提 PR（或维护者代提）。
+### 自动同步试点：Memes
+
+目前仅 `TogetsuDo/pallas-plugin-memes` 试点，不是所有社区插件通用能力，也不是官方 PyPI 发版通道。部署并启用后才生效；默认关闭，本说明不代为配置。
+
+启用步骤：
+
+1. 在 Memes 仓与索引仓部署各自的工作流。
+2. 在索引仓创建 `community-index-release` environment，仅允许 `main` 分支部署；将 `INDEX_PR_TOKEN` 配置为 environment secret。该凭据仅需索引仓 `Contents: read/write` 与 `Pull requests: read/write` 权限，不可使用默认 `GITHUB_TOKEN` 替代。
+3. 在 Memes 仓配置 `COMMUNITY_INDEX_DISPATCH_TOKEN`，其 fine-grained PAT 仅授予目标索引仓 `Actions: write` 权限。当前 workflow 直接使用 secret，不负责签发或刷新 GitHub App 安装 token；若使用 App，须另行实现即时签发/刷新，本试点不包含该能力，不要将短期 App token 长期存为 secret。
+4. 在两仓分别设置 `COMMUNITY_INDEX_SYNC_ENABLED=true`。
+
+触发 tag、插件元数据版本与 CHANGELOG 版本须一致，格式为正式 `vX.Y.Z`。自动流程只更新索引版本并创建 PR，不会自动合并；需 CI 通过后人工审阅合并。条目的 `ref=main` 仍指向主分支，不会因发布自动固定到 tag。失败时可能留下自动 PR 分支，可重试，不会强推覆盖；未启用时继续按上文手工同步。
 
 ## 成功信号
 

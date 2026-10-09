@@ -56,6 +56,7 @@ def normalize_index_entry(raw: object) -> dict[str, Any] | None:
     icon = str(raw.get("icon") or "").strip()
     cover = str(raw.get("cover") or "").strip()
     avatar = str(raw.get("avatar") or "").strip()
+    version = str(raw.get("version") or "").strip()
     return {
         "plugin_id": plugin_id,
         "name": name,
@@ -69,6 +70,7 @@ def normalize_index_entry(raw: object) -> dict[str, Any] | None:
         "avatar": avatar or None,
         "tags": tags,
         "min_pallas_version": min_version or None,
+        "version": version or None,
     }
 
 

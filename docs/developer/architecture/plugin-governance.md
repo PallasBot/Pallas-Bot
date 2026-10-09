@@ -15,6 +15,12 @@
 | 帮助可见性 | `usage` / `menu_data` / `help_audience` | 帮助图与控制台展示 |
 | 安装 / 禁用 / 更新 | console / CLI | 包生命周期 |
 
+社区插件索引若声明 `min_pallas_version`，共享 Git 安装与更新入口（含自动更新）会在 clone / fetch 前拦截不满足版本的请求；显式仓库地址或 ref 不绕过该门槛。当前版本或非空下限无法解析时拒绝；索引未声明、未找到插件或加载失败时继续操作，但结果会标注兼容性未验证。
+
+社区商店的 `index_version` 来自索引条目；`installed_version` 只从本地插件根目录读取，优先 `[project].version`，再回退到 `PluginMetadata.extra['version']` 字面量。两个版本独立展示，缺少本地声明时为 `null`；更新快照中的 `installed_ref` / `latest_ref` 仍表示 Git commit。
+
+社区索引发版自动同步目前仅有 Memes 试点：源仓库的低权限工作流触发索引仓库工作流，由受限 environment 凭据创建待人工审核的 PR；默认关闭，不自动合并或将索引 `ref` 固定到发布 tag。
+
 ## LLM 出口总闸
 
 `llm_chat` 是 LLM 能力的载体插件。除消息入口的 matcher 门禁外，LLM 底层出口还有一层统一闸，避免后台循环、work/embed 辅进程绕过插件禁用：

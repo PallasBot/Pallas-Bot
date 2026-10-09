@@ -78,20 +78,35 @@ async def _community_remote_head(repository_url: str, ref: str) -> str | None:
     """git ls-remote 取远端 ref 的 commit；失败返回 None。"""
     from pallas.console.webui.community_plugin_install import run_git_command
 
+    ref = (ref or "").strip()
+    if ref == "HEAD":
+        candidates = ["HEAD"]
+    elif ref.startswith("refs/heads/"):
+        candidates = [ref]
+    elif ref.startswith("refs/tags/"):
+        candidates = [f"{ref}^{{}}", ref]
+    else:
+        candidates = [f"refs/heads/{ref}", f"refs/tags/{ref}^{{}}", f"refs/tags/{ref}"]
     try:
         code, out, _ = await run_git_command(
             _PER_PLUGIN_TIMEOUT_S,
             "ls-remote",
             repository_url,
-            ref,
+            *candidates,
         )
     except Exception:  # noqa: BLE001 — 网络/超时/命令缺失统一降级为 unknown
         return None
     if code != 0:
         return None
-    first = (out or "").strip().split("\n", 1)[0].strip()
-    sha = first.split("\t", 1)[0].strip() if first else ""
-    return sha or None
+    refs = {}
+    for line in (out or "").splitlines():
+        sha, separator, remote_ref = line.partition("\t")
+        if separator and sha.strip() and remote_ref.strip():
+            refs[remote_ref.strip()] = sha.strip()
+    for candidate in candidates:
+        if candidate in refs:
+            return refs[candidate]
+    return None
 
 
 async def _community_local_head(plugin_id: str) -> str | None:

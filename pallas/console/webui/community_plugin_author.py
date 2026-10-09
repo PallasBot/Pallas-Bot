@@ -9,8 +9,9 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from pallas.console.webui.community_plugin_assets import infer_community_plugin_icon, parse_git_host_repo
-from pallas.console.webui.community_plugin_index import normalize_index_entry, parse_index_document
+from pallas.console.webui.community_plugin_index import normalize_index_entry
 from pallas.console.webui.community_plugin_install import PLUGIN_ID_RE
+from pallas.core.commands.metadata_stub import parse_plugin_metadata_extra_stub
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -22,6 +23,7 @@ ICON_ASSET_PATHS = (
     "assets/avatar.png",
     "assets/avatar.jpg",
 )
+INDEX_VERSION_RE = re.compile(r"^v?\d+\.\d+\.\d+([.-].+)?$")
 
 # ---- import 规则（L1 社区插件） ----
 FORBIDDEN_PREFIXES_L1 = (
@@ -157,39 +159,6 @@ def _extract_literal_dict(node: ast.AST) -> dict[str, Any] | None:
     return out
 
 
-def _extract_decl_row(node: ast.AST) -> dict[str, Any] | None:
-    if not isinstance(node, ast.Call):
-        return _extract_literal_dict(node)
-    call_name = _extract_call_name(node.func)
-    if call_name == "command_perm_row":
-        if len(node.args) >= 3:
-            return {
-                "id": _const_str(node.args[0]) or "",
-                "label": _const_str(node.args[1]) or "",
-                "default": _const_str(node.args[2]) or "",
-            }
-    if call_name == "command_limit_row":
-        if len(node.args) >= 2:
-            return {
-                "id": _const_str(node.args[0]) or "",
-                "cd_sec": _const_int(node.args[1]) if _const_int(node.args[1]) is not None else -1,
-            }
-    return _extract_literal_dict(node)
-
-
-def _extract_decl_rows(node: ast.AST) -> list[dict[str, Any]]:
-    if isinstance(node, (ast.List, ast.Tuple)):
-        return [row for item in node.elts if (row := _extract_decl_row(item)) is not None]
-    if isinstance(node, ast.Call):
-        rows: list[dict[str, Any]] = []
-        for arg in node.args:
-            row = _extract_decl_row(arg)
-            if row is not None:
-                rows.append(row)
-        return rows
-    return []
-
-
 def _is_usage_builder_call(node: ast.AST) -> bool:
     """识别 join_usage(...) / usage_line(...) 这类 usage 组装调用。"""
     if not isinstance(node, ast.Call):
@@ -212,6 +181,9 @@ def parse_plugin_metadata_contract(init_path: Path) -> dict[str, Any]:
         "command_limits": [],
         "menu_data": [],
     }
+    stub = parse_plugin_metadata_extra_stub(init_path) or {}
+    contract["command_permissions"] = stub.get("command_permissions", [])
+    contract["command_limits"] = stub.get("command_limits", [])
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
             continue
@@ -229,11 +201,7 @@ def parse_plugin_metadata_contract(init_path: Path) -> dict[str, Any]:
                 continue
             for extra_key_node, extra_value_node in zip(keyword.value.keys, keyword.value.values, strict=False):
                 extra_key = _const_str(extra_key_node) if extra_key_node is not None else None
-                if extra_key == "command_permissions":
-                    contract["command_permissions"] = _extract_decl_rows(extra_value_node)
-                elif extra_key == "command_limits":
-                    contract["command_limits"] = _extract_decl_rows(extra_value_node)
-                elif extra_key == "menu_data":
+                if extra_key == "menu_data":
                     contract["menu_data"] = _extract_literal_rows(extra_value_node)
         break
     return contract
@@ -447,24 +415,49 @@ def format_index_entry_json(entry: dict[str, Any], *, indent: int = 2) -> str:
 
 def validate_index_file(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]], list[str]]:
     raw = json.loads(path.read_text(encoding="utf-8"))
-    meta, plugins = parse_index_document(raw)
+    if not isinstance(raw, dict):
+        raise ValueError("根对象须为 JSON 对象")
+    if type(raw.get("version")) is not int or raw["version"] != 1:
+        raise ValueError("version 须为整数 1")
+    entries = raw.get("plugins")
+    if not isinstance(entries, list):
+        raise ValueError("plugins 须为数组")
+
+    meta = {key: raw.get(key) for key in ("version", "updated_at", "description")}
+    plugins: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for index, item in enumerate(entries):
+        location = f"plugins[{index}]"
+        if not isinstance(item, dict):
+            raise ValueError(f"{location} 须为对象")
+        pid = str(item.get("id") or "").strip()
+        if not PLUGIN_ID_RE.fullmatch(pid):
+            raise ValueError(f"{location}.id 非法：{pid!r}")
+        if pid in seen:
+            raise ValueError(f"重复 plugin id：{pid}")
+        seen.add(pid)
+        repo = str(item.get("repository") or "").strip()
+        if not repo.startswith(("https://", "git@")):
+            raise ValueError(f"{location}.repository 须为 https:// 或 git@ 开头")
+        ref = item.get("ref")
+        if ref is not None and not str(ref).strip():
+            raise ValueError(f"{location}.ref 不能为空字符串")
+        version = item.get("version")
+        if version is not None and not INDEX_VERSION_RE.fullmatch(str(version).strip()):
+            raise ValueError(f"{location}.version 非法（应为语义化版本，如 0.1.0）：{version!r}")
+        normalized = normalize_index_entry(item)
+        if normalized is None:
+            raise ValueError(f"{location} 无法归一化")
+        plugins.append(normalized)
+
     issues: list[str] = []
     for entry in plugins:
         pid = entry["plugin_id"]
-        repo = entry.get("repository_url") or ""
+        repo = entry["repository_url"]
         if not entry.get("icon") and parse_git_host_repo(str(repo)):
             issues.append(
                 f"{pid}: 未设置 icon，将自动推断 {ICON_ASSET_PATHS[0]}（请确保仓库中存在该文件）",
             )
-        normalized = normalize_index_entry(
-            {
-                "id": pid,
-                "repository": repo,
-                **{k: v for k, v in entry.items() if k not in {"plugin_id", "repository_url"}},
-            },
-        )
-        if normalized is None:
-            issues.append(f"{pid}: 条目无效")
     return meta, plugins, issues
 
 

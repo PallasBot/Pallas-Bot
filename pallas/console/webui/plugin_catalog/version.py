@@ -53,12 +53,26 @@ def plugin_version(
         return installed
     if source not in ("local", "community") or package_root is None:
         return None
+    return local_plugin_declared_version(package_root)
+
+
+def local_plugin_declared_version(package_root: Path) -> str | None:
+    version = pyproject_version(package_root)
+    if version:
+        return version
+    metadata = _repo._parse_plugin_metadata_stub(package_root / "__init__.py")
+    extra = metadata.get("extra") if isinstance(metadata, dict) else None
+    version = extra.get("version") if isinstance(extra, dict) else None
+    return version.strip() or None if isinstance(version, str) else None
+
+
+def pyproject_version(package_root: Path) -> str | None:
     try:
         with (package_root / "pyproject.toml").open("rb") as f:
             project = tomllib.load(f).get("project")
     except (OSError, tomllib.TOMLDecodeError):
         return None
     version = project.get("version") if isinstance(project, dict) else None
-    if version is None:
+    if not isinstance(version, str):
         return None
-    return str(version).strip() or None
+    return version.strip() or None

@@ -93,6 +93,11 @@ def build_community_plugin_row(
     has_update = snap_entry.get("has_update") if isinstance(snap_entry, dict) else None
     installed_ref = snap_entry.get("installed_ref") if isinstance(snap_entry, dict) else None
     latest_ref = snap_entry.get("latest_ref") if isinstance(snap_entry, dict) else None
+    installed_version = None
+    if local:
+        from pallas.console.webui.plugin_catalog.version import local_plugin_declared_version
+
+        installed_version = local_plugin_declared_version(community_plugins_root() / plugin_id)
     return {
         "plugin_id": plugin_id,
         "name": entry.get("name") or plugin_id,
@@ -106,6 +111,8 @@ def build_community_plugin_row(
         "avatar": resolve_community_plugin_avatar(entry),
         "tags": list(entry.get("tags") or []),
         "min_pallas_version": entry.get("min_pallas_version"),
+        "index_version": entry.get("version"),
+        "installed_version": installed_version,
         "local_only": bool(entry.get("local_only")),
         "local_installed": local,
         "loaded": loaded,
