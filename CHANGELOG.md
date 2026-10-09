@@ -9,7 +9,7 @@
 
 ### Changed
 
-* docs(plugins): 说明 Memes 社区索引自动 PR 试点
+* docs(plugins): 明确社区索引自动 PR 为默认关闭的可选接入方式，目前仅 Memes 完成集成
 
 ### Fixed
 
