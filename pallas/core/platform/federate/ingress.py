@@ -191,11 +191,8 @@ async def claim_federate_group_message_ingress(
 
     if not claim_owner:
         try:
-            won = await asyncio.wait_for(wait_for, timeout=_INFLIGHT_CLAIM_WAIT_SEC)
+            won = await asyncio.wait_for(asyncio.shield(wait_for), timeout=_INFLIGHT_CLAIM_WAIT_SEC)
         except TimeoutError:
-            async with _win_lock:
-                if _inflight_claims.get(cache_key) is wait_for:
-                    _inflight_claims.pop(cache_key, None)
             timer.finish(
                 outcome="claim_timeout",
                 cache_hit=False,
@@ -231,9 +228,10 @@ async def claim_federate_group_message_ingress(
         )
     except TimeoutError:
         async with _win_lock:
-            future = _inflight_claims.pop(cache_key, None)
-        if future is not None and not future.done():
-            future.set_result(False)
+            if _inflight_claims.get(cache_key) is wait_for:
+                _inflight_claims.pop(cache_key)
+        if not wait_for.done():
+            wait_for.set_result(False)
         timer.finish(
             outcome="claim_timeout",
             cache_hit=False,
@@ -244,23 +242,24 @@ async def claim_federate_group_message_ingress(
         return False
     except BaseException as exc:
         async with _win_lock:
-            future = _inflight_claims.pop(cache_key, None)
-        if future is not None and not future.done():
+            if _inflight_claims.get(cache_key) is wait_for:
+                _inflight_claims.pop(cache_key)
+        if not wait_for.done():
             if isinstance(exc, asyncio.CancelledError):
-                future.cancel()
+                wait_for.cancel()
             else:
-                future.set_exception(exc)
+                wait_for.set_exception(exc)
+                wait_for.exception()
         raise
 
     timer.mark("redis_claim")
-    if won:
-        expire_at = time.monotonic() + _WIN_CACHE_TTL_SEC
-        async with _win_lock:
-            _win_cache[cache_key] = expire_at
     async with _win_lock:
-        future = _inflight_claims.pop(cache_key, None)
-    if future is not None and not future.done():
-        future.set_result(won)
+        if _inflight_claims.get(cache_key) is wait_for:
+            if won:
+                _win_cache[cache_key] = time.monotonic() + _WIN_CACHE_TTL_SEC
+            _inflight_claims.pop(cache_key)
+    if not wait_for.done():
+        wait_for.set_result(won)
     timer.finish(
         outcome="won" if won else "lost",
         cache_hit=False,

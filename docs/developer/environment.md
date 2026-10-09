@@ -229,10 +229,10 @@ uv run ruff format pallas/ packages/
 uv run pytest
 ```
 
-可选（与 CI 对齐，不阻断合并）：
+本地可选预检；CI 始终执行，审计或 Docker 构建失败会使对应检查失败：
 
 ```bash
-uv run pip-audit
+uv run python tools/audit_dependencies.py
 docker build -t test-build .
 ```
 

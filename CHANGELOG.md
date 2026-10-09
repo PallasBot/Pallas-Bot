@@ -10,10 +10,14 @@
 ### Changed
 
 * docs(plugins): 说明 Memes 社区索引自动 PR 试点
+* chore(deps): 依赖审计发现漏洞或审计覆盖不完整时阻断 CI
+* fix(ci): 依赖审计兼容无锁安装环境
+* chore(deps): 移除网易云客户端依赖
 
 ### Fixed
 
 * fix(db): 校验备份文件完整性并清理下载临时文件
+* fix(federation): 保护共享消息 claim 状态，避免并发重复领取
 * fix(commands): 修复插件命令冷却配置覆盖
 * fix(commands): 支持静态命令声明引用常量
 * fix(plugins): 严格校验作者索引与社区插件导入边界
