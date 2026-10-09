@@ -10,6 +10,9 @@
 ### Changed
 
 * docs(plugins): 说明 Memes 社区索引自动 PR 试点
+* chore(deps): 依赖审计发现漏洞或审计覆盖不完整时阻断 CI
+* fix(ci): 依赖审计兼容无锁安装环境
+* chore(deps): 移除网易云客户端依赖
 
 ### Fixed
 
