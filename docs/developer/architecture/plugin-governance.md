@@ -19,7 +19,7 @@
 
 社区商店的 `index_version` 来自索引条目；`installed_version` 只从本地插件根目录读取，优先 `[project].version`，再回退到 `PluginMetadata.extra['version']` 字面量。两个版本独立展示，缺少本地声明时为 `null`；更新快照中的 `installed_ref` / `latest_ref` 仍表示 Git commit。
 
-社区索引发版后自动创建 PR 是可选接入方式，手工向索引仓提 PR 的流程仍适用。目前仅 Memes 仓库完成集成（并非全部 9 个仓库）；此能力默认关闭，须由插件仓与索引仓分别配置工作流、token、变量及 environment。自动化只创建待人工审核的 PR，不会自动合并，索引 `ref` 仍为 `main`。
+社区索引发版后自动创建 PR 是可选接入方式，手工向索引仓提 PR 的流程仍适用。目前仅 Memes 仓库完成集成（并非全部 9 个仓库）；此能力默认关闭。接入时，源插件仓的低权限工作流触发索引仓工作流，由受限 environment 凭据创建待人工审核的 PR；插件仓与索引仓须分别配置工作流、token、变量及 environment。自动化不会自动合并，索引 `ref` 仍为 `main`，不会固定到发布 tag。
 
 ## LLM 出口总闸
 
