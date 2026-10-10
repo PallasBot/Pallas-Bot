@@ -48,6 +48,139 @@ def _provider_response_json(response: httpx.Response) -> Any:
     raise _repo.LlmProviderError("invalid provider payload", failure_class="invalid_payload") from None
 
 
+def _parse_chat_completions_sse(response: httpx.Response) -> dict[str, Any]:
+    body = getattr(response, "text", None)
+    if not isinstance(body, str):
+        content = getattr(response, "content", b"")
+        body = content.decode("utf-8", errors="replace") if isinstance(content, bytes) else ""
+
+    message: dict[str, Any] = {"role": "assistant", "content": ""}
+    tool_calls: dict[int, dict[str, Any]] = {}
+    usage: Any = None
+    has_usage = False
+    finish_reason: str | None = None
+    data_lines: list[str] = []
+    done = False
+
+    def dispatch() -> None:
+        nonlocal usage, has_usage, finish_reason, done
+        if not data_lines or done:
+            data_lines.clear()
+            return
+        raw = "\n".join(data_lines)
+        data_lines.clear()
+        if raw.strip() == "[DONE]":
+            done = True
+            return
+        try:
+            chunk = json.loads(raw)
+        except (json.JSONDecodeError, TypeError):
+            _raise_provider_output_error("invalid_payload")
+        if not isinstance(chunk, dict) or "error" in chunk:
+            _raise_provider_output_error("invalid_payload")
+        if "usage" in chunk:
+            usage = chunk["usage"]
+            has_usage = True
+        choices = chunk.get("choices", [])
+        if not isinstance(choices, list):
+            _raise_provider_output_error("invalid_payload")
+        for choice in choices:
+            if not isinstance(choice, dict):
+                _raise_provider_output_error("invalid_payload")
+            if choice.get("index", 0) != 0:
+                continue
+            delta = choice.get("delta") or {}
+            if not isinstance(delta, dict):
+                _raise_provider_output_error("invalid_payload")
+            content = delta.get("content")
+            if content is not None:
+                if not isinstance(content, str):
+                    _raise_provider_output_error("invalid_payload")
+                message["content"] += content
+            for reasoning in (delta.get("reasoning_content"), delta.get("reasoning")):
+                if reasoning is not None:
+                    if not isinstance(reasoning, str):
+                        _raise_provider_output_error("invalid_payload")
+                    message["reasoning_content"] = message.get("reasoning_content", "") + reasoning
+            refusal = delta.get("refusal", choice.get("refusal"))
+            if refusal is not None:
+                if not isinstance(refusal, str):
+                    _raise_provider_output_error("invalid_payload")
+                message["refusal"] = message.get("refusal", "") + refusal
+            if choice.get("finish_reason") is not None:
+                finish_reason = choice["finish_reason"]
+            fragments = delta.get("tool_calls", [])
+            if not isinstance(fragments, list):
+                _raise_provider_output_error("invalid_payload")
+            for fragment in fragments:
+                if not isinstance(fragment, dict):
+                    _raise_provider_output_error("invalid_payload")
+                index = fragment.get("index")
+                if not isinstance(index, int) or isinstance(index, bool):
+                    _raise_provider_output_error("invalid_payload")
+                call = tool_calls.setdefault(index, {"id": "", "type": "function", "name": "", "arguments": ""})
+                call_id = fragment.get("id")
+                if call_id is not None:
+                    if not isinstance(call_id, str):
+                        _raise_provider_output_error("invalid_payload")
+                    call["id"] += call_id
+                call_type = fragment.get("type")
+                if call_type is not None and call_type != "function":
+                    _raise_provider_output_error("invalid_payload")
+                function = fragment.get("function") or {}
+                if not isinstance(function, dict):
+                    _raise_provider_output_error("invalid_payload")
+                for key in ("name", "arguments"):
+                    value = function.get(key)
+                    if value is not None:
+                        if not isinstance(value, str):
+                            _raise_provider_output_error("invalid_payload")
+                        call[key] += value
+
+    for line in body.splitlines():
+        if not line:
+            dispatch()
+            if done:
+                break
+        elif line.startswith(":"):
+            continue
+        elif line.startswith("event:") and line[6:].strip() == "error":
+            _raise_provider_output_error("invalid_payload")
+        elif line.startswith("data:"):
+            value = line[5:]
+            data_lines.append(value.removeprefix(" "))
+    if not done:
+        dispatch()
+    if not done:
+        _raise_provider_output_error("invalid_payload")
+
+    if tool_calls:
+        if finish_reason == "length":
+            _raise_provider_output_error("incomplete_token_limit")
+        assembled_calls = []
+        for index in sorted(tool_calls):
+            call = tool_calls[index]
+            if not call["id"].strip() or not call["name"].strip():
+                _raise_provider_output_error("invalid_payload")
+            try:
+                arguments = json.loads(call["arguments"])
+            except (json.JSONDecodeError, TypeError):
+                _raise_provider_output_error("invalid_payload")
+            if not isinstance(arguments, dict):
+                _raise_provider_output_error("invalid_payload")
+            assembled_calls.append({
+                "id": call["id"],
+                "type": "function",
+                "function": {"name": call["name"], "arguments": call["arguments"]},
+            })
+        message["tool_calls"] = assembled_calls
+
+    data: dict[str, Any] = {"choices": [{"index": 0, "message": message, "finish_reason": finish_reason}]}
+    if has_usage:
+        data["usage"] = usage
+    return data
+
+
 def _provider_response_is_refusal(method: str, data: dict[str, Any], message_obj: dict[str, Any]) -> bool:
     if method == "responses":
         output = data.get("output")
@@ -624,6 +757,8 @@ async def _post_chat_completions(
         "model": model_name,
         "messages": messages,
     }
+    if provider_id == "cpa":
+        payload["stream"] = True
     if tools:
         payload["tools"] = tools
         choice = str(options.get("tool_choice") or "auto").strip() or "auto"
@@ -650,9 +785,18 @@ async def _post_chat_completions(
         )
         _repo.raise_provider_http_error(response)
 
-    data = _provider_response_json(response)
+    content_type = str(getattr(response, "headers", {}).get("content-type", "")).split(";", 1)[0].strip().lower()
+    data = (
+        _parse_chat_completions_sse(response)
+        if provider_id == "cpa" and content_type == "text/event-stream"
+        else _provider_response_json(response)
+    )
     if not isinstance(data, dict):
         _raise_provider_output_error("invalid_payload")
+    if data.get("success") is True and "choices" not in data:
+        wrapped_data = data.get("data")
+        if isinstance(wrapped_data, dict) and isinstance(wrapped_data.get("choices"), list):
+            data = wrapped_data
     _repo._record_usage_from_payload(
         data,
         task=task,
