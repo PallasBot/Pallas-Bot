@@ -160,10 +160,10 @@ packages/<name>/
 - **推荐提交说明格式**（与日常中文习惯一致）：`feat(scope): 简要中文说明`；`fix` / `refactor` / `chore` / `docs` 等同理加 scope 与中文说明。
 - **标题行**：一条提交只做一件事，`type(scope): 中文短句`，避免「修复/新增」等冗余动词开头与主题堆叠；太长时把细节下沉到 body——标题只说「改了什么」，不说「怎么改的」（如 `语义样本批量落盘去重`、`兼容多平台检查钩子` 一类粒度）。
 - **正文（body，可选）**：与标题空一行；用现在时/祈使句解释**为什么**而非复述 diff；要点可用 `-` 列表；每行 ≤72 字符、段间空行。注意 `git commit` 默认 `cleanup=strip` 会剥掉列表缩进，需保留时用 `--cleanup=verbatim` 或设 `commit.cleanup verbatim`。
-- **分支命名**：`feat/xxx`、`fix/xxx`、`refactor/xxx`，scope 用一件具体事；从 dev 拉出，单线开发。侧枝之间**可以互相 merge**（保留早期「主题分支先交叉再合主线」的复杂度感），但每个侧枝最终须能干净合回 dev 主线。
-- **merge 标题：统一用 git 自动生成，不手写**。走 PR 则保留 GitHub 自动标题 `Merge pull request #N from ...`；本地直合则保留 `git merge` 自动标题 `Merge branch '...' into ...`。不再使用 `merge: 中文说明` / `merge(scope):` 前缀。
-- **merge 结构**：默认真实 merge（`--no-ff`），保留**双父**（第一父=被并入主线，第二父=被合并分支 tip），不得拍扁成单亲 flat merge 导致历史失真；维护者要求时可 squash（如小批量普通 dev→main），但不擅自 squash 主线。
-- **区分「有意义交叉」与「噪声同步」**：允许主题侧枝之间先合并再合主线；但「同名分支/同主干追赶性互并」（`master into master`、`catcat into catcat`）属纯噪声，用 `--rebase` 或 squash 消掉，不算为历史做贡献。
+- **分支命名**：`feat/xxx`、`fix/xxx`、`refactor/xxx`，scope 用一件具体事；功能 / 修复分支从最新 `dev` 拉出，PR 默认 `--base dev`，默认 squash 合入 `dev`（多 commit、值得保留内部历史的功能可用 `--no-ff` 真实 merge）。
+- **squash 标题**：squash 合入时提交标题沿用 PR 标题（格式为 `type(scope): 中文短句`）；仅在确有 merge 时保留 Git 自动生成的 merge 标题，不手写 `merge: 中文说明` / `merge(scope):`。
+- **合入结构**：`dev` 是唯一 trunk，功能 PR 默认 squash 合入（主干清晰），需要保留分支内多 commit 历史时可用 `--no-ff` 真实 merge；`main` 永远是 `dev` 的祖先（已发布指针），只通过 `git checkout main && git merge --ff-only dev && git push origin main` 快进推进，不直接提交 `main`、不向 `main` 开 merge PR、不产生 merge commit。热修也必须经 `dev`（或 hotfix 分支合入 `dev`）后再快进 `main`；需要 PR 门禁时用 GitHub `Rebase and merge`。
+- **区分「有意义交叉」与「噪声同步」**：允许主题侧枝之间有意义地交叉；但「同名分支/同主干追赶性互并」（`master into master`、`catcat into catcat`）属纯噪声，用 `--rebase` 或 squash 消掉，不算为历史做贡献。Model B 下不再需要 `main`→`dev` 的追赶性 merge。
 - 仍可采用英文摘要式前缀（与常见开源习惯兼容），例如：
   - `feat:` 新功能
   - `fix:` 修复
@@ -171,7 +171,7 @@ packages/<name>/
   - `chore:` 构建/工具链/依赖
   - `docs:` 文档
 - **自动化 Agent 创建 git commit 前**：先给出**提交信息草案**供维护者确认，**得到确认后再提交**。
-- **普通 dev→main PR 的 CHANGELOG**：WebUI 与 Bot 发版解耦、Bot 降频后，`dev`→`main` 多为不含 `chore(release)` 的功能 PR。此类 PR 应随批写好 `## [Unreleased]`（只写 `### Added` / `### Fixed` / `### Changed` 明细，不写更新公告、不改版本号），素材随批落到 `main`，供真正发版时整理公告。完整约定见 `docs/skills/pallas-release/SKILL.md` 的「普通 dev→main PR 的 CHANGELOG 约定」。
+- **普通功能 PR 的 CHANGELOG**：功能 PR 合入 `dev` 时写好 `## [Unreleased]`（只写 `### Added` / `### Fixed` / `### Changed` 明细，不写更新公告、不改版本号）；素材随功能落到 `dev`，供真正发版时整理公告。完整约定见 `docs/skills/pallas-release/SKILL.md` 的「普通功能 PR 的 CHANGELOG 约定」。
 
 ### Git 操作边界
 

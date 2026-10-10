@@ -2,7 +2,7 @@
 name: pallas-release
 description: >
   当维护者说「发版」「release」「更新公告」「错开发版」「要发 Bot/WebUI 了」时，优先读取本 SKILL。
-  处理 Pallas-Bot 主仓与 Pallas-Bot-WebUI 的发版（更新公告、chore(release)、dev→main PR、Auto Tag Release 与 Release 工作流出包）。
+  处理 Pallas-Bot 主仓与 Pallas-Bot-WebUI 的发版（更新公告、chore(release)、dev trunk / main 快进、Auto Tag Release 与 Release 工作流出包）。
   本 SKILL 是发版流程的唯一权威来源；旧 ~/.cursor/rules/pallas-release.mdc 已精简为指针。
 ---
 
@@ -15,7 +15,7 @@ description: >
 ## 何时触发
 
 - 维护者说「发版准备」「release」「错开发版」「Bot/WebUI 该发了」。
-- 默认 **patch**；WebUI 要 minor/major 时给合入 `main` 的 PR 打 `bump:minor` / `bump:major`。
+- 默认 **patch**；WebUI 要 minor/major 时，若通过 PR 门禁推进 `main`，给 PR 打 `bump:minor` / `bump:major`。
 
 ## 发版前必读：摸清本版内容（决定公告质量）
 
@@ -32,20 +32,21 @@ description: >
 
 ## 分支与合入顺序
 
-- 发版 PR：`dev` → `main`。
+- `dev` 是唯一 trunk：功能 / 修复分支从最新 `dev` 拉出，PR `--base dev`，默认 squash 合入（多 commit、值得保留内部历史的功能可用 `--no-ff` 真实 merge）。
+- `main` 永远是 `dev` 的祖先（已发布指针），只由 `dev` 快进推进：`git checkout main && git merge --ff-only dev && git push origin main`。不直接提交 `main`、不向 `main` 开 merge PR、不产生 merge commit；热修也必须先经 `dev`（或 hotfix 分支合入 `dev`）再快进 `main`。如需 PR 门禁，使用 GitHub `Rebase and merge`（线性、无 merge 父节点）。
 - WebUI 与 Bot 可以独立发版；Bot Release 从 WebUI tag 中自动选择与当前 Bot commit 兼容的最新 `v*`，也可手动指定 `webui_tag`。
-- **WebUI**：合入 `main` 后由 Release **自动**递增版本并打 `v*` tag（`release.yml` 监听 **PR merged 到 main** 或 push `v*` tag / `workflow_dispatch` 触发；PR 合入时默认 patch 递增 `package.json` 并打 tag）。WebUI 的 `chore(release)` 提交本身不触发打 tag，由 Release 工作流在合并后处理。
-- **Bot**：合入 `main` 后由 **Auto Tag Release** 工作流（`auto-tag-release.yml`）检测 **push 到 main 的 HEAD 提交**是否为 `chore(release): vX.Y.Z`（squash 合入时 HEAD 即发版提交；merge commit 时取 HEAD^2=dev tip；main 直发 HEAD 即发版提交同样命中），命中即自动打 `vX.Y.Z` tag 并触发 `Release`（出 GitHub Release / 捆绑兼容的 `dist.zip` / Docker）与 **`publish-pypi-core`**（发布 `pallas-core` 到 PyPI）。未命中（HEAD 非发版提交、或 tag 已存在）则跳过；需要补发时对 `Release` 工作流 `workflow_dispatch`，传入 `version=vX.Y.Z`（可选 `webui_tag=v…`），PyPI 则对 `publish-pypi-core` `workflow_dispatch`。勿空等 auto-tag。
-- 开 Bot 发版 PR 前：本地 `dev` **先快进 / 对齐** `origin/main`（避免 `dev` 落后于 `main` 的纯文档/合入提交漏在 PR 外或把无关 diff 搅进来），再叠本版功能与发版提交。
+- **WebUI**：更新 `main` 后由 Release 递增版本并打 `v*` tag（`release.yml` 监听 **PR merged 到 main** 或 push `v*` tag / `workflow_dispatch` 触发；PR 合入时默认 patch 递增 `package.json` 并打 tag）。直接 ff 到 `main` 不会触发 PR merged 事件，若未由其他触发条件启动则用 `workflow_dispatch`。WebUI 的 `chore(release)` 提交本身不触发打 tag，由 Release 工作流处理。
+- **Bot**：快进 `main` 后由 **Auto Tag Release** 工作流（`auto-tag-release.yml`）检测 **push 到 main 的 HEAD 提交**是否为 `chore(release): vX.Y.Z`（发版提交位于 `dev` tip，快进后 `main` HEAD 即该提交），命中即自动打 `vX.Y.Z` tag 并触发 `Release`（出 GitHub Release / 捆绑兼容的 `dist.zip` / Docker）与 **`publish-pypi-core`**（发布 `pallas-core` 到 PyPI）。未命中（HEAD 非发版提交、或 tag 已存在）则跳过；需要补发时对 `Release` 工作流 `workflow_dispatch`，传入 `version=vX.Y.Z`（可选 `webui_tag=v…`），PyPI 则对 `publish-pypi-core` `workflow_dispatch`。勿空等 auto-tag。
+- 开始 Bot 发版前：确认 `main` 是 `dev` 的祖先（即 `dev` 未落后于 `main`），再叠本版功能与发版提交。
 - 本版尚未合入 `dev` 的功能（如 feature 分支）：先合入 / cherry-pick 到 `dev`，再做发版提交。
 
-## 普通 dev→main PR 的 CHANGELOG 约定
+## 普通功能 PR 的 CHANGELOG 约定
 
-`dev`→`main` 多为**不含** `chore(release)` 的普通功能 PR（把一批功能推进 `main`）。此类 PR 的 CHANGELOG 素材应**随批记录**，供后续发版引用：
+功能通过以 `dev` 为 base 的 PR 合入；此类 PR 的 CHANGELOG 素材应**随功能记录在 `dev`**，供后续发版引用：
 
-- 每个普通 dev→main PR，在它那批功能提交里写好 `## [Unreleased]`（只写 `### Added` / `### Fixed` / `### Changed` 明细，**不写** `### 更新公告`，也不改版本号），随 PR 一起合入 `main`。更新公告留到真正发版时再依据明细整理。
-- 该 `Unreleased` 记录**必须 amend 进该批最新一个功能提交**，不独立提交；关键是**每次普通 PR 都带一次**，素材随批落到 `main`。
-- 发版时把 `main` 上累积的 `Unreleased` 段标题转正式段 `## [X.Y.Z]`，补充 `### 更新公告`，版本号在 `chore(release)` 里改。
+- 每个普通功能 PR 写好 `## [Unreleased]`（只写 `### Added` / `### Fixed` / `### Changed` 明细，**不写** `### 更新公告`，也不改版本号），随 PR 合入 `dev`。更新公告留到真正发版时再依据明细整理。
+- `Unreleased` 记录必须包含在功能 PR 中并随之合入，不单独补提交；关键是**每个功能 PR 都带一次**，素材随功能落到 `dev`。
+- 发版时把 `dev` 上累积的 `Unreleased` 段标题转正式段 `## [X.Y.Z]`，补充 `### 更新公告`，版本号在 `chore(release)` 里改。
 
 这样发版面对的是一份已分好类的素材，无需再从几十条 commit 重新归纳。
 
@@ -72,8 +73,8 @@ description: >
 | Commit | `chore(release): vX.Y.Z`（Bot / WebUI 相同） |
 | PR 标题 | 与发版 commit 标题相同 |
 | PR 正文 | 只写本版变更；不写打 tag、合入顺序、CI、强推等流程说明 |
-| 合入方式 | 默认 merge commit（no-ff），保留完整 feature 历史；维护者要求时可 squash（普通小批量 dev→main 常用）。Auto Tag Release / Release 对两种合入方式都兼容 |
-| dev 同步 | 合入后 `dev` 对齐 `main`（reset 到 `origin/main`）：no-ff 时落后一个 merge commit，squash 时本地提交与主线 squash 提交 SHA 不同，均直接 `git reset --hard origin/main` 即可 |
+| 合入方式 | 功能 PR 默认 squash 合入 `dev`（多 commit 功能可用 `--no-ff` 真实 merge）；`main` 通过 `git merge --ff-only dev` 快进。需要 PR 门禁时可用 GitHub `Rebase and merge` |
+| dev 同步 | ff 后 `main == dev`，无需 reset 或同步 `dev`←`main` |
 
 ## CHANGELOG
 
@@ -114,33 +115,28 @@ WebUI 更新公告**第一条（或靠前）**须写明本版控制台依赖的 
 1. 在 `CHANGELOG.md` 的 `<!-- entries -->` 下写 `## [Unreleased]`，正文按更新公告写（**含最低 Bot commit**；可先有功能 commit，再补公告 / 发版 commit）。
 2. 更新 `release-manifest.json` 的 `requires.bot.min_commit`，使用完整 40 位 SHA；Release 会校验它可从 Bot `main` 到达，并将 manifest 作为资产及 `dist.zip` 内容发布。
 3. 提交 `chore(release): vX.Y.Z` 且为 **`dev` tip**（预期合入后版本；**不要**手改 `package.json` version，由合入 `main` 的 Release 递增并打 tag）。
-4. 开 PR：`--base main --head dev`，标题=发版 commit，正文=变更。
-5. PR 合并后由 Release 工作流自动递增 `package.json` 并打 `vX.Y.Z` tag、出 GitHub Release 资产。确认出现 tag 与资产后再收尾（同步 `dev`←`main`、清分支）。未自动触发时 `workflow_dispatch` 传 `bump=patch`。
+4. 按 Model B 将 `main` 从 `dev` 快进：`git checkout main && git merge --ff-only dev && git push origin main`。需要 PR 门禁时用 GitHub `Rebase and merge`，不产生 merge commit。
+5. `release.yml` 在 PR merged 到 `main`、push `v*` tag 或 `workflow_dispatch` 时运行；由 Release 工作流递增 `package.json` 并打 `vX.Y.Z` tag、出 GitHub Release 资产。直接 ff 后若未自动触发，`workflow_dispatch` 传 `bump=patch`。确认出现 tag 与资产后再收尾；ff 后 `main == dev`，无需同步分支。
 
 ## Bot
 
-1. 对齐 `origin/main` → 合入本版功能 → 再发版。
+1. 确认 `main` 是 `dev` 的祖先（`dev` 未落后于 `main`）→ 合入本版功能 → 再发版。
 2. 同步 `pyproject.toml` 与 `pallas/__init__.py` 版本号（**只在** `chore(release)` 里改）。
 3. `CHANGELOG.md` 顶部写本版正式段（含更新公告；Bot 直接写 `## [X.Y.Z]`，不走 Unreleased）。
 4. 提交 `chore(release): vX.Y.Z`（版本文件 + CHANGELOG 同 commit），并确保其为 **`dev` tip**。
-5. 开 PR：标题=发版 commit，正文=变更。
-6. `main` 合入后由 Auto Tag Release 自动打 tag 并触发 `Release` 与 `publish-pypi-core`。Release 会按当前 Bot commit 选择兼容的最新 WebUI tag，手动传入 `webui_tag` 时也必须通过 manifest 校验；没有兼容 WebUI 时直接失败，不回退到 `main`。确认出现 `vX.Y.Z` tag、Release 资产与 PyPI 发布后再收尾：同步 `dev`←`main`、清分支。若本次 push 未命中发版提交而未自动触发，手动打 tag 或 `workflow_dispatch`。
+5. 按 Model B 将 `main` 从 `dev` 快进：`git checkout main && git merge --ff-only dev && git push origin main`。
+6. 快进后由 Auto Tag Release 自动打 tag 并触发 `Release` 与 `publish-pypi-core`。Release 会按当前 Bot commit 选择兼容的最新 WebUI tag，手动传入 `webui_tag` 时也必须通过 manifest 校验；没有兼容 WebUI 时直接失败，不回退到 `main`。确认出现 `vX.Y.Z` tag、Release 资产与 PyPI 发布后再收尾；ff 后 `main == dev`，无需同步分支。若本次 push 未命中发版提交而未自动触发，手动打 tag 或 `workflow_dispatch`。
 
-## Bot 在 `main` 直接发版
+## Bot 在 `main` 直接发版（禁止）
 
-维护者指定 bot 直接在 `main` 发版（不走 `dev`→`main` PR，如功能直接落在 `main`）时：
-
-1. 改版本号与 CHANGELOG（仍是发版文件），**amend 进 `main` 最新提交**，保持单提交形态。
-2. `git push origin main`：最新提交未推送时 amend 无需强推；若已推送，须维护者授权后才 `--force-with-lease`。
-3. **推送后 Auto Tag Release 自动打 tag**（`auto-tag-release.yml` 检测 push 到 `main` 的 HEAD 提交是否为 `chore(release): vX.Y.Z`；main 直发若 HEAD 是发版提交同样命中，无需手动）。若 HEAD 不是发版提交（如 amend 未成功或 push 的是普通提交），**手动打签名 annotated tag** `vX.Y.Z` 并确认 `Release` 工作流出包。
-4. 打 tag 后确认 `Release` 工作流出包（并确认 `publish-pypi-core` 发布到 PyPI）；WebUI 可独立发版，Bot 仅捆绑通过 manifest 校验的 tag。
+Model B 下禁止直接在 `main` 提交、amend 或发版。发版提交必须位于 `dev` tip，再按上文将 `main` 快进到 `dev`；热修也必须先经 `dev`，不得绕过 trunk。
 
 ## 错开发版
 
 维护者要求 Bot 与 WebUI 错开 / 间隔发版时：
 
-- **各自独立**走本流程：版本号各自计算、各自 `chore(release)`、各自 PR 与 tag；不要求同一轮。
-- 先发的一方按正常流程收尾（合并、出 tag、Release 就绪）；后发的一方在发起前**对齐已发布的 `main`** 再叠发版提交。
+- **各自独立**走本流程：版本号各自计算、各自 `chore(release)`、功能 PR 与 tag；`main` 仍按 Model B 从 `dev` 快进，不要求同一轮。
+- 先发的一方按正常流程收尾（推进 `main`、出 tag、Release 就绪）；后发的一方发起前确认已发布的 `main` 是 `dev` 祖先，再叠发版提交。
 - WebUI 的「需要 Bot commit …」必须以已进入 Bot `main` 的完整 SHA 为准；不要求 Bot 与 WebUI 同轮或按固定顺序发布。
 - 更新公告里两端各自单列，不混写。
 
@@ -148,7 +144,7 @@ WebUI 更新公告**第一条（或靠前）**须写明本版控制台依赖的 
 
 - 先给 CHANGELOG、版本、PR 标题与正文草案，确认后再提交 / 开 PR / `--force-with-lease`。
 - 开 PR 后跟 CI 与有效 review；若修正导致 tip 不再是 `chore(release)`，按上文重排后再推（需维护者已授权发版 / 强推 `dev` 时可用 `--force-with-lease`）。
-- Bot 发版 PR 合并后确认 Auto Tag Release 已打 tag、`Release` 就绪、`publish-pypi-core` 已发布 PyPI；若自动触发未生效，再手动 `gh release create` / `gh workflow run Release`（或等价打 tag）并等到 Release 就绪。
+- Bot 将 `main` 快进到发版提交后，确认 Auto Tag Release 已打 tag、`Release` 就绪、`publish-pypi-core` 已发布 PyPI；若自动触发未生效，再手动 `gh release create` / `gh workflow run Release`（或等价打 tag）并等到 Release 就绪。
 - 不擅自强推 `main`；不默认登记 Notion。
 
 ## 流程文件维护
