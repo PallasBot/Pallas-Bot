@@ -451,6 +451,7 @@ async def test_complete_chat_message_parses_openai_response(monkeypatch: pytest.
             assert url.endswith("/chat/completions")
             assert json is not None
             assert json["model"] == "demo"
+            assert "stream" not in json
             return FakeResponse()
 
     async def fake_client():
@@ -472,6 +473,244 @@ async def test_complete_chat_message_parses_openai_response(monkeypatch: pytest.
         cfg=cfg,
     )
     assert message["content"] == "你好"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("inner_usage", "expected_usage"),
+    [
+        (None, {"prompt_tokens": 2, "completion_tokens": 1}),
+        ({"prompt_tokens": 5, "completion_tokens": 3}, {"prompt_tokens": 5, "completion_tokens": 3}),
+    ],
+)
+async def test_complete_chat_message_parses_cpa_envelope_usage(
+    monkeypatch: pytest.MonkeyPatch,
+    inner_usage: dict[str, int] | None,
+    expected_usage: dict[str, int],
+) -> None:
+    outer_usage = {"prompt_tokens": 2, "completion_tokens": 1}
+    wrapped_data: dict[str, Any] = {
+        "choices": [{"message": {"role": "assistant", "content": "CPA 回复"}}]
+    }
+    if inner_usage is not None:
+        wrapped_data["usage"] = inner_usage
+
+    class FakeResponse:
+        status_code = 200
+        headers = {"content-type": "application/json"}
+
+        def json(self) -> dict[str, Any]:
+            return {"success": True, "usage": outer_usage, "data": wrapped_data}
+
+    class FakeClient:
+        async def post(self, *args: Any, json: dict[str, Any] | None = None, **_kwargs) -> FakeResponse:
+            assert json is not None and json["stream"] is True
+            return FakeResponse()
+
+    async def fake_client():
+        return FakeClient()
+
+    recorded: list[dict[str, Any]] = []
+    monkeypatch.setattr("pallas.product.llm.provider_client.get_llm_shared_httpx_client", fake_client)
+    monkeypatch.setattr(
+        "pallas.product.llm.provider_client._record_usage_from_payload",
+        lambda data, **_kwargs: recorded.append(data),
+    )
+    cfg = LlmConfig(
+        llm_base_url="http://example.test/v1",
+        llm_api_key="sk-test",
+        llm_model="demo",
+        chat_timeout_sec=5.0,
+        llm_chat_enabled=True,
+    )
+    message = await complete_chat_message(
+        [{"role": "user", "content": "hi"}],
+        model="demo",
+        base_url="http://example.test/v1",
+        api_key="sk-test",
+        cfg=cfg,
+        provider_id="cpa",
+    )
+    assert message["content"] == "CPA 回复"
+    assert len(recorded) == 1
+    assert recorded[0]["usage"] == expected_usage
+
+
+@pytest.mark.asyncio
+async def test_complete_chat_message_parses_cpa_stream(monkeypatch: pytest.MonkeyPatch) -> None:
+    body = (
+        ': ping\n\n'
+        'data: {"choices":[{"index":0,"delta":{"content":"hello ",\n'
+        'data: "reasoning_content":"draft "}}]}\n\n'
+        'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_a",'
+        '"type":"function","function":{"name":"search_","arguments":"{\\"q\\":"}}]}}]}\n\n'
+        'data: {"choices":[{"index":0,"delta":{},"finish_reason":"tool_calls"}],'
+        '"usage":{"prompt_tokens":2}}\n\n'
+        'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":1,"id":"call_b",'
+        '"type":"function","function":{"name":"noop","arguments":"{}"}}]},'
+        '"finish_reason":null}]}\n\n'
+        'data: {"choices":[{"index":0,"delta":{"content":"world","tool_calls":[{"index":0,'
+        '"function":{"name":"docs","arguments":"\\"x\\"}"}}]}}]}\n\n'
+        'data: {"choices":[],"usage":{"prompt_tokens":7,"completion_tokens":3}}\n\n'
+        'data: [DONE]\n\n'
+    ).replace("\n", "\r\n")
+    recorded: list[dict[str, Any]] = []
+
+    class FakeResponse:
+        status_code = 200
+        headers = {"content-type": "text/event-stream; charset=utf-8"}
+        text = body
+
+    class FakeClient:
+        async def post(self, url: str, json: dict[str, Any] | None = None, **_kwargs) -> FakeResponse:
+            assert json is not None and json["stream"] is True
+            return FakeResponse()
+
+    async def fake_client():
+        return FakeClient()
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.get_llm_shared_httpx_client", fake_client)
+    monkeypatch.setattr(
+        "pallas.product.llm.provider_client._record_usage_from_payload",
+        lambda data, **_kwargs: recorded.append(data),
+    )
+    cfg = LlmConfig(
+        llm_base_url="http://example.test/v1",
+        llm_api_key="sk-test",
+        llm_model="demo",
+        chat_timeout_sec=5.0,
+        llm_chat_enabled=True,
+    )
+    message = await complete_chat_message(
+        [{"role": "user", "content": "hi"}],
+        model="demo",
+        base_url="http://example.test/v1",
+        api_key="sk-test",
+        cfg=cfg,
+        provider_id="cpa",
+    )
+
+    assert message["content"] == "hello world"
+    assert message["reasoning_content"] == "draft "
+    assert message["tool_calls"] == [
+        {
+            "id": "call_a",
+            "type": "function",
+            "function": {"name": "search_docs", "arguments": '{"q":"x"}'},
+        },
+        {"id": "call_b", "type": "function", "function": {"name": "noop", "arguments": "{}"}},
+    ]
+    assert len(recorded) == 1
+    assert recorded[0] == {"usage": {"prompt_tokens": 7, "completion_tokens": 3}}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "body",
+    [
+        'data: {"choices":[{"index":0,"delta":{"content":"incomplete"}}]}\n\n',
+        'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_a",'
+        '"function":{"name":"search","arguments":"{\\"q\\":"}}]}}]}\n\ndata: [DONE]\n\n',
+        'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_a",'
+        '"function":{"name":"search","arguments":"{}"}}]},"finish_reason":"length"}]}\n\n'
+        'data: [DONE]\n\n',
+        'data: not-json\n\ndata: [DONE]\n\n',
+        'event: error\ndata: {"error":{"message":"private response"}}\n\n',
+    ],
+)
+async def test_complete_chat_message_rejects_invalid_cpa_stream(
+    monkeypatch: pytest.MonkeyPatch, body: str
+) -> None:
+    class FakeResponse:
+        status_code = 200
+        headers = {"content-type": "text/event-stream"}
+        text = body
+
+    class FakeClient:
+        async def post(self, *args: Any, **kwargs: Any) -> FakeResponse:
+            return FakeResponse()
+
+    async def fake_client():
+        return FakeClient()
+
+    monkeypatch.setattr("pallas.product.llm.provider_client.get_llm_shared_httpx_client", fake_client)
+    cfg = LlmConfig(
+        llm_base_url="http://example.test/v1",
+        llm_api_key="sk-test",
+        llm_model="demo",
+        chat_timeout_sec=5.0,
+        llm_chat_enabled=True,
+    )
+    with pytest.raises(Exception, match="invalid provider payload|provider response incomplete"):
+        await complete_chat_message(
+            [{"role": "user", "content": "hi"}],
+            model="demo",
+            base_url="http://example.test/v1",
+            api_key="sk-test",
+            cfg=cfg,
+            provider_id="cpa",
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "body",
+    [
+        'data: {"choices":[],"usage":{"prompt_tokens":2}}\n\n',
+        'data: {"choices":[],"usage":{"prompt_tokens":2}}\n\n'
+        'event: error\ndata: {"error":{"message":"private response"}}\n\n',
+        'data: {"choices":[],"usage":{"prompt_tokens":2}}\n\n'
+        'data: not-json\n\n',
+        'data: {"choices":[],"usage":{"prompt_tokens":2}}\n\n'
+        'data: {"choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"id":"call_a",'
+        '"function":{"name":"search","arguments":"{"}}]}}]}\n\n'
+        'data: [DONE]\n\n',
+        'data: {"choices":[{"index":0,"delta":{"content":"partial"},'
+        '"finish_reason":"length"}],"usage":{"prompt_tokens":2}}\n\n'
+        'data: [DONE]\n\n',
+    ],
+)
+async def test_complete_chat_message_rejects_cpa_stream_and_records_usage_once(
+    monkeypatch: pytest.MonkeyPatch,
+    body: str,
+) -> None:
+    class FakeResponse:
+        status_code = 200
+        headers = {"content-type": "text/event-stream"}
+        text = body
+
+    class FakeClient:
+        async def post(self, *args: Any, **kwargs: Any) -> FakeResponse:
+            return FakeResponse()
+
+    async def fake_client():
+        return FakeClient()
+
+    recorded: list[dict[str, Any]] = []
+    monkeypatch.setattr("pallas.product.llm.provider_client.get_llm_shared_httpx_client", fake_client)
+    monkeypatch.setattr(
+        "pallas.product.llm.provider_client._record_usage_from_payload",
+        lambda data, **_kwargs: recorded.append(data),
+    )
+    cfg = LlmConfig(
+        llm_base_url="http://example.test/v1",
+        llm_api_key="sk-test",
+        llm_model="demo",
+        chat_timeout_sec=5.0,
+        llm_chat_enabled=True,
+    )
+
+    with pytest.raises(Exception, match="invalid provider payload|provider response incomplete"):
+        await complete_chat_message(
+            [{"role": "user", "content": "hi"}],
+            model="demo",
+            base_url="http://example.test/v1",
+            api_key="sk-test",
+            cfg=cfg,
+            provider_id="cpa",
+        )
+
+    assert recorded == [{"usage": {"prompt_tokens": 2}}]
 
 
 @pytest.mark.asyncio
