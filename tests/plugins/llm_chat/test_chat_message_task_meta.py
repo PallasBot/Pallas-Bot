@@ -38,6 +38,63 @@ def capture_create_task(monkeypatch: pytest.MonkeyPatch) -> list[object]:
             coro.close()
 
 
+def test_semantic_injection_types_include_only_prompted_strategy_and_v2_style() -> None:
+    from packages.llm_chat.chat_message import _semantic_injection_types
+
+    strategy = SimpleNamespace(scene="闲聊", action="顺着接一句")
+    invalid_strategy = SimpleNamespace(scene="闲聊", action="  ")
+    style = SimpleNamespace(
+        matched_examples=[],
+        behavior_patterns=[],
+        continuation_patterns=[],
+        behavior_strategies=[invalid_strategy, strategy],
+        active_pipeline="v2",
+        prompt_block="旧版风格",
+        direct_candidate="候选回复",
+    )
+
+    assert _semantic_injection_types(style) == ["behavior_strategy", "v2_style"]
+
+    # 和 ResolvedGroupExpression 一样，先取前两条再过滤；第三条不会被提升补位。
+    style.behavior_strategies = [invalid_strategy, invalid_strategy, strategy]
+    assert _semantic_injection_types(style) == ["v2_style"]
+
+    # v2 prompt_block 未参与其他 pipeline，候选文本本身也不代表已注入。
+    style.active_pipeline = "v3"
+    style.direct_candidate = ""
+    assert _semantic_injection_types(style) == []
+
+
+def test_semantic_injection_types_does_not_count_strategy_when_patterns_take_precedence() -> None:
+    from packages.llm_chat.chat_message import _semantic_injection_types
+
+    style = SimpleNamespace(
+        matched_examples=[],
+        behavior_patterns=[object()],
+        continuation_patterns=[],
+        behavior_strategies=[SimpleNamespace(scene="闲聊", action="顺着接一句")],
+        active_pipeline="v3",
+        prompt_block="不注入",
+    )
+
+    assert _semantic_injection_types(style) == ["behavior_pattern"]
+
+
+def test_semantic_injection_types_ignore_content_removed_by_prompt_sanitization() -> None:
+    from packages.llm_chat.chat_message import _semantic_injection_types
+
+    style = SimpleNamespace(
+        matched_examples=[],
+        behavior_patterns=[],
+        continuation_patterns=[],
+        behavior_strategies=[SimpleNamespace(scene="\x00", action="接一句")],
+        active_pipeline="v2",
+        prompt_block="\x00",
+    )
+
+    assert _semantic_injection_types(style) == []
+
+
 def test_build_recent_reply_variation_hint_flags_repeated_structure_without_exact_duplicate() -> None:
     turns = [
         LlmChatTurn(role="assistant", content="其实这事可以慢慢来，你先别急。", user_id=1, created_at=1),

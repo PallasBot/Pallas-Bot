@@ -2774,7 +2774,9 @@ async def label_semantic_style_with_retry(
     reply_text: str,
     pair_relation: Literal["quoted", "adjacent"] = "adjacent",
     once_only: bool = False,
+    propagate_token_limit: bool = False,
 ) -> tuple[SemanticStyleLabel, BehaviorStrategy | None] | None:
+    """Retry one label; batch callers may propagate token limits to stop remaining rescue calls."""
     attempts = 1 if once_only else SEMANTIC_STYLE_LABEL_MAX_RETRIES + 1
     for retry_index in range(attempts):
         if not claim_semantic_label_budget():
@@ -2789,6 +2791,8 @@ async def label_semantic_style_with_retry(
             kind = provider_exception_kind(exc)
             if kind == "fatal_auth":
                 # 认证类最终失败：窄透传给 batch 终止剩余语义请求，不在单条层吞成 None
+                raise
+            if kind == "token_limit" and propagate_token_limit:
                 raise
             if kind == "token_limit" or retry_index >= attempts - 1:
                 logger.warning(
@@ -2814,7 +2818,7 @@ async def label_semantic_style_batch_with_llm(
     参照 gsuid 后台管线的「一次输出 JSON 数组」范式，显著降低语义风格采集的
     LLM 提交次数。批量解析为 None/缺尾的下标才回退单对接口
     ``label_semantic_style_with_retry``，已解析项按位置保留、不重标。
-    最终认证失败（401/403）终止本批剩余请求，不逐条救援。
+    最终认证失败（401/403）或单条补救再次遇到截断时，终止本批剩余请求。
     """
     from pallas.product.llm.config import get_llm_config
     from pallas.product.llm.provider_client import complete_chat_message
@@ -2879,14 +2883,16 @@ async def label_semantic_style_batch_with_llm(
                             reply_text=chunk[index][1],
                             pair_relation=chunk[index][2],
                             once_only=once_only_fallback,
+                            propagate_token_limit=True,
                         )
                     except Exception as exc:
+                        kind = provider_exception_kind(exc)
                         logger.warning(
                             "Repeater semantic style fallback stopped: kind [{}], status [{}], failure [{}], exc [{}]",
                             *provider_failure_log_args(exc),
                         )
-                        if provider_exception_kind(exc) == "fatal_auth":
-                            # fallback 中认证类失败：保留已取得槽，停止后续槽 / chunk
+                        if kind in {"fatal_auth", "token_limit"}:
+                            # fallback 中认证或截断失败：保留当前 chunk 槽，停止后续槽 / chunk
                             results.extend(slots)
                             return results
                         raise

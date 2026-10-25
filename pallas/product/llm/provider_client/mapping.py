@@ -157,6 +157,8 @@ def apply_model_effort_to_payload(
             return
         # 非 DeepSeek 模型（如 qwen3）默认可能开思考，required tool_choice 会被拒；同样禁用
         payload["thinking"] = {"type": "disabled"}
+        if is_chat and model_name.startswith("qwen"):
+            payload["enable_thinking"] = False
         payload.pop("reasoning_effort", None)
         if is_chat and reasoning_effort_none_on_disable:
             payload["reasoning_effort"] = "none"

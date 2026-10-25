@@ -11,6 +11,27 @@ import pytest
 from pallas.product.llm.inference_params import task_token_budget
 
 
+@pytest.mark.parametrize(
+    ("model", "method", "native_disable"),
+    [
+        ("qwen3.7-flash", "chat_completions", True),
+        ("qwen3.7-plus", "chat_completions", True),
+        ("deepseek-v4.1-flash", "chat_completions", False),
+        ("qwen3.7-flash", "responses", False),
+    ],
+)
+def test_qwen_chat_disable_uses_native_enable_thinking(model, method, native_disable) -> None:
+    from pallas.product.llm.provider_client.mapping import apply_model_effort_to_payload
+
+    payload = {"model": model, "max_tokens": 4096}
+    apply_model_effort_to_payload(payload, {"model_effort": "disable"}, model=model, request_method=method)
+
+    if native_disable:
+        assert payload["enable_thinking"] is False
+    else:
+        assert "enable_thinking" not in payload
+
+
 class _OkResponse:
     status_code = 200
     headers = {"content-type": "application/json"}
@@ -126,16 +147,19 @@ async def test_batch_label_budget_scales_per_chunk(
 
 
 @pytest.mark.asyncio
-async def test_semantic_style_budget_serializes_to_chat_completions(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("model", ["deepseek-v4.1-flash", "qwen3.7-flash"])
+async def test_semantic_style_budget_serializes_to_chat_completions(
+    monkeypatch: pytest.MonkeyPatch, model: str
+) -> None:
     complete_chat_message, payloads = _capture_chat_completions(
         monkeypatch, provider_id="deepseek-test", response=_OkResponse()
     )
 
     await complete_chat_message(
         [{"role": "user", "content": "hi"}],
-        model="deepseek-v4.1-flash",
+        model=model,
         options={"temperature": 0, "max_tokens": task_token_budget("repeater.semantic_style")},
-        cfg=SimpleNamespace(llm_api_key="sk", llm_model="deepseek-v4.1-flash", chat_timeout_sec=10.0),
+        cfg=SimpleNamespace(llm_api_key="sk", llm_model=model, chat_timeout_sec=10.0),
         base_url="https://provider.example/v1",
         api_key="sk",
         task="repeater.semantic_style",
@@ -144,6 +168,10 @@ async def test_semantic_style_budget_serializes_to_chat_completions(monkeypatch:
 
     assert payloads[0]["max_tokens"] == 2048
     assert payloads[0]["thinking"] == {"type": "disabled"}
+    if model.startswith("qwen"):
+        assert payloads[0]["enable_thinking"] is False
+    else:
+        assert "enable_thinking" not in payloads[0]
     assert "tools" not in payloads[0]
     # 非 CPA provider 走非流式，只有 CPA 分支才打开 stream
     assert "stream" not in payloads[0]

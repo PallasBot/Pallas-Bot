@@ -118,7 +118,7 @@ from pallas.product.llm.turn_telemetry import new_turn_id, record_turn_event
 from pallas.product.llm.vision_content import user_message_has_vision_content, vision_payload_from_segments
 from pallas.product.persona.corpus_expression_habits import infer_expression_affect_stance
 from pallas.product.persona.peer_bots_prompt import save_peer_alias_from_teach
-from pallas.product.persona.prompt_guard import sanitize_prompt_literal
+from pallas.product.persona.prompt_guard import sanitize_prompt_block, sanitize_prompt_literal
 from pallas.product.persona.self_identity import (
     extract_raw_learned_self_aliases,
     extract_self_aliases,
@@ -196,9 +196,31 @@ def _semantic_injection_types(semantic_style: object) -> list[str]:
         types.append("direct_example")
     if getattr(semantic_style, "behavior_patterns", None):
         types.append("behavior_pattern")
+    elif any(
+        sanitize_prompt_block(getattr(item, "scene", "") or "", max_len=80)
+        and sanitize_prompt_block(getattr(item, "action", "") or "", max_len=120)
+        for item in _semantic_behavior_strategies(semantic_style)
+    ):
+        types.append("behavior_strategy")
     if getattr(semantic_style, "continuation_patterns", None):
         types.append("continuation_pattern")
+    if sanitize_prompt_block(_semantic_prompt_block(semantic_style), max_len=240):
+        types.append("v2_style")
     return types
+
+
+def _semantic_behavior_strategies(semantic_style: object) -> list[object]:
+    return [
+        item
+        for item in (getattr(semantic_style, "behavior_strategies", None) or [])[:2]
+        if str(getattr(item, "scene", "") or "").strip() and str(getattr(item, "action", "") or "").strip()
+    ]
+
+
+def _semantic_prompt_block(semantic_style: object) -> str:
+    if getattr(semantic_style, "active_pipeline", "v3") != "v2":
+        return ""
+    return str(getattr(semantic_style, "prompt_block", "") or "")
 
 
 def _semantic_source_ids(semantic_style: object) -> list[str]:
@@ -1435,16 +1457,8 @@ async def prepare_and_submit_llm_chat_turn(
         group_expression = ResolvedGroupExpression(
             matched_examples=semantic_examples,
             baseline_note="",
-            prompt_block=(
-                str(getattr(semantic_style, "prompt_block", "") or "")
-                if getattr(semantic_style, "active_pipeline", "v3") == "v2"
-                else ""
-            ),
-            behavior_strategies=[
-                item
-                for item in (getattr(semantic_style, "behavior_strategies", None) or [])[:2]
-                if str(getattr(item, "scene", "") or "").strip() and str(getattr(item, "action", "") or "").strip()
-            ],
+            prompt_block=_semantic_prompt_block(semantic_style),
+            behavior_strategies=_semantic_behavior_strategies(semantic_style),
             behavior_patterns=list(getattr(semantic_style, "behavior_patterns", None) or [])[:2],
             continuation_patterns=list(getattr(semantic_style, "continuation_patterns", None) or [])[:1],
         )

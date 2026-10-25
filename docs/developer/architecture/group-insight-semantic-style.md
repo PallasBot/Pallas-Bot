@@ -142,6 +142,8 @@ work aux 消费 `group.insight` 后，按该 `(bot_id, group_id)` 的持久化�
 
 语义标注走共享 Chat Completions 路径：Provider 注册模型可启用 `reasoning_effort_none_on_disable`（默认关闭）。仅当该模型实际关闭思考时，Bot 侧会同时携带 `reasoning_effort: none`；未启用、显式 `enable`/档位以及 Responses、Anthropic 路径均不追加。该选项用于兼容需要显式 `none` 才关闭思考的网关，`none` 仍需上游模型声明支持（例如 CPA 侧模型档位包含 `none`），Bot 不保证网关一定遵守。关闭思考与 `none` 的兼容性应按网关与模型实测后再启用。
 
+Qwen 的 Chat Completions 请求关闭思考时，同时发送原生 `enable_thinking: false`，不只依赖通用 `thinking` 字段；该字段不追加到 DeepSeek、Responses 或 Anthropic 请求。上游是否真正停用思考仍应按响应与用量验证。
+
 只有 `is_reply_pair=true` 且 `transferable=true` 的结果才写入语义样本；非法 JSON、缺必需布尔字段或类型错误解析为未判（None），不算负标签、也不写样本。显式 `false/false` 是有效负判断，可正常推进。仅当本轮所有候选都已判定（长度一致且无未判项）才推进该群的持久化游标。
 
 送标注前先做确定性清洗：纯媒体 trigger、机器人菜单/欢迎话术、CQ 原码、URL、长数字与内部 token 元数据在本地直接跳过，不消耗预算，也不进入样本。
@@ -154,7 +156,7 @@ data/pb_webui/repeater_semantic_style/semantic_style_label_budget.json
 
 预算按「语义层标注调用」预占，非 provider 内部 POST 硬限：一次批量请求算 1 次，逐条回退的每一次单条调用各占 1 次（provider 内部 key / endpoint failover 的多次 POST 不计入）。请求发起前在进程锁和跨进程文件锁内原子预占，避免多个 work worker 同时通过检查。
 
-达到预算时，任务软跳过：不报失败、不推进游标，下一轮继续处理。请求失败按类型回退：最终 401/403 终止本批剩余请求、不逐条救援；`incomplete_token_limit` 拆成单条各尝试 1 次（同类不再重复）；unknown / transient 保留有限单条重试（最多 3 次）。本轮存在未判项（解析 None 或短返回）时，先落盘已成功且符合接受条件的子集，但不推进游标，未判候选下轮重标——明确负标签不落盘，游标停滞时可能重复消费预算。
+达到预算时，任务软跳过：不报失败、不推进游标，下一轮继续处理。请求失败按类型回退：最终 401/403 终止本批剩余请求、不逐条救援；`incomplete_token_limit` 允许拆单补救，每条最多尝试 1 次，但任一单条补救再次遇到截断即停止当前任务剩余单条与后续 chunk，避免连续消耗预算；unknown / transient 保留有限单条重试（最多 3 次）。已发请求的预占额度不退还。本轮存在未判项（解析 None 或短返回）时，先落盘已成功且符合接受条件的子集，但不推进游标，未判候选下轮重标——明确负标签不落盘，游标停滞时可能重复消费预算。
 
 游标文件位于：
 
@@ -216,7 +218,9 @@ settings 记录 `active_pipeline`（默认 `v3`）。回滚只切换读取与注
 
 投递成功后记录 exposure（request、bucket、注入类型、source id、delivery source），后台约每 60 秒结算一次：
 
-- 目标用户在 90 秒或后续 3 条真人消息内继续回应/引用 Bot：`target_followup=true`。
+exposure 会记录所有符合条件的 LLM 文本投递，不代表该轮命中过语义指导。`injection_types` 区分 `direct_example`、`behavior_pattern`、旧版 `behavior_strategy`、`continuation_pattern` 和 `v2_style`；仅有直投候选不计为 prompt 注入。旧记录不回填新增类型，因此不能把不同版本的非空比例直接视为覆盖率变化。实验组也包含未注入回合，不能直接将两组的继续发言率差值归因于语义指导。
+
+- 投递后 90 秒内、后续最多 3 条真人消息中出现目标用户再次发言：`target_followup=true`。不要求回复、引用或 @ Bot，因此只作为继续发言的代理指标，不能直接视为与 Bot 互动或语义注入收益。
 - 高置信纠正/拒绝短语（如“别回”“答非所问”）：`negative=true`；现有“不可以”、撤回等显式 outcome 也计入。
 
 实验至少累计 200 回合、对照至少 20 回合后，若实验负反馈率比对照高至少 3 个百分点且达到 1.5 倍，自动停用语义注入但继续采集；`experiment_governance` 状态暴露熔断原因与两组计数，WebUI 可人工确认恢复。
