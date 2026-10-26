@@ -45,6 +45,7 @@ dependencies = [
     "nonebot-plugin-apscheduler>=0.5.0",
     "nonebot-plugin-localstore>=0.7",
     "httpx[socks]>=0.28.1",
+    "mcp>=2.3,<3",
     "pydantic>=2.0",
     "tenacity>=9.1.2",
 ]

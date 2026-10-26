@@ -20,6 +20,7 @@ _COMMAND_MODULES = (
     "pallas.console.cli.commands.redis_cmd",
     "pallas.console.cli.commands.daemon_cmd",
     "pallas.console.cli.commands.console_token_cmd",
+    "pallas.console.cli.commands.mcp_cmd",
 )
 
 

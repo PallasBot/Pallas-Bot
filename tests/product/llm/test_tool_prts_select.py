@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pytest
 
+from pallas.product.llm.tools.registry import list_registered_tools
 from pallas.product.llm.tools.select import infer_tool_domains
 
 
@@ -39,3 +40,9 @@ def test_external_scope_matcher_can_recall_data_backed_prts_entity(monkeypatch: 
     )
 
     assert "prts" in infer_tool_domains("孤星剧情发生在什么时候")
+
+
+def test_builtin_prts_tools_are_registered_without_local_plugin() -> None:
+    names = {spec.name for spec in list_registered_tools()}
+
+    assert {"prts.search", "prts.read", "prts.timeline"} <= names

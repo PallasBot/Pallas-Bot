@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
+import pytest
+
 from pallas.core.platform.bot_runtime import plugin_loader
 
 
@@ -200,3 +202,92 @@ def test_community_plugin_directory_accepts_external_git_origin(tmp_path, monkey
     )
 
     assert plugin_loader.is_community_plugin_directory(plugin_dir) is True
+
+
+def test_discovered_legacy_prts_plugin_is_skipped_before_import(monkeypatch) -> None:
+    loaded: list[str] = []
+    logs: list[tuple[str, tuple[object, ...]]] = []
+
+    def fake_load(module_path: str, *, role_label: str, loaded_short: set[str]) -> bool:
+        loaded.append(module_path)
+        return True
+
+    monkeypatch.setattr(plugin_loader, "_load_plugin_module", fake_load)
+    monkeypatch.setattr(
+        plugin_loader,
+        "logger",
+        SimpleNamespace(
+            info=lambda message, *args: logs.append((message, args)),
+            warning=lambda message, *args: logs.append((message, args)),
+        ),
+    )
+
+    count = plugin_loader._load_discovered_plugin_modules(
+        role_label="unified",
+        module_paths=["packages.prts_corpus", "packages.other"],
+        skip_short=frozenset(),
+        loaded_short=set(),
+    )
+
+    assert count == 1
+    assert loaded == ["packages.other"]
+    assert any("pallas mcp corpus update" in message for message, _ in logs)
+
+
+def test_extra_directory_legacy_prts_plugin_is_skipped_before_import(tmp_path, monkeypatch) -> None:
+    root = tmp_path / "local" / "plugins"
+    for plugin_id in ("prts_corpus", "other"):
+        plugin_dir = root / plugin_id
+        plugin_dir.mkdir(parents=True)
+        (plugin_dir / "__init__.py").write_text("", encoding="utf-8")
+    loaded: list[str] = []
+    logs: list[tuple[str, tuple[object, ...]]] = []
+
+    def fake_load(path):
+        loaded.append(str(path))
+        return SimpleNamespace(module=SimpleNamespace(__name__=path.name))
+
+    monkeypatch.setattr(plugin_loader, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(plugin_loader.nonebot, "load_plugin", fake_load)
+    monkeypatch.setattr(
+        plugin_loader,
+        "logger",
+        SimpleNamespace(
+            info=lambda message, *args: logs.append((message, args)),
+            warning=lambda message, *args: logs.append((message, args)),
+            debug=lambda message, *args: logs.append((message, args)),
+        ),
+    )
+
+    count = plugin_loader._load_toml_extra_plugin_dirs(["local/plugins"], role_label="unified", loaded_short=set())
+
+    assert count == 1
+    assert [path.rsplit("/", 1)[-1] for path in loaded] == ["other"]
+    assert any("pallas mcp corpus update" in message for message, _ in logs)
+
+
+def test_hot_load_legacy_prts_plugin_is_skipped_before_import(tmp_path, monkeypatch) -> None:
+    plugin_dir = tmp_path / "local" / "plugins" / "prts_corpus"
+    plugin_dir.mkdir(parents=True)
+    (plugin_dir / "__init__.py").write_text("", encoding="utf-8")
+    logs: list[tuple[str, tuple[object, ...]]] = []
+
+    def fail_load(*_args, **_kwargs):
+        pytest.fail("legacy plugin must be skipped before import")
+
+    monkeypatch.setattr(plugin_loader, "PROJECT_ROOT", tmp_path)
+    monkeypatch.setattr(plugin_loader, "runtime_loaded_short_names", lambda: set())
+    monkeypatch.setattr(plugin_loader, "load_apscheduler_plugin_first", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        "pallas.core.foundation.config.repo_settings.resolve_extra_plugin_dirs",
+        lambda: ["local/plugins"],
+    )
+    monkeypatch.setattr(plugin_loader.nonebot, "load_plugin", fail_load)
+    monkeypatch.setattr(
+        plugin_loader,
+        "logger",
+        SimpleNamespace(warning=lambda message, *args: logs.append((message, args))),
+    )
+
+    assert plugin_loader.hot_load_extra_dir_plugin("prts_corpus") is False
+    assert any("pallas mcp corpus update" in message for message, _ in logs)
