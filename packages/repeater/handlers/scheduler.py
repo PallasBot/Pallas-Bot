@@ -54,6 +54,11 @@ async def speak_up():
 
     bot_id, group_id, messages, target_id = ret
 
+    from pallas.product.agent_bridge.runtime import bridge_suppresses
+
+    if bridge_suppresses(bot_id, group_id):
+        return
+
     try:
         bot = get_bot(str(bot_id))
     except (KeyError, ValueError):
@@ -61,6 +66,8 @@ async def speak_up():
         return
 
     for msg in messages:
+        if bridge_suppresses(bot_id, group_id):
+            return
         logger.debug(
             "[Repeater] Bot [{}] prepared proactive speech in group [{}] with content length [{}]",
             bot_id,

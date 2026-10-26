@@ -246,8 +246,12 @@ def dispatch_repeater_reply(bot_id: int, group_id: int, answers) -> None:
 async def send_repeater_answers(bot_id: int, group_id: int, answers, *, fanout: bool = False) -> None:
 
     from packages.repeater import post_proc
+    from pallas.product.agent_bridge.runtime import bridge_suppresses
 
     from .model import Chat
+
+    if bridge_suppresses(bot_id, group_id):
+        return
 
     log_tag = "fanout" if fanout else "reply"
     send_context = "repeater_fanout" if fanout else "repeater_reply"
@@ -290,6 +294,9 @@ async def send_repeater_answers(bot_id: int, group_id: int, answers, *, fanout: 
         await asyncio.sleep(delay)
 
         await config.refresh_cooldown("repeat")
+
+        if bridge_suppresses(bot_id, group_id):
+            return
 
         try:
             from pallas.product.llm.sticker_followup import suppress_outgoing_sticker_followup
@@ -461,6 +468,11 @@ async def _delayed_local_reply(delay: float, bot_id: int, payload: dict[str, Any
 
     if delay > 0:
         await asyncio.sleep(delay)
+
+    from pallas.product.agent_bridge.runtime import bridge_suppresses
+
+    if bridge_suppresses(bot_id, payload.get("group_id")):
+        return
 
     try:
         await run_repeater_reply_for_bot(bot_id, payload)

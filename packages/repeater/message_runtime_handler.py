@@ -72,16 +72,18 @@ def build_repeater_fanout_outcome(event: Any, bot_ids: tuple[int, ...], bundle: 
 def build_repeater_capture_and_learn_action(event: Any, chat: Any) -> DeferredAction:
     async def capture_and_learn() -> None:
         from packages.repeater.learn_queue import enqueue_repeater_learn
+        from pallas.core.platform.ingress.message_load import should_shed_chat_sidework
         from pallas.core.shared.utils.media_cache import insert_image
 
-        for segment in event.message:
-            if segment.type == "image":
-                await insert_image(
-                    segment,
-                    bot_id=int(event.self_id),
-                    group_id=int(event.group_id),
-                    message_id=int(event.message_id),
-                )
+        if not should_shed_chat_sidework():
+            for segment in event.message:
+                if segment.type == "image":
+                    await insert_image(
+                        segment,
+                        bot_id=int(event.self_id),
+                        group_id=int(event.group_id),
+                        message_id=int(event.message_id),
+                    )
         await enqueue_repeater_learn(chat, event)
 
     return DeferredAction(

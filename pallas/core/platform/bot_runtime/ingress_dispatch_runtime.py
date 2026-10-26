@@ -122,6 +122,15 @@ def register_ingress_dispatch_runtime() -> None:
             )
         install_send_queue()
         await start_send_queue_workers()
+        from pallas.product.agent_bridge.runtime import bridge_status, start_bridge
+
+        if await start_bridge():
+            status = bridge_status()
+            register_startup_fact(
+                "agent_bridge",
+                f"enabled={status['enabled']} connected={status['connected']} "
+                f"bot={status['bot_id']} groups={len(status['group_ids'])}",
+            )
         start_passive_pools()
         await start_conversation_scheduler()
         start_adaptive_capacity_loop()
@@ -142,6 +151,9 @@ def register_ingress_dispatch_runtime() -> None:
         await stop_passive_pools()
         uninstall_matcher_dispatch()
         uninstall_onebot_backpressure()
+        from pallas.product.agent_bridge.runtime import stop_bridge
+
+        await stop_bridge()
         await stop_send_queue_workers()
         uninstall_send_queue()
 

@@ -279,6 +279,11 @@ async def send_reaction(bot: Bot, event: Event, emoji_code: str) -> None:
     message_id = event.message_id  # type: ignore[attr-defined]
     group_id = getattr(event, "group_id", "unknown")
 
+    from pallas.product.agent_bridge.runtime import bridge_suppresses
+
+    if bridge_suppresses(bot.self_id, getattr(event, "group_id", None)):
+        return
+
     if has_sent_reaction(bot_id, message_id):
         logger.debug(format_business_event("表情回应", "已跳过", bot=bot_id, group=group_id, message_id=message_id))
         return
@@ -287,6 +292,8 @@ async def send_reaction(bot: Bot, event: Event, emoji_code: str) -> None:
     try:
         # Uniseg 仅识别 NapCat/LLOneBot/Lagrange/ws-plugin；SnowLuma 会 WARNING 且不发送。
         app_name = await onebot_app_name(bot)
+        if bridge_suppresses(bot.self_id, getattr(event, "group_id", None)):
+            return
         if app_name in {"SnowLuma", "NapCat.Onebot", "LLOneBot"}:
             await send_msg_emoji_like(bot, int(message_id), emoji_code)
         else:

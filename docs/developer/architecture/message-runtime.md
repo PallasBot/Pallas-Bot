@@ -55,6 +55,29 @@ planner、registry、`HandlingPlan`、`HandlingOutcome` 和 `ActionCommitter` �
 
 durable work handler 可以返回 `DirectWorkResult`，其中的 `DirectBotAction` 由 work auxiliary 按顺序交给现有 `bot_action` 设施，单机直接投递，分片时路由到持有目标 Bot 连接的 worker。handler 在返回结果前失败仍使用 work job 的重试策略；结果提交一旦开始便可能已经产生可见动作，此后失败会直接 dead-letter，不再重跑整个 job。
 
+## 实验性 MaiBot 桥（默认关闭）
+
+`pallas/product/agent_bridge/` 提供原创 Legacy WebSocket 文本桥，单机 unified 部署可将一个 Bot 的显式允许群交给独立 MaiBot 进程处理聊天。默认不开连接、不接管任何群；启用但配置无效或处于分片部署时明确报错。本桥不负责安装、启动 MaiBot，也不代替用户接受其协议或配置模型。
+
+入口仍先执行既有预处理、权限与命令分类。移交范围内的非命令消息跳过旧聊天 direct 路径，在 stale / 过载处理后执行 Repeater 的仅采集路径，再尝试转发；随后仍运行其他 matcher，仅按对象身份排除旧 Repeater 和 LLM 聊天 matcher。命令和范围外消息保持原路径。降质时保留消息采集、停止图片侧工，学习队列沿用先持久化消息、再按压力跳过学习的规则，不向 MaiBot 外发；过期消息沿用入口丢弃规则。
+
+聊天归属固定为启动时的 `(bot_id, group_id)` 快照，直到停止桥才释放，不随连接状态变化。断线、实时配置无效、关闭开关或移除群均不会自动恢复旧 agent。实时关闭、换账号或移群会拒绝入站转发和回投；新增群、修改连接参数及切回旧 agent 需要重启。避免把“拒绝通信”误当成“释放归属”。定时发言、延迟 Repeater 回复、表情反应和自动跟图的相关入口也检查同一归属。
+
+转发独立检查异步消息审核、聊天插件群开关、睡眠、群封禁和 `llm_chat.chat` 权限，不以采集成功作为安全门。回投检查实时准入、群开关、睡眠、群封禁与异步审核，固定获取绑定 Bot，经 `send_group_message_with_receipt` 和既有发送队列发送，抑制旧自动跟图。只有获得真实消息 ID 才回传 echo；回包没有原始用户事件，不声称重新执行了用户级 ACL。复核发生在入队前，不保证撤销已入队的发送。
+
+配置只从现有合并配置读取，手动写入 `config/pallas.toml` 的 `[env]`；WebUI 落盘的同名键仍具有更高优先级。未新增管理页面。
+
+| 配置键 | 含义 |
+| --- | --- |
+| `MAIBOT_BRIDGE_ENABLED` | 默认 `false`，显式开启才连接 |
+| `MAIBOT_BRIDGE_URL` | Legacy WebSocket 完整地址，通常以 `/ws` 结尾 |
+| `MAIBOT_BRIDGE_BOT_ID` | 唯一绑定的 Bot 账号 |
+| `MAIBOT_BRIDGE_GROUP_IDS` | 非空 JSON 列表，例如字符串 `'[700001,700002]'` |
+| `MAIBOT_BRIDGE_PLATFORM` | 与服务端路由一致的平台标识 |
+| `MAIBOT_BRIDGE_TOKEN` | 可选鉴权值，不写入日志或公开配置 |
+
+生命周期在发送队列就绪后连接桥，在关闭发送队列前停止桥。连接握手最多等待 10 秒；连接失败时命令服务仍可继续，但移交群保持仅采集、不回退。当前仅支持纯文本，去重窗口只在进程内有效；无自动重连、离线补发、跨重启去重、媒体桥、人设/记忆迁移或语义风格 Hook。协议服务端回环与模拟 dispatch / 发送队列测试不能代替真实 MaiBot 和 QQ 联调。
+
 ## 出站发送队列
 
 发送队列的 `depth` / `depth_live` 统计所有已接纳任务，包括排队、执行与退避中的重试，`max_depth` 限制接纳总量。高优先级发送在满载时等待至 `PALLAS_SEND_QUEUE_ENQUEUE_TIMEOUT_SEC`，超时明确失败；低优先级丢弃策略不变。停止时先拒绝新任务，结束容量等待者与已接纳调用，并取消延迟重试；重启会建立新生命周期，旧重试不会进入新队列。回执超时仍按“结果不明确”处理，不盲目再次发送。

@@ -1,6 +1,8 @@
 # Bot 内置 Agent 生命周期
 
-Pallas-Bot 的普通 LLM 聊天在 Bot 进程内完成。本文说明维护者修改这条路径时的职责边界和排查入口。
+Pallas-Bot 默认的普通 LLM 聊天在 Bot 进程内完成。本文说明维护者修改这条路径时的职责边界和排查入口。
+
+实验性 MaiBot 桥默认关闭；启用后，启动快照中指定账号和群的聊天改由独立 MaiBot 进程处理，不再进入下面的旧聊天生成路径。Pallas 保留命令、权限、审核、消息采集与发送；人设、记忆和语义风格尚未迁移。断线或实时撤销通信不会自动恢复旧 agent，切回需要重启。配置、生命周期及安全边界见[统一消息入口架构 · 实验性 MaiBot 桥](message-runtime.md#实验性-maibot-桥默认关闭)。
 
 用户侧的配置和能力选择见 [LLM 对话、媒体与 AI Runtime](/guide/ai-runtime-choice)。
 

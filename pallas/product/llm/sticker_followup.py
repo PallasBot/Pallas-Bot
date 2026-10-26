@@ -46,6 +46,10 @@ def is_llm_sticker_followup_origin() -> bool:
 
 
 async def llm_sticker_followup_gate_reason(bot_id: int, group_id: int) -> str:
+    from pallas.product.agent_bridge.runtime import bridge_suppresses
+
+    if bridge_suppresses(bot_id, group_id):
+        return "maibot_bridge_scope"
     from pallas.product.llm.availability import llm_chat_exit_gate_reason
 
     return await llm_chat_exit_gate_reason(bot_id, group_id)
@@ -138,6 +142,10 @@ def bind_outgoing_sticker_followup() -> None:
         message = str(data.get("message") or "")
         if not group_id or "[CQ:image," in message:
             return
+        from pallas.product.agent_bridge.runtime import bridge_suppresses
+
+        if bridge_suppresses(bot.self_id, group_id):
+            return
         from pallas.product.llm.config import get_llm_config
 
         cfg = get_llm_config()
@@ -164,7 +172,13 @@ def bind_outgoing_sticker_followup() -> None:
 async def send_outgoing_sticker_followup(
     bot: Any, group_id: int, text: str, *, cooldown_sec: int, llm_origin: bool = False
 ) -> None:
+    from pallas.product.agent_bridge.runtime import bridge_suppresses
+
+    if bridge_suppresses(getattr(bot, "self_id", None), group_id):
+        return
     await asyncio.sleep(0.7)
+    if bridge_suppresses(getattr(bot, "self_id", None), group_id):
+        return
     from pallas.product.llm.delivery import send_repeater_emotion_image
 
     await send_repeater_emotion_image(

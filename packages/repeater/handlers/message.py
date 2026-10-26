@@ -102,3 +102,43 @@ async def execute_repeater_message(bot: Bot, event: GroupMessageEvent) -> None:
 @any_msg.handle()
 async def handle_group_message(bot: Bot, event: GroupMessageEvent) -> None:
     await execute_repeater_message(bot, event)
+
+
+async def capture_repeater_only(bot: Bot, event: GroupMessageEvent) -> bool:
+    """Capture + learn only, no prepare/answer.
+
+    Used by the MaiBot bridge scope: reuse the existing event gate, scrub, Chat
+    and capture-and-learn action so the message is stored/learned exactly once
+    without running the local reply path. Returns whether the event was captured.
+    """
+    ctx = await build_repeater_event_context(int(bot.self_id), event)
+    if ctx is None:
+        return False
+
+    if await is_message_scrub_blocked_async(
+        plain_text=ctx.plain_body,
+        raw_message=ctx.norm_raw,
+        group_id=int(event.group_id),
+        bot_id=int(bot.self_id),
+    ):
+        pv = scrub_intercept_log_preview(ctx.plain_body, ctx.norm_raw)
+        logger.info(
+            f"bot [{event.self_id}] repeater capture-only skipped (message_scrub) in group [{event.group_id}] "
+            f"user [{event.user_id}] msg_id [{event.message_id}] preview [{pv}]"
+        )
+        return False
+
+    from pallas.product.llm.reply_target_candidates import record_reply_target_candidate
+
+    record_reply_target_candidate(
+        group_id=int(event.group_id),
+        message_id=int(event.message_id),
+        sender_id=int(event.user_id),
+        text=ctx.plain_body,
+    )
+
+    from ..message_runtime_handler import build_repeater_capture_and_learn_action
+
+    chat = Chat(event)
+    await build_repeater_capture_and_learn_action(event, chat).run()
+    return True

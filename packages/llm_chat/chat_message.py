@@ -408,6 +408,10 @@ async def handle_llm_chat(
 ):
     if send_message is None:
         send_message = llm_chat_msg.send
+    from pallas.product.agent_bridge.runtime import bridge_suppresses
+
+    if bridge_suppresses(bot.self_id, getattr(event, "group_id", None)):
+        return
     if not is_llm_chat_service_enabled():
         return
 

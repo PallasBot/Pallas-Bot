@@ -42,6 +42,10 @@ async def maybe_send_repeater_sticker_followup(
     *,
     cfg: Any | None = None,
 ) -> bool:
+    from pallas.product.agent_bridge.runtime import bridge_suppresses
+
+    if bridge_suppresses(getattr(bot, "self_id", None), group_id):
+        return False
     text = str(message or "")
     config = cfg or get_repeater_config()
     if "[CQ:" in text or random.random() >= float(config.sticker_followup_rate):
@@ -77,6 +81,8 @@ async def maybe_send_repeater_sticker_followup(
         return False
     from pallas.product.llm.delivery import prepare_sticker_image
 
+    if bridge_suppresses(getattr(bot, "self_id", None), group_id):
+        return False
     try:
         await bot.call_api(
             "send_group_msg",

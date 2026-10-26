@@ -338,6 +338,60 @@ def exclude_direct_matchers(selected_matchers: list[type], modules: frozenset[st
     return [matcher for matcher in selected_matchers if matcher_module_key(matcher) not in modules]
 
 
+_BRIDGE_SUPPRESSED_MATCHERS: frozenset[type] | None = None
+
+
+def bridge_suppressed_matchers() -> frozenset[type]:
+    """Old chat-agent matchers (repeater chat, llm_chat chat) the bridge scope suppresses.
+
+    Identified by lazy-imported object identity so repeater/llm_chat commands keep running.
+    """
+    global _BRIDGE_SUPPRESSED_MATCHERS
+    if _BRIDGE_SUPPRESSED_MATCHERS is None:
+        suppressed: set[type] = set()
+        with contextlib.suppress(Exception):
+            from packages.repeater.handlers.message import any_msg
+
+            suppressed.add(any_msg)
+        with contextlib.suppress(Exception):
+            from packages.llm_chat.chat_message import llm_chat_msg
+
+            suppressed.add(llm_chat_msg)
+        if suppressed:
+            _BRIDGE_SUPPRESSED_MATCHERS = frozenset(suppressed)
+    return _BRIDGE_SUPPRESSED_MATCHERS or frozenset()
+
+
+def bridge_owned_group_event(bot: Bot, event: Event) -> bool:
+    """Whether the MaiBot bridge scope owns this (bot, group) (config-driven)."""
+    if not isinstance(event, GroupMessageEvent):
+        return False
+    try:
+        from pallas.product.agent_bridge.runtime import bridge_owns
+
+        return bridge_owns(int(bot.self_id), int(event.group_id))
+    except Exception:
+        return False
+
+
+async def run_bridge_owned_capture_and_forward(bot: Bot, event: GroupMessageEvent, *, degraded: bool) -> None:
+    """Scope-owned non-command message: capture only, then forward unless degraded."""
+    try:
+        from packages.repeater.handlers.message import capture_repeater_only
+
+        await capture_repeater_only(bot, event)
+    except Exception:
+        logger.exception("MaiBot bridge capture-only failed")
+    if degraded:
+        return
+    try:
+        from pallas.product.agent_bridge.runtime import forward_owned_event
+
+        await forward_owned_event(bot, event, command_traffic=False)
+    except Exception:
+        logger.exception("MaiBot bridge forward failed")
+
+
 def record_route_candidate_safe(
     *,
     command_traffic: bool,
@@ -525,12 +579,18 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
             resolution = resolve_route_for_event(event) if apply_dispatch else None
             command_traffic = event_command_traffic(event, state, resolution=resolution) if apply_dispatch else True
             traffic_token = command_traffic_ctx.set(bool(apply_dispatch and command_traffic))
+            bridge_owned = (
+                apply_dispatch
+                and not command_traffic
+                and marked_command_id is None
+                and bridge_owned_group_event(bot, event)
+            )
             dispatch_duration_ms = None
             if apply_dispatch and marked_command_id is None:
                 direct_matcher_exclude_modules = frozenset()
                 direct_outcome = None
                 direct_runtime = direct_runtime_for_group(int(getattr(event, "group_id", 0) or 0))
-                if direct_runtime is not None:
+                if direct_runtime is not None and not bridge_owned:
                     try:
                         dispatch_duration_ms = (time.perf_counter() - ingress_started) * 1000.0
                         direct_context = message_runtime_context(
@@ -613,6 +673,8 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                     chat_degraded_token = mark_chat_degraded(True)
 
             try:
+                if bridge_owned:
+                    await run_bridge_owned_capture_and_forward(bot, event, degraded=chat_degraded_token is not None)
                 total_selected = 0
                 total_considered = 0
                 matchers_run = 0
@@ -646,7 +708,11 @@ async def patched_handle_event_now(bot: Bot, event: Event) -> None:
                         selected = select_synthetic_llm_command_matchers(selected, resolution)
                     elif chat_degraded_token is not None:
                         selected = select_overload_chatter_matchers(selected)
-                    return exclude_direct_matchers(selected, direct_matcher_exclude_modules)
+                    selected = exclude_direct_matchers(selected, direct_matcher_exclude_modules)
+                    if bridge_owned:
+                        suppressed = bridge_suppressed_matchers()
+                        selected = [matcher for matcher in selected if matcher not in suppressed]
+                    return selected
 
                 if dispatch_duration_ms is None:
                     dispatch_duration_ms = (time.perf_counter() - ingress_started) * 1000.0
