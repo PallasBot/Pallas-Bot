@@ -190,6 +190,20 @@ jobs:
             tests/product/llm/test_group_insight_processor.py \
             -p no:nonebug -p no:cacheprovider -q
 
+      - name: Run Arknights and MCP regression tests
+        run: |
+          env -u PG_TEST_DSN uv run pytest \
+            tests/product/arknights_kb \
+            tests/product/arknights_mcp \
+            tests/features/test_arknights_query_parity.py \
+            tests/product/llm/test_tool_prts_select.py \
+            tests/common/test_plugin_loader_local_load.py \
+            tests/plugins/test_arknights_kb_env_section.py \
+            tests/product/llm/test_mcp_session.py \
+            tests/product/llm/test_mcp_http_allowlist.py \
+            tests/plugins/test_webui_env_sections.py \
+            -q -p no:cacheprovider
+
       - name: Check console OpenAPI spec drift
         run: |
           uv run python tools/check_console_openapi_drift.py

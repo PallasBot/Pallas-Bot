@@ -425,6 +425,8 @@ def _arknights_kb_section() -> WebuiEnvSection:
             "prts_corpus_read_max_lines": "PRTS_CORPUS_READ_MAX_LINES",
             "prts_corpus_read_max_chars": "PRTS_CORPUS_READ_MAX_CHARS",
             "prts_corpus_download_timeout_sec": "PRTS_CORPUS_DOWNLOAD_TIMEOUT_SEC",
+            "prts_corpus_cache_max_mb": "PRTS_CORPUS_CACHE_MAX_MB",
+            "prts_corpus_query_max_mb": "PRTS_CORPUS_QUERY_MAX_MB",
         },
         skip_fields=frozenset(),
     )

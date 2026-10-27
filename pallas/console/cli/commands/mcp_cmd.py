@@ -23,6 +23,7 @@ def register(sub: argparse._SubParsersAction) -> None:
     serve_parser.add_argument("--rate-window", type=int, default=60, help="限流窗口秒数")
     serve_parser.add_argument("--concurrency", type=int, default=8, help="最大并发请求和查询线程数")
     serve_parser.add_argument("--max-request-body-size", type=int, default=64 * 1024, help="请求体上限（字节）")
+    serve_parser.add_argument("--source-url", default=None, help="在 MCP 初始化说明中公布本运行版源码归档 URL")
     serve_parser.set_defaults(handler=serve)
 
     token_parser = actions.add_parser("token", help="签发一次性显示的 MCP 专用 Bearer Key")
@@ -98,11 +99,12 @@ def serve(args: argparse.Namespace) -> int:
             rate_window_seconds=args.rate_window,
             concurrency=args.concurrency,
             max_request_body_size=args.max_request_body_size,
+            source_url=args.source_url,
         )
     except (ValueError, RuntimeError, OSError) as exc:
         print(f"MCP 服务配置失败：{exc}", file=sys.stderr)
         return 2
-    uvicorn.run(app, host=args.host, port=args.port, proxy_headers=False)
+    uvicorn.run(app, host=args.host, port=args.port, proxy_headers=False, access_log=False)
     return 0
 
 

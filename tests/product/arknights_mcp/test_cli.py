@@ -15,6 +15,7 @@ def test_mcp_cli_defaults_to_loopback_and_known_free_port():
     assert args.allowed_host is None
     assert args.allowed_origin == []
     assert args.concurrency == 8
+    assert args.source_url is None
 
 
 def test_cli_token_commands_do_not_use_console_credentials(monkeypatch, capsys):
@@ -62,13 +63,20 @@ def test_serve_uses_configured_app_and_disables_proxy_header_trust(monkeypatch):
 
     monkeypatch.setattr(server, "create_app", create_app)
     monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: calls.update(app=app, uvicorn=kwargs))
-    args = build_parser().parse_args(["mcp", "serve"])
+    source_url = "https://stats.pallasbot.top/mcp-source.tar.gz"
+    args = build_parser().parse_args(["mcp", "serve", "--source-url", source_url])
 
     assert mcp_cmd.serve(args) == 0
     assert calls["app"] is app
     assert calls["app_config"]["host"] == "127.0.0.1"
     assert calls["app_config"]["port"] == 8765
-    assert calls["uvicorn"] == {"host": "127.0.0.1", "port": 8765, "proxy_headers": False}
+    assert calls["app_config"]["source_url"] == source_url
+    assert calls["uvicorn"] == {
+        "host": "127.0.0.1",
+        "port": 8765,
+        "proxy_headers": False,
+        "access_log": False,
+    }
 
 
 def test_corpus_cli_calls_only_explicit_status_and_update(monkeypatch, capsys):

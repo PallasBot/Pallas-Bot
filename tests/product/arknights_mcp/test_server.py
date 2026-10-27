@@ -120,6 +120,44 @@ async def test_official_client_initialize_list_call_and_scope_filter(tmp_path: P
 
 
 @pytest.mark.asyncio
+async def test_source_url_is_optional_and_exposed_in_client_initialization(tmp_path: Path):
+    source_url = "https://stats.pallasbot.top/mcp-source.tar.gz"
+    default_app = make_app(tmp_path / "default")
+    default_key, _ = CredentialStore(tmp_path / "default").issue()
+    async with default_app.router.lifespan_context(default_app), connected_client(default_app, default_key) as client:
+        assert client.session.initialize_result.instructions is None
+
+    for mode in (None, "legacy"):
+        app = make_app(tmp_path / str(mode), source_url=source_url)
+        secret, _ = CredentialStore(tmp_path / str(mode)).issue()
+        async with app.router.lifespan_context(app), connected_client(app, secret, mode=mode) as client:
+            result = client.session.discover_result or client.session.initialize_result
+            assert result.instructions is not None
+            assert source_url in result.instructions
+            assert "运行版" in result.instructions
+
+
+@pytest.mark.parametrize(
+    ("source_url", "private_value"),
+    [
+        ("http://example.test/private/source.tar.gz", "/private/source.tar.gz"),
+        ("https://user:secret@example.test/source.tar.gz", "secret"),
+        ("https://example.test/source.tar.gz#privatepath", "privatepath"),
+        ("https://example.test/source.tar.gz?token=secret", "secret"),
+        ("not a URL /private/path", "/private/path"),
+    ],
+)
+def test_source_url_requires_public_https_without_echoing_invalid_value(
+    tmp_path: Path, source_url: str, private_value: str
+):
+    with pytest.raises(ValueError, match="absolute HTTPS URL") as exc_info:
+        make_app(tmp_path, source_url=source_url)
+
+    assert private_value not in str(exc_info.value)
+    assert source_url not in str(exc_info.value)
+
+
+@pytest.mark.asyncio
 async def test_default_client_mode_scopes_calls_and_observes_revocation(tmp_path: Path):
     app = make_app(tmp_path)
     store = CredentialStore(tmp_path)

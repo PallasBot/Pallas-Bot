@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from pallas.product.arknights_kb import service
 
@@ -315,6 +316,44 @@ def test_prts_config_fields_match_shared_contract(monkeypatch: pytest.MonkeyPatc
     assert cfg.prts_corpus_read_max_lines == 80
     assert cfg.prts_corpus_read_max_chars == 12_000
     assert cfg.prts_corpus_download_timeout_sec == 120
+    assert cfg.prts_corpus_cache_max_mb == 64
+    assert cfg.prts_corpus_query_max_mb == 64
+
+
+def test_prts_memory_budgets_load_from_repo_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.arknights_kb import config
+
+    settings = {
+        "PRTS_CORPUS_CACHE_MAX_MB": "32",
+        "PRTS_CORPUS_QUERY_MAX_MB": "48",
+    }
+    monkeypatch.setattr(config, "repo_env_raw_value", lambda key: settings.get(key))
+
+    cfg = config.get_arknights_kb_config()
+
+    assert cfg.prts_corpus_cache_max_mb == 32
+    assert cfg.prts_corpus_query_max_mb == 48
+
+
+def test_prts_memory_budgets_accept_inclusive_bounds() -> None:
+    cfg = service.ArknightsKbConfig(prts_corpus_cache_max_mb=16, prts_corpus_query_max_mb=256)
+
+    assert cfg.prts_corpus_cache_max_mb == 16
+    assert cfg.prts_corpus_query_max_mb == 256
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("prts_corpus_cache_max_mb", 15),
+        ("prts_corpus_cache_max_mb", 257),
+        ("prts_corpus_query_max_mb", 15),
+        ("prts_corpus_query_max_mb", 257),
+    ],
+)
+def test_prts_memory_budgets_enforce_bounds(field: str, value: int) -> None:
+    with pytest.raises(ValidationError):
+        service.ArknightsKbConfig(**{field: value})
 
 
 def test_query_payload_is_json_serializable() -> None:

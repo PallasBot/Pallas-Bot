@@ -120,6 +120,31 @@ def test_query_has_a_cumulative_decompression_budget(tmp_path, monkeypatch) -> N
         prts_corpus.CorpusStore(data_dir).search("孤星", pack_ids=["references"])
 
 
+def test_query_uses_instance_cumulative_decompression_budget(tmp_path) -> None:
+    data_dir = _installed_fixture(tmp_path)
+    release_dir = data_dir / "releases" / "r1" / "references"
+    catalog_size = len(gzip.decompress((release_dir / "catalog/documents.jsonl.gz").read_bytes()))
+    shard_size = len(gzip.decompress((release_dir / "shards/00000.jsonl.gz").read_bytes()))
+    budget = max(catalog_size, shard_size)
+    assert budget < catalog_size + shard_size
+
+    with pytest.raises(prts_corpus.CorpusError, match="累计解压"):
+        prts_corpus.CorpusStore(data_dir, query_max_bytes=budget).search("孤星", pack_ids=["references"])
+
+
+def test_raw_cache_stays_within_instance_budget(tmp_path) -> None:
+    data_dir = _installed_fixture(tmp_path)
+    catalog = data_dir / "releases" / "r1" / "references/catalog/documents.jsonl.gz"
+    budget = len(gzip.decompress(catalog.read_bytes()))
+    store = prts_corpus.CorpusStore(data_dir, cache_max_bytes=budget)
+
+    result = store.search("孤星", pack_ids=["references"])
+
+    assert result["count"] == 1
+    assert store._cache_bytes <= budget
+    assert store._shard_cache == {}
+
+
 def test_query_keeps_a_pinned_snapshot_while_current_pointer_moves(tmp_path, monkeypatch) -> None:
     data_dir = tmp_path / "prts_corpus"
     state = {"version": "a" * 64, "text": "旧内容"}

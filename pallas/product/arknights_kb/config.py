@@ -76,6 +76,26 @@ class ArknightsKbConfig(BaseModel):
         le=600,
         description=field_help("设置 PRTS 语料下载请求超时", "填写 10–600 秒的整数"),
     )
+    prts_corpus_cache_max_mb: int = Field(
+        default=64,
+        ge=16,
+        le=256,
+        description=field_help(
+            "限制 PRTS 查询原始缓存数据预算",
+            "填写 16–256 MiB",
+            "按原始数据字节计量，不保证进程或容器 RSS；容器硬限制需单独设置，修改后重启 Bot/MCP 生效",
+        ),
+    )
+    prts_corpus_query_max_mb: int = Field(
+        default=64,
+        ge=16,
+        le=256,
+        description=field_help(
+            "限制单次 PRTS 查询累计解压数据预算",
+            "填写 16–256 MiB",
+            "按累计解压原始字节计量，不保证进程或容器 RSS；容器硬限制需单独设置，修改后重启 Bot/MCP 生效",
+        ),
+    )
 
 
 def get_arknights_kb_config() -> ArknightsKbConfig:
@@ -91,4 +111,6 @@ def get_arknights_kb_config() -> ArknightsKbConfig:
         prts_corpus_read_max_lines=env_int("PRTS_CORPUS_READ_MAX_LINES", 80),
         prts_corpus_read_max_chars=env_int("PRTS_CORPUS_READ_MAX_CHARS", 12000),
         prts_corpus_download_timeout_sec=env_int("PRTS_CORPUS_DOWNLOAD_TIMEOUT_SEC", 120),
+        prts_corpus_cache_max_mb=env_int("PRTS_CORPUS_CACHE_MAX_MB", 64),
+        prts_corpus_query_max_mb=env_int("PRTS_CORPUS_QUERY_MAX_MB", 64),
     )

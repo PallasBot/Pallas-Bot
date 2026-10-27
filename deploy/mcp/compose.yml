@@ -1,0 +1,64 @@
+services:
+  mcp:
+    image: ${PALLAS_MCP_IMAGE:?Set the verified local image tag}
+    container_name: pallas-mcp
+    user: "10001:10001"
+    init: true
+    restart: unless-stopped
+    read_only: true
+    cpus: "1.0"
+    mem_limit: 512m
+    memswap_limit: 768m
+    pids_limit: 128
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=64m,mode=1777,noexec,nosuid
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - ${MCP_STATE_DIR:-/opt/pallas-mcp/state}:/app/data
+      - ${MCP_RESOURCE_DIR:-/opt/pallas-mcp/resource}:/app/resource
+    environment:
+      ARKNIGHTS_KB_AUTO_SYNC: "false"
+      PRTS_CORPUS_PACKS: ${PRTS_CORPUS_PACKS:-references}
+      PRTS_CORPUS_INCLUDE_ENDFIELD: "false"
+      PRTS_CORPUS_CACHE_MAX_MB: "64"
+      PRTS_CORPUS_QUERY_MAX_MB: "64"
+    command:
+      - mcp
+      - serve
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8765"
+      - --allow-remote
+      - --allowed-host
+      - ${MCP_PUBLIC_HOST:?Set the exact HTTPS hostname}
+      - --allowed-host
+      - 127.0.0.1:8765
+      - --source-url
+      - ${MCP_SOURCE_URL:?Set the immutable corresponding-source HTTPS URL}
+      - --concurrency
+      - "2"
+      - --rate-limit
+      - "30"
+      - --rate-window
+      - "60"
+    healthcheck:
+      test:
+        - CMD
+        - /app/.venv/bin/python
+        - -c
+        - "import http.client; c=http.client.HTTPConnection('127.0.0.1',8765,timeout=3); c.request('GET','/mcp'); raise SystemExit(c.getresponse().status != 401)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: 5m
+        max-file: "2"

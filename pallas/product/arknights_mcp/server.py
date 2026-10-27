@@ -138,6 +138,34 @@ def _validate_origin(value: str) -> str:
     return value
 
 
+def _validate_source_url(value: str | None) -> str | None:
+    if value is None:
+        return None
+    error = "source URL must be an absolute HTTPS URL without credentials, query, or fragment"
+    if type(value) is not str or not value or value != value.strip() or any(char.isspace() for char in value):
+        raise ValueError(error)
+    try:
+        parsed = urlsplit(value)
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError(error) from exc
+    if (
+        parsed.scheme != "https"
+        or not hostname
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or "?" in value
+        or parsed.fragment
+        or "#" in value
+        or "\\" in parsed.netloc
+        or (port is not None and not 1 <= port <= 65535)
+    ):
+        raise ValueError(error)
+    return value
+
+
 def _load_tool_specs(
     specs: Mapping[str, dict[str, Any]] | None,
     executor: Callable[[str, dict[str, Any]], dict[str, Any]] | None,
@@ -488,9 +516,11 @@ def create_app(
     rate_window_seconds: int = 60,
     concurrency: int = 8,
     max_request_body_size: int = 64 * 1024,
+    source_url: str | None = None,
 ) -> Starlette:
     if not 1 <= port <= 65535:
         raise ValueError("port must be between 1 and 65535")
+    source_url = _validate_source_url(source_url)
     checked_hosts, checked_origins = _listener_allowlists(host, port, allow_remote, allowed_hosts, allowed_origins)
     _validate_resource_limits(rate_limit, rate_window_seconds, concurrency, max_request_body_size)
 
@@ -504,6 +534,7 @@ def create_app(
         "pallas-arknights-readonly",
         version="1.0.0",
         description="Read-only queries over local Arknights and PRTS data.",
+        instructions=(f"运行版源码归档（对应当前运行代码）：{source_url}" if source_url else None),
         on_list_tools=list_tools,
         on_call_tool=call_tool,
     )

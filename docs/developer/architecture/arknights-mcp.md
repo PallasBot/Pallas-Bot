@@ -43,6 +43,7 @@ PRTS 从 PRTS.chat release 指定的公开来源按需下载，保留 manifest �
 | `PRTS_CORPUS_SEARCH_LIMIT` | 单次资料检索条数上限 |
 | `PRTS_CORPUS_READ_MAX_LINES` / `PRTS_CORPUS_READ_MAX_CHARS` | 原文读取预算 |
 | `PRTS_CORPUS_DOWNLOAD_TIMEOUT_SEC` | 管理员更新时的下载超时 |
+| `PRTS_CORPUS_CACHE_MAX_MB` / `PRTS_CORPUS_QUERY_MAX_MB` | 缓存与单次累计解压预算，各默认64 MiB，修改后重启服务生效；不是RSS保证 |
 
 配置仍按 `pallas.toml → 遗留环境配置 → webui.json` 合并，见 [配置存储](config-storage.md)。本地资料目录沿用 `data/prts_corpus/`，MCP 凭据独立落在 `data/pallas_mcp/`。
 
@@ -53,6 +54,7 @@ PRTS 更新先校验完整新快照再发布指针，失败保留旧资料。运
 MCP 使用独立 `pmcp_` 预配查询密钥，只存摘要；console 的 `pls_` 管理身份不能用于 MCP，MCP 身份不能登录控制台。密钥按调用方签发，撤销后拒绝后续请求，不取消已授权的在途请求。
 
 首版适配支持自定义 `Authorization: Bearer …` 的 Streamable HTTP 客户端；不提供 OAuth 登录、动态注册或 OAuth 自动发现，不伪造授权服务器元数据。
+托管修改版可用 `--source-url https://mcp.example.com/mcp-source.tar.gz` 提供对应运行源码；该地址会出现在客户端初始化说明中。应用默认关闭 access log，凭据不得放入 URL。
 
 在仓库根目录管理本机服务：
 

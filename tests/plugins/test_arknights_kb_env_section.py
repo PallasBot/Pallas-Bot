@@ -11,6 +11,8 @@ PRTS_FIELDS = (
     "prts_corpus_read_max_lines",
     "prts_corpus_read_max_chars",
     "prts_corpus_download_timeout_sec",
+    "prts_corpus_cache_max_mb",
+    "prts_corpus_query_max_mb",
 )
 
 
@@ -26,3 +28,9 @@ def test_prts_fields_have_help() -> None:
     for field in PRTS_FIELDS:
         assert field in fields
         assert fields[field].description
+
+    for field in ("prts_corpus_cache_max_mb", "prts_corpus_query_max_mb"):
+        description = fields[field].description
+        assert "16–256 MiB" in description
+        assert "RSS" in description
+        assert "重启 Bot/MCP" in description

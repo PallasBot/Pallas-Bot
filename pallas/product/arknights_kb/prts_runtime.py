@@ -15,7 +15,12 @@ _STORE: CorpusStore | None = None
 def corpus_store() -> CorpusStore:
     global _STORE
     if _STORE is None:
-        _STORE = CorpusStore(CORPUS_DIR)
+        cfg = get_arknights_kb_config()
+        _STORE = CorpusStore(
+            CORPUS_DIR,
+            cache_max_bytes=cfg.prts_corpus_cache_max_mb * 1024 * 1024,
+            query_max_bytes=cfg.prts_corpus_query_max_mb * 1024 * 1024,
+        )
     return _STORE
 
 

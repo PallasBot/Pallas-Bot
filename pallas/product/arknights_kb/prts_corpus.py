@@ -707,9 +707,17 @@ def _names_serialized(method: Callable) -> Callable:
 
 
 class CorpusStore:
-    def __init__(self, data_dir: Path):
+    def __init__(
+        self,
+        data_dir: Path,
+        *,
+        cache_max_bytes: int | None = None,
+        query_max_bytes: int | None = None,
+    ):
         self.data_dir = data_dir
         self.root = corpus_root(data_dir)
+        self._cache_budget_bytes = MAX_STORE_CACHE_BYTES if cache_max_bytes is None else cache_max_bytes
+        self._query_budget_bytes = MAX_QUERY_GZIP_UNCOMPRESSED_BYTES if query_max_bytes is None else query_max_bytes
         self._lock = threading.RLock()
         self._names_lock = threading.RLock()
         self._loaded_key = ""
@@ -923,9 +931,10 @@ class CorpusStore:
             for raw in _iter_gzip_lines(catalog_path, account=self._account_query_decompressed):
                 if not raw.strip():
                     continue
-                self._cache_bytes += len(raw.encode("utf-8"))
-                if self._cache_bytes > MAX_STORE_CACHE_BYTES:
+                raw_size = len(raw.encode("utf-8"))
+                if self._cache_bytes + raw_size > self._cache_budget_bytes:
                     raise CorpusError("PRTS 查询缓存超过大小上限")
+                self._cache_bytes += raw_size
                 row = json.loads(raw)
                 summary = row.get("document") if isinstance(row, dict) else None
                 if not isinstance(summary, dict):
@@ -960,12 +969,12 @@ class CorpusStore:
 
     def _account_query_decompressed(self, size: int) -> None:
         self._query_decompressed_bytes += size
-        if self._query_decompressed_bytes > MAX_QUERY_GZIP_UNCOMPRESSED_BYTES:
+        if self._query_decompressed_bytes > self._query_budget_bytes:
             raise CorpusError("PRTS 单次查询累计解压超过大小上限")
 
     def _account_names_decompressed(self, size: int) -> None:
         self._names_decompressed_bytes += size
-        if self._names_decompressed_bytes > MAX_QUERY_GZIP_UNCOMPRESSED_BYTES:
+        if self._names_decompressed_bytes > self._query_budget_bytes:
             raise CorpusError("PRTS 实体目录累计解压超过大小上限")
 
     def _release_dir(self, pack_id: str) -> Path:
@@ -990,7 +999,7 @@ class CorpusStore:
                     records.append(json.loads(raw))
         except (OSError, json.JSONDecodeError) as exc:
             raise CorpusError(f"读取 PRTS 分片失败：{path}: {exc}") from exc
-        if self._cache_bytes + size <= MAX_STORE_CACHE_BYTES:
+        if self._cache_bytes + size <= self._cache_budget_bytes:
             self._shard_cache[key] = records
             self._cache_bytes += size
         return records
@@ -1030,7 +1039,7 @@ class CorpusStore:
                 current += delta
                 postings.append(current)
             result[gram] = postings
-        if self._cache_bytes + len(raw) <= MAX_STORE_CACHE_BYTES:
+        if self._cache_bytes + len(raw) <= self._cache_budget_bytes:
             self._index_cache[key] = result
             self._cache_bytes += len(raw)
         return result

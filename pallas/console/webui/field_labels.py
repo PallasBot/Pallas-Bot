@@ -225,6 +225,8 @@ FIELD_LABELS: dict[str, str] = {
     "prts_corpus_read_max_lines": "PRTS 单次读取行数",
     "prts_corpus_read_max_chars": "PRTS 单次读取字符数",
     "prts_corpus_download_timeout_sec": "PRTS 下载超时（秒）",
+    "prts_corpus_cache_max_mb": "PRTS 原始缓存预算（MiB）",
+    "prts_corpus_query_max_mb": "PRTS 单次查询解压预算（MiB）",
     "llm_session_enabled": "记住多轮上下文",
     "llm_session_user_window": "用户上下文条数",
     "llm_session_user_storage_window": "用户历史存储条数",
