@@ -28,7 +28,7 @@ def _patch_tool_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         registry,
         "get_arknights_kb_config",
-        lambda: SimpleNamespace(arknights_kb_enabled=True),
+        lambda: SimpleNamespace(arknights_kb_enabled=True, prts_corpus_enabled=True),
     )
     monkeypatch.setattr(registry, "load_tool_description_overrides", dict)
 
@@ -128,6 +128,7 @@ def test_build_tools_ui_rows_exposes_source(monkeypatch: pytest.MonkeyPatch) -> 
 
     assert catalog["policy"]["tools_enabled"] is True
     assert catalog["policy"]["selective_enabled"] is False
+    assert catalog["policy"]["prts_corpus_enabled"] is True
     assert "plugin.roll" in by_name
     assert by_name["plugin.roll"]["source"] == "plugin_command"
     assert by_name["plugin.roll"]["domains"] == ["command", "dice"]
