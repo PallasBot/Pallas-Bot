@@ -121,12 +121,20 @@ def spawn_detached(
     cwd: Path | str,
     env: Mapping[str, str] | None = None,
     log_path: Path | None = None,
+    inherit_env: bool = True,
 ) -> int:
-    """后台启动进程，返回子进程 pid；可选将 stdout/stderr 追加到日志。"""
+    """后台启动进程，返回子进程 pid；可选将 stdout/stderr 追加到日志。
+
+    ``inherit_env=False`` 时子进程只使用 ``env``（不再 merge 父进程环境），
+    供托管另一份 venv 项目时避免把剥掉的 ``VIRTUAL_ENV``/``UV_PROJECT`` 等又带回去。
+    """
     cwd_s = str(cwd)
-    popen_env = dict(os.environ)
-    if env:
-        popen_env.update({str(k): str(v) for k, v in env.items()})
+    if inherit_env:
+        popen_env = dict(os.environ)
+        if env:
+            popen_env.update({str(k): str(v) for k, v in env.items()})
+    else:
+        popen_env = {str(k): str(v) for k, v in (env or {}).items()}
 
     stdout = subprocess.DEVNULL
     stderr = subprocess.DEVNULL
@@ -169,44 +177,97 @@ def spawn_detached(
     return int(proc.pid)
 
 
+def _send_signal(pid: int, sig: int) -> None:
+    try:
+        os.killpg(pid, sig)
+    except OSError:
+        try:
+            os.kill(pid, sig)
+        except OSError:
+            pass
+
+
+def group_has_live_member(pgid: int) -> bool:
+    """进程组是否还有非僵尸成员（仅 Linux ``/proc`` 可判定；无 ``/proc`` 时回退 leader 存活）。"""
+    proc = Path("/proc")
+    if not proc.is_dir():
+        return pid_alive(pgid)
+    for entry in proc.iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            raw = (entry / "stat").read_text(encoding="utf-8")
+        except OSError:
+            continue
+        try:
+            fields = raw.rsplit(")", 1)[1].split()
+            state = fields[0]
+            pgrp = int(fields[2])
+        except (IndexError, ValueError):
+            continue
+        if pgrp == pgid and state != "Z":
+            return True
+    return False
+
+
+def _wait_group_gone(pgid: int, timeout_s: float) -> bool:
+    deadline = time.monotonic() + timeout_s
+    while True:
+        if not group_has_live_member(pgid):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.25)
+
+
 def stop_pid(
     pid: int,
     *,
     timeout_s: float = 30.0,
     force: bool = False,
-) -> None:
-    """温和停止进程；超时或 force 时强制结束。
+    wait_for_group: bool = False,
+) -> bool:
+    """温和停止进程；超时或 force 时强制结束。返回是否已确认停止（组模式）。
 
     Unix 下优先对会话组发信号（``spawn_detached`` 使用 ``start_new_session``），
     避免只杀掉 ``uv`` 父进程而留下孤儿 ``python``。
+
+    ``wait_for_group=True``（仅 Linux 有意义）：spawn_detached 用 ``start_new_session``
+    使 pgid==pid，即使 leader 已退出也清理同组残留成员；最终仍有非僵尸成员则返回 False。
+    缺省 ``False`` 保持既有行为不变。
     """
-    if pid <= 0 or not pid_alive(pid):
-        return
+    if pid <= 0:
+        return True
     if is_windows():
+        if not pid_alive(pid):
+            return True
         _windows_stop_pid(pid, force=force or False, timeout_s=timeout_s)
-        return
+        return not pid_alive(pid)
 
-    def _send(sig: int) -> None:
-        try:
-            os.killpg(pid, sig)
-        except OSError:
-            try:
-                os.kill(pid, sig)
-            except OSError:
-                pass
+    if wait_for_group:
+        if force:
+            _send_signal(pid, signal.SIGKILL)
+            return _wait_group_gone(pid, 5.0)
+        _send_signal(pid, signal.SIGTERM)
+        if _wait_group_gone(pid, timeout_s):
+            return True
+        _send_signal(pid, signal.SIGKILL)
+        return _wait_group_gone(pid, 5.0)
 
+    if not pid_alive(pid):
+        return True
     if force:
-        _send(signal.SIGKILL)
-        return
+        _send_signal(pid, signal.SIGKILL)
+        return True
 
-    _send(signal.SIGTERM)
-
+    _send_signal(pid, signal.SIGTERM)
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         if not pid_alive(pid):
-            return
+            return True
         time.sleep(0.5)
-    _send(signal.SIGKILL)
+    _send_signal(pid, signal.SIGKILL)
+    return True
 
 
 def report_process_stop(name: str, pid: int, elapsed_s: float) -> None:

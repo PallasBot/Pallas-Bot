@@ -66,10 +66,57 @@ def stop_aux_services() -> None:
 
 def print_aux_services_status() -> None:
     from pallas.console.cli.embedding_aux import print_embed_aux_status
+    from pallas.console.cli.maibot_aux import print_maibot_aux_status
     from pallas.console.cli.work_aux import print_work_aux_status
 
     print_embed_aux_status()
     print_work_aux_status()
+    print_maibot_aux_status()
+
+
+def start_managed_maibot() -> tuple[int, int | None]:
+    """启动托管 MaiBot（若开启）并等待消息端口就绪；返回 (rc, 本次新起的 pid 或 None)。
+
+    不吞配置错误：显式开启但配置无效时 ``start_maibot_aux`` 直接返回 rc=1，
+    Pallas 启动因此失败，而不是静默忽略。
+    """
+    from pallas.console.cli import maibot_aux
+
+    result = maibot_aux.start_maibot_aux()
+    return result.rc, result.spawned_pid
+
+
+def stop_spawned_maibot(pid: int | None) -> bool:
+    """回滚本次新起的托管 pid（None 时不动作，不读 pid 文件）。返回是否已确认停止。"""
+    if pid is None:
+        return True
+    from pallas.console.cli import maibot_aux
+
+    return maibot_aux.stop_spawned_pid(pid)
+
+
+def stop_managed_maibot() -> bool:
+    """停止已核实身份的受管实例（Pallas/桥停止之后调用）；返回是否已确认停止。"""
+    from pallas.console.cli import maibot_aux
+
+    return maibot_aux.stop_maibot_aux()
+
+
+def _rollback_started_bot(bot_pid: int | None, maibot_pid: int | None) -> None:
+    """未成功启动时回滚本次 spawn 的 Bot（用具体 pid，不依赖失败 PID 文件），再回滚托管 MaiBot。
+
+    仅在本次确实 spawn 过 Bot 时停 aux（无本次 Bot 不误停）；aux 停失败也继续回滚 Bot 与 MaiBot。
+    """
+    try:
+        if bot_pid is not None:
+            try:
+                stop_aux_services()
+            finally:
+                if pid_alive(bot_pid):
+                    stop_pid(bot_pid, timeout_s=30.0)
+                clear_pid_file(PID_FILE)
+    finally:
+        stop_spawned_maibot(maibot_pid)
 
 
 def is_bot_running() -> bool:
@@ -167,7 +214,21 @@ def start_bot(*, skip_port_sync: bool = False, detach: bool = False) -> int:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     if is_bot_running():
         print(f"unified 已在运行 (pid {read_pid_file(PID_FILE)})")
-        return start_aux_services()
+        from pallas.console.cli import maibot_aux
+
+        state = maibot_aux.managed_runtime_state()
+        if state == "invalid":
+            print("unified 已在运行，但托管 MaiBot 配置无效；请修复后 restart", file=sys.stderr)
+            return 1
+        if state == "off":
+            return start_aux_services()
+        if state == "running":
+            return start_aux_services()
+        print(
+            "unified 已在运行，但托管 MaiBot 未运行；Pallas 运行中不会新起 MaiBot（桥无自动重连），请先 restart",
+            file=sys.stderr,
+        )
+        return 1
     port = read_listen_port()
     sync_rc = prepare_unified_ports(port, skip_port_sync=skip_port_sync)
     if sync_rc != 0:
@@ -182,59 +243,80 @@ def start_bot(*, skip_port_sync: bool = False, detach: bool = False) -> int:
             print(f"控制台 http://127.0.0.1:{port}/pallas/")
             print("提示：保持当前终端查看实时日志；需后台运行请使用 uv run pallas -d。")
             print("按 Ctrl+C 停止 Bot 与本次自动启动的辅进程。")
-            if start_aux_services() != 0:
+            maibot_rc, maibot_pid = start_managed_maibot()
+            if maibot_rc != 0:
+                print("unified 启动失败：托管 MaiBot 未就绪", file=sys.stderr)
                 return 1
-            write_pid_file(PID_FILE, os.getpid())
-            from pallas.core.foundation.asgi_runner import (
-                clear_process_shutdown_callback,
-                register_process_shutdown_callback,
-            )
+            cleaned = False
 
             def cleanup_foreground_runtime() -> None:
-                clear_pid_file(PID_FILE)
-                stop_aux_services()
+                nonlocal cleaned
+                if cleaned:
+                    return
+                cleaned = True
+                try:
+                    clear_pid_file(PID_FILE)
+                    stop_aux_services()
+                finally:
+                    stop_spawned_maibot(maibot_pid)
 
-            register_process_shutdown_callback(cleanup_foreground_runtime)
             try:
-                runpy.run_path(str(PROJECT_ROOT / "bot.py"), run_name="__main__")
-            except KeyboardInterrupt:
-                print("\nunified 正在停止…")
-            finally:
-                clear_process_shutdown_callback()
-                clear_pid_file(PID_FILE)
-                stop_aux_services()
-            return 0
+                if start_aux_services() != 0:
+                    return 1
+                write_pid_file(PID_FILE, os.getpid())
+                from pallas.core.foundation.asgi_runner import (
+                    clear_process_shutdown_callback,
+                    register_process_shutdown_callback,
+                )
 
-        cleanup_launcher_logs()
-        cmd = uv_run_python_cmd("bot.py")
-        log_path = launcher_log_path()
+                register_process_shutdown_callback(cleanup_foreground_runtime)
+                try:
+                    runpy.run_path(str(PROJECT_ROOT / "bot.py"), run_name="__main__")
+                except KeyboardInterrupt:
+                    print("\nunified 正在停止…")
+                finally:
+                    clear_process_shutdown_callback()
+                    cleanup_foreground_runtime()
+                return 0
+            finally:
+                cleanup_foreground_runtime()
+
+        maibot_rc, maibot_pid = start_managed_maibot()
+        if maibot_rc != 0:
+            return maibot_rc
+        bot_ok = False
+        bot_pid: int | None = None
         try:
-            pid = spawn_detached(cmd, cwd=PROJECT_ROOT, env=env, log_path=log_path)
+            cleanup_launcher_logs()
+            cmd = uv_run_python_cmd("bot.py")
+            log_path = launcher_log_path()
+            bot_pid = spawn_detached(cmd, cwd=PROJECT_ROOT, env=env, log_path=log_path)
+            write_pid_file(PID_FILE, bot_pid)
+            time.sleep(2)
+            if not is_bot_running():
+                print_startup_failure(log_path)
+                return 1
+            if start_aux_services() != 0:
+                return 1
+
+            startup = wait_for_bot_startup(log_path)
+            if startup is False:
+                print_startup_failure(log_path)
+                return 1
+            if startup is True:
+                print(f"unified 已转入后台 · pid {read_pid_file(PID_FILE)} · port {port}")
+                print(f"控制台 http://127.0.0.1:{port}/pallas/")
+                print(f"启动器日志 {log_path}")
+            else:
+                print(f"unified 仍在后台启动，尚未确认就绪；启动器日志 {log_path}")
+            bot_ok = True
+            return 0
         except OSError as err:
             print(f"unified 启动失败: {err}", file=sys.stderr)
             return 1
-        write_pid_file(PID_FILE, pid)
-        time.sleep(2)
-        if not is_bot_running():
-            clear_pid_file(PID_FILE)
-            print_startup_failure(log_path)
-            return 1
-        if start_aux_services() != 0:
-            stop_bot()
-            return 1
-
-        startup = wait_for_bot_startup(log_path)
-        if startup is False:
-            stop_bot()
-            print_startup_failure(log_path)
-            return 1
-        if startup is True:
-            print(f"unified 已转入后台 · pid {read_pid_file(PID_FILE)} · port {port}")
-            print(f"控制台 http://127.0.0.1:{port}/pallas/")
-            print(f"启动器日志 {log_path}")
-        else:
-            print(f"unified 仍在后台启动，尚未确认就绪；启动器日志 {log_path}")
-        return 0
+        finally:
+            if not bot_ok:
+                _rollback_started_bot(bot_pid, maibot_pid)
     finally:
         for key, value in old_env.items():
             if value is None:
@@ -243,17 +325,19 @@ def start_bot(*, skip_port_sync: bool = False, detach: bool = False) -> int:
                 os.environ[key] = value
 
 
-def stop_bot() -> int:
+def stop_bot(*, stop_managed: bool = True) -> int:
     stop_aux_services()
     pid = read_pid_file(PID_FILE)
     if pid is None or not pid_alive(pid):
         clear_pid_file(PID_FILE)
+        managed_ok = stop_managed_maibot() if stop_managed else True
         print("unified 未运行")
-        return 0
+        return 0 if managed_ok else 1
     stop_pid(pid, timeout_s=30.0)
     clear_pid_file(PID_FILE)
+    managed_ok = stop_managed_maibot() if stop_managed else True
     print("unified 已停止")
-    return 0
+    return 0 if managed_ok else 1
 
 
 def status_bot() -> int:
@@ -301,7 +385,9 @@ def run_unified_action(
     if normalized == "stop":
         return stop_bot()
     if normalized == "restart":
-        stop_bot()
+        if stop_bot() != 0:
+            print("unified 停止失败，取消重启（请手动处理）", file=sys.stderr)
+            return 1
         return start_bot(skip_port_sync=skip_port_sync, detach=detach)
     if normalized == "status":
         return status_bot()

@@ -15,6 +15,7 @@ UNIFIED_LAUNCHER_LOG_DIR = PROJECT_ROOT / "data" / "pallas_unified" / "logs"
 UNIFIED_BOT_LOG = UNIFIED_LAUNCHER_LOG_DIR / "bot.log"
 EMBED_AUX_LOG = PROJECT_ROOT / "data" / "pallas_embed" / "logs" / "embed.log"
 WORK_AUX_LOG = PROJECT_ROOT / "data" / "pallas_work" / "logs" / "work.log"
+MAIBOT_AUX_LOG = PROJECT_ROOT / "data" / "pallas_maibot" / "logs" / "maibot.log"
 SHARD_HUB_LOG = PROJECT_ROOT / "data" / "pallas_shard" / "logs" / "hub.log"
 SHARD_LOG_DIR = PROJECT_ROOT / "data" / "pallas_shard" / "logs"
 
@@ -51,6 +52,7 @@ def list_default_log_targets(*, mode: str = "auto") -> list[tuple[str, Path]]:
         ("启动器日志目录", UNIFIED_LAUNCHER_LOG_DIR),
         ("work 辅进程", WORK_AUX_LOG),
         ("embed 辅进程", EMBED_AUX_LOG),
+        ("MaiBot 托管", MAIBOT_AUX_LOG),
     ]
 
 

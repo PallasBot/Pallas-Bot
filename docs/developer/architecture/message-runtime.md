@@ -78,6 +78,24 @@ durable work handler 可以返回 `DirectWorkResult`，其中的 `DirectBotActio
 
 生命周期在发送队列就绪后连接桥，在关闭发送队列前停止桥。连接握手最多等待 10 秒；连接失败时命令服务仍可继续，但移交群保持仅采集、不回退。当前仅支持纯文本，去重窗口只在进程内有效；无自动重连、离线补发、跨重启去重、媒体桥、人设/记忆迁移或语义风格 Hook。协议服务端回环与模拟 dispatch / 发送队列测试不能代替真实 MaiBot 和 QQ 联调。
 
+### 可选统一启动（Linux）
+
+`pallas/console/cli/maibot_aux.py` 将一个已准备好的 MaiBot 源码实例接入现有 unified 启停流程，不另建 supervisor。维护者须先自行安装该实例的依赖、配置模型，并在前台阅读和确认当前 EULA 与隐私条款；托管只读校验确认文件与协议内容一致，不写确认文件、不代填同意或升级确认，不支持安装版 wheel。协议变更或旧版本升级需要交互时，应先在 MaiBot 实例中前台处理。
+
+除上一节桥配置外，手工设置以下 `[env]` 键：
+
+| 配置键 | 含义 |
+| --- | --- |
+| `MAIBOT_MANAGED_ENABLED` | 默认 `false`；开启托管必须同时开启有效桥 |
+| `MAIBOT_MANAGED_DIR` | 已准备好的 MaiBot 源码实例目录；相对路径以 Pallas 仓库根为基准 |
+| `MAIBOT_MANAGED_PYTHON` | 可选独立解释器路径，默认实例的 `.venv/bin/python`，不复用 Pallas 环境 |
+
+托管要求桥地址为本机明文 `ws://127.0.0.1:端口/ws`（也支持 `localhost`、`::1`），与实例 `[maim_message]` 的监听端口及地址族相符；远程地址、其他路径、URL 内凭证或查询参数均拒绝。启动先检查源码入口、可执行解释器、两份 TOML 配置、协议确认和端口，再等待消息端口可连接，最后才启动 Pallas。就绪等待最多 60 秒，只代表 transport 可连接，不代表模型或插件健康；端口被未知进程占用时拒绝启动，不接管外部实例。
+
+继续使用 `uv run pallas run -d`、`uv run pallas stop`、`uv run pallas restart -d`、`uv run pallas status` 和 `uv run pallas logs`。Pallas 已运行时才新启用托管，必须 restart；桥没有自动重连。停止先结束 Pallas/桥，再停止已核实身份的 MaiBot 进程组，给予约 55 秒优雅退出。启动失败只回滚本次新建进程，不误停已有实例；停止失败会阻止 restart。
+
+运行文件位于 `data/pallas_maibot/run/`，日志为 `data/pallas_maibot/logs/maibot.log`。进程身份依赖 Linux `/proc` 核实，不支持的平台拒绝启用；无法核实的活 PID 不接管、不发送终止信号。这里只保证串行重复启动的幂等，不承诺并发 CLI 启动、跨平台托管、无主孤儿组自动清理或逃逸到新 session 的孙进程回收。无法安全停止的残留需人工确认处理。
+
 ## 出站发送队列
 
 发送队列的 `depth` / `depth_live` 统计所有已接纳任务，包括排队、执行与退避中的重试，`max_depth` 限制接纳总量。高优先级发送在满载时等待至 `PALLAS_SEND_QUEUE_ENQUEUE_TIMEOUT_SEC`，超时明确失败；低优先级丢弃策略不变。停止时先拒绝新任务，结束容量等待者与已接纳调用，并取消延迟重试；重启会建立新生命周期，旧重试不会进入新队列。回执超时仍按“结果不明确”处理，不盲目再次发送。

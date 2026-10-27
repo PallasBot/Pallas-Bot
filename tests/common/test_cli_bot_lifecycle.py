@@ -273,7 +273,7 @@ def test_unified_detached_start_prints_startup_error(monkeypatch, tmp_path: Path
     monkeypatch.setattr(unified_lifecycle, "is_bot_running", lambda: state["running"])
     monkeypatch.setattr(unified_lifecycle.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(unified_lifecycle, "start_aux_services", lambda: 0)
-    monkeypatch.setattr(unified_lifecycle, "stop_bot", lambda: 0)
+    monkeypatch.setattr(unified_lifecycle, "stop_bot", lambda **_kw: 0)
 
     def spawn(*_args, **_kwargs):
         state["running"] = True
@@ -302,8 +302,12 @@ def test_unified_detached_start_rolls_back_bot_when_aux_start_fails(monkeypatch,
     monkeypatch.setattr(unified_lifecycle, "is_bot_running", lambda: state["started"])
     monkeypatch.setattr(unified_lifecycle.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(unified_lifecycle, "start_aux_services", lambda: 1)
-    stopped: list[bool] = []
-    monkeypatch.setattr(unified_lifecycle, "stop_bot", lambda: stopped.append(True) or 0)
+    monkeypatch.setattr(unified_lifecycle, "start_managed_maibot", lambda: (0, None))
+    rolled_back: list = []
+    monkeypatch.setattr(unified_lifecycle, "pid_alive", lambda _pid: True)
+    monkeypatch.setattr(unified_lifecycle, "stop_pid", lambda pid, timeout_s: rolled_back.append(pid) or True)
 
     assert unified_lifecycle.start_bot(detach=True) == 1
-    assert stopped == [True]
+    # rollback stops the specific bot pid this call spawned
+    assert rolled_back == [4242]
+    assert unified_lifecycle.read_pid_file(unified_lifecycle.PID_FILE) is None
