@@ -341,6 +341,171 @@ def test_ensure_pg_message_group_user_time_index_creates_missing_index(monkeypat
     assert executed == ["CREATE INDEX IF NOT EXISTS ix_message_group_user_time ON message (group_id, user_id, time)"]
 
 
+class _MessageAnchorResult:
+    def __init__(self, row) -> None:
+        self._row = row
+
+    def first(self):
+        return self._row
+
+
+class _MessageAnchorConnection:
+    """记录 (SQL, params) 并按 marker 是否存在返回 SELECT 结果；可选在建索引时抛错。"""
+
+    def __init__(self, *, marker_present: bool, fail_on_index: bool = False) -> None:
+        self.calls: list[tuple[str, dict | None]] = []
+        self._marker_present = marker_present
+        self._fail_on_index = fail_on_index
+
+    def execute(self, statement, parameters=None):
+        sql = str(statement)
+        self.calls.append((sql, parameters))
+        if sql.startswith("SELECT 1 FROM schema_migrations"):
+            return _MessageAnchorResult((1,) if self._marker_present else None)
+        if self._fail_on_index and sql.startswith("CREATE UNIQUE INDEX"):
+            raise RuntimeError("index creation failed")
+        return _MessageAnchorResult(None)
+
+    @property
+    def statements(self) -> list[str]:
+        return [sql for sql, _ in self.calls]
+
+
+class _MessageAnchorInspector:
+    def __init__(self, *, message_table: bool = True) -> None:
+        self._message_table = message_table
+
+    def has_table(self, name: str) -> bool:
+        return name == "message" and self._message_table
+
+
+def _message_anchor_kind(sql: str) -> str:
+    if sql.startswith("SELECT pg_advisory_xact_lock"):
+        return "lock"
+    if sql.startswith("SELECT 1 FROM schema_migrations"):
+        return "marker_check"
+    if sql.startswith("DELETE FROM message"):
+        return "delete"
+    if sql.startswith("CREATE UNIQUE INDEX IF NOT EXISTS uq_message_group_bot_message_id"):
+        return "create_index"
+    if sql.startswith("INSERT INTO schema_migrations"):
+        return "marker_insert"
+    return f"unknown:{sql}"
+
+
+def test_ensure_pg_message_unique_anchor_runs_delete_once_under_lock(monkeypatch):
+    """marker 缺失时：先取锁 → 查 marker → DELETE → 建索引 → 写 marker。"""
+    from pallas.core.foundation.db import repository_pg as mod
+    from pallas.core.foundation.db.repository_pg import lifecycle as lifecycle_mod
+
+    connection = _MessageAnchorConnection(marker_present=False)
+    monkeypatch.setattr(mod, "inspect", lambda _connection: _MessageAnchorInspector())
+
+    mod._ensure_pg_message_unique_anchor(connection)
+
+    assert [_message_anchor_kind(sql) for sql in connection.statements] == [
+        "lock",
+        "marker_check",
+        "delete",
+        "create_index",
+        "marker_insert",
+    ]
+    # 锁 key 固定，marker step 稳定
+    assert connection.calls[0][1] == {"key": lifecycle_mod._MESSAGE_UNIQUE_ANCHOR_LOCK_KEY}
+    assert connection.calls[1][1] == {"step": "ddl.message_unique_anchor"}
+    assert connection.calls[-1][1]["step"] == "ddl.message_unique_anchor"
+
+
+def test_ensure_pg_message_unique_anchor_skips_delete_when_marker_present(monkeypatch):
+    """marker 已存在时：仍取锁并轻量补建唯一索引，但不再 DELETE、不再写 marker。"""
+    from pallas.core.foundation.db import repository_pg as mod
+
+    connection = _MessageAnchorConnection(marker_present=True)
+    monkeypatch.setattr(mod, "inspect", lambda _connection: _MessageAnchorInspector())
+
+    mod._ensure_pg_message_unique_anchor(connection)
+
+    assert [_message_anchor_kind(sql) for sql in connection.statements] == [
+        "lock",
+        "marker_check",
+        "create_index",
+    ]
+
+
+def test_ensure_pg_message_unique_anchor_skips_missing_message_table(monkeypatch):
+    """缺 message 表时安全返回，不取锁、不发任何语句。"""
+    from pallas.core.foundation.db import repository_pg as mod
+
+    connection = _MessageAnchorConnection(marker_present=False)
+    monkeypatch.setattr(
+        mod,
+        "inspect",
+        lambda _connection: _MessageAnchorInspector(message_table=False),
+    )
+
+    mod._ensure_pg_message_unique_anchor(connection)
+
+    assert connection.statements == []
+
+
+def test_ensure_pg_message_unique_anchor_does_not_mark_on_index_failure(monkeypatch):
+    """建唯一索引失败时异常冒泡，marker 不得写入（同一事务回滚）。"""
+    from pallas.core.foundation.db import repository_pg as mod
+
+    connection = _MessageAnchorConnection(marker_present=False, fail_on_index=True)
+    monkeypatch.setattr(mod, "inspect", lambda _connection: _MessageAnchorInspector())
+
+    with pytest.raises(RuntimeError, match="index creation failed"):
+        mod._ensure_pg_message_unique_anchor(connection)
+
+    kinds = [_message_anchor_kind(sql) for sql in connection.statements]
+    assert "delete" in kinds
+    assert "create_index" in kinds
+    assert "marker_insert" not in kinds
+
+
+@pytest.mark.asyncio
+async def test_concurrent_init_pg_message_anchor_delete_runs_once(pg_engine):
+    """两次并发 init_pg 必须都成功（无表锁↔advisory 逆序死锁），首次迁移 DELETE 仅一次。
+
+    barrier 只拦每个连接第一次取 advisory 锁：init_pg 起始取锁时两会合，ensure 内
+    重入同一事务锁不再阻塞。marker 先清空以覆盖首次迁移路径。
+    """
+    from sqlalchemy import event, text
+    from sqlalchemy.util.concurrency import await_only
+
+    from pallas.core.foundation.db.repository_pg import init_pg
+
+    step = "ddl.message_unique_anchor"
+    async with pg_engine.begin() as conn:
+        await conn.execute(text("DELETE FROM schema_migrations WHERE step = :step"), {"step": step})
+
+    deletes: list[str] = []
+    barrier = asyncio.Barrier(2)
+    seen_connections: set[int] = set()
+
+    def before_execute(conn, cursor, statement, parameters, context, many):  # noqa: ARG001
+        if "DELETE FROM message a USING message b" in statement:
+            deletes.append(statement)
+        if "pg_advisory_xact_lock" in statement:
+            key = id(conn.connection)
+            if key not in seen_connections:
+                seen_connections.add(key)
+                await_only(barrier.wait())
+
+    event.listen(pg_engine.sync_engine, "before_cursor_execute", before_execute)
+    try:
+        results = await asyncio.wait_for(
+            asyncio.gather(init_pg(pg_engine), init_pg(pg_engine), return_exceptions=True),
+            timeout=15,
+        )
+    finally:
+        event.remove(pg_engine.sync_engine, "before_cursor_execute", before_execute)
+
+    assert all(result is None for result in results), f"并发 init_pg 失败: {results}"
+    assert len(deletes) == 1
+
+
 @pytest.mark.parametrize(
     ("existing_columns", "expected"),
     [
