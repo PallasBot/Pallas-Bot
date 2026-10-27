@@ -29,6 +29,12 @@ MCP 不要求开启 `LLM_TOOLS_ENABLED`，不依赖群聊、数据库中的私�
 
 服务结果区分输入错误、源禁用、源不可用与正常未命中；缺数据不自动联网下载。结构化表可能只覆盖部分干员，不能把部分覆盖当作完整图鉴；来源标识不等同于精确游戏版本或实时性证明。
 
+### 检索边界与缓存
+
+`prts.search` 先按 metadata（game / resource_type / 名称类过滤）在加载索引与正文之前筛选，eligible 为空时直接返回正常 0 结果。候选按最终 title 值稳定排序后按 `(pack_id, shard_path)` 分组，每个分片只加载并校验一次；全局只保留旧排名（正文命中优先、同分按 title 稳定）的前 K 条，并仅在后续分片不可能超过第 K 名时安全提前停止。返回条数、单次累计解压与并发仍有上限，宽泛或罕见查询可能因解压预算失败（真实错误，不伪装成 0 结果）。
+
+倒排索引的长期缓存只保留解压后的 raw bytes，且只为本次查询命中的 grams 构建 postings；其余条目仍完整校验格式（header / offset 表 / varint / UTF-8）但不保留列表，校验通过后才发布缓存，异常不留坏 raw。raw 缓存的字节预算是容器内存预算的一部分，不是 RSS 保证；计费、代际清理与错误语义不变。索引文件仍会被整体遍历，未匹配候选很多时仍可能触发解压预算，不宣称查询复杂度已完全解决。
+
 ## 资料与配置
 
 PRTS 从 PRTS.chat release 指定的公开来源按需下载，保留 manifest 与来源定位；查询只读取已安装资料。资料不随 wheel、Docker 或 Bot release 打包。
@@ -55,6 +61,14 @@ MCP 使用独立 `pmcp_` 预配查询密钥，只存摘要；console 的 `pls_` 
 
 首版适配支持自定义 `Authorization: Bearer …` 的 Streamable HTTP 客户端；不提供 OAuth 登录、动态注册或 OAuth 自动发现，不伪造授权服务器元数据。
 托管修改版可用 `--source-url https://mcp.example.com/mcp-source.tar.gz` 提供对应运行源码；该地址会出现在客户端初始化说明中。应用默认关闭 access log，凭据不得放入 URL。
+
+### 公共只读模式
+
+`pallas mcp serve --public-readonly`（`create_app(public_readonly=True)`）是显式的 opt-in：此时无需 `Authorization`，也不读取本地密钥库，官方 legacy 与默认 modern 客户端可直接 initialize / list / call 固定 8 个只读工具。默认与现有自部署 compose 仍强制 Bearer，不会因该参数把其它部署变匿名。
+
+公共请求使用一个固定全局只读身份（两只读 scope）接入既有 rate limiter，因此与私钥请求一样受应用全局请求上限与并发约束；这是公共共享预算，不是逐调用方配额。Authorization 头即使存在也不扩大能力，仍只能访问同一固定工具集；`X-Forwarded-For` 等用户可伪造的身份头不被信任。该固定身份不读取本地密钥库，因此不受 `pallas mcp revoke` 影响（撤销只作用于 private 模式的 `pmcp_` 密钥）。Host/Origin/请求体上限、源 URL 校验与 access log 关闭在两种模式下一致，不开放内部注册表、管理接口、文件写入或资料同步。
+
+真实调用方 IP 的限流由部署侧反向代理承担：经隧道/代理后应用看不到原始 IP，也不应直接信任 `X-Forwarded-For`，需在代理对该 MCP vhost 按 IP 限流。应用不因此开启任意 Origin 或 CORS 反射。
 
 在仓库根目录管理本机服务：
 
@@ -86,7 +100,7 @@ uv run python -c 'from pallas.core.domain.arknights.sync import kb_sync_plan, ru
 
 服务默认仅监听回环地址。远程使用应显式配置允许的 Host/Origin，并在可信反向代理处启用 TLS；不因能启动服务就默认已适合公网开放。不得把凭据放入 URL、日志或提交到仓库。
 
-请求体、参数、输出与实际查询并发均有上限；按已认证查询身份限流。首版是单进程内限流，不承诺多实例共享配额，也不把协程取消当作后台查询线程已停止。
+请求体、参数、输出与实际查询并发均有上限；私有模式按已认证查询身份限流，公共只读模式则共用同一全局预算。首版是单进程内限流，不承诺多实例共享配额，也不把协程取消当作后台查询线程已停止。
 
 ## 旧插件迁移
 

@@ -67,25 +67,19 @@ uv run pallas
 浏览器打开 `http://<主机>:8088/pallas/`，使用启动日志中的密钥登录。  
 更完整的上手说明见文档站 [快速开始](https://PallasBot.github.io/Pallas-Bot-Docs/guide/quickstart)。
 
-## 方舟资料与 MCP
+## 📚 方舟资料与 MCP
 
-结构化游戏数据与剧情资料各有用途：可以查干员技能，也可以搜索 PRTS 资料、读取带出处的片段和查询时间线。查询服务本身不调用聊天模型；外部客户端不需要启动整只 Bot。
+<p><sub>牛牛把方舟资料接成了 MCP：可以查询干员、技能和敌人，也能检索 PRTS 剧情、干员档案与时间线。</sub></p>
 
 ### 使用托管 MCP
 
-无需部署 Bot 或下载资料。向服务维护者申请个人查询密钥，在支持 **Streamable HTTP + 自定义请求头** 的 MCP 客户端中添加远程服务：
+无需部署或注册，在支持 Streamable HTTP 的 MCP 客户端中添加：
 
-| 接入项 | 值 |
-| --- | --- |
-| 地址 | `https://mcp.pallasbot.top/mcp` |
-| 传输 | Streamable HTTP |
-| 请求头 | `Authorization: Bearer <你的查询密钥>` |
+```text
+https://mcp.pallasbot.top/mcp
+```
 
-密钥按调用方单独签发，请勿共享或放进 URL、截图及公开配置。服务不提供自助注册或 OAuth 登录；仅支持 OAuth、不能设置请求头的客户端暂不适用。浏览器直接打开地址返回 `401` 属于正常鉴权，不是网页故障；浏览器类客户端还需维护者允许其准确 Origin。
-
-完整权限提供 8 个只读工具；仅获 `arknights:read` 的身份提供 5 个结构化工具。可尝试「查询帕拉斯三技能」「搜索泰拉资料并读取出处」「查询年表」。托管实例当前仅安装 PRTS `references` 参考资料包，不含完整剧情包或终末地资料；数据为已同步快照，不保证实时更新。服务有请求频率与并发限制，不开放群聊记录、管理功能或文件写入。
-
-客户端初始化说明与响应的源码链接指向对应运行版本的公开源码归档。数据来源及使用条件见下方文档，不因可检索就代表可以任意转载。
+<sub>提供明日方舟官方剧情、干员档案与参考资料，不含终末地；资料非实时更新，服务设有请求限流。详情见<a href="https://pallasbot.github.io/Pallas-Bot-Docs/common/mcp/">使用说明</a>。</sub>
 
 ### 自行部署
 
@@ -95,10 +89,10 @@ uv run pallas
 uv run pallas mcp corpus status
 uv run pallas mcp corpus update       # 按需下载 PRTS 资料
 uv run pallas mcp token --label agent # 签发查询密钥，仅显示一次
-uv run pallas mcp serve               # 默认仅本机 http://127.0.0.1:8765/mcp
+uv run pallas mcp serve               # 默认仅本机 http://127.0.0.1:8765/mcp，且要求 Bearer 密钥
 ```
 
-客户端需支持 Streamable HTTP 与预配 Bearer 请求头；首版不提供 OAuth 登录。远程使用须另行配置 TLS、Host/Origin 和访问边界，不能直接复用控制台密钥。数据来自 [ArknightsGameData](https://github.com/Kengxxiao/ArknightsGameData) 与 [PRTS.chat](https://prts.chat/)，内容仍受各自使用条款约束。
+自行部署默认仍要求 `Authorization: Bearer` 密钥；仅当确认要以公共只读方式对外时，才加 `--public-readonly` 关闭鉴权（此时真实调用方 IP 的限流应由反向代理承担，应用只保留全局共享预算）。远程使用须另行配置 TLS、Host/Origin 和访问边界，不能直接复用控制台密钥。数据来自 [ArknightsGameData](https://github.com/Kengxxiao/ArknightsGameData) 与 [PRTS.chat](https://prts.chat/)，内容仍受各自使用条款约束。
 
 ## 📖 文档与进展
 

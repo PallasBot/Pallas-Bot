@@ -16,6 +16,32 @@ def test_mcp_cli_defaults_to_loopback_and_known_free_port():
     assert args.allowed_origin == []
     assert args.concurrency == 8
     assert args.source_url is None
+    assert args.public_readonly is False
+
+
+def test_serve_public_readonly_flag_is_opt_in_and_forwarded(monkeypatch):
+    import uvicorn
+
+    from pallas.console.cli.commands import mcp_cmd
+    from pallas.product.arknights_mcp import server
+
+    calls = {}
+    app = object()
+
+    def create_app(**kwargs):
+        calls["app_config"] = kwargs
+        return app
+
+    monkeypatch.setattr(server, "create_app", create_app)
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: calls.update(app=app, uvicorn=kwargs))
+
+    parser = build_parser()
+    assert parser.parse_args(["mcp", "serve"]).public_readonly is False
+
+    args = parser.parse_args(["mcp", "serve", "--public-readonly"])
+    assert args.public_readonly is True
+    assert mcp_cmd.serve(args) == 0
+    assert calls["app_config"]["public_readonly"] is True
 
 
 def test_cli_token_commands_do_not_use_console_credentials(monkeypatch, capsys):

@@ -1,0 +1,32 @@
+services:
+  mcp:
+    command:
+      - mcp
+      - serve
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8765"
+      - --allow-remote
+      - --allowed-host
+      - ${MCP_PUBLIC_HOST:?}
+      - --allowed-host
+      - 127.0.0.1:8765
+      - --source-url
+      - ${MCP_SOURCE_URL:?}
+      - --public-readonly
+      - --concurrency
+      - "2"
+      - --rate-limit
+      - "300"
+      - --rate-window
+      - "60"
+    healthcheck:
+      test:
+        - CMD
+        - /app/.venv/bin/python
+        - -c
+        - >-
+          import http.client,json; c=http.client.HTTPConnection('127.0.0.1',8765,timeout=3);
+          c.request('POST','/mcp',body=json.dumps({'jsonrpc':'2.0','id':1,'method':'ping'}),headers={'Content-Type':'application/json','Accept':'application/json,text/event-stream'});
+          r=c.getresponse(); raise SystemExit(not(r.status==200 and json.loads(r.read()).get('result')=={}))
