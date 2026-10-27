@@ -48,6 +48,12 @@ _MAX_RESULT_BYTES = 64 * 1024
 _MCP_PATH = "/mcp"
 _AUTHENTICATED_KEY: ContextVar[Credential | None] = ContextVar("pallas_mcp_key", default=None)
 _AUTH_HEADER = re.compile(r"Bearer ([^\s]+)\Z", re.IGNORECASE)
+_PUBLIC_CREDENTIAL = Credential(
+    id="public",
+    label="public",
+    scopes=frozenset(SCOPES),
+    created_at="",
+)
 _URL_CREDENTIAL_NAMES = frozenset({"token", "access_token", "api_key", "apikey", "authorization"})
 _PRIVATE_RESULT_FIELDS = frozenset({
     "absolute_path",
@@ -420,6 +426,7 @@ class _McpRequestGuard:
         allowed_origins: frozenset[str],
         rate_limiter: _KeyRateLimiter,
         request_gate: _RequestGate,
+        public_readonly: bool = False,
     ):
         self.app = app
         self.key_store = key_store
@@ -427,6 +434,7 @@ class _McpRequestGuard:
         self.allowed_origins = allowed_origins
         self.rate_limiter = rate_limiter
         self.request_gate = request_gate
+        self.public_readonly = public_readonly
 
     async def _authenticate(self, scope: Scope, send: Send) -> Credential | None:
         auth_headers = [value for name, value in scope["headers"] if name.lower() == b"authorization"]
@@ -447,19 +455,24 @@ class _McpRequestGuard:
             await _respond(send, 401, "Unauthorized", ((b"www-authenticate", b"Bearer"),))
             return None
 
+        if not await self._valid_query(scope, send):
+            return None
+        return credential
+
+    async def _valid_query(self, scope: Scope, send: Send) -> bool:
         query = scope.get("query_string", b"")
         if len(query) > 4096:
             await _respond(send, 400, "Invalid request")
-            return None
+            return False
         try:
             query_items = parse_qsl(query.decode("ascii"), keep_blank_values=True)
         except (UnicodeError, ValueError):
             await _respond(send, 400, "Invalid request")
-            return None
+            return False
         if any(name.lower() in _URL_CREDENTIAL_NAMES for name, _ in query_items):
             await _respond(send, 400, "Credentials must use the Authorization header")
-            return None
-        return credential
+            return False
+        return True
 
     async def _valid_host_origin(self, scope: Scope, send: Send) -> bool:
         hosts = [value for name, value in scope["headers"] if name.lower() == b"host"]
@@ -482,9 +495,14 @@ class _McpRequestGuard:
             return
 
         try:
-            credential = await self._authenticate(scope, send)
-            if credential is None:
-                return
+            if self.public_readonly:
+                credential = _PUBLIC_CREDENTIAL
+                if not await self._valid_query(scope, send):
+                    return
+            else:
+                credential = await self._authenticate(scope, send)
+                if credential is None:
+                    return
             if not await self._valid_host_origin(scope, send):
                 return
 
@@ -517,6 +535,7 @@ def create_app(
     concurrency: int = 8,
     max_request_body_size: int = 64 * 1024,
     source_url: str | None = None,
+    public_readonly: bool = False,
 ) -> Starlette:
     if not 1 <= port <= 65535:
         raise ValueError("port must be between 1 and 65535")
@@ -557,6 +576,7 @@ def create_app(
         allowed_origins=checked_origins,
         rate_limiter=rate_limiter,
         request_gate=request_gate,
+        public_readonly=public_readonly,
     )
     app.state.key_store = key_store
     app.state.request_gate = request_gate

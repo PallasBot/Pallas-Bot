@@ -24,6 +24,11 @@ def register(sub: argparse._SubParsersAction) -> None:
     serve_parser.add_argument("--concurrency", type=int, default=8, help="最大并发请求和查询线程数")
     serve_parser.add_argument("--max-request-body-size", type=int, default=64 * 1024, help="请求体上限（字节）")
     serve_parser.add_argument("--source-url", default=None, help="在 MCP 初始化说明中公布本运行版源码归档 URL")
+    serve_parser.add_argument(
+        "--public-readonly",
+        action="store_true",
+        help="公共只读模式：无需 Bearer 密钥，公开固定只读工具；真实调用方 IP 限流应由反向代理承担",
+    )
     serve_parser.set_defaults(handler=serve)
 
     token_parser = actions.add_parser("token", help="签发一次性显示的 MCP 专用 Bearer Key")
@@ -100,6 +105,7 @@ def serve(args: argparse.Namespace) -> int:
             concurrency=args.concurrency,
             max_request_body_size=args.max_request_body_size,
             source_url=args.source_url,
+            public_readonly=args.public_readonly,
         )
     except (ValueError, RuntimeError, OSError) as exc:
         print(f"MCP 服务配置失败：{exc}", file=sys.stderr)

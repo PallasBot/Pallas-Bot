@@ -137,6 +137,7 @@ FILE_MAP: dict[str, str] = {
     "common/webui/api/08-update-ai.md": "common/webui/api/08-update-ai.md",
     "common/webui/api/09-agent-platform.md": "common/webui/api/09-agent-platform.md",
     "common/message_scrub/README.md": "common/message_scrub.md",
+    "common/mcp/README.md": "common/mcp/index.md",
     "plugins/README.md": "plugins/index.md",
     "develop/README.md": "develop/index.md",
     # 现行正文在 developer/；develop/ 仅 stub，由 Docs 仓维护

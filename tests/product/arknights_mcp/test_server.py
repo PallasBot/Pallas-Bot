@@ -69,11 +69,14 @@ def make_app(tmp_path: Path, *, executor=None, **kwargs):
 
 
 @asynccontextmanager
-async def connected_client(app, secret: str, *, extra_headers=None, mode="legacy"):
+async def connected_client(app, secret: str | None = None, *, extra_headers=None, mode="legacy"):
+    headers = dict(extra_headers or {})
+    if secret is not None:
+        headers["Authorization"] = f"Bearer {secret}"
     async with httpx2.AsyncClient(
         base_url="http://127.0.0.1:8765",
         transport=httpx2.ASGITransport(app=app),
-        headers={"Authorization": f"Bearer {secret}", **(extra_headers or {})},
+        headers=headers,
     ) as http_client:
         transport = streamable_http_client(
             "http://127.0.0.1:8765/mcp",
@@ -661,3 +664,212 @@ asyncio.run(run())
         check=False,
     )
     assert proc.returncode == 0, proc.stderr
+
+
+def make_public_app(tmp_path: Path, *, executor=None, **kwargs):
+    return create_app(
+        data_root=tmp_path,
+        specs=TEST_SPECS,
+        executor=executor or (lambda name, arguments: {"ok": True, "error": "", "result": {"tool": name, **arguments}}),
+        allowed_hosts=("127.0.0.1:8765",),
+        public_readonly=True,
+        **kwargs,
+    )
+
+
+async def raw_post_status(app, query_string: bytes) -> int:
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/mcp",
+        "raw_path": b"/mcp",
+        "query_string": query_string,
+        "root_path": "",
+        "headers": [
+            (b"host", b"127.0.0.1:8765"),
+            (b"content-type", b"application/json"),
+            (b"accept", b"application/json, text/event-stream"),
+        ],
+        "server": ("127.0.0.1", 8765),
+        "client": ("127.0.0.1", 12345),
+    }
+    messages: list[dict] = []
+    delivered = False
+
+    async def receive():
+        nonlocal delivered
+        if delivered:
+            return {"type": "http.disconnect"}
+        delivered = True
+        return {"type": "http.request", "body": b'{"jsonrpc":"2.0","id":1,"method":"ping"}', "more_body": False}
+
+    async def send(message):
+        messages.append(message)
+
+    await app(scope, receive, send)
+    return messages[0]["status"] if messages else 0
+
+
+@pytest.mark.asyncio
+async def test_public_readonly_still_rejects_unsafe_query_strings(tmp_path: Path):
+    app = make_public_app(tmp_path)
+    async with app.router.lifespan_context(app):
+        assert await raw_post_status(app, b"a=1&" * 1500) == 400
+        assert await raw_post_status(app, b"\xff=1") == 400
+        assert await raw_post_status(app, b"access_token=x") == 400
+        assert await raw_post_status(app, b"token=x") == 400
+        assert await raw_post_status(app, b"q=hi") == 200
+
+
+@pytest.mark.asyncio
+async def test_default_mode_still_requires_authorization_for_anonymous_requests(tmp_path: Path):
+    app = make_app(tmp_path)
+    async with (
+        app.router.lifespan_context(app),
+        httpx2.AsyncClient(base_url="http://127.0.0.1:8765", transport=httpx2.ASGITransport(app=app)) as client,
+    ):
+        response = await client.get("/mcp")
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"].startswith("Bearer")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("mode", ["legacy", None])
+async def test_public_readonly_lists_and_calls_without_credentials(tmp_path: Path, mode):
+    from pallas.product.arknights_kb import service
+
+    calls = []
+    source_url = "https://stats.pallasbot.top/mcp-source.tar.gz"
+    app = create_app(
+        data_root=tmp_path,
+        specs=service.QUERY_TOOLS,
+        executor=lambda name, args: calls.append((name, args)) or {"ok": True, "error": "", "result": {"tool": name}},
+        allowed_hosts=("127.0.0.1:8765",),
+        public_readonly=True,
+        source_url=source_url,
+    )
+    async with app.router.lifespan_context(app), connected_client(app, None, mode=mode) as client:
+        listed = await client.list_tools()
+        assert {tool.name for tool in listed.tools} == set(service.QUERY_TOOLS)
+        assert len(listed.tools) == 8
+        result = await client.call_tool("arknights.operator.get", {"name": "Amiya"})
+        assert result.structured_content == {"ok": True, "error": "", "result": {"tool": "arknights.operator.get"}}
+        initialized = client.session.discover_result or client.session.initialize_result
+        assert initialized.instructions is not None
+        assert source_url in initialized.instructions
+    assert calls == [("arknights.operator.get", {"name": "Amiya"})]
+
+
+@pytest.mark.asyncio
+async def test_public_readonly_rejects_unknown_admin_tools_and_extra_arguments(tmp_path: Path):
+    calls = []
+    app = make_public_app(
+        tmp_path,
+        executor=lambda name, args: calls.append((name, args)) or {"ok": True, "error": "", "result": {}},
+    )
+    async with app.router.lifespan_context(app), connected_client(app, None) as client:
+        unknown = await client.call_tool("admin.update", {})
+        extra = await client.call_tool("arknights.operator.get", {"name": "Amiya", "admin": True})
+    assert unknown.is_error
+    assert extra.is_error
+    assert calls == []
+
+
+@pytest.mark.asyncio
+async def test_public_readonly_still_enforces_host_origin_and_body_limits(tmp_path: Path):
+    app = make_public_app(tmp_path, max_request_body_size=1024)
+    async with (
+        app.router.lifespan_context(app),
+        httpx2.AsyncClient(base_url="http://127.0.0.1:8765", transport=httpx2.ASGITransport(app=app)) as client,
+    ):
+        bad_host = await client.get("/mcp", headers={"Host": "evil.example"})
+        assert bad_host.status_code == 421
+        bad_origin = await client.get("/mcp", headers={"Origin": "https://evil.example"})
+        assert bad_origin.status_code == 403
+        too_large = await client.post("/mcp", headers={"Content-Type": "application/json"}, content=b"x" * 2048)
+        assert too_large.status_code == 413
+
+
+@pytest.mark.asyncio
+async def test_public_readonly_uses_one_global_rate_budget_and_ignores_forwarded_identity(tmp_path: Path):
+    app = make_public_app(tmp_path, rate_limit=1, rate_window_seconds=3600)
+    async with (
+        app.router.lifespan_context(app),
+        httpx2.AsyncClient(base_url="http://127.0.0.1:8765", transport=httpx2.ASGITransport(app=app)) as client,
+    ):
+        assert (await client.head("/mcp")).status_code != 429
+        limited = await client.head("/mcp")
+        assert limited.status_code == 429
+        assert limited.headers["retry-after"]
+        spoofed = await client.head("/mcp", headers={"X-Forwarded-For": "203.0.113.9"})
+        assert spoofed.status_code == 429
+        with_auth = await client.head("/mcp", headers={"Authorization": "Bearer pmcp_invalid"})
+        assert with_auth.status_code == 429
+
+
+@pytest.mark.asyncio
+async def test_public_readonly_keeps_global_concurrency_cap(tmp_path: Path):
+    app = make_public_app(tmp_path, concurrency=1)
+    assert app.state.request_gate.enter()
+    try:
+        async with (
+            app.router.lifespan_context(app),
+            httpx2.AsyncClient(base_url="http://127.0.0.1:8765", transport=httpx2.ASGITransport(app=app)) as client,
+        ):
+            busy = await client.head("/mcp")
+            assert busy.status_code == 429
+    finally:
+        if app.state.request_gate.active:
+            app.state.request_gate.leave()
+
+
+@pytest.mark.asyncio
+async def test_public_readonly_jsonrpc_ping_probe_returns_200_without_authorization(tmp_path: Path):
+    app = make_public_app(tmp_path)
+    body = {"jsonrpc": "2.0", "id": 1, "method": "ping"}
+    async with (
+        app.router.lifespan_context(app),
+        httpx2.AsyncClient(base_url="http://127.0.0.1:8765", transport=httpx2.ASGITransport(app=app)) as client,
+    ):
+        response = await client.post(
+            "/mcp",
+            headers={"Accept": "application/json, text/event-stream", "Content-Type": "application/json"},
+            json=body,
+        )
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["jsonrpc"] == "2.0"
+    assert payload["id"] == 1
+    assert payload["result"] == {}
+
+
+@pytest.mark.asyncio
+async def test_public_readonly_ping_ignores_authorization_and_never_calls_key_store(tmp_path: Path, monkeypatch):
+    app = make_public_app(tmp_path)
+    auth_calls = []
+
+    def failing_authenticate(secret):
+        auth_calls.append(secret)
+        raise RuntimeError("public mode must not authenticate")
+
+    monkeypatch.setattr(app.state.key_store, "authenticate", failing_authenticate)
+    body = {"jsonrpc": "2.0", "id": 1, "method": "ping"}
+    async with (
+        app.router.lifespan_context(app),
+        httpx2.AsyncClient(base_url="http://127.0.0.1:8765", transport=httpx2.ASGITransport(app=app)) as client,
+    ):
+        response = await client.post(
+            "/mcp",
+            headers={
+                "Accept": "application/json, text/event-stream",
+                "Content-Type": "application/json",
+                "Authorization": "Bearer pmcp_invalid",
+            },
+            json=body,
+        )
+    assert response.status_code == 200
+    assert response.json()["result"] == {}
+    assert auth_calls == []
