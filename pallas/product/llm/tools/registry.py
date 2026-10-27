@@ -227,8 +227,12 @@ def tool_spec_is_eligible(spec: LlmToolSpec) -> bool:
     blacklist = {item.strip().lower() for item in cfg.llm_tools_blacklist if item.strip()}
     if blacklist and (spec.name.lower() in blacklist or spec.domains.intersection(blacklist)):
         return False
-    if "arknights" in spec.domains and not get_arknights_kb_config().arknights_kb_enabled:
-        return False
+    if spec.domains.intersection({"arknights", "prts"}):
+        kb = get_arknights_kb_config()
+        if not kb.arknights_kb_enabled:
+            return False
+        if "prts" in spec.domains and not kb.prts_corpus_enabled:
+            return False
     return True
 
 
@@ -658,8 +662,10 @@ def build_tools_catalog_ui() -> dict[str, Any]:
             disabled_reason = "tools_disabled"
         elif spec.name.lower() in blacklist or spec.domains.intersection(blacklist):
             disabled_reason = "blacklisted"
-        elif "arknights" in spec.domains and not kb.arknights_kb_enabled:
+        elif spec.domains.intersection({"arknights", "prts"}) and not kb.arknights_kb_enabled:
             disabled_reason = "arknights_kb_disabled"
+        elif "prts" in spec.domains and not kb.prts_corpus_enabled:
+            disabled_reason = "prts_corpus_disabled"
         declared_hints = sorted(str(h) for h in (spec.hints or frozenset()) if str(h).strip())
         effective_hints = sorted(effective_tool_hints(spec))
         items.append({
@@ -744,6 +750,7 @@ def build_tools_catalog_ui() -> dict[str, Any]:
             "max_rounds": int(cfg.llm_tools_max_rounds),
             "blacklist": [str(item) for item in (cfg.llm_tools_blacklist or []) if str(item).strip()],
             "arknights_kb_enabled": bool(kb.arknights_kb_enabled),
+            "prts_corpus_enabled": bool(kb.prts_corpus_enabled),
             "desc_max_len": int(cfg.llm_tools_desc_max_len),
             "mcp": mcp_registration_snapshot(),
         },

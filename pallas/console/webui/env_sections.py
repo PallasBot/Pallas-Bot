@@ -418,6 +418,15 @@ def _arknights_kb_section() -> WebuiEnvSection:
         field_to_env={
             "arknights_kb_enabled": "ARKNIGHTS_KB_ENABLED",
             "arknights_kb_auto_sync": "ARKNIGHTS_KB_AUTO_SYNC",
+            "prts_corpus_enabled": "PRTS_CORPUS_ENABLED",
+            "prts_corpus_packs": "PRTS_CORPUS_PACKS",
+            "prts_corpus_include_endfield": "PRTS_CORPUS_INCLUDE_ENDFIELD",
+            "prts_corpus_search_limit": "PRTS_CORPUS_SEARCH_LIMIT",
+            "prts_corpus_read_max_lines": "PRTS_CORPUS_READ_MAX_LINES",
+            "prts_corpus_read_max_chars": "PRTS_CORPUS_READ_MAX_CHARS",
+            "prts_corpus_download_timeout_sec": "PRTS_CORPUS_DOWNLOAD_TIMEOUT_SEC",
+            "prts_corpus_cache_max_mb": "PRTS_CORPUS_CACHE_MAX_MB",
+            "prts_corpus_query_max_mb": "PRTS_CORPUS_QUERY_MAX_MB",
         },
         skip_fields=frozenset(),
     )

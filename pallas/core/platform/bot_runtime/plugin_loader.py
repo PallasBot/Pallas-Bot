@@ -48,6 +48,7 @@ _PLUGINS_ROOT = PROJECT_ROOT / "packages"
 _PYPROJECT = PROJECT_ROOT / "pyproject.toml"
 _APSCHEDULER_MODULE = "nonebot_plugin_apscheduler"
 _ALCONNA_MODULE = "nonebot_plugin_alconna"
+_BUILTIN_REPLACED_PLUGIN_IDS = frozenset({"prts_corpus"})
 _BUNDLED_PLUGIN_ENTRY_SUBMODULES: dict[str, tuple[str, ...]] = {}
 _PLUGIN_LOAD_SLOW_SECONDS = 1.0
 _PLUGIN_LOAD_DIAGNOSTIC_LIMIT = 3
@@ -80,6 +81,17 @@ def startup_plugin_skip_source_fact() -> str:
 
 def _plugin_display_name(module_path: str) -> str:
     return module_path.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1].rsplit(".", 1)[-1]
+
+
+def _skip_builtin_replaced_plugin(module_path: str) -> bool:
+    if _plugin_display_name(module_path) not in _BUILTIN_REPLACED_PLUGIN_IDS:
+        return False
+    _record_startup_plugin_skip(module_path)
+    logger.warning(
+        "启动：跳过旧插件 [{}]，PRTS 语料功能已内建，请使用 pallas mcp corpus update",
+        module_path,
+    )
+    return True
 
 
 def record_startup_plugin_load_failure(module_path: str) -> None:
@@ -303,6 +315,8 @@ def hot_load_extra_dir_plugin(plugin_id: str, *, role_label: str = "runtime") ->
     pid = (plugin_id or "").strip()
     if not pid:
         return False
+    if _skip_builtin_replaced_plugin(pid):
+        return False
     if pid in runtime_loaded_short_names():
         logger.debug("Runtime hot load: {} already loaded, skipping", pid)
         return False
@@ -347,6 +361,8 @@ def _load_plugin_module(
     role_label: str,
     loaded_short: set[str],
 ) -> bool:
+    if _skip_builtin_replaced_plugin(module_path):
+        return False
     slot = _load_slot_key(module_path)
     if slot in loaded_short:
         return False
@@ -415,6 +431,8 @@ def _load_discovered_plugin_modules(
             _record_startup_plugin_skip(mod)
             logger.info("跳过 {}：配置禁用", mod)
             continue
+        if _skip_builtin_replaced_plugin(mod):
+            continue
         if slot in loaded_short:
             logger.info("跳过 {}：同名插件已加载", mod)
             continue
@@ -443,14 +461,15 @@ def _load_toml_extra_plugin_dirs(
                 continue
             if not (entry / "__init__.py").is_file():
                 continue
+            sub_rel = f"{rel_dir.rstrip('/')}/{entry.name}"
+            if _skip_builtin_replaced_plugin(sub_rel):
+                continue
             if _load_slot_key(entry.name) in loaded_short:
-                sub_rel = f"{rel_dir.rstrip('/')}/{entry.name}"
                 logger.info(
                     "跳过 {}：同名插件已加载",
                     sub_rel,
                 )
                 continue
-            sub_rel = f"{rel_dir.rstrip('/')}/{entry.name}"
             pkg_path = PROJECT_ROOT / sub_rel
             try:
                 started_at = time.perf_counter()

@@ -14,6 +14,7 @@ dependencies = [
     "aiosmtplib>=5.0.0",
     "beanie>=2.0.0",
     "httpx[socks]>=0.28.1",
+    "mcp>=2.3,<3",
     "jieba>=0.42.1",
     "nb-cli>=1.5.0",
     "nonebot-adapter-onebot>=2.4.6",

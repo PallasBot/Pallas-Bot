@@ -52,6 +52,7 @@ FILE_MAP: dict[str, str] = {
     "developer/index.md": "developer/index.md",
     "developer/author/index.md": "developer/author/index.md",
     "developer/architecture/overview.md": "developer/architecture/overview.md",
+    "developer/architecture/arknights-mcp.md": "developer/architecture/arknights-mcp.md",
     "developer/architecture/message-runtime.md": "developer/architecture/message-runtime.md",
     "developer/architecture/core-vs-extensions.md": "developer/architecture/core-vs-extensions.md",
     "developer/architecture/config-storage.md": "developer/architecture/config-storage.md",

@@ -35,6 +35,7 @@
 - **语料联邦**：可选接入社区共享语料池，扩充接话短句来源；多部署可共池互认，按群归属与消息抢占去重，避免重复回复
 - **语义风格指导**：由复读引擎按账号与群维度学习「什么场合常说什么」，作为群表达指导注入 LLM 对话；同群不同账号互不干扰
 - **LLM 对话**：明确 `@` 时经 Bot Provider 多轮对话，支持群内长期记忆、人物观察、知识检索、联网搜索与工具调用；输出受账号人格与本群表达风格约束
+- **方舟资料与只读 MCP**：干员、技能、敌人查询与 PRTS 本地资料检索共用查询逻辑，既供 Bot 使用，也供外部 Agent 通过 HTTP 调用；独立查询密钥、权限范围与限流，不开放群聊记录或管理功能
 - **WebUI 控制台**：浏览器管理配置、插件、命令权限与消息审查，并内置 LLM / AI 观测与运维面板
 - **插件生态**：可从内置商店安装插件，原生支持 NoneBot 插件
 - **高并发消息处理**：后台任务可靠投递，慢操作不阻塞消息主路径；多 worker 分片横向扩展
@@ -65,6 +66,39 @@ uv run pallas
 
 浏览器打开 `http://<主机>:8088/pallas/`，使用启动日志中的密钥登录。  
 更完整的上手说明见文档站 [快速开始](https://PallasBot.github.io/Pallas-Bot-Docs/guide/quickstart)。
+
+## 方舟资料与 MCP
+
+结构化游戏数据与剧情资料各有用途：可以查干员技能，也可以搜索 PRTS 资料、读取带出处的片段和查询时间线。查询服务本身不调用聊天模型；外部客户端不需要启动整只 Bot。
+
+### 使用托管 MCP
+
+无需部署 Bot 或下载资料。向服务维护者申请个人查询密钥，在支持 **Streamable HTTP + 自定义请求头** 的 MCP 客户端中添加远程服务：
+
+| 接入项 | 值 |
+| --- | --- |
+| 地址 | `https://mcp.pallasbot.top/mcp` |
+| 传输 | Streamable HTTP |
+| 请求头 | `Authorization: Bearer <你的查询密钥>` |
+
+密钥按调用方单独签发，请勿共享或放进 URL、截图及公开配置。服务不提供自助注册或 OAuth 登录；仅支持 OAuth、不能设置请求头的客户端暂不适用。浏览器直接打开地址返回 `401` 属于正常鉴权，不是网页故障；浏览器类客户端还需维护者允许其准确 Origin。
+
+完整权限提供 8 个只读工具；仅获 `arknights:read` 的身份提供 5 个结构化工具。可尝试「查询帕拉斯三技能」「搜索泰拉资料并读取出处」「查询年表」。托管实例当前仅安装 PRTS `references` 参考资料包，不含完整剧情包或终末地资料；数据为已同步快照，不保证实时更新。服务有请求频率与并发限制，不开放群聊记录、管理功能或文件写入。
+
+客户端初始化说明与响应的源码链接指向对应运行版本的公开源码归档。数据来源及使用条件见下方文档，不因可检索就代表可以任意转载。
+
+### 自行部署
+
+资料按需准备，不随安装包分发。PRTS 需显式下载，结构化表沿用方舟知识库数据；来源、缺源提示与使用条件见 [方舟查询与 HTTP MCP](docs/developer/architecture/arknights-mcp.md)。
+
+```bash
+uv run pallas mcp corpus status
+uv run pallas mcp corpus update       # 按需下载 PRTS 资料
+uv run pallas mcp token --label agent # 签发查询密钥，仅显示一次
+uv run pallas mcp serve               # 默认仅本机 http://127.0.0.1:8765/mcp
+```
+
+客户端需支持 Streamable HTTP 与预配 Bearer 请求头；首版不提供 OAuth 登录。远程使用须另行配置 TLS、Host/Origin 和访问边界，不能直接复用控制台密钥。数据来自 [ArknightsGameData](https://github.com/Kengxxiao/ArknightsGameData) 与 [PRTS.chat](https://prts.chat/)，内容仍受各自使用条款约束。
 
 ## 📖 文档与进展
 
@@ -205,6 +239,7 @@ uv run pallas
 - [**gsuid_core**](https://github.com/Genshin-bots/gsuid_core)：多 Bot 插件核心框架
 - [**ArknightsGameData**](https://github.com/Kengxxiao/ArknightsGameData)：明日方舟游戏数据；决斗干员表与知识库由远端同步其 `zh_CN/gamedata`
 - [**ArknightsGameResource**](https://github.com/yuanyan3060/ArknightsGameResource)：干员头像等资源；决斗 / 知识库头像由此拉取
+- [**PRTS.chat / PRTS Terrarchive**](https://github.com/HTian-qwq/prts-terrarchive)：PRTS 资料包、检索索引与引用定位；资料按上游声明使用，不随本项目分发
 - [**MaaAssistantArknights**](https://github.com/MaaAssistantArknights/MaaAssistantArknights.git)：明日方舟长草助手 MAA；本项目的远控能力基于其[远程控制协议](https://docs.maa.plus/zh-cn/protocol/remote-control-schema.html)实现
 - [**NoneBot2**](https://github.com/nonebot/nonebot2)：跨平台 Python 异步聊天机器人框架
 - [**jieba_next**](https://github.com/mxcoras/jieba-next)：基于 Rust 加速的现代中文分词库

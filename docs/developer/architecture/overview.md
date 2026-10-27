@@ -41,6 +41,8 @@ Pallas-Bot 的可执行边界是：主仓承载运行时与产品语义；WebUI�
 
 ## 主仓路径
 
+方舟结构化查询、PRTS 资料检索与对外只读服务的共用边界，见 [方舟查询与 HTTP MCP](arknights-mcp.md)。
+
 | 路径 | 作用 |
 | --- | --- |
 | `pallas/` | 内核、平台、产品、console |
