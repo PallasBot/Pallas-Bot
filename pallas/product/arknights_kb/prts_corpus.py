@@ -21,6 +21,7 @@ import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from operator import itemgetter
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
@@ -682,6 +683,51 @@ def _line_text(line: dict[str, Any]) -> str:
     return f"{speaker}: {text}" if speaker else text
 
 
+def _document_title(summary: dict[str, Any], document_id: str) -> str:
+    return str(summary.get("display_title") or document_id)
+
+
+def _summary_matches_filters(summary: dict[str, Any], filters: dict[str, Any]) -> bool:
+    """按 location.summary 判定 games/resource_types/名称过滤；可在加载索引或正文前使用。"""
+    if filters.get("games") and _game(summary) not in filters["games"]:
+        return False
+    if filters.get("resource_types") and _resource_type(summary) not in filters["resource_types"]:
+        return False
+    metadata = " ".join(
+        str(summary.get(key) or "")
+        for key in (
+            "display_title",
+            "character_name",
+            "activity_name",
+            "story_name",
+            "collection_name",
+        )
+    )
+    metadata_text = _normalize(metadata)
+    for key in ("character_names", "activity_names", "entity_names"):
+        if filters.get(key) and not any(_normalize(item) in metadata_text for item in filters[key]):
+            return False
+    return True
+
+
+def _record_matches(record: dict[str, Any], normalized_query: str) -> list[dict[str, Any]]:
+    matches: list[dict[str, Any]] = []
+    lines = record.get("lines") if isinstance(record.get("lines"), list) else []
+    for line in lines:
+        if not isinstance(line, dict):
+            continue
+        if normalized_query and normalized_query not in _normalize(_line_text(line)):
+            continue
+        matches.append({
+            "line": int(line.get("line_number") or 0),
+            "speaker": str(line.get("speaker_raw") or ""),
+            "text": _bounded_text(line.get("text")),
+        })
+        if len(matches) >= 3:
+            break
+    return matches
+
+
 def _serialized(method: Callable) -> Callable:
     """以 search/read 实例锁串行化入口，避免并发线程混用 release 缓存与指针。"""
 
@@ -732,7 +778,7 @@ class CorpusStore:
         self._by_uid: dict[str, DocumentLocation] = {}
         self._by_title: dict[str, list[DocumentLocation]] = {}
         self._shard_cache: dict[tuple[str, str], list[dict[str, Any]]] = {}
-        self._index_cache: dict[tuple[str, str], dict[str, list[int]]] = {}
+        self._index_cache: dict[tuple[str, str], bytes] = {}
         self._manifests: dict[str, dict[str, Any]] = {}
         self._entity_names_key = ""
         self._entity_names_cache: tuple[str, ...] = ()
@@ -982,11 +1028,12 @@ class CorpusStore:
             raise CorpusError("PRTS pack 未安装")
         return self._snapshot_path / pack_id
 
-    def _load_shard(self, location: DocumentLocation) -> list[dict[str, Any]]:
+    def _load_shard(self, location: DocumentLocation, *, use_cache: bool = True) -> list[dict[str, Any]]:
         key = (location.pack_id, location.shard_path)
-        cached = self._shard_cache.get(key)
-        if cached is not None:
-            return cached
+        if use_cache:
+            cached = self._shard_cache.get(key)
+            if cached is not None:
+                return cached
         path = _safe_asset_path(self._release_dir(location.pack_id), location.shard_path)
         if not path.is_file():
             raise CorpusUnavailableError(f"PRTS 分片缺失：{location.pack_id}")
@@ -999,31 +1046,34 @@ class CorpusStore:
                     records.append(json.loads(raw))
         except (OSError, json.JSONDecodeError) as exc:
             raise CorpusError(f"读取 PRTS 分片失败：{path}: {exc}") from exc
-        if self._cache_bytes + size <= self._cache_budget_bytes:
+        if use_cache and self._cache_bytes + size <= self._cache_budget_bytes:
             self._shard_cache[key] = records
             self._cache_bytes += size
         return records
 
-    def _load_index(self, pack_id: str, path: str) -> dict[str, list[int]]:
+    def _load_index(
+        self, pack_id: str, path: str, requested_grams: Iterable[str] | None = None
+    ) -> dict[str, list[int]]:
         key = (pack_id, path)
-        cached = self._index_cache.get(key)
-        if cached is not None:
-            return cached
-        index_path = _safe_asset_path(self._release_dir(pack_id), path)
-        if not index_path.is_file():
-            raise CorpusUnavailableError(f"PRTS 倒排索引缺失：{pack_id}")
-        raw = _read_gzip_bytes(index_path, account=self._account_query_decompressed)
+        raw = self._index_cache.get(key)
+        freshly_read = raw is None
+        if raw is None:
+            index_path = _safe_asset_path(self._release_dir(pack_id), path)
+            if not index_path.is_file():
+                raise CorpusUnavailableError(f"PRTS 倒排索引缺失：{pack_id}")
+            raw = _read_gzip_bytes(index_path, account=self._account_query_decompressed)
         if raw[:8] not in (b"PRTSNG2\0", b"PRTSTG1\0"):
-            raise CorpusError(f"PRTS 倒排索引格式未知：{index_path}")
+            raise CorpusError(f"PRTS 倒排索引格式未知：{path}")
         count = int.from_bytes(raw[8:12], "little")
         table_start = 12
         payload_start = table_start + (count + 1) * 4
         if payload_start > len(raw):
-            raise CorpusError(f"PRTS 倒排索引偏移表损坏：{index_path}")
+            raise CorpusError(f"PRTS 倒排索引偏移表损坏：{path}")
         offsets = [
             int.from_bytes(raw[table_start + index * 4 : table_start + index * 4 + 4], "little")
             for index in range(count + 1)
         ]
+        wanted = None if requested_grams is None else set(requested_grams)
         result: dict[str, list[int]] = {}
         for index in range(count):
             cursor = payload_start + offsets[index]
@@ -1032,6 +1082,10 @@ class CorpusStore:
             gram = raw[cursor : cursor + length].decode("utf-8")
             cursor += length
             posting_count, cursor = _read_varint(raw, cursor, end)
+            if wanted is not None and gram not in wanted:
+                for _ in range(posting_count):
+                    _, cursor = _read_varint(raw, cursor, end)
+                continue
             postings: list[int] = []
             current = 0
             for _ in range(posting_count):
@@ -1039,8 +1093,9 @@ class CorpusStore:
                 current += delta
                 postings.append(current)
             result[gram] = postings
-        if self._cache_bytes + len(raw) <= self._cache_budget_bytes:
-            self._index_cache[key] = result
+        # Publish the raw cache only after the whole file validated; never cache a bad payload.
+        if freshly_read and self._cache_bytes + len(raw) <= self._cache_budget_bytes:
+            self._index_cache[key] = raw
             self._cache_bytes += len(raw)
         return result
 
@@ -1067,7 +1122,7 @@ class CorpusStore:
                 relevant = [gram for gram in grams if first <= gram.encode("utf-8") <= last]
                 if not relevant:
                     continue
-                index = self._load_index(pack_id, str(descriptor.get("path") or ""))
+                index = self._load_index(pack_id, str(descriptor.get("path") or ""), relevant)
                 for gram in relevant:
                     per_gram[gram].update(index.get(gram, []))
             intersection: set[int] | None = None
@@ -1082,24 +1137,8 @@ class CorpusStore:
         return candidates if has_index else None
 
     def _matches_filters(self, summary: dict[str, Any], record: dict[str, Any], filters: dict[str, Any]) -> bool:
-        if filters.get("games") and _game(summary) not in filters["games"]:
+        if not _summary_matches_filters(summary, filters):
             return False
-        if filters.get("resource_types") and _resource_type(summary) not in filters["resource_types"]:
-            return False
-        metadata = " ".join(
-            str(summary.get(key) or "")
-            for key in (
-                "display_title",
-                "character_name",
-                "activity_name",
-                "story_name",
-                "collection_name",
-            )
-        )
-        metadata_text = _normalize(metadata)
-        for key in ("character_names", "activity_names", "entity_names"):
-            if filters.get(key) and not any(_normalize(item) in metadata_text for item in filters[key]):
-                return False
         if filters.get("speakers"):
             speakers = {
                 str(item.get("speaker_raw") or "") for item in record.get("lines", []) if isinstance(item, dict)
@@ -1107,6 +1146,29 @@ class CorpusStore:
             if not speakers.intersection(filters["speakers"]):
                 return False
         return True
+
+    def _search_item(self, location: DocumentLocation, matches: list[dict[str, Any]]) -> dict[str, Any]:
+        title = _document_title(location.summary, location.document_id)
+        line_start = matches[0]["line"] if matches else None
+        line_end = matches[-1]["line"] if matches else None
+        return {
+            "game": _game(location.summary),
+            "title": title,
+            "resource_type": _resource_type(location.summary),
+            "authority": str(self._manifests.get(location.pack_id, {}).get("authority") or ""),
+            "document_uid": _document_uid(location.document_id),
+            "source_ref_prefix": str(location.summary.get("source_ref_prefix") or ""),
+            "matches": matches,
+            "citation": f"《{title}》" + (f"第 {line_start}-{line_end} 行" if line_start else ""),
+        }
+
+    def _search_response(self, query: str, items: list[dict[str, Any]], limit: int) -> dict[str, Any]:
+        return {
+            "query": query,
+            "data_version": self._data_version,
+            "count": min(len(items), limit),
+            "items": items[:limit],
+        }
 
     @_serialized
     def search(
@@ -1120,58 +1182,50 @@ class CorpusStore:
     ) -> dict[str, Any]:
         self._load(pointer, pack_ids, require_search_index=True)
         normalized_query = _normalize(query)
-        locations = self._candidate_locations(normalized_query, pack_ids) if normalized_query else None
-        if locations is None:
-            locations = list(self._locations.values())
         selected_packs = set(self._manifests if pack_ids is None else pack_ids)
-        results: list[dict[str, Any]] = []
-        for location in locations:
-            if location.pack_id not in selected_packs:
-                continue
-            records = self._load_shard(location)
-            if location.record_index >= len(records):
-                continue
-            record = records[location.record_index]
-            if not isinstance(record, dict) or not self._matches_filters(location.summary, record, filters):
-                continue
-            lines = record.get("lines") if isinstance(record.get("lines"), list) else []
-            matches = []
-            for line in lines:
-                if not isinstance(line, dict):
-                    continue
-                if normalized_query and normalized_query not in _normalize(_line_text(line)):
-                    continue
-                matches.append({
-                    "line": int(line.get("line_number") or 0),
-                    "speaker": str(line.get("speaker_raw") or ""),
-                    "text": _bounded_text(line.get("text")),
-                })
-                if len(matches) >= 3:
+        eligible = [
+            location
+            for location in self._locations.values()
+            if location.pack_id in selected_packs and _summary_matches_filters(location.summary, filters)
+        ]
+        top_k = max(1, limit)
+        if not eligible:
+            return self._search_response(query, [], top_k)
+        candidates = eligible
+        if normalized_query:
+            indexed = self._candidate_locations(normalized_query, pack_ids)
+            if indexed is not None:
+                eligible_keys = {(location.pack_id, location.document_id) for location in eligible}
+                candidates = [
+                    location for location in indexed if (location.pack_id, location.document_id) in eligible_keys
+                ]
+        ordered = sorted(candidates, key=lambda location: _document_title(location.summary, location.document_id))
+        groups: dict[tuple[str, str], list[tuple[int, DocumentLocation]]] = {}
+        for ordinal, location in enumerate(ordered):
+            groups.setdefault((location.pack_id, location.shard_path), []).append((ordinal, location))
+        best: list[tuple[tuple[int, int], dict[str, Any]]] = []
+        for members in sorted(groups.values(), key=lambda rows: rows[0][0]):
+            if len(best) >= top_k:
+                worst_rank = max(rank for rank, _ in best)
+                if worst_rank[0] == 0 and members[0][0] > worst_rank[1]:
                     break
-            title_hit = normalized_query and normalized_query in _normalize(location.summary.get("display_title"))
-            if normalized_query and not matches and not title_hit:
-                continue
-            line_start = matches[0]["line"] if matches else None
-            line_end = matches[-1]["line"] if matches else None
-            title = str(location.summary.get("display_title") or location.document_id)
-            result = {
-                "game": _game(location.summary),
-                "title": title,
-                "resource_type": _resource_type(location.summary),
-                "authority": str(self._manifests.get(location.pack_id, {}).get("authority") or ""),
-                "document_uid": _document_uid(location.document_id),
-                "source_ref_prefix": str(location.summary.get("source_ref_prefix") or ""),
-                "matches": matches,
-                "citation": f"《{title}》" + (f"第 {line_start}-{line_end} 行" if line_start else ""),
-            }
-            results.append(result)
-        results.sort(key=lambda item: (0 if item["matches"] else 1, item["title"]))
-        return {
-            "query": query,
-            "data_version": self._data_version,
-            "count": min(len(results), max(1, limit)),
-            "items": results[: max(1, limit)],
-        }
+            records = self._load_shard(members[0][1], use_cache=False)
+            for ordinal, location in members:
+                if location.record_index >= len(records):
+                    continue
+                record = records[location.record_index]
+                if not isinstance(record, dict) or not self._matches_filters(location.summary, record, filters):
+                    continue
+                matches = _record_matches(record, normalized_query)
+                title_hit = normalized_query and normalized_query in _normalize(location.summary.get("display_title"))
+                if normalized_query and not matches and not title_hit:
+                    continue
+                best.append(((0 if matches else 1, ordinal), self._search_item(location, matches)))
+                if len(best) > top_k:
+                    best.remove(max(best, key=itemgetter(0)))
+            del records
+        items = [item for _, item in sorted(best, key=itemgetter(0))]
+        return self._search_response(query, items, top_k)
 
     @_serialized
     def read(

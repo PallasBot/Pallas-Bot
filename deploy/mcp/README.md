@@ -30,6 +30,20 @@ docker compose --env-file /path/to/compose.env -f deploy/mcp/compose.yml exec mc
 PRTS 初次同步明确限定为 `references`，在受限容器内显式执行 `mcp corpus update`。需要扩展 pack 时先评估内存、磁盘和内容使用条件。同步结构化游戏表仍使用架构文档列出的既有同步入口。
 缓存与累计解压各默认 64 MiB，这是原始字节预算，不是 Python RSS 保证；超预算会失败，而容器硬内存限制单独生效。预算配置修改后须重启新 MCP 容器，不需要重启 Bot。
 
+## 公共只读模式
+
+公共入口不沿用 private 默认，而是叠加公开 override：两个文件一起用，base 的资源限制（只读根、CPU/内存、PID、非 root 身份、端口发布）继续继承，`command` 与 `healthcheck` 由 public 文件覆盖。
+
+```bash
+docker compose --env-file /path/to/compose.env \
+  -f deploy/mcp/compose.yml -f deploy/mcp/compose.public.yml up -d
+```
+
+- `deploy/mcp/compose.public.yml` 显式追加 `--public-readonly`，并把全局预算设为 `--rate-limit 300 --rate-window 60 --concurrency 2`；文件本身不含密钥，凭据仍在 `compose.env` 之外管理。
+- 该 override 的 healthcheck 改为一次无鉴权 JSON-RPC `ping`（`POST /mcp` 返回 200 且 `result == {}`）。private 的 `GET /mcp == 401` 判据不能沿用到 public，否则服务会被误判为 unhealthy。
+- 公共入口必须由 MCP 专属反代缓冲请求体并限定闲置超时：`proxy_request_buffering on`、`client_body_timeout 5s`，server 级 `client_header_timeout 5s`、`send_timeout 15s`。完整 body 到齐才转发后端，闲置请求会被终止（可能返回 408 或直接断开连接）；这不是绝对的整请求 deadline。
+- 这样慢或半截 body 不会占满应用并发槽，peer-IP 限流、全局共享预算与资源上限维持不变。不要为此改动其他站点或 SSHD，也不要开启任意 Origin/CORS。
+
 ## HTTPS 与隧道
 
 - TLS 由反向代理终止，后端只允许准确 Host；不得直接公开容器端口。
@@ -43,4 +57,4 @@ PRTS 初次同步明确限定为 `references`，在受限容器内显式执行 `
 将归档以不可变的版本地址通过 HTTPS 提供，并在 `MCP_SOURCE_URL` 设置该地址；compose 将其传给 `--source-url`。SDK 初始化说明会提示该地址，反代可同时添加源码 Link Header。不要将旧镜像的源码地址覆盖成新代码。
 
 切换前保留前一镜像、运行配置、对应源码归档及反代配置备份。失败时恢复成组物料并 reload 反代；不得删除社区数据库、旧 Bot 数据或其他容器。
-密钥按调用方单独签发、仅显示一次，测试身份验收后撤销。静态 Bearer 不是 OAuth 登录；单进程限流不等于多副本配额。
+私有模式下，密钥按调用方单独签发、仅显示一次，测试身份验收后撤销。静态 Bearer 不是 OAuth 登录；单进程限流不等于多副本配额。

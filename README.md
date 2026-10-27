@@ -69,7 +69,7 @@ uv run pallas
 
 ## 📚 方舟资料与 MCP
 
-<p><sub>牛牛把方舟资料接成了 MCP：可以查询干员、技能和敌人，也能检索 PRTS 参考资料、原文片段与时间线。</sub></p>
+<p><sub>牛牛把方舟资料接成了 MCP：可以查询干员、技能和敌人，也能检索 PRTS 剧情、干员档案与时间线。</sub></p>
 
 ### 使用托管 MCP
 
@@ -79,7 +79,7 @@ uv run pallas
 https://mcp.pallasbot.top/mcp
 ```
 
-<sub>目前仅开放 PRTS 参考资料，不含完整剧情包或终末地；资料非实时更新，服务设有请求限流。详情见<a href="https://pallasbot.github.io/Pallas-Bot-Docs/common/mcp/">使用说明</a>。</sub>
+<sub>提供明日方舟官方剧情、干员档案与参考资料，不含终末地；资料非实时更新，服务设有请求限流。详情见<a href="https://pallasbot.github.io/Pallas-Bot-Docs/common/mcp/">使用说明</a>。</sub>
 
 ### 自行部署
 
