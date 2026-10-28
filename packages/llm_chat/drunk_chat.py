@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 
-from nonebot import logger, on_message
+from nonebot import logger
 from nonebot.adapters import Bot  # noqa: TC002  # NoneBot 依赖解析需要运行时可见
-from nonebot.adapters.onebot.v11 import GroupMessageEvent, permission
-from nonebot.rule import Rule
 from ulid import ULID
+
+if TYPE_CHECKING:
+    from nonebot.adapters.onebot.v11 import GroupMessageEvent
 
 from pallas.api.logging import format_plugin_event
 from pallas.core.foundation.config import BotConfig, GroupConfig, TaskManager
@@ -89,15 +91,6 @@ async def is_to_drunk_chat(event: GroupMessageEvent) -> bool:
     return (await config.drunkenness()) > 0
 
 
-drunk_msg = on_message(
-    rule=Rule(is_to_drunk_chat),
-    priority=DRUNK_CHAT_PRIORITY,
-    block=True,
-    permission=permission.GROUP,
-)
-
-
-@drunk_msg.handle()
 async def handle_drunk_chat(bot: Bot, event: GroupMessageEvent):
     config = GroupConfig(event.group_id, cooldown=10)
     if not await config.is_cooldown(CHAT_COOLDOWN_KEY):

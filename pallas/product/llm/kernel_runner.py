@@ -14,9 +14,7 @@ from pallas.product.llm.availability import LlmChatExitGateError, llm_chat_exit_
 from pallas.product.llm.execution_budget import (
     LlmExecutionSlot,
     release_llm_execution_slot,
-    try_acquire_llm_execution_slot,
 )
-from pallas.product.llm.governance import LlmChatGovernance
 from pallas.product.llm.models import ChatSubmitRequest, ChatSubmitResult
 from pallas.product.llm.tool_loop import complete_with_tool_loop
 from pallas.product.llm.turn_budget import LlmTurnBudgetExceeded
@@ -93,11 +91,6 @@ async def run_kernel_chat_job(
 ) -> None:
     started = time.monotonic()
     task = str(metadata.get("task") or "llm_chat").strip() or "llm_chat"
-    turn_budget = None
-    if task == "llm_chat":
-        from pallas.product.llm.turn_budget import new_llm_chat_turn_budget
-
-        turn_budget = new_llm_chat_turn_budget(cfg, started_at=started)
     progress_started = asyncio.Event()
     progress_finished = asyncio.Event()
     progress_task: asyncio.Task[None] | None = None
@@ -106,7 +99,7 @@ async def run_kernel_chat_job(
         return await llm_chat_exit_gate_reason(
             metadata.get("bot_id"),
             metadata.get("group_id"),
-            captured_enabled=cfg.llm_chat_enabled,
+            captured_enabled=bool(getattr(cfg, "llm_chat_enabled", False)),
         )
 
     async def ensure_exit_gate(*, side_effect_started: bool = False) -> None:
@@ -153,6 +146,12 @@ async def run_kernel_chat_job(
         if gate_reason := await exit_gate_reason():
             await record_exit_gate_skip(gate_reason)
             return
+
+        turn_budget = None
+        if task == "llm_chat":
+            from pallas.product.llm.turn_budget import new_llm_chat_turn_budget
+
+            turn_budget = new_llm_chat_turn_budget(cfg, started_at=started)
 
         from pallas.product.llm.semantic_protocol import claim_protocol_candidate
 
@@ -443,16 +442,9 @@ def schedule_kernel_chat_job(
     cfg: LlmConfig,
     execution_slot: LlmExecutionSlot,
 ) -> None:
-    asyncio.create_task(
-        run_kernel_chat_job(
-            request_id,
-            system_prompt=system_prompt,
-            messages=messages,
-            metadata=metadata,
-            cfg=cfg,
-            execution_slot=execution_slot,
-        )
-    )
+    # 旧内核聊天调度已退役：不再创建任务，立即释放传入的执行名额一次。
+    _ = (request_id, system_prompt, messages, metadata)
+    release_llm_execution_slot(execution_slot, cfg=cfg)
 
 
 async def submit_kernel_llm_chat_task(
@@ -465,26 +457,6 @@ async def submit_kernel_llm_chat_task(
     message_count: int,
     cfg: LlmConfig,
 ) -> ChatSubmitResult:
-    async with LlmChatGovernance(wait=False, queue=request.priority == "explicit", cfg=cfg) as gov:
-        if gov.skipped:
-            timer.finish(status="skipped_busy", request_id=request.request_id)
-            return ChatSubmitResult(status="busy", ok=False)
-        execution_slot = await try_acquire_llm_execution_slot(request.priority, cfg=cfg)
-        if execution_slot is None:
-            timer.finish(status="shared_budget_busy", request_id=request.request_id)
-            return ChatSubmitResult(status="shared_budget_busy", ok=False)
-        try:
-            schedule_kernel_chat_job(
-                request.request_id,
-                system_prompt=system_prompt,
-                messages=messages,
-                metadata=metadata,
-                cfg=cfg,
-                execution_slot=execution_slot,
-            )
-        except Exception:
-            release_llm_execution_slot(execution_slot, cfg=cfg)
-            raise
-    timer.mark("kernel_schedule")
-    timer.finish(status="processing", request_id=request.request_id, message_count=message_count)
-    return ChatSubmitResult(task_id=request.request_id, status="processing", ok=True)
+    # 旧 LLM 聊天生成已退役：不再起任务/占用 slot/调度 toolloop。
+    _ = (request, system_prompt, messages, metadata, timer, message_count, cfg)
+    return ChatSubmitResult(status="legacy_agent_retired", ok=False)

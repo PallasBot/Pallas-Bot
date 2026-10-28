@@ -142,6 +142,12 @@ async def run_ai_callback(
     task = await resolve_callback_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    from pallas.core.platform.ai_callback.task_types import is_retired_chat_task_type
+
+    if is_retired_chat_task_type(task.get("task_type")):
+        # Terminal ACK for a late old-chat callback: the claim already landed the
+        # terminal state, so consume it without bot/send/trace/feedback/history/media.
+        return {"message": "ok", "status": "legacy_agent_retired"}
     _verify_song_binding(task, song_id)
     parsed_agent_trace: dict | None = None
     if agent_trace:

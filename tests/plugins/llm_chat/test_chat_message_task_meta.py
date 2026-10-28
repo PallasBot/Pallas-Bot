@@ -396,7 +396,7 @@ async def test_handle_llm_chat_skips_empty_to_me_without_reply(monkeypatch: pyte
     submit_mock = AsyncMock()
 
     monkeypatch.setattr(mod, "is_llm_chat_service_enabled", lambda: True)
-    monkeypatch.setattr(mod.llm_chat_msg, "send", send_mock)
+    monkeypatch.setattr(mod, "bound_send", lambda _b, _e: send_mock)
     monkeypatch.setattr(mod, "submit_chat_task", submit_mock)
 
     await mod.handle_llm_chat(bot, event)
@@ -553,7 +553,7 @@ async def test_handle_llm_chat_dispatch_low_engagement_on_rule_pass_without_mode
 
     dispatch_mock = AsyncMock(return_value=True)
     monkeypatch.setattr("pallas.product.llm.low_engagement.dispatch_low_engagement", dispatch_mock)
-    monkeypatch.setattr(mod.llm_chat_msg, "send", fake_send)
+    monkeypatch.setattr(mod, "bound_send", lambda _b, _e: fake_send)
 
     from packages.repeater import opportunity_trace
 
@@ -649,7 +649,7 @@ async def test_handle_llm_chat_dispatch_low_engagement_on_necessity_skip(
 
     dispatch_mock = AsyncMock(return_value=True)
     monkeypatch.setattr("pallas.product.llm.low_engagement.dispatch_low_engagement", dispatch_mock)
-    monkeypatch.setattr(mod.llm_chat_msg, "send", fake_send)
+    monkeypatch.setattr(mod, "bound_send", lambda _b, _e: fake_send)
 
     from packages.repeater import opportunity_trace
 

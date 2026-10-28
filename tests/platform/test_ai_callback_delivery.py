@@ -20,6 +20,13 @@ def allow_enabled_llm_delivery(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
     monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", AsyncMock(return_value=False))
 
+    # 历史 delivery 算法测试：旧 LLM 聊天生成已退役，这里还原旧聊天 exit gate 语义，
+    # 以便直接测试 delivery 纯入口（不改生产、不加开关）。
+    async def _open_gate(*_args, **_kwargs):
+        return ""
+
+    monkeypatch.setattr("pallas.product.llm.availability.llm_chat_exit_gate_reason", _open_gate)
+
 
 @pytest.mark.parametrize(
     ("value", "expected"),

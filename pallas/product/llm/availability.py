@@ -16,13 +16,9 @@ async def llm_chat_exit_gate_reason(
     *,
     captured_enabled: bool = True,
 ) -> str:
-    if not captured_enabled or not llm_calls_enabled(get_llm_config()):
-        return "global_disabled_after_submit"
-    if await llm_plugin_disabled_for_scope(bot_id, group_id):
-        return "scope_disabled_after_submit"
-    if not llm_calls_enabled(get_llm_config()):
-        return "global_disabled_after_submit"
-    return ""
+    """Chat-specific exit gate. 旧 LLM/RWKV 聊天生成已退役，无条件关闭。"""
+    _ = (bot_id, group_id, captured_enabled)
+    return "legacy_agent_retired"
 
 
 def is_llm_chat_service_enabled(cfg: LlmConfig | None = None) -> bool:

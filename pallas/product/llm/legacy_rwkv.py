@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from nonebot import logger
+from typing import TYPE_CHECKING
 
-from pallas.core.shared.utils import HTTPXClient
-
-from .config import LlmConfig, get_llm_config, llm_server_base_url
+if TYPE_CHECKING:
+    from .config import LlmConfig
 
 
 async def submit_rwkv_drunk_chat(
@@ -17,36 +16,9 @@ async def submit_rwkv_drunk_chat(
     timeout_sec: float = 30.0,
     cfg: LlmConfig | None = None,
 ) -> tuple[str, bool]:
-    """遗留 RWKV 酒后聊天；返回 (task_id, ok)。"""
-    c = cfg or get_llm_config()
-    base = llm_server_base_url(c)
-    url = f"{base}{chat_endpoint}/{request_id}"
-    from pallas.core.platform.ai_callback.ai_bearer import ai_bearer_headers
-
-    try:
-        response = await HTTPXClient.post(
-            url,
-            json={
-                "session": session,
-                "text": text,
-                "token_count": 50,
-                "tts": tts,
-            },
-            headers=ai_bearer_headers(),
-            timeout=timeout_sec,
-        )
-    except Exception:
-        logger.exception("RWKV drunk-chat request failed for URL [{}]", url)
-        return "", False
-    if not response:
-        return "", False
-    try:
-        body = response.json()
-    except Exception:
-        logger.warning("RWKV drunk-chat response contained invalid JSON for URL [{}]", url)
-        return "", False
-    task_id = str(body.get("task_id") or "")
-    return task_id, bool(task_id)
+    """遗留 RWKV 酒后聊天已退役：不再发起任何 HTTP 请求。"""
+    _ = (request_id, session, text, tts, chat_endpoint, timeout_sec, cfg)
+    return "", False
 
 
 async def delete_rwkv_chat_session(
@@ -56,14 +28,6 @@ async def delete_rwkv_chat_session(
     timeout_sec: float = 30.0,
     cfg: LlmConfig | None = None,
 ) -> bool:
-    c = cfg or get_llm_config()
-    base = llm_server_base_url(c)
-    url = f"{base}{del_session_endpoint}/{session_id}"
-    from pallas.core.platform.ai_callback.ai_bearer import ai_bearer_headers
-
-    try:
-        response = await HTTPXClient.delete(url, headers=ai_bearer_headers(), timeout=timeout_sec)
-    except Exception:
-        logger.warning("RWKV chat session deletion failed for session [{}]", session_id)
-        return False
-    return bool(response) and response.status_code < 400
+    """遗留 RWKV 会话删除已退役：不再发起任何 HTTP 请求。"""
+    _ = (session_id, del_session_endpoint, timeout_sec, cfg)
+    return False

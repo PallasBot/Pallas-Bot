@@ -52,7 +52,9 @@ async def handle_switch_model(event: MessageEvent, args: str = CommandArg()) -> 
             f"Bot [{event.self_id}] switched its local inference model to [{resolved}]",
         )
     )
-    await switch_model_cmd.finish(f"已切换模型：{resolved}（无需重启 Celery，旧权重已卸载）")
+    await switch_model_cmd.finish(
+        f"已切换 Pallas 本地推理模型：{resolved}（无需重启 Celery，旧权重已卸载；不影响 MaiBot）"
+    )
 
 
 @unload_model_cmd.handle()
@@ -65,4 +67,4 @@ async def handle_unload_model(event: MessageEvent) -> None:
         await unload_model_cmd.finish(f"卸载模型失败：{exc}")
         return
     logger.info(format_plugin_event("unload_model", f"Bot [{event.self_id}] unloaded its local inference model"))
-    await unload_model_cmd.finish("已请求卸载当前本地模型；下次对话将按新配置重新加载。")
+    await unload_model_cmd.finish("已请求卸载 Pallas 本地推理模型；下次本地调用按新配置重新加载；不影响 MaiBot。")

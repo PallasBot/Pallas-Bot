@@ -14,29 +14,15 @@ def test_telemetry_metadata_allows_only_turn_linkage() -> None:
 
 
 @pytest.mark.asyncio
-async def test_submit_chat_task_keeps_behavior_metadata_but_exposes_safe_telemetry_context(
+async def test_submit_chat_task_is_retired_and_never_reaches_kernel(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from pallas.product.llm.client import submit_chat_task
     from pallas.product.llm.config import LlmConfig
-    from pallas.product.llm.models import ChatSubmitRequest, ChatSubmitResult
-    from pallas.product.llm.turn_telemetry import telemetry_metadata
+    from pallas.product.llm.models import ChatSubmitRequest
 
-    submit_kernel = AsyncMock(return_value=ChatSubmitResult(task_id="task-1", status="processing", ok=True))
-    monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_llm_chat_task", submit_kernel)
-    monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: False)
-    # submit gate 读全局配置，与用例 cfg 无关：放行以聚焦遥测元数据断言。
-    from pallas.product.llm.submit_gate import LlmSubmitGateResult
-
-    async def allow_gate() -> LlmSubmitGateResult:
-        return LlmSubmitGateResult(allowed=True)
-
-    monkeypatch.setattr("pallas.product.llm.client.assess_llm_submit_gate", allow_gate)
-    monkeypatch.setattr(
-        "pallas.product.llm.assembler.assemble_tool_bundle",
-        lambda **_kwargs: {"tools_enabled": False, "tool_schemas": []},
-    )
-    monkeypatch.setattr("pallas.product.llm.runtime_debug.append_request_snapshot", lambda **_kwargs: "snapshot-1")
+    submit_kernel = AsyncMock()
+    monkeypatch.setattr("pallas.product.llm.kernel_runner.submit_kernel_llm_chat_task", submit_kernel, raising=False)
 
     result = await submit_chat_task(
         ChatSubmitRequest(
@@ -45,26 +31,14 @@ async def test_submit_chat_task_keeps_behavior_metadata_but_exposes_safe_telemet
             user_text="短句",
             system_prompt="system",
             task="llm_chat",
-            llm_rewrite_metadata={
-                "turn_id": "turn-1",
-                "prompt": "secret",
-                "reply_target": "fact",
-            },
+            llm_rewrite_metadata={"turn_id": "turn-1", "prompt": "secret", "reply_target": "fact"},
         ),
-        # submit gate 现要求 provider 已配置；补最小 base_url + model 让用例
-        # 聚焦遥测元数据断言（kernel 提交本身已被 mock）。
-        cfg=LlmConfig(
-            llm_chat_enabled=True,
-            llm_governance_enabled=False,
-            llm_base_url="http://127.0.0.1:9/v1",
-            llm_model="test-model",
-        ),
+        cfg=LlmConfig(llm_chat_enabled=True, llm_base_url="http://127.0.0.1:9/v1", llm_model="test-model"),
     )
 
-    assert result.ok is True
-    metadata = submit_kernel.await_args.kwargs["metadata"]
-    assert metadata["reply_target"] == "fact"
-    assert telemetry_metadata(metadata) == {"turn_id": "turn-1"}
+    assert result.ok is False
+    assert result.status == "legacy_agent_retired"
+    submit_kernel.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -120,3 +94,23 @@ async def test_kernel_passes_turn_linkage_into_tool_loop_without_rewriting_metad
 
     assert seen["turn_id"] == "turn-1"
     assert seen["reply_target"] == "fact"
+
+
+@pytest.fixture(autouse=True)
+def _historical_legacy_agent_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """历史内核测试：自研 agent 生成已全局退役；还原旧聊天 exit gate 以隔离纯算法断言。"""
+    from pallas.product.llm import availability
+
+    async def _old_gate(bot_id, group_id, *, captured_enabled=True):
+        if not captured_enabled or not availability.llm_calls_enabled(availability.get_llm_config()):
+            return "global_disabled_after_submit"
+        if await availability.llm_plugin_disabled_for_scope(bot_id, group_id):
+            return "scope_disabled_after_submit"
+        if not availability.llm_calls_enabled(availability.get_llm_config()):
+            return "global_disabled_after_submit"
+        return ""
+
+    monkeypatch.setattr(availability, "llm_chat_exit_gate_reason", _old_gate)
+    from pallas.product.llm import kernel_runner
+
+    monkeypatch.setattr(kernel_runner, "llm_chat_exit_gate_reason", _old_gate)

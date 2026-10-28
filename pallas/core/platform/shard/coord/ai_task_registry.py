@@ -318,6 +318,10 @@ def build_ai_task_record(task_id: str, task_status: dict[str, Any]) -> dict[str,
 
 
 def register_ai_task(task_id: str, task_status: dict[str, Any]) -> str:
+    from pallas.core.platform.ai_callback.task_types import is_retired_chat_task_type
+
+    if is_retired_chat_task_type(task_status.get("task_type")):
+        return "conflict"  # retired chat task types never register new Redis work
     rec = build_ai_task_record(task_id, task_status)
     if rec is None:
         return "conflict"

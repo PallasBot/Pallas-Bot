@@ -2,14 +2,12 @@ import asyncio
 import time
 from collections.abc import Awaitable, Callable
 
-from nonebot import logger, on_message
+from nonebot import logger
 from nonebot.adapters import Bot, Event
 from nonebot.adapters.onebot.v11 import GroupMessageEvent
-from nonebot.rule import Rule
 from ulid import ULID
 
 from pallas.api.logging import format_plugin_event
-from pallas.api.perm import group_message_permission_for_command
 from pallas.core.foundation.config import TaskManager
 from pallas.core.platform.ai_callback.task_types import LLM_CHAT_TASK_TYPE
 from pallas.core.shared.reply_command_rule import extract_reply_id_from_raw_message
@@ -351,14 +349,6 @@ def llm_chat_rule(event: Event) -> bool:
     return isinstance(event, GroupMessageEvent)
 
 
-llm_chat_msg = on_message(
-    priority=get_llm_chat_config().llm_chat_min_priority + 1,
-    block=False,
-    rule=Rule(llm_chat_rule),
-    permission=group_message_permission_for_command("llm_chat.chat"),
-)
-
-
 async def _resolve_speak_aliases(bot_id: int) -> list[str]:
     bot_id = int(bot_id)
     now = time.monotonic()
@@ -399,7 +389,17 @@ async def latest_llm_assistant_reply(bot_id: int, group_id: int | None, user_id:
     return ""
 
 
-@llm_chat_msg.handle()
+async def _send_via_bot(bot: Bot, event: Event, message: object) -> object:
+    return await bot.send(event, message)
+
+
+def bound_send(bot: Bot, event: Event) -> Callable[[object], Awaitable[object]]:
+    async def _send(message: object) -> object:
+        return await _send_via_bot(bot, event, message)
+
+    return _send
+
+
 async def handle_llm_chat(
     bot: Bot,
     event: Event,
@@ -407,7 +407,8 @@ async def handle_llm_chat(
     send_message: Callable[[object], Awaitable[object]] | None = None,
 ):
     if send_message is None:
-        send_message = llm_chat_msg.send
+        send_message = bound_send(bot, event)
+
     from pallas.product.agent_bridge.runtime import bridge_suppresses
 
     if bridge_suppresses(bot.self_id, getattr(event, "group_id", None)):
@@ -1145,7 +1146,7 @@ async def prepare_and_submit_llm_chat_turn(
                         group_id=int(group_id),
                         user_id=int(user_id),
                         recent_bot_reply_count=recent_bot_reply_count,
-                        send_message=llm_chat_msg.send,
+                        send_message=bound_send(bot, event),
                         trigger_text=focus_text,
                     )
                 except Exception as exc:
@@ -1250,7 +1251,7 @@ async def prepare_and_submit_llm_chat_turn(
                         group_id=int(group_id),
                         user_id=int(user_id),
                         recent_bot_reply_count=recent_bot_reply_count,
-                        send_message=llm_chat_msg.send,
+                        send_message=bound_send(bot, event),
                         trigger_text=focus_text,
                     )
                 except Exception as exc:

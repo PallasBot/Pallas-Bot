@@ -1,14 +1,24 @@
 # LLM 输出路径
 
-本页标出普通聊天与接话的代码入口，方便改接线。用户向说明见 [LLM 对话与复读](/guide/llm-and-repeater)。
+本页说明 MaiBot 接管后的输出边界，并保留旧内置 LLM 聊天的实现索引。[LLM 对话与复读](/guide/llm-and-repeater) 中的非 LLM 复读能力仍保留，旧 LLM 聊天入口不再启用。
 
-普通 `@` 聊天走 Bot Provider，在 Bot 进程内完成；不要为这条路径增加 Pallas-Bot-AI / `:9099` / HTTP callback。媒体与遗留 RWKV 另见 [Agent 生命周期](agent-lifecycle.md) 与运维文档。
+## 当前输出边界
+
+聊天 agent 由独立 MaiBot 承担：群消息先经过 Pallas ingress 的权限、审核与命令分类，命令仍在 Pallas 执行；桥范围内的聊天仅采集并转发，MaiBot 文本回投再经桥校验和 Pallas 发送队列。桥关闭、断线、配置无效或范围外时不回退旧 agent。协议及限制见 [统一消息入口](message-runtime.md#实验性-maibot-桥默认关闭)。
+
+旧 LLM/酒后聊天 matcher 和 LLM direct handler 不再注册；纯语料主动发言、Repeater direct/复读接话、自动表情、跟图及 fanout RPC 保留，沿用现有开关与桥归属抑制以避免重复回复。`submit_chat_task`、kernel 聊天调度与 RWKV 聊天入口拒绝旧 LLM 生成。`llm_chat`、`ollama`、`chat` 任务拒绝新登记；历史任务回调原子领取后终止，不查找 Bot、不写入聊天结果、不调用媒体钩子或发送成功/失败回复。
+
+共享 Provider、Embedding、贴纸标注、媒体助手及显式命令工具仍保留。绘图、歌曲和 TTS 沿原媒体 callback 投递。旧工具 HTTP 入口不再默认注册，不能充当 MaiBot 工具网关。详见 [Agent 生命周期](agent-lifecycle.md)。
 
 ## 出口总闸
 
-所有 LLM 出口（`complete_chat_message`、`fetch_embeddings_sync`）统一受 `pallas.product.llm.availability.llm_calls_enabled` 约束：`LLM_CHAT_ENABLED` 为关，或 `llm_chat` 插件被全实例禁用时，直接不发请求。消息入口另有 `llm_plugin_disabled_for_scope` 做按牛/按群拦截；后台循环、work/embed 辅进程在各自任务入口自查同一作用域，避免绕过插件禁用。治理细节见 [插件治理](plugin-governance.md)。
+Pallas 共享 LLM 出口（`complete_chat_message`、`fetch_embeddings_sync`）仍受 `pallas.product.llm.availability.llm_calls_enabled` 约束：`LLM_CHAT_ENABLED` 为关，或 `llm_chat` 插件被全实例禁用时，不发请求。保留能力的后台循环与 work/embed 辅进程仍遵守各自作用域门禁。该开关不再启用旧聊天 agent，也不控制独立 MaiBot 的模型请求；不要为了退役旧聊天将它强制关闭而误伤 Embedding 或标注。治理细节见 [插件治理](plugin-governance.md)。
 
-## 两条出口
+## 历史内置聊天实现（已退役）
+
+下面的 LLM 流程、输出管线、telemetry、表达注入和预算记录仅供后续源码/数据清理时定位依赖，不是当前 LLM 运行流程；其中非 LLM Repeater 语料检索、投递与原始消息采集仍在使用。MaiBot 不自动继承旧 LLM 行为；历史数据不会自动删除或迁移。共享路由与媒体工具的保留不意味着旧 LLM 生成入口可重新启用。
+
+### 原有两条出口
 
 ```text
 群消息
@@ -31,7 +41,7 @@ Repeater 回放入站消息时优先将 OneBot `original_message`（入站结构
 
 普通 `llm_chat` 单轮生成共享一个预算对象（`pallas/product/llm/turn_budget.py`）：从 kernel 开始生成计时（deadline 锚在 job 起始，不在首次 provider 调用另起时钟），限制墙钟时长与真实 HTTP 尝试次数（`llm_chat_turn_timeout_sec`、`llm_chat_turn_max_http_attempts`）。候选准备、provider 补全、工具续轮、final、persona retry 与内联工具（如 `chat.recent_summary` 的工具内模型调用，经 `ToolInvokeContext` 运行期透传）都经同一对象计数，换密钥 / 换 provider / required→auto 不重置；provider 每个协议在真正 `client.post` 前领取一次并把 httpx 分阶段超时钳到剩余。预算耗尽时不再发起新请求：deadline 前已启动的工具允许正常收尾并保留结果，门禁或 provider 等待期间到期的工具不会被启动；只有当本 turn 动作全部成功完成且无截断时，才复用已取得的 `chat.reply`，否则诚实静默，persona firewall 不再触发重试。未开放 / 被拒 / 失败的动作，以及后台受理（queued、尚未真正执行）都不算完成，会保守地抑制既有完成话术；后台受理结果与既有 durable 续行机制保留，不被取消。该时限不是整轮硬墙钟上限，工具收尾与取消清理可以超过，不计入队列、前置上下文与投递；后台 durable 记忆等独立异步任务不继承该预算、也不被父轮停止取消。
 
-## LLM 输出管线
+## 历史 LLM 输出管线
 
 ![LLM 输出管线与表达数据粒度](/assets/llm-output-path.svg)
 
@@ -53,7 +63,7 @@ Repeater 回放入站消息时优先将 OneBot `original_message`（入站结构
 
 LLM 回调的文本发送会用异步上下文标记来源，供 `BaseBot.on_called_api` 的普通表情跟随后续任务继承；结构化表情走同一来源标记。LLM 来源在取图前及缓存读取后、实际发图前复核共享出口门禁。视觉表情任务将可选 `delivery.llm_origin` 持久化，work handler 与最终 dispatcher 继续检查；关闸时以固定原因落为 `failed`，不伪报 `sent`。缺少来源标记的既有视觉任务和 Repeater 发送保持原行为。
 
-## LLM turn telemetry
+## 历史 LLM turn telemetry
 
 LLM turn telemetry 从消息进入 `llm_chat` handler 后开始，以随机 `turn_id` 关联 `ingress`、speak perception、reply gate、necessity、submit、Provider、output 和 delivery 各阶段。Provider 保持空可用输出校验，并仅按协议结构把失败归为固定类别；拒绝、纯思考、截断、失败、无输出及未知原因不会把上游正文写入事件或作为 Bot 答复。首期不覆盖完全未匹配 `llm_chat` rule 的入站消息，也不改变任何门控、生成或投递决策。
 
@@ -63,7 +73,7 @@ LLM turn telemetry 从消息进入 `llm_chat` handler 后开始，以随机 `tur
 
 Telemetry 是 best-effort 的旁路观测：写 key、序列化、目录或文件失败时只记录限频运维日志，不阻断聊天。完整 prompt 和消息内容仍属于独立的 runtime snapshot/trace 调试路径，不能把两类数据混为同一份报告。
 
-## 表达数据粒度
+## 历史表达数据粒度
 
 | 数据 | 存储 | 粒度 | 影响 |
 | --- | --- | --- | --- |
@@ -72,13 +82,13 @@ Telemetry 是 best-effort 的旁路观测：写 key、序列化、目录或文�
 
 同群不同 bot 的表达指导互不共享；回复画像是群统计，同群所有 bot 共用。WebUI 管理入口见 `packages/pb_webui/llm_product_api.py`。
 
-## Prompt 组装
+## 历史 Prompt 组装
 
 at-chat 系统提示词 `pallas/product/persona/at_chat_system_prompt.txt` 只承载背景 / 输出边界 / 群聊边界等不变原则，不再内嵌具体对话示范；接话的差异化由语义风格按 **bot × 群** 注入（见上表「群表达指导」「真人接话参考」）。`ChatPromptAssembler`（`pallas/product/llm/assembler/chat_prompt.py`）按变化频率从低到高依次组装：persona 核心 → 群表达指导 / 真人接话参考（随 profile 有数据才注入）→ 近期上下文（检索块 → 群时间线）→ reply_shape（回复形状与输出契约）→ turn policy → 当前时间 → 工具上下文，使支持前缀缓存的 Provider 可命中更长的稳定前缀。
 
 ## 任务路由与模型选择
 
-所有 LLM 任务经 `resolve_endpoint_candidates_for_task(task)`（`pallas/product/llm/providers_store.py`）取提供方候选：
+Pallas 共享任务路由仍经 `resolve_endpoint_candidates_for_task(task)`（`pallas/product/llm/providers_store.py`）取提供方候选；下表也保留了旧聊天任务名，存在配置不表示任务仍会被调用。MaiBot 配置同步仅转换已支持的配置，不复用 Pallas 的运行期路由：
 
 ```text
 routing.tasks[task]                       → 主提供方（WebUI 任务编排写入）
@@ -113,8 +123,8 @@ provider.task_models[task] / default_model → 该提供方下的具体模型
 
 ## AI 回调与内部 IPC 鉴权边界
 
-- **服务身份**：AI→Bot 的 `/callback/*` 与受信工具入口 `/pallas/api/internal/llm/tools/execute` 复用同一 AI Bearer（`ai_extension.json` 的 token，或 `PALLAS_AI_API_TOKEN` / `TTS_API_TOKEN`）；空配置拒绝、常量时间比较。工具入口也接受维护者 `X-Pallas-Api-Key`。见 `pallas/core/platform/ai_callback/ai_bearer.py`。
-- **任务身份绑定**：工具执行只允许在已登记的 LLM 任务上下文内进行；`request_id` 必填且有界，上下文主体（bot/group/user/source_segments）一律由任务登记构造，body 身份仅作兼容断言，不一致拒绝；不接受 body 自授 `approved_tools`；工具名先经 registry 规范化再禁 `social.*`。
+- **服务身份**：AI→Bot 的 `/callback/*` 继续校验 AI Bearer（`ai_extension.json` 的 token，或 `PALLAS_AI_API_TOKEN` / `TTS_API_TOKEN`）；空配置拒绝、常量时间比较。旧 `/pallas/api/internal/llm/tools/execute` 不再默认注册，其历史鉴权代码不是 MaiBot 工具接入。见 `pallas/core/platform/ai_callback/ai_bearer.py`。
+- **旧聊天终止**：内部登记认证后，旧聊天类型返回 HTTP 410 `legacy_agent_retired`；晚到回调在领取旧任务后返回 HTTP 200 `{"message":"ok","status":"legacy_agent_retired"}`，不进入旧投递。任务类型按去空白和小写精确区分，不将包含 `chat` 的整个语音任务集合一并禁用。
 - **内部 IPC**：work aux→Bot 的任务登记/删除（`/pallas/api/internal/ai/tasks*`）强制 `X-Pallas-Internal-Token`，由共享根密钥 `data/pallas_console/session_secret.bin` 按固定用途标签 HMAC-SHA256 派生（`internal_auth.py`），根密钥不下发 AI/浏览器；loopback 仅纵深防御。
 - **解析前有界**：`boundary_guard.py` 对上述入口先 header 鉴权、再按实际 ASGI receive 字节累计，超限 413（Content-Length 仅快速拒绝，chunked 同样有界）；JSON 2MiB、回调单文件 64MiB、字段/文本/trace/history 另有限额，初值可用 repo 设置覆盖。鉴权相关 header（`Authorization` / `X-Pallas-Internal-Token` / `X-Pallas-Api-Key`）重复出现视为歧义直接 400；畸形或超长 Content-Length 记 400/413，不做无界 `int()`。
 - **原子领取与终态**：有 Redis 协调时，登记、领取、取消各自用单个短 Lua 脚本原子完成——登记在同一次调用内检查终态、比较不可变绑定与受保护内容（`song_id`/来源消息段）后创建；领取一次完成取记录、删键与写终态（无独立门，空记录不触碰键）；取消写终态并删键。同一 ID 至多领取一次、终态在 TTL 内不得复活；协调已启用但不可用（client 缺失/读写异常）统一抛 `AiTaskRedisError` 映射 503，不静默降级。无协调 unified 仍在本地锁内领取并即落终态。
@@ -122,7 +132,7 @@ provider.task_models[task] / default_model → 该提供方下的具体模型
 - **pending 查询纯读**：待处理任务查询（song 绑定 peek、hub 路由、tools 上下文）缺失或过期返回「未找到」，不写终态、不取消该 ID；读取故障抛 `AiTaskRedisError`，在 song peek / hub / tools 边界映射 503（不降级为 404/500），且不产生写。取消只有在共享终态提交成功后才确认成功（DELETE 失败映射 503），失败后本地不落终态。
 - **hub→worker 转发**：hub 先认证/校验/限字节再转发，只构造必需 auth header、不转 Cookie/Forwarded，`trust_env=False` 且不跟随重定向；worker 侧同样校验 AI Bearer，保留 413 等不可重试状态。
 
-## 约束
+## 历史内置生成约束
 
 - 怒气门控发生在 direct runtime 与 matcher 之前。静默不是丢弃入站消息：消息仍持久化并带 `suppressed_by_rage=true`，但不会被视为 Bot 已回复，也不会进入 LLM、工具或 Repeater 处理。
 - 攻击增量由攻击词数量、短窗口连续攻击次数和当前怒气共同决定；75 分进入静默，低于 75 才恢复。静默期间不重复累积怒气、不重复扣好感、不延长截止时间。
@@ -136,6 +146,6 @@ provider.task_models[task] / default_model → 该提供方下的具体模型
 ## 后续阅读
 
 - [LLM 输出护栏与离线评测](llm-output-guardrails.md)
-- [Bot 内置 Agent 生命周期](agent-lifecycle.md)
+- [Agent 生命周期与旧链路退役](agent-lifecycle.md)
 - [架构总览](overview.md)
 - [LLM 与 AI 运维](/maintainer/operate/llm-and-ai)

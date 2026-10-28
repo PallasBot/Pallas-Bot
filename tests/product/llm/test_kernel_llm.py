@@ -22,6 +22,25 @@ def _allow_live_llm_gate(monkeypatch: pytest.MonkeyPatch, cfg: LlmConfig) -> Non
     monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", AsyncMock(return_value=False))
 
 
+@pytest.fixture(autouse=True)
+def _historical_legacy_agent_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """历史内核测试：自研 agent 生成已全局退役；这里把聊天 exit gate 还原为旧语义，
+    以便隔离 provider/tool_loop/kernel 的纯算法断言（不改生产、不加复活开关）。"""
+    from pallas.product.llm import availability, kernel_runner
+
+    async def _old_gate(bot_id, group_id, *, captured_enabled=True):
+        if not captured_enabled or not availability.llm_calls_enabled(availability.get_llm_config()):
+            return "global_disabled_after_submit"
+        if await availability.llm_plugin_disabled_for_scope(bot_id, group_id):
+            return "scope_disabled_after_submit"
+        if not availability.llm_calls_enabled(availability.get_llm_config()):
+            return "global_disabled_after_submit"
+        return ""
+
+    monkeypatch.setattr(availability, "llm_chat_exit_gate_reason", _old_gate)
+    monkeypatch.setattr(kernel_runner, "llm_chat_exit_gate_reason", _old_gate)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("system_prompt", [None, "基础人格"])
 async def test_tool_loop_keeps_one_system_message_when_background_events_arrive(
@@ -1099,48 +1118,14 @@ async def test_tool_loop_one_round(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_submit_chat_task_kernel_schedules_deliver(monkeypatch: pytest.MonkeyPatch) -> None:
-    clear_llm_config_cache()
-    delivered: list[tuple[str, str, str]] = []
-
-    cfg = LlmConfig(
-        llm_base_url="http://example.test/v1",
-        llm_model="demo",
-        llm_chat_enabled=True,
-        use_unified_chat_api=True,
-        llm_governance_enabled=False,
-        llm_tools_enabled=False,
+async def test_submit_chat_task_is_retired_and_schedules_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
+    # 退役契约：公开提交入口最先返回，不再装配上下文/路由/预算或调度内核任务。
+    scheduled: list[str] = []
+    monkeypatch.setattr(
+        "pallas.product.llm.kernel_runner.submit_kernel_llm_chat_task",
+        lambda *a, **k: scheduled.append("schedule"),
+        raising=False,
     )
-    _allow_live_llm_gate(monkeypatch, cfg)
-
-    async def fake_complete(*, system_prompt, messages, metadata=None, cfg=None, **_kwargs):
-        return "内核回复", {"role": "assistant", "content": "内核回复"}
-
-    async def fake_deliver(
-        task_id,
-        *,
-        status,
-        text=None,
-        agent_trace=None,
-        history_summary=None,
-        history_keep_messages=None,
-    ):
-        delivered.append((task_id, status, text or ""))
-        return {"message": "ok"}
-
-    from pallas.product.llm.submit_gate import LlmSubmitGateResult
-
-    async def allow_gate() -> LlmSubmitGateResult:
-        return LlmSubmitGateResult(allowed=True)
-
-    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.client.assess_llm_submit_gate", allow_gate)
-    monkeypatch.setattr("pallas.product.llm.kernel_runner.complete_with_tool_loop", fake_complete)
-    monkeypatch.setattr("pallas.product.llm.kernel_runner.deliver_llm_chat_result", fake_deliver)
-    monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: False)
-    monkeypatch.setattr("pallas.product.llm.tools.registry.tool_metadata_for_chat", lambda **kwargs: {})
-    monkeypatch.setattr("pallas.product.llm.runtime_debug.append_request_snapshot", lambda **kwargs: "snap")
-
     from pallas.product.llm.client import submit_chat_task
 
     result = await submit_chat_task(
@@ -1154,18 +1139,11 @@ async def test_submit_chat_task_kernel_schedules_deliver(monkeypatch: pytest.Mon
             user_id=3,
             task="llm_chat",
         ),
-        cfg=cfg,
     )
-    assert result.ok is True
-    assert result.task_id == "req-kernel-1"
-    assert result.status == "processing"
+    assert result.ok is False
+    assert result.status == "legacy_agent_retired"
+    assert scheduled == []
 
-    for _ in range(50):
-        if delivered:
-            break
-        await asyncio.sleep(0.02)
-    assert delivered == [("req-kernel-1", "success", "内核回复")]
-    clear_llm_config_cache()
 
 
 @pytest.mark.asyncio

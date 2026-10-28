@@ -15,7 +15,6 @@ def configure_direct_runtime() -> None:
     from packages.drink.direct import DrinkDirectHandler
     from packages.greeting.direct import CallMeDirectHandler
     from packages.help.direct import HelpDirectHandler
-    from packages.llm_chat.message_runtime_handler import LlmChatDirectHandler
     from packages.pb_core.direct import ConsoleDirectHandler, PluginsDirectHandler, StatusDirectHandler
     from packages.repeater.message_runtime_handler import RepeaterDirectHandler
 
@@ -26,7 +25,6 @@ def configure_direct_runtime() -> None:
     registry.register(ConsoleDirectHandler())
     registry.register(PluginsDirectHandler())
     registry.register(RepeaterDirectHandler())
-    registry.register(LlmChatDirectHandler())
     from .declarations import build_declaration_handlers
 
     declaration_handlers, diagnostics = build_declaration_handlers()

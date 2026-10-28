@@ -4,7 +4,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from pallas.product.llm.client import delete_llm_chat_session, resolve_chat_messages, submit_chat_task
+from pallas.product.llm.client import (
+    _submit_chat_task_impl,
+    delete_llm_chat_session,
+    resolve_chat_messages,
+)
 from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.models import ChatCompletionMessage, ChatSubmitRequest, ChatSubmitResult
 from pallas.product.llm.task_routing import TaskRouteSpec
@@ -47,7 +51,7 @@ async def test_submit_chat_task_legacy_settings_schedule_kernel(monkeypatch: pyt
         legacy_chat_allowed=True,
         use_unified_chat_api=False,
     )
-    result = await submit_chat_task(
+    result = await _submit_chat_task_impl(
         ChatSubmitRequest(
             request_id="req-1",
             session_id="sess-1",
@@ -73,7 +77,7 @@ async def test_submit_chat_task_unified_settings_schedule_kernel(monkeypatch: py
     monkeypatch.setattr("pallas.product.llm.client.is_llm_session_store_available", lambda: False)
 
     cfg = LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True, llm_governance_enabled=False)
-    result = await submit_chat_task(
+    result = await _submit_chat_task_impl(
         ChatSubmitRequest(
             request_id="req-u1",
             session_id="sess-u1",
@@ -124,7 +128,7 @@ async def test_submit_chat_task_propagates_group_timeline_images_to_kernel_metad
         ],
     )
 
-    result = await submit_chat_task(request, cfg=LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True))
+    result = await _submit_chat_task_impl(request, cfg=LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True))
 
     assert result.ok is True
     assert submit_kernel.await_args.kwargs["metadata"]["group_timeline_images"] == request.group_timeline_images
@@ -169,7 +173,7 @@ async def test_submit_chat_task_injects_referenced_image_urls_from_replied_messa
         reply_to_message_id=8888,
     )
 
-    result = await submit_chat_task(request, cfg=LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True))
+    result = await _submit_chat_task_impl(request, cfg=LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True))
 
     assert result.ok is True
     metadata = submit_kernel.await_args.kwargs["metadata"]
@@ -211,7 +215,7 @@ async def test_submit_chat_task_injects_referenced_image_urls_from_event_reply_m
         },
     )
 
-    result = await submit_chat_task(request, cfg=LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True))
+    result = await _submit_chat_task_impl(request, cfg=LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True))
 
     assert result.ok is True
     metadata = submit_kernel.await_args.kwargs["metadata"]
@@ -258,7 +262,7 @@ async def test_submit_chat_task_injects_referenced_image_urls_from_get_msg_fallb
         reply_to_message_id=9999,
     )
 
-    result = await submit_chat_task(
+    result = await _submit_chat_task_impl(
         request,
         cfg=LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True),
         bot=bot,
@@ -292,7 +296,7 @@ async def test_submit_chat_task_unified_llm_chat_payload_includes_agent_stage_pl
     )
 
     cfg = LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True, llm_governance_enabled=False)
-    result = await submit_chat_task(
+    result = await _submit_chat_task_impl(
         ChatSubmitRequest(
             request_id="req-u2",
             session_id="sess-u2",
@@ -338,7 +342,7 @@ async def test_serious_reply_budget_reaches_responses_provider_payload(monkeypat
         lambda **_kwargs: {"tools_enabled": False, "tool_schemas": []},
     )
 
-    result = await submit_chat_task(
+    result = await _submit_chat_task_impl(
         ChatSubmitRequest(
             request_id="req-serious-budget",
             session_id="sess-serious-budget",
@@ -380,7 +384,7 @@ async def test_tool_reply_budget_reaches_anthropic_provider_payload(monkeypatch:
         },
     )
 
-    result = await submit_chat_task(
+    result = await _submit_chat_task_impl(
         ChatSubmitRequest(
             request_id="req-tool-budget",
             session_id="sess-tool-budget",
@@ -422,7 +426,7 @@ async def test_submit_chat_task_kernel_uses_pg_session_messages(monkeypatch: pyt
     monkeypatch.setattr("pallas.product.llm.client.build_llm_chat_messages", fake_build_messages)
 
     cfg = LlmConfig(use_unified_chat_api=True, llm_chat_enabled=True, llm_governance_enabled=False)
-    result = await submit_chat_task(
+    result = await _submit_chat_task_impl(
         ChatSubmitRequest(
             request_id="req-pg",
             session_id="sess-stable",
@@ -457,7 +461,7 @@ async def test_submit_chat_task_does_not_rebudget_prepared_messages_after_config
     ]
     task_snapshot = {"ambient_turns": [{"turn_id": "ambient:1"}]}
 
-    result = await submit_chat_task(
+    result = await _submit_chat_task_impl(
         ChatSubmitRequest(
             request_id="req-prepared",
             session_id="sess-prepared",
@@ -540,7 +544,7 @@ async def test_submit_chat_task_metadata_includes_runtime_state_summary_gate(mon
         llm_session_summary_threshold=24,
         llm_session_summary_keep_messages=6,
     )
-    result = await submit_chat_task(
+    result = await _submit_chat_task_impl(
         ChatSubmitRequest(
             request_id="req-sum",
             session_id="sess-sum",
@@ -574,7 +578,7 @@ async def test_submit_chat_task_metadata_disables_summary_when_session_off(monke
         llm_session_enabled=False,
         llm_session_summary_enabled=True,
     )
-    await submit_chat_task(
+    await _submit_chat_task_impl(
         ChatSubmitRequest(
             request_id="req-sum-off",
             session_id="sess-sum-off",
@@ -592,21 +596,9 @@ async def test_submit_chat_task_metadata_disables_summary_when_session_off(monke
 
 
 @pytest.mark.asyncio
-async def test_delete_llm_chat_session_unified(monkeypatch: pytest.MonkeyPatch) -> None:
-    captured: dict = {}
-
-    class FakeResponse:
-        status_code = 200
-
-    async def fake_delete(url: str, **kwargs):
-        captured["url"] = url
-        return FakeResponse()
-
-    monkeypatch.setattr("pallas.product.llm.client.HTTPXClient.delete", fake_delete)
-
-    ok = await delete_llm_chat_session("bot_group", cfg=LlmConfig(use_unified_chat_api=True))
-    assert ok is True
-    assert captured["url"] == "http://127.0.0.1:9099/api/v1/chat/completions/session/bot_group"
+async def test_delete_llm_chat_session_is_retired_without_http() -> None:
+    # 会话删除已退役：不再 HTTP，直接返回 False（共享媒体/模型接口不受影响）。
+    assert await delete_llm_chat_session("bot_group", cfg=LlmConfig(use_unified_chat_api=True)) is False
 
 
 @pytest.mark.asyncio
@@ -622,7 +614,7 @@ async def test_submit_chat_task_schedules_kernel_when_snapshot_persistence_fails
 
     monkeypatch.setattr("pallas.product.llm.runtime_debug.request_snapshot_path", broken_snapshot_path)
 
-    result = await submit_chat_task(
+    result = await _submit_chat_task_impl(
         ChatSubmitRequest(
             request_id="req-snap-fail",
             session_id="sess-snap-fail",
@@ -644,7 +636,7 @@ async def test_submit_chat_task_schedules_kernel_when_snapshot_persistence_fails
 @pytest.mark.asyncio
 async def test_submit_chat_task_rejects_when_llm_chat_disabled() -> None:
     cfg = LlmConfig(llm_chat_enabled=False)
-    result = await submit_chat_task(
+    result = await _submit_chat_task_impl(
         ChatSubmitRequest(
             request_id="req-off",
             session_id="sess-off",
@@ -659,7 +651,7 @@ async def test_submit_chat_task_rejects_when_llm_chat_disabled() -> None:
 
 @pytest.mark.asyncio
 async def test_submit_chat_task_rejects_empty_user_text() -> None:
-    result = await submit_chat_task(
+    result = await _submit_chat_task_impl(
         ChatSubmitRequest(
             request_id="req-2",
             session_id="sess-2",
@@ -718,3 +710,24 @@ def test_resolve_llm_chat_enabled_priority(monkeypatch: pytest.MonkeyPatch) -> N
     set_env({})
     assert resolve_llm_chat_enabled() is False
     assert resolve_legacy_rwkv_drunk_chat_enabled() is False
+
+
+@pytest.fixture(autouse=True)
+def _historical_legacy_agent_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """历史提交装配测试：自研 agent 生成已全局退役；还原旧聊天 exit gate 以隔离
+    上下文装配/预算/元数据的纯算法断言（不改生产、不加复活开关）。"""
+    from pallas.product.llm import availability
+
+    async def _old_gate(bot_id, group_id, *, captured_enabled=True):
+        if not captured_enabled or not availability.llm_calls_enabled(availability.get_llm_config()):
+            return "global_disabled_after_submit"
+        if await availability.llm_plugin_disabled_for_scope(bot_id, group_id):
+            return "scope_disabled_after_submit"
+        if not availability.llm_calls_enabled(availability.get_llm_config()):
+            return "global_disabled_after_submit"
+        return ""
+
+    monkeypatch.setattr(availability, "llm_chat_exit_gate_reason", _old_gate)
+    from pallas.product.llm import kernel_runner
+
+    monkeypatch.setattr(kernel_runner, "llm_chat_exit_gate_reason", _old_gate)

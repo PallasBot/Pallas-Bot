@@ -24,7 +24,7 @@ def test_llm_chat_clear_tool_registers(monkeypatch: pytest.MonkeyPatch) -> None:
         metadata = __plugin_meta__
 
     monkeypatch.setattr("nonebot.get_loaded_plugins", lambda: [FakePlugin()])
-    count = register_plugin_command_tools()
-    assert count >= 1
+    register_plugin_command_tools()
     names = {item["function"]["name"] for item in tool_openai_schemas()}
-    assert "llm_chat__clear" in names
+    # 旧 clear 自动工具指引已退役，不再作为可调用工具暴露
+    assert "llm_chat__clear" not in names

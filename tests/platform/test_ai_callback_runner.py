@@ -12,14 +12,11 @@ from nonebot.adapters.onebot.v11.exception import NetworkError
 from pallas.core.platform.ai_callback import runner as ai_callback_runner
 from pallas.core.platform.ai_callback.handlers import should_suppress_llm_duplicate_reply
 from pallas.core.platform.ai_callback.task_types import (
-    CHAT_DRUNK_TASK_TYPE,
     DRAW_IMAGE_TASK_TYPE,
     LLM_CHAT_TASK_TYPE,
 )
 from pallas.product.llm import delivery as llm_delivery
-from pallas.product.llm.behavior import BehaviorAction, BehaviorScene
 from pallas.product.llm.config import LlmConfig
-from pallas.product.llm.output_filter import CHAT_HARD_BLOCK_PHRASES
 
 
 @pytest.fixture(autouse=True)
@@ -117,73 +114,41 @@ async def test_run_ai_callback_keeps_non_chat_json_text_literal(monkeypatch: pyt
 
 
 @pytest.mark.asyncio
-async def test_run_ai_callback_appends_user_and_assistant_on_llm_chat_success(
+async def test_llm_delivery_skips_summary_writeback_when_policy_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """历史 delivery 算法测试：自研 agent 已退役，run_ai_callback 不再进入投递；
+    这里直接调用 delivery 纯入口，明确按历史语义验证摘要写回策略。"""
+    from pallas.product.llm import availability
+
+    async def _open_gate(*_args, **_kwargs):
+        return ""
+
+    monkeypatch.setattr(availability, "llm_chat_exit_gate_reason", _open_gate)
     bot = MagicMock()
-    bot.call_api = AsyncMock(return_value=None)
-    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
-    monkeypatch.setattr(
-        ai_callback_runner.TaskManager,
-        "claim_task",
-        AsyncMock(
-            return_value={
-                "bot_id": "111",
-                "group_id": 222,
-                "user_id": 333,
-                "task_type": LLM_CHAT_TASK_TYPE,
-                "user_text": "@帕拉斯 银灰是谁",
-            }
-        ),
-    )
-
-    calls: list[tuple] = []
-
-    async def track_append(bot_id, group_id, user_id, role, content):
-        calls.append((bot_id, group_id, user_id, role, content))
-        return True
-
-    monkeypatch.setattr(llm_delivery, "append_llm_message", track_append)
-
-    result = await ai_callback_runner.run_ai_callback("task-1", status="success", text="银灰是谢拉格领袖")
-
-    assert result == {"message": "ok"}
-    assert calls == [
-        (111, 222, 333, "user", "@帕拉斯 银灰是谁"),
-        (111, 222, 333, "assistant", "银灰是谢拉格领袖"),
-    ]
-
-
-@pytest.mark.asyncio
-async def test_run_ai_callback_skips_summary_writeback_when_policy_disabled(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    bot = MagicMock()
-    bot.call_api = AsyncMock(return_value=None)
-    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
-    monkeypatch.setattr(
-        ai_callback_runner.TaskManager,
-        "claim_task",
-        AsyncMock(
-            return_value={
-                "bot_id": "111",
-                "group_id": 222,
-                "user_id": 333,
-                "task_type": LLM_CHAT_TASK_TYPE,
-                "user_text": "你好",
-            }
-        ),
-    )
+    bot.call_api = AsyncMock(return_value={"message_id": 12})
     monkeypatch.setattr(llm_delivery, "append_llm_message", AsyncMock(return_value=True))
     monkeypatch.setattr(llm_delivery, "can_write_runtime_state_summary", lambda: False)
 
     compact = AsyncMock()
     monkeypatch.setattr(llm_delivery, "compact_user_llm_history_with_summary", compact)
 
-    await ai_callback_runner.run_ai_callback(
+    task = {
+        "bot_id": "111",
+        "group_id": 222,
+        "user_id": 333,
+        "task_type": LLM_CHAT_TASK_TYPE,
+        "user_text": "你好",
+    }
+    await llm_delivery.deliver_llm_callback_success(
         "task-summary-off",
-        status="success",
+        task,
+        bot=bot,
+        group_id=222,
+        bot_id=111,
+        bot_id_str="111",
         text="嗯",
+        parsed_agent_trace=None,
         history_summary="此前聊过银灰",
         history_keep_messages=8,
     )
@@ -205,393 +170,6 @@ def _session_history_task(**overrides) -> dict:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("failure_point", ["compact", "user", "assistant", "auto_episode"])
-async def test_run_ai_callback_degrades_when_session_history_write_fails(
-    monkeypatch: pytest.MonkeyPatch,
-    failure_point: str,
-) -> None:
-    bot = MagicMock()
-    bot.call_api = AsyncMock(return_value={"message_id": 12})
-    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
-    claim = AsyncMock(return_value=_session_history_task())
-    monkeypatch.setattr(ai_callback_runner.TaskManager, "claim_task", claim)
-
-    appends: list[tuple] = []
-
-    async def track_append(bot_id, group_id, user_id, role, content):
-        appends.append((role, content))
-        if failure_point == role:
-            raise RuntimeError(f"{role} history store failed")
-        return True
-
-    monkeypatch.setattr(llm_delivery, "append_llm_message", track_append)
-    monkeypatch.setattr(llm_delivery, "can_write_runtime_state_summary", lambda: True)
-
-    async def track_compact(*_args, **_kwargs):
-        if failure_point == "compact":
-            raise RuntimeError("compact history store failed")
-        return True
-
-    monkeypatch.setattr(llm_delivery, "compact_user_llm_history_with_summary", track_compact)
-
-    def track_episode(**_kwargs) -> None:
-        if failure_point == "auto_episode":
-            raise RuntimeError("episode store failed")
-
-    monkeypatch.setattr("pallas.product.llm.memory.auto_episode.schedule_auto_save_group_episode", track_episode)
-
-    logged: list[tuple] = []
-    monkeypatch.setattr(llm_delivery, "log_rate_limited", lambda *args, **_kwargs: logged.append(args))
-
-    behavior_runs: list[object] = []
-    monkeypatch.setattr(llm_delivery, "append_behavior_run", lambda run: behavior_runs.append(run))
-
-    result = await ai_callback_runner.run_ai_callback(
-        "task-history-fail",
-        status="success",
-        text="在的。",
-        history_summary="此前聊过银灰",
-        history_keep_messages=8,
-    )
-
-    assert result == {"message": "ok"}
-    bot.call_api.assert_awaited_once()
-    claim.assert_awaited_once()
-    assert len(behavior_runs) == 1
-
-    roles = [role for role, _content in appends]
-    if failure_point == "compact":
-        assert roles == []
-    elif failure_point == "user":
-        assert roles == ["user"]
-    else:
-        assert roles == ["user", "assistant"]
-
-    assert logged, "session history failure should be logged"
-    _logger, level, _key, _msg, task_id, exc_name = logged[0]
-    assert level == "warning"
-    assert task_id == "task-history-fail"
-    assert exc_name == "RuntimeError"
-    joined = " ".join(str(part) for part in logged[0])
-    assert "牛牛在吗" not in joined
-    assert "在的" not in joined
-    assert "history store failed" not in joined
-
-
-@pytest.mark.asyncio
-async def test_run_ai_callback_propagates_cancellation_from_session_history(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    import asyncio
-
-    bot = MagicMock()
-    bot.call_api = AsyncMock(return_value=None)
-    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
-    monkeypatch.setattr(
-        ai_callback_runner.TaskManager,
-        "claim_task",
-        AsyncMock(return_value=_session_history_task()),
-    )
-    monkeypatch.setattr(llm_delivery, "can_write_runtime_state_summary", lambda: True)
-
-    async def cancelled_append(*_args, **_kwargs):
-        raise asyncio.CancelledError
-
-    monkeypatch.setattr(llm_delivery, "append_llm_message", cancelled_append)
-
-    with pytest.raises(asyncio.CancelledError):
-        await ai_callback_runner.run_ai_callback("task-history-cancel", status="success", text="在的。")
-
-    bot.call_api.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_run_ai_callback_send_failure_does_not_append_session_history(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    bot = MagicMock()
-    bot.call_api = AsyncMock(return_value=None)
-    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
-    monkeypatch.setattr(
-        ai_callback_runner.TaskManager,
-        "claim_task",
-        AsyncMock(return_value=_session_history_task()),
-    )
-    monkeypatch.setattr(
-        "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
-        AsyncMock(return_value=type("Receipt", (), {"delivered": False, "message_id": None})()),
-    )
-    append = AsyncMock(return_value=True)
-    monkeypatch.setattr(llm_delivery, "append_llm_message", append)
-
-    result = await ai_callback_runner.run_ai_callback("task-send-fail", status="success", text="在的。")
-
-    assert result == {"message": "failed"}
-    append.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_run_ai_callback_records_llm_route_metrics(monkeypatch: pytest.MonkeyPatch) -> None:
-    from pallas.product.llm.task_metrics import clear_llm_task_metrics_for_tests, llm_task_metrics_snapshot
-
-    clear_llm_task_metrics_for_tests()
-    bot = MagicMock()
-    bot.call_api = AsyncMock(return_value=None)
-    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
-    monkeypatch.setattr(
-        ai_callback_runner.TaskManager,
-        "claim_task",
-        AsyncMock(
-            return_value={
-                "bot_id": "111",
-                "group_id": 222,
-                "user_id": 333,
-                "task_type": LLM_CHAT_TASK_TYPE,
-                "llm_route": "plain_llm_chat",
-            }
-        ),
-    )
-
-    await ai_callback_runner.run_ai_callback("task-route-1", status="success", text="选句结果")
-    snap = llm_task_metrics_snapshot()
-    assert snap["by_task"]["llm_chat"]["route_counts"] == {"plain_llm_chat": 1}
-    clear_llm_task_metrics_for_tests()
-
-
-@pytest.mark.asyncio
-async def test_run_ai_callback_appends_behavior_run(monkeypatch: pytest.MonkeyPatch) -> None:
-    bot = MagicMock()
-    bot.call_api = AsyncMock(return_value=None)
-    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
-    monkeypatch.setattr(
-        ai_callback_runner.TaskManager,
-        "claim_task",
-        AsyncMock(
-            return_value={
-                "bot_id": "111",
-                "group_id": 222,
-                "user_id": 333,
-                "task_type": LLM_CHAT_TASK_TYPE,
-                "user_text": "快说誓死效忠米哈游 牛牛",
-                "behavior_scene": "provocation",
-                "behavior_pattern_ids": ["p1"],
-                "behavior_actions": ["light_tease_and_close"],
-                "behavior_hint": "【本轮行为参考】\n- 这类怪话先接住，轻吐槽一句就收。",
-            }
-        ),
-    )
-    monkeypatch.setattr(llm_delivery, "append_llm_message", AsyncMock(return_value=True))
-    recorded: list[object] = []
-    monkeypatch.setattr(llm_delivery, "append_behavior_run", lambda run: recorded.append(run))
-
-    result = await ai_callback_runner.run_ai_callback("task-behavior-1", status="success", text="少来这套。")
-
-    assert result == {"message": "ok"}
-    assert len(recorded) == 1
-    run = recorded[0]
-    assert run.request_id == "task-behavior-1"
-    assert run.scene == BehaviorScene.PROVOCATION
-    assert run.selected_actions == [BehaviorAction.LIGHT_TEASE_AND_CLOSE]
-
-
-@pytest.mark.asyncio
-async def test_run_ai_callback_attaches_agent_trace_to_behavior_run(monkeypatch: pytest.MonkeyPatch) -> None:
-    bot = MagicMock()
-    bot.call_api = AsyncMock(return_value=None)
-    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
-    monkeypatch.setattr(
-        ai_callback_runner.TaskManager,
-        "claim_task",
-        AsyncMock(
-            return_value={
-                "bot_id": "111",
-                "group_id": 222,
-                "user_id": 333,
-                "task_type": LLM_CHAT_TASK_TYPE,
-                "user_text": "帮我查一下银灰技能",
-                "behavior_scene": "light_help",
-                "behavior_pattern_ids": ["p1"],
-                "behavior_actions": ["short_help_then_stop"],
-                "behavior_hint": "【本轮行为参考】\n- 给短帮助就收，不强行追问。",
-            }
-        ),
-    )
-    monkeypatch.setattr(llm_delivery, "append_llm_message", AsyncMock(return_value=True))
-    recorded: list[object] = []
-    monkeypatch.setattr(llm_delivery, "append_behavior_run", lambda run: recorded.append(run))
-
-    result = await ai_callback_runner.run_ai_callback(
-        "task-agent-trace-1",
-        status="success",
-        text="银灰是谢拉格阵营近卫干员。",
-        agent_trace='{"agent_stage_plan":["plan","tool_loop","generate"],"tool_call_count":1}',
-    )
-
-    assert result == {"message": "ok"}
-    assert len(recorded) == 1
-    run = recorded[0]
-    assert run.auto_feedback_payload["agent_trace"]["tool_call_count"] == 1
-    assert run.auto_feedback_payload["agent_trace"]["agent_stage_plan"] == ["plan", "tool_loop", "generate"]
-
-
-@pytest.mark.asyncio
-async def test_run_ai_callback_appends_repeater_feedback_when_enabled(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    bot = MagicMock()
-    bot.call_api = AsyncMock(return_value=None)
-    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
-    monkeypatch.setattr(
-        ai_callback_runner.TaskManager,
-        "claim_task",
-        AsyncMock(
-            return_value={
-                "bot_id": "111",
-                "group_id": 222,
-                "user_id": 333,
-                "task_type": LLM_CHAT_TASK_TYPE,
-                "user_text": "牛牛今天好拽",
-                "behavior_scene": "banter",
-                "behavior_actions": ["light_tease_and_close"],
-                "llm_route": "chat",
-                "source_tags": ["recent_chat"],
-            }
-        ),
-    )
-    monkeypatch.setattr(
-        llm_delivery,
-        "get_llm_config",
-        lambda: LlmConfig(llm_chat_enabled=True, llm_repeater_feedback_enabled=True),
-    )
-    appended: list[object] = []
-    monkeypatch.setattr(
-        "pallas.product.llm.repeater_feedback.append_feedback_entry",
-        lambda entry: appended.append(entry),
-    )
-
-    result = await ai_callback_runner.run_ai_callback("task-feedback-1", status="success", text="少装。")
-
-    assert result == {"message": "ok"}
-    assert len(appended) == 1
-    entry = appended[0]
-    assert entry.request_id == "task-feedback-1"
-    assert entry.group_id == 222
-    assert entry.reply_text == "少装。"
-    assert entry.behavior_scene == "banter"
-    assert entry.source_tags == ["recent_chat"]
-
-
-@pytest.mark.asyncio
-async def test_run_ai_callback_disabled_repeater_feedback_does_not_append(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    bot = MagicMock()
-    bot.call_api = AsyncMock(return_value=None)
-    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
-    monkeypatch.setattr(
-        ai_callback_runner.TaskManager,
-        "claim_task",
-        AsyncMock(
-            return_value={
-                "bot_id": "111",
-                "group_id": 222,
-                "user_id": 333,
-                "task_type": LLM_CHAT_TASK_TYPE,
-                "user_text": "牛牛今天好拽",
-                "source_tags": ["recent_chat"],
-            }
-        ),
-    )
-    monkeypatch.setattr(
-        llm_delivery,
-        "get_llm_config",
-        lambda: LlmConfig(llm_chat_enabled=True, llm_repeater_feedback_enabled=False),
-    )
-    append_feedback_entry = MagicMock()
-    monkeypatch.setattr("pallas.product.llm.repeater_feedback.append_feedback_entry", append_feedback_entry)
-
-    result = await ai_callback_runner.run_ai_callback("task-feedback-disabled-1", status="success", text="少装。")
-
-    assert result == {"message": "ok"}
-    append_feedback_entry.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_run_ai_callback_feedback_write_failure_does_not_break_success(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    bot = MagicMock()
-    bot.call_api = AsyncMock(return_value=None)
-    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
-    monkeypatch.setattr(
-        ai_callback_runner.TaskManager,
-        "claim_task",
-        AsyncMock(
-            return_value={
-                "bot_id": "111",
-                "group_id": 222,
-                "user_id": 333,
-                "task_type": LLM_CHAT_TASK_TYPE,
-                "user_text": "牛牛今天好拽",
-                "source_tags": ["recent_chat"],
-            }
-        ),
-    )
-    monkeypatch.setattr(
-        llm_delivery,
-        "get_llm_config",
-        lambda: LlmConfig(llm_chat_enabled=True, llm_repeater_feedback_enabled=True),
-    )
-
-    def raise_append(_entry) -> None:
-        raise RuntimeError("disk full")
-
-    monkeypatch.setattr("pallas.product.llm.repeater_feedback.append_feedback_entry", raise_append)
-
-    result = await ai_callback_runner.run_ai_callback("task-feedback-fail-1", status="success", text="少装。")
-
-    assert result == {"message": "ok"}
-    bot.call_api.assert_awaited_once()
-
-
-@pytest.mark.asyncio
-async def test_run_ai_callback_delivery_failure_does_not_append_repeater_feedback(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: MagicMock())
-    monkeypatch.setattr(
-        ai_callback_runner.TaskManager,
-        "claim_task",
-        AsyncMock(
-            return_value={
-                "bot_id": "111",
-                "group_id": 222,
-                "user_id": 333,
-                "task_type": LLM_CHAT_TASK_TYPE,
-                "user_text": "牛牛今天好拽",
-                "source_tags": ["recent_chat"],
-            }
-        ),
-    )
-    monkeypatch.setattr(
-        llm_delivery,
-        "get_llm_config",
-        lambda: LlmConfig(llm_chat_enabled=True, llm_repeater_feedback_enabled=True),
-    )
-    monkeypatch.setattr(
-        "pallas.core.platform.ai_callback.delivery.send_group_message_with_receipt",
-        AsyncMock(return_value=type("Receipt", (), {"delivered": False, "message_id": None})()),
-    )
-    append_feedback_entry = MagicMock()
-    monkeypatch.setattr("pallas.product.llm.repeater_feedback.append_feedback_entry", append_feedback_entry)
-
-    result = await ai_callback_runner.run_ai_callback("task-feedback-delivery-fail-1", status="success", text="少装。")
-
-    assert result == {"message": "failed"}
-    append_feedback_entry.assert_not_called()
-
-
-@pytest.mark.asyncio
 async def test_run_ai_callback_send_timeout_returns_failed(monkeypatch: pytest.MonkeyPatch) -> None:
     bot = MagicMock()
     bot.call_api = AsyncMock(side_effect=NetworkError("WebSocket call api send_group_msg timeout"))
@@ -605,39 +183,6 @@ async def test_run_ai_callback_send_timeout_returns_failed(monkeypatch: pytest.M
     result = await ai_callback_runner.run_ai_callback("task-1", status="success", text="hello")
 
     assert result == {"message": "failed"}
-
-
-@pytest.mark.asyncio
-async def test_run_ai_callback_llm_chat_duplicate_reply_uses_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
-    bot = MagicMock()
-    bot.call_api = AsyncMock(return_value=None)
-    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
-    monkeypatch.setattr(
-        ai_callback_runner.TaskManager,
-        "claim_task",
-        AsyncMock(
-            return_value={
-                "bot_id": "111",
-                "group_id": 222,
-                "user_id": 333,
-                "task_type": LLM_CHAT_TASK_TYPE,
-                "fallback_text": "语料候选",
-            }
-        ),
-    )
-    monkeypatch.setattr(
-        llm_delivery,
-        "should_suppress_llm_duplicate_reply",
-        lambda task, reply_text: True,
-    )
-
-    result = await ai_callback_runner.run_ai_callback("task-dup-1", status="success", text="重复句")
-
-    assert result == {"message": "ok"}
-    bot.call_api.assert_awaited_once()
-    call_kwargs = bot.call_api.await_args.kwargs
-    assert call_kwargs["group_id"] == 222
-    assert call_kwargs["message"] == "语料候选"
 
 
 @pytest.mark.asyncio
@@ -655,91 +200,6 @@ async def test_run_ai_callback_get_bot_failed(monkeypatch: pytest.MonkeyPatch) -
     result = await ai_callback_runner.run_ai_callback("task-1", status="success", text="hello")
 
     assert result == {"message": "failed"}
-
-
-@pytest.mark.asyncio
-async def test_run_ai_callback_drunk_chat_failed_is_silent(monkeypatch: pytest.MonkeyPatch) -> None:
-    bot = MagicMock()
-    bot.call_api = AsyncMock(return_value=None)
-    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
-    monkeypatch.setattr(
-        ai_callback_runner.TaskManager,
-        "claim_task",
-        AsyncMock(
-            return_value={
-                "bot_id": "111",
-                "group_id": 222,
-                "task_type": CHAT_DRUNK_TASK_TYPE,
-            }
-        ),
-    )
-
-    result = await ai_callback_runner.run_ai_callback("task-drunk-fail", status="failed")
-
-    assert result == {"message": "ok"}
-    bot.call_api.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_run_ai_callback_llm_chat_failed_is_silent(monkeypatch: pytest.MonkeyPatch) -> None:
-    bot = MagicMock()
-    bot.call_api = AsyncMock(return_value=None)
-    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
-    monkeypatch.setattr(
-        ai_callback_runner.TaskManager,
-        "claim_task",
-        AsyncMock(
-            return_value={
-                "bot_id": "111",
-                "group_id": 222,
-                "task_type": LLM_CHAT_TASK_TYPE,
-            }
-        ),
-    )
-
-    result = await ai_callback_runner.run_ai_callback("task-llm-chat-fail", status="failed")
-
-    assert result == {"message": "ok"}
-    bot.call_api.assert_not_awaited()
-
-
-@pytest.mark.asyncio
-async def test_run_ai_callback_chat_output_filter_blocks_service_tone(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    bot = MagicMock()
-    bot.call_api = AsyncMock(return_value=None)
-    monkeypatch.setattr(ai_callback_runner, "get_bot", lambda _bot_id: bot)
-    monkeypatch.setattr(
-        ai_callback_runner.TaskManager,
-        "claim_task",
-        AsyncMock(
-            return_value={
-                "bot_id": "111",
-                "group_id": 222,
-                "task_type": LLM_CHAT_TASK_TYPE,
-                "user_id": 333,
-            }
-        ),
-    )
-    monkeypatch.setattr(
-        llm_delivery,
-        "get_llm_config",
-        lambda: LlmConfig(
-            llm_chat_enabled=True,
-            llm_output_filter_enabled=True,
-            llm_output_filter_chat_hard_phrases=list(CHAT_HARD_BLOCK_PHRASES),
-        ),
-    )
-
-    result = await ai_callback_runner.run_ai_callback(
-        "task-chat-filter",
-        status="success",
-        text="博士您好，有什么想聊的吗？",
-    )
-
-    assert result == {"message": "ok"}
-    bot.call_api.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -1098,3 +558,49 @@ async def test_run_ai_callback_voice_delivery_invokes_media_task_hook(monkeypatc
         assert seen == [("sing", 222, 300)]
     finally:
         hooks_mod.clear_media_task_hooks_for_tests()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["success", "failed"])
+@pytest.mark.parametrize("task_type", ["llm_chat", "ollama", "chat", " LLM_CHAT ", "Chat", "OLLAMA"])
+async def test_run_ai_callback_retired_task_is_terminal_ack_without_side_effects(
+    monkeypatch: pytest.MonkeyPatch, status: str, task_type: str
+) -> None:
+    """旧聊天/RWKV 任务回调：claim 后返回 200 终态 ACK，不取 Bot、不发送、不写历史/反馈/遥测/媒体钩子。"""
+    probes: list[str] = []
+
+    def probe(name: str):
+        def _record(*_args, **_kwargs):
+            probes.append(name)
+
+        return _record
+
+    monkeypatch.setattr(ai_callback_runner, "get_bot", probe("get_bot"))
+    monkeypatch.setattr(ai_callback_runner, "send_group_message", AsyncMock(side_effect=probe("send")))
+    monkeypatch.setattr(ai_callback_runner, "send_group_image", AsyncMock(side_effect=probe("send_image")))
+    monkeypatch.setattr(ai_callback_runner, "send_group_voice", AsyncMock(side_effect=probe("send_voice")))
+    monkeypatch.setattr(ai_callback_runner, "failure_reply_for_task", probe("failure_reply"))
+    monkeypatch.setattr(ai_callback_runner, "invoke_media_task_failure", probe("media_failure"))
+    monkeypatch.setattr(ai_callback_runner, "invoke_media_task_success", probe("media_success"))
+    monkeypatch.setattr(ai_callback_runner, "deliver_llm_callback_success", AsyncMock(side_effect=probe("delivery")))
+    monkeypatch.setattr(ai_callback_runner, "track_llm_callback", probe("track"))
+    monkeypatch.setattr(ai_callback_runner, "record_turn_event", probe("turn_event"))
+    monkeypatch.setattr(llm_delivery, "append_llm_message", AsyncMock(side_effect=probe("history")))
+    monkeypatch.setattr(
+        ai_callback_runner.TaskManager,
+        "claim_task",
+        AsyncMock(
+            return_value={
+                "bot_id": "111",
+                "group_id": 222,
+                "user_id": 333,
+                "task_type": task_type,
+                "user_text": "hi",
+            }
+        ),
+    )
+
+    result = await ai_callback_runner.run_ai_callback("task-retired", status=status, text="x")
+
+    assert result == {"message": "ok", "status": "legacy_agent_retired"}
+    assert probes == []

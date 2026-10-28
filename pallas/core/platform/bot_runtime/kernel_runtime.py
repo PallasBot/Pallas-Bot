@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pallas.core.platform.ai_callback.http import register_ai_callback_http
-from pallas.core.platform.ai_callback.llm_tools_http import register_llm_tools_http
 from pallas.core.platform.bot_runtime.duplicate_prefix_check import register_duplicate_prefix_startup_check
 from pallas.core.platform.bot_runtime.roles import is_hub_role
 from pallas.core.platform.multi_bot.bot_filter import register_bot_filter_runtime
@@ -16,7 +15,7 @@ def register_kernel_runtime() -> None:
     if _KERNEL_REGISTERED:
         return
     register_ai_callback_http()
-    register_llm_tools_http()
+    # 旧 llm tools HTTP 根注册已退役（不是 MaiBot 网关）；不再默认挂载该路由。
     if not is_hub_role():
         from pallas.core.platform.bot_runtime.ingress_dispatch_runtime import register_ingress_dispatch_runtime
         from pallas.core.platform.ingress.gate import register_ingress_gate_runtime

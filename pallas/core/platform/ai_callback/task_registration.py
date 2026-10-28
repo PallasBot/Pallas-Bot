@@ -61,6 +61,10 @@ async def register_ai_task_from_aux(
     _require_internal_token(internal_token)
     if not valid_task_id(task_id):
         raise HTTPException(status_code=400, detail="invalid_task_id")
+    from pallas.core.platform.ai_callback.task_types import is_retired_chat_task_type
+
+    if isinstance(task_status, dict) and is_retired_chat_task_type(task_status.get("task_type")):
+        raise HTTPException(status_code=410, detail="legacy_agent_retired")
     from pallas.core.platform.shard.coord.ai_task_registry import AiTaskRedisError
 
     try:

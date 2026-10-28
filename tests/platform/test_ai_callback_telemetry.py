@@ -17,6 +17,13 @@ def allow_enabled_llm_delivery(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
     monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", AsyncMock(return_value=False))
 
+    # 历史 delivery 算法测试：旧 LLM 聊天生成已退役，这里还原旧聊天 exit gate 语义，
+    # 以便直接测试 delivery 纯入口（不改生产、不加开关）。
+    async def _open_gate(*_args, **_kwargs):
+        return ""
+
+    monkeypatch.setattr("pallas.product.llm.availability.llm_chat_exit_gate_reason", _open_gate)
+
 
 def _capture_events(events: list[dict[str, object]]):
     def capture(**fields: object) -> None:
@@ -217,18 +224,13 @@ async def test_direct_pass_reply_stays_silent(monkeypatch: pytest.MonkeyPatch) -
 
 
 @pytest.mark.asyncio
-async def test_failed_callback_emits_fixed_output_failure_linkage(
+async def test_failed_callback_retired_task_is_terminal_ack_without_output_telemetry(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from pallas.core.platform.ai_callback import runner
 
     events: list[dict[str, object]] = []
     monkeypatch.setattr(runner, "record_turn_event", _capture_events(events))
-    monkeypatch.setattr(
-        runner.TaskManager,
-        "claim_task",
-        lambda _task_id: None,
-    )
 
     async def claim_task(_task_id: str):
         return {
@@ -237,7 +239,9 @@ async def test_failed_callback_emits_fixed_output_failure_linkage(
         }
 
     monkeypatch.setattr(runner.TaskManager, "claim_task", claim_task)
-    monkeypatch.setattr(runner, "get_bot", lambda _bot_id: None)
+    monkeypatch.setattr(
+        runner, "get_bot", lambda _bot_id: (_ for _ in ()).throw(AssertionError("retired must not get_bot"))
+    )
 
     result = await runner.run_ai_callback(
         "request-callback-failed",
@@ -245,10 +249,7 @@ async def test_failed_callback_emits_fixed_output_failure_linkage(
         text="provider error: secret prompt",
     )
 
-    assert result == {"message": "ok"}
-    failure = next(event for event in events if event["stage"] == "output")
-    assert failure["decision"] == "failed"
-    assert failure["reason"] == "callback_failed"
-    assert failure["request_id_hash"]
-    assert "secret prompt" not in str(events)
-    assert "text" not in failure
+    # 旧聊天任务在 claim 后立即返回终态 ACK，不进入旧失败投递，也不产生 output/delivery telemetry
+    assert result == {"message": "ok", "status": "legacy_agent_retired"}
+    assert events == []
+    assert "secret prompt" not in str(result)

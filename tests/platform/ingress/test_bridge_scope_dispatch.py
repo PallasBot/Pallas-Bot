@@ -27,13 +27,14 @@ def _group_event(group_id: int) -> GroupMessageEvent:
     })
 
 
-def test_suppressed_matchers_include_old_chat_entries():
-    from packages.llm_chat.chat_message import llm_chat_msg
+def test_suppressed_matchers_only_exclude_repeater_capture():
     from packages.repeater.handlers.message import any_msg
 
     suppressed = matcher_dispatch.bridge_suppressed_matchers()
+    # bridge captures once; only the repeater capture matcher is suppressed.
     assert any_msg in suppressed
-    assert llm_chat_msg in suppressed
+    # the retired llm_chat generation matcher no longer exists
+    assert not hasattr(__import__("packages.llm_chat.chat_message", fromlist=["x"]), "llm_chat_msg")
 
 
 def test_bridge_owned_group_event_follows_runtime(monkeypatch):

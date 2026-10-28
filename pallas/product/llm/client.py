@@ -5,11 +5,10 @@ from typing import Any
 from nonebot import logger
 
 from pallas.core.platform.observability import SlowPathTimer, slow_path_threshold_ms
-from pallas.core.shared.utils import HTTPXClient
 
 from .availability import llm_plugin_disabled_for_scope
 from .budget import trim_messages_to_char_budget
-from .config import LlmConfig, get_llm_config, llm_server_base_url
+from .config import LlmConfig, get_llm_config
 from .kernel.memory_governance import can_write_runtime_state_summary, runtime_state_summary_metadata
 from .legacy_guard import assess_legacy_chat_submit
 from .message_guard import format_user_turn
@@ -111,6 +110,18 @@ async def _resolve_referenced_vision_payload(
 
 
 async def submit_chat_task(
+    request: ChatSubmitRequest,
+    *,
+    cfg: LlmConfig | None = None,
+    bot: Any | None = None,
+) -> ChatSubmitResult:
+    # 旧 LLM 聊天生成已退役：最先返回，不触 DB/route/budget/TaskManager/HTTP。
+    # 旧实现保留在下方（仅供内部单元测试的算法断言），运行入口不可达。
+    _ = (request, cfg, bot)
+    return ChatSubmitResult(status="legacy_agent_retired", ok=False)
+
+
+async def _submit_chat_task_impl(
     request: ChatSubmitRequest,
     *,
     cfg: LlmConfig | None = None,
@@ -293,15 +304,6 @@ def build_chat_messages(user_text: str, *, max_len: int = 4000) -> list[ChatComp
 
 
 async def delete_llm_chat_session(session_id: str, *, cfg: LlmConfig | None = None) -> bool:
-    c = cfg or get_llm_config()
-    base = llm_server_base_url(c)
-    if c.use_unified_chat_api:
-        url = f"{base}{c.unified_del_session_endpoint}/{session_id}"
-    else:
-        url = f"{base}{c.legacy_del_session_endpoint}/{session_id}"
-    try:
-        response = await HTTPXClient.delete(url, timeout=c.chat_timeout_sec)
-    except Exception:
-        logger.warning("LLM chat session deletion failed for session [{}]", session_id)
-        return False
-    return bool(response) and response.status_code < 400
+    """自研会话删除已退役：不再发起 HTTP；不触碰共享媒体/模型接口。"""
+    _ = (session_id, cfg)
+    return False

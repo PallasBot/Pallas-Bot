@@ -30,8 +30,9 @@ def test_user_menu_items_cover_chat_clear_and_drunk():
         if str(item.get("help_audience") or "user").strip().lower() not in {"superuser", "maintainer"}
     ]
     funcs = {item.get("func") for item in user_items}
-    assert "智能对话" in funcs
-    assert "酒后聊天" in funcs
+    # 自研 agent 自动聊天/酒后对话已退役，不再作为用户菜单项出现
+    assert "智能对话" not in funcs
+    assert "酒后聊天" not in funcs
     assert "清空和牛牛的记录" in funcs
     assert "LLM 状态" not in funcs
     assert "换模型" not in funcs
@@ -40,9 +41,7 @@ def test_user_menu_items_cover_chat_clear_and_drunk():
 
 def test_drunk_chat_menu_item_present():
     menu = __plugin_meta__.extra.get("menu_data") or []
-    drunk = next(item for item in menu if item.get("func") == "酒后聊天")
-    assert drunk.get("command_permission") == "llm_chat.chat"
-    assert "醉酒" in str(drunk.get("trigger_condition") or "")
+    assert all(item.get("func") != "酒后聊天" for item in menu)
 
 
 def test_llm_chat_rule_rejects_private_message(monkeypatch):

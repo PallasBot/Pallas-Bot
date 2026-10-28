@@ -186,18 +186,15 @@ _SAVED_PLUGIN_NAMES: dict[int, object] = {}
 
 
 def _register_pool():
-    from packages.llm_chat.chat_message import llm_chat_msg
     from packages.repeater.handlers.message import any_msg
 
-    for matcher, canonical in ((any_msg, "repeater"), (llm_chat_msg, "llm_chat")):
-        if id(matcher) not in _SAVED_PLUGIN_NAMES:
-            _SAVED_PLUGIN_NAMES[id(matcher)] = (matcher, getattr(matcher, "plugin_name", None))
-        matcher.plugin_name = canonical
+    if id(any_msg) not in _SAVED_PLUGIN_NAMES:
+        _SAVED_PLUGIN_NAMES[id(any_msg)] = (any_msg, getattr(any_msg, "plugin_name", None))
+    any_msg.plugin_name = "repeater"
     pool = nb_matcher.matchers
-    for matcher in (any_msg, llm_chat_msg):
-        bucket = pool.setdefault(int(matcher.priority), [])
-        if matcher not in bucket:
-            bucket.append(matcher)
+    bucket = pool.setdefault(int(any_msg.priority), [])
+    if any_msg not in bucket:
+        bucket.append(any_msg)
 
 
 def _restore_plugin_names():
@@ -379,7 +376,9 @@ async def _noop(*_args, **_kwargs):
 
 
 @pytest.mark.parametrize("to_me", [False, True])
-async def test_out_of_scope_chat_reaches_the_old_agent(monkeypatch, framework_state, fake_mai, qq_queue, to_me):
+async def test_out_of_scope_chat_reaches_non_llm_repeater_without_old_llm(
+    monkeypatch, framework_state, fake_mai, qq_queue, to_me
+):
     kernel_calls: list[str] = []
     captures: list[str] = []
     llm_probe: list[str] = []
@@ -387,11 +386,28 @@ async def test_out_of_scope_chat_reaches_the_old_agent(monkeypatch, framework_st
     _patch_boundaries(monkeypatch, kernel_calls=kernel_calls, captures=captures, llm_probe=llm_probe)
     await _arm_bridge(monkeypatch, fake_mai)
 
-    # positive control: the same matchers ARE reachable for a non-owned group
+    # positive control: a non-owned group runs the (non-LLM) Repeater matcher; the retired
+    # llm_chat generation matcher no longer exists to be evaluated.
     await md.patched_handle_event_now(qq_queue.bot, _event(group_id=OTHER_GROUP, to_me=to_me))
 
-    assert kernel_calls == ["repeater"]  # old repeater path reachable
-    assert llm_probe == ["llm"]  # llm_chat rule evaluated, probe reachable
+    assert kernel_calls == ["repeater"]  # non-LLM Repeater path reachable
+    assert llm_probe == []  # retired llm_chat matcher never runs
+    assert captures == []  # bridge capture-only path does not run outside scope
+    assert fake_mai.frames() == []
+
+
+@pytest.mark.parametrize("to_me", [False, True])
+async def test_bridge_off_chat_reaches_non_llm_repeater(monkeypatch, framework_state, fake_mai, qq_queue, to_me):
+    kernel_calls: list[str] = []
+    captures: list[str] = []
+    llm_probe: list[str] = []
+    _register_pool()
+    _patch_boundaries(monkeypatch, kernel_calls=kernel_calls, captures=captures, llm_probe=llm_probe)
+    # bridge not armed (bridge off): an in-scope group must still reach the non-LLM Repeater
+    await md.patched_handle_event_now(qq_queue.bot, _event(group_id=GROUP_ID, to_me=to_me))
+
+    assert kernel_calls == ["repeater"]  # non-LLM Repeater path reachable with the bridge off
+    assert llm_probe == []  # retired llm_chat matcher never runs
     assert captures == []
     assert fake_mai.frames() == []
 

@@ -691,3 +691,27 @@ async def test_kernel_delivery_survives_session_history_write_failure(
     history_logs = [entry for entry in logged if len(entry) > 5 and entry[4] == request_id]
     assert history_logs
     assert history_logs[0][5] == "RuntimeError"
+
+
+@pytest.fixture(autouse=True)
+def _historical_legacy_agent_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    """历史内核/输出测试：自研 agent 生成已全局退役；还原旧聊天 exit gate 与任务登记
+    的退役判定，以隔离 kernel/callback 的纯算法断言（不改生产、不加复活开关）。"""
+    from pallas.product.llm import availability
+
+    async def _old_gate(bot_id, group_id, *, captured_enabled=True):
+        if not captured_enabled or not availability.llm_calls_enabled(availability.get_llm_config()):
+            return "global_disabled_after_submit"
+        if await availability.llm_plugin_disabled_for_scope(bot_id, group_id):
+            return "scope_disabled_after_submit"
+        if not availability.llm_calls_enabled(availability.get_llm_config()):
+            return "global_disabled_after_submit"
+        return ""
+
+    monkeypatch.setattr(availability, "llm_chat_exit_gate_reason", _old_gate)
+    from pallas.product.llm import kernel_runner
+
+    monkeypatch.setattr(kernel_runner, "llm_chat_exit_gate_reason", _old_gate)
+    from pallas.core.platform.ai_callback import task_types
+
+    monkeypatch.setattr(task_types, "is_retired_chat_task_type", lambda _value: False)

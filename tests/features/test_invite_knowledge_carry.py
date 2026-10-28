@@ -461,7 +461,7 @@ async def test_other_faq_chunks_still_injected(real_llm_chat_faq: KnowledgeSourc
     )
     assert "llm_chat.faq" in result.trace["sources"]
     titles = {chunk["title"] for chunk in result.trace["chunks"]}
-    assert "清空本轮记录" in titles
+    assert "清空历史会话记录" in titles
     assert "邀请牛牛进群" not in titles
     assert "普通群友想拉牛牛进群" not in result.system_prompt
     assert "clear" in result.system_prompt

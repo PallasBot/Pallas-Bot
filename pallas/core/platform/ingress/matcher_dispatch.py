@@ -342,9 +342,9 @@ _BRIDGE_SUPPRESSED_MATCHERS: frozenset[type] | None = None
 
 
 def bridge_suppressed_matchers() -> frozenset[type]:
-    """Old chat-agent matchers (repeater chat, llm_chat chat) the bridge scope suppresses.
+    """Repeater capture matcher the bridge scope suppresses (bridge captures once).
 
-    Identified by lazy-imported object identity so repeater/llm_chat commands keep running.
+    Identified by lazy-imported object identity so repeater commands keep running.
     """
     global _BRIDGE_SUPPRESSED_MATCHERS
     if _BRIDGE_SUPPRESSED_MATCHERS is None:
@@ -353,10 +353,6 @@ def bridge_suppressed_matchers() -> frozenset[type]:
             from packages.repeater.handlers.message import any_msg
 
             suppressed.add(any_msg)
-        with contextlib.suppress(Exception):
-            from packages.llm_chat.chat_message import llm_chat_msg
-
-            suppressed.add(llm_chat_msg)
         if suppressed:
             _BRIDGE_SUPPRESSED_MATCHERS = frozenset(suppressed)
     return _BRIDGE_SUPPRESSED_MATCHERS or frozenset()

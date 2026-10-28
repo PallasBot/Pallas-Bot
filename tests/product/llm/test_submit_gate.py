@@ -23,13 +23,16 @@ def test_assess_submit_gate_from_body_always_uses_kernel() -> None:
 
 
 @pytest.mark.asyncio
-async def test_submit_chat_task_rejects_when_provider_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_submit_chat_task_is_retired_before_any_submit_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.product.llm.client import submit_chat_task
     from pallas.product.llm.config import LlmConfig
     from pallas.product.llm.models import ChatSubmitRequest
     from pallas.product.llm.submit_gate import LlmSubmitGateResult
 
+    called: list[str] = []
+
     async def reject_gate() -> LlmSubmitGateResult:
+        called.append("gate")
         return LlmSubmitGateResult(allowed=False, status="provider_not_configured")
 
     monkeypatch.setattr("pallas.product.llm.client.assess_llm_submit_gate", reject_gate)
@@ -49,7 +52,8 @@ async def test_submit_chat_task_rejects_when_provider_missing(monkeypatch: pytes
         cfg=cfg,
     )
     assert result.ok is False
-    assert result.status == "provider_not_configured"
+    assert result.status == "legacy_agent_retired"
+    assert called == []  # retirement decided before provider/submit gate
 
 
 def test_llm_chat_daily_budget_ok_when_unlimited(monkeypatch: pytest.MonkeyPatch) -> None:

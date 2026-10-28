@@ -33,7 +33,9 @@ def gate_defer_total(snapshot: dict[str, Any]) -> int:
 
 async def build_llm_status_text(*, cfg: LlmConfig | None = None) -> str:
     c = cfg or get_llm_config()
-    lines: list[str] = []
+    lines: list[str] = [
+        "说明：以下为 Pallas 共享模型与本地推理状态；LLM 对话由 MaiBot 承担，不在此显示。",
+    ]
     try:
         admin = await fetch_model_admin_status(cfg=c)
     except Exception as exc:

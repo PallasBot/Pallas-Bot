@@ -40,6 +40,14 @@ def test_builtin_bot_faq_retrieves_on_clear_keyword() -> None:
     assert any("clear" in item.content.lower() or "清空" in item.content for item in hits)
 
 
+def test_builtin_bot_faq_distinguishes_pallas_records_from_maibot_memory() -> None:
+    chunks = {chunk.title: chunk.content for chunk in BOT_FAQ_SOURCE.chunks}
+    assert "Pallas" in chunks["清空会话"]
+    assert "不影响 MaiBot" in chunks["清空会话"]
+    assert "MaiBot" in chunks["多轮记忆"]
+    assert "自动同步" in chunks["多轮记忆"]
+
+
 @pytest.mark.asyncio
 async def test_enrich_system_with_knowledge_sources_injects_block() -> None:
     from pallas.product.llm.rag_metrics import clear_llm_rag_metrics_for_tests, llm_rag_metrics_snapshot

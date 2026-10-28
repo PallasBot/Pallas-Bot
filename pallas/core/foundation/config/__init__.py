@@ -621,6 +621,10 @@ class TaskManager:
         normalized = normalize_ai_task_status(task_status)
         if normalized is None:
             return "invalid"
+        from pallas.core.platform.ai_callback.task_types import is_retired_chat_task_type
+
+        if is_retired_chat_task_type(normalized.get("task_type")):
+            return "invalid"  # retired chat task types never register new work
         binding = cls._binding(normalized)
         async with cls._lock:
             if task_id in cls._terminal:
