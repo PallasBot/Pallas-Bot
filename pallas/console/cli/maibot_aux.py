@@ -31,6 +31,7 @@ from pallas.console.cli.process_util import (
     write_pid_file,
 )
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value
+from pallas.core.foundation.fs_lock import interprocess_file_lock
 from pallas.core.foundation.paths import PROJECT_ROOT
 
 MANAGED_ENABLED_KEY = "MAIBOT_MANAGED_ENABLED"
@@ -126,6 +127,35 @@ def load_managed_config() -> ManagedMaiBotConfig:
 def maibot_aux_running() -> bool:
     pid = read_pid_file(PID_FILE)
     return pid is not None and pid_alive(pid)
+
+
+def _lock_path() -> Path:
+    """Instance management lock; resolved through ``RUN_DIR`` so tests can redirect it."""
+    return RUN_DIR / "maibot.lock"
+
+
+def _config_sync_enabled() -> bool:
+    from pallas.product.agent_bridge.config_sync import config_sync_enabled
+
+    return config_sync_enabled()
+
+
+def config_sync_requested() -> bool:
+    """True when managed is on and config sync is explicitly requested.
+
+    An invalid ``MAIBOT_CONFIG_SYNC_ENABLED`` counts as requested so a running
+    instance is not silently treated as already-synced.
+    """
+    try:
+        config = load_managed_config()
+    except ManagedConfigError:
+        return False
+    if not config.enabled:
+        return False
+    try:
+        return _config_sync_enabled()
+    except Exception:
+        return True
 
 
 # ---------------------------------------------------------------- url / host
@@ -392,14 +422,18 @@ def _stop_owned_pid(pid: int, *, force: bool = False) -> bool:
 
 
 def stop_spawned_pid(pid: int) -> bool:
-    """回滚本次 spawn 的 pid（不读 pid 文件盲停）；返回是否已确认停止。"""
+    """回滚本次 spawn 的 pid（不读 pid 文件盲停）；返回是否已确认停止。
+
+    与 start/stop 共用实例管理锁，避免回滚停止后新 start 的记录被误删。
+    """
     if pid <= 0:
         return True
-    ok = _stop_owned_pid(pid)
-    if read_pid_file(PID_FILE) == pid and ok:
-        clear_pid_file(PID_FILE)
-        _clear_owner()
-    return ok
+    with interprocess_file_lock(_lock_path()):
+        ok = _stop_owned_pid(pid)
+        if read_pid_file(PID_FILE) == pid and ok:
+            clear_pid_file(PID_FILE)
+            _clear_owner()
+        return ok
 
 
 def _print_problems(problems: list[str]) -> None:
@@ -456,28 +490,90 @@ def start_maibot_aux(*, dry_run: bool = False, ready_timeout_s: float = READY_TI
     assert addr is not None  # validate_managed_instance ensured it
     host, port = addr
 
+    try:
+        sync_enabled = _config_sync_enabled()
+    except Exception as exc:
+        print(f"  · MaiBot 托管：配置同步开关无效：{type(exc).__name__}", file=sys.stderr)
+        return ManagedStartResult(rc=1)
+
+    # Platform support is checked before any sync / lock file creation (incl. dry-run).
+    if not linux_managed_supported():
+        print("  · MaiBot 托管：仅支持 Linux 且 /proc 可读，拒绝启动", file=sys.stderr)
+        return ManagedStartResult(rc=1)
+
+    if dry_run:
+        # Zero writes: no lock dir, no sync, no spawn.
+        return _start_dry_run(config, host, port, sync_enabled=sync_enabled, ready_timeout_s=ready_timeout_s)
+
+    with interprocess_file_lock(_lock_path()):
+        return _start_locked(config, host, port, sync_enabled=sync_enabled, ready_timeout_s=ready_timeout_s)
+
+
+def _start_dry_run(
+    config: ManagedMaiBotConfig,
+    host: str,
+    port: int,
+    *,
+    sync_enabled: bool,
+    ready_timeout_s: float,
+) -> ManagedStartResult:
     owned = current_managed_process()
     if owned is not None:
-        print(f"  · MaiBot 托管：已在运行 pid={owned}")
-        return ManagedStartResult(rc=_wait_transport_ready(host, port, timeout_s=ready_timeout_s, owned_pid=owned))
+        if sync_enabled:
+            print("  · MaiBot 托管：已在运行；已启用配置同步，需 restart 才能应用（预览，不写文件）", file=sys.stderr)
+            return ManagedStartResult(rc=1)
+        print(f"  · MaiBot 托管：已在运行 pid={owned}（预览）")
+        return ManagedStartResult(rc=0)
     if maibot_aux_running():
         print("  · MaiBot 托管：检测到 pid 存活但无法核实身份，拒绝接管（请手动处理）", file=sys.stderr)
         return ManagedStartResult(rc=1)
-    if dry_run:
-        print("  · MaiBot 托管：将启动（预览）")
-        return ManagedStartResult(rc=0)
+    if _has_unresolved_orphan_group():
+        print("  · MaiBot 托管：存在未解决的受管孤组，拒绝启动（请手动处理）", file=sys.stderr)
+        return ManagedStartResult(rc=1)
     if _port_connectable(host, port):
         print(
             f"  · MaiBot 托管：消息端口 {host}:{port} 已被占用，拒绝启动（可能是外部实例，请先处理）",
             file=sys.stderr,
         )
         return ManagedStartResult(rc=1)
+    if sync_enabled and not _sync_instance(config, dry_run=True):
+        return ManagedStartResult(rc=1)
+    print("  · MaiBot 托管：将启动（预览）")
+    return ManagedStartResult(rc=0)
+
+
+def _start_locked(
+    config: ManagedMaiBotConfig,
+    host: str,
+    port: int,
+    *,
+    sync_enabled: bool,
+    ready_timeout_s: float,
+) -> ManagedStartResult:
+    owned = current_managed_process()
+    if owned is not None:
+        if sync_enabled:
+            print("  · MaiBot 托管：已在运行；已启用配置同步，需 restart 才能应用（未写文件）", file=sys.stderr)
+            return ManagedStartResult(rc=1)
+        print(f"  · MaiBot 托管：已在运行 pid={owned}")
+        return ManagedStartResult(rc=_wait_transport_ready(host, port, timeout_s=ready_timeout_s, owned_pid=owned))
+    if maibot_aux_running():
+        print("  · MaiBot 托管：检测到 pid 存活但无法核实身份，拒绝接管（请手动处理）", file=sys.stderr)
+        return ManagedStartResult(rc=1)
+    if _has_unresolved_orphan_group():
+        print("  · MaiBot 托管：存在未解决的受管孤组，拒绝启动（请手动处理）", file=sys.stderr)
+        return ManagedStartResult(rc=1)
+    if _port_connectable(host, port):
+        print(
+            f"  · MaiBot 托管：消息端口 {host}:{port} 已被占用，拒绝启动（可能是外部实例，请先处理）",
+            file=sys.stderr,
+        )
+        return ManagedStartResult(rc=1)
+    if sync_enabled and not _sync_instance(config, dry_run=False):
+        return ManagedStartResult(rc=1)
 
     assert config.instance_dir is not None
     assert config.python is not None
-    if not linux_managed_supported():
-        print("  · MaiBot 托管：仅支持 Linux 且 /proc 可读，拒绝启动", file=sys.stderr)
-        return ManagedStartResult(rc=1)
     RUN_DIR.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     cmd = [str(config.python), "-u", "bot.py"]
@@ -512,6 +608,28 @@ def start_maibot_aux(*, dry_run: bool = False, ready_timeout_s: float = READY_TI
     return ManagedStartResult(rc=0, spawned_pid=spawned_pid)
 
 
+def _sync_instance(config: ManagedMaiBotConfig, *, dry_run: bool) -> bool:
+    """Merge shared persona / global LLM config into the instance TOMLs.
+
+    Returns False (and prints a static reason) on any conversion failure; the
+    reason never contains TOML, keys or provider objects.
+    """
+    if config.instance_dir is None:
+        print("  · MaiBot 托管：配置同步缺少实例目录", file=sys.stderr)
+        return False
+    from pallas.product.agent_bridge.config_sync import ConfigSyncError, sync_maibot_config
+
+    try:
+        sync_maibot_config(config.instance_dir, dry_run=dry_run)
+    except ConfigSyncError as exc:
+        print(f"  · MaiBot 托管：配置同步失败：{exc}", file=sys.stderr)
+        return False
+    except OSError:
+        print("  · MaiBot 托管：配置同步写盘失败（IO 错误）", file=sys.stderr)
+        return False
+    return True
+
+
 def _has_unresolved_orphan_group() -> bool:
     """记录在案的受管 pid（同一 boot）leader 已退出但同组仍有存活成员。"""
     recorded = read_pid_file(PID_FILE)
@@ -527,7 +645,31 @@ def _has_unresolved_orphan_group() -> bool:
 
 
 def stop_maibot_aux(*, force: bool = False) -> bool:
-    """停止已核实身份的受管实例；返回是否已确认停止（同组残留未清则 False，保留记录）。"""
+    """停止已核实身份的受管实例；返回是否已确认停止（同组残留未清则 False，保留记录）。
+
+    与启动共用实例管理锁，覆盖停机确认与记录清理，避免 start/stop 交错。无任何受管
+    记录且托管关闭时不创建运行目录/锁，直接确认未运行。
+    """
+    if _nothing_recorded_and_disabled():
+        print("  · MaiBot 托管：未在运行")
+        return True
+    with interprocess_file_lock(_lock_path()):
+        return _stop_locked(force=force)
+
+
+def _nothing_recorded_and_disabled() -> bool:
+    if _read_owner() is not None:
+        return False
+    if read_pid_file(PID_FILE) is not None:
+        return False
+    try:
+        config = load_managed_config()
+    except ManagedConfigError:
+        return False
+    return not config.enabled
+
+
+def _stop_locked(*, force: bool = False) -> bool:
     owned = current_managed_process()
     if owned is None:
         if _has_unresolved_orphan_group():

@@ -57,7 +57,7 @@ durable work handler 可以返回 `DirectWorkResult`，其中的 `DirectBotActio
 
 ## 实验性 MaiBot 桥（默认关闭）
 
-`pallas/product/agent_bridge/` 提供原创 Legacy WebSocket 文本桥，单机 unified 部署可将一个或多个 Bot 的显式允许群交给同一个 MaiBot 进程处理聊天。账号共享核心人设和模型配置，不为每只牛牛启动独立进程。默认不开连接、不接管任何群；启用但配置无效或处于分片部署时明确报错。桥本身不负责安装、启动 MaiBot，也不代替用户接受其协议或配置模型；可选托管见下文。
+`pallas/product/agent_bridge/` 提供原创 Legacy WebSocket 文本桥，单机 unified 部署可将一个或多个 Bot 的显式允许群交给同一个 MaiBot 进程处理聊天。账号共享核心人设和模型配置，不为每只牛牛启动独立进程。默认不开连接、不接管任何群；启用但配置无效或处于分片部署时明确报错。桥本身不负责安装、启动 MaiBot，也不代替用户接受其协议；可选托管与配置同步见下文。
 
 入口仍先执行既有预处理、权限与命令分类。移交范围内的非命令消息跳过旧聊天 direct 路径，在 stale / 过载处理后执行 Repeater 的仅采集路径，再尝试转发；随后仍运行其他 matcher，仅按对象身份排除旧 Repeater 和 LLM 聊天 matcher。命令和范围外消息保持原路径。降质时保留消息采集、停止图片侧工，学习队列沿用先持久化消息、再按压力跳过学习的规则，不向 MaiBot 外发；过期消息沿用入口丢弃规则。
 
@@ -69,7 +69,7 @@ durable work handler 可以返回 `DirectWorkResult`，其中的 `DirectBotActio
 
 当前上游临时出站 ID 仅含毫秒时间戳，Legacy echo 又按裸 ID 跨会话更新；多账号模式因此从第一条回包起完全禁用 echo，不随在线账号数量改变。纯文本发送仍可用，但引用、撤回、编辑和依赖真实 ID 的回复映射不支持。这只避免该回填风险，不代表修复了上游内部 ID 的全部歧义，也不代表不同账号的所有学习数据已完全隔离。
 
-会话 ID 包含账号，但记忆检索还受 MaiBot 的 `[a_memorix]` 配置控制：默认 `global_memory_sharing_enabled = false`，未配置共享组时按当前会话收敛；开启全局共享或跨会话共享组会改变这一边界。这些原生配置仍生效，不把“账号会话 ID 不同”说成无条件的记忆隔离。
+会话 ID 包含账号，但记忆检索还受 MaiBot 的 `[a_memorix]` 配置控制：默认 `global_memory_sharing_enabled = false`，未配置共享组时按当前会话收敛；开启全局共享或跨会话共享组会改变这一边界。同步保留这些非受管配置，不把“账号会话 ID 不同”说成无条件的记忆隔离。
 
 配置只从现有合并配置读取，手动写入 `config/pallas.toml` 的 `[env]`；WebUI 落盘的同名键仍具有更高优先级。未新增管理页面。
 
@@ -83,7 +83,7 @@ durable work handler 可以返回 `DirectWorkResult`，其中的 `DirectBotActio
 | `MAIBOT_BRIDGE_PLATFORM` | 与服务端路由一致的平台标识 |
 | `MAIBOT_BRIDGE_TOKEN` | 可选鉴权值，不写入日志或公开配置 |
 
-生命周期在发送队列就绪后连接桥，在关闭发送队列前停止桥。连接握手最多等待 10 秒；连接失败时命令服务仍可继续，但移交群保持仅采集、不回退。当前仅支持纯文本，去重窗口只在进程内有效；无自动重连、离线补发、跨重启去重、媒体桥、旧记忆迁移或语义风格 Hook。共享核心人设仍需在 MaiBot 中配置；DB 中的账号行为权重、学习别名和群风格未做完整迁移。协议服务端回环与模拟 dispatch / 发送队列测试不能代替真实 MaiBot 和 QQ 联调。
+生命周期在发送队列就绪后连接桥，在关闭发送队列前停止桥。连接握手最多等待 10 秒；连接失败时命令服务仍可继续，但移交群保持仅采集、不回退。当前仅支持纯文本，去重窗口只在进程内有效；无自动重连、离线补发、跨重启去重、媒体桥、旧记忆迁移或语义风格 Hook。共享核心人设可通过下述显式同步迁移；DB 中的账号行为权重、学习别名和群风格未做完整迁移。协议服务端回环与模拟 dispatch / 发送队列测试不能代替真实 MaiBot 和 QQ 联调。
 
 ### 可选统一启动（Linux）
 
@@ -102,6 +102,19 @@ durable work handler 可以返回 `DirectWorkResult`，其中的 `DirectBotActio
 继续使用 `uv run pallas run -d`、`uv run pallas stop`、`uv run pallas restart -d`、`uv run pallas status` 和 `uv run pallas logs`。Pallas 已运行时才新启用托管，必须 restart；桥没有自动重连。停止先结束 Pallas/桥，再停止已核实身份的 MaiBot 进程组，给予约 55 秒优雅退出。启动失败只回滚本次新建进程，不误停已有实例；停止失败会阻止 restart。
 
 运行文件位于 `data/pallas_maibot/run/`，日志为 `data/pallas_maibot/logs/maibot.log`。进程身份依赖 Linux `/proc` 核实，不支持的平台拒绝启用；无法核实的活 PID 不接管、不发送终止信号。这里只保证串行重复启动的幂等，不承诺并发 CLI 启动、跨平台托管、无主孤儿组自动清理或逃逸到新 session 的孙进程回收。无法安全停止的残留需人工确认处理。
+
+### 共享人设与模型配置同步
+
+设置 `[env]` 的 `MAIBOT_CONFIG_SYNC_ENABLED = "true"`，表示明确授权 Pallas 在受管实例停机时接管下述字段；默认 `false`，未开启时保留现有手工 MaiBot 配置。只同步已准备好的实例，不替用户安装或接受协议，外部非托管实例不自动写入。开启后需用 restart 应用，不能靠重复 start 宣称已更新运行中实例。配置同步与托管启停共用锁，未知存活实例、占用端口和未解决孤组均拒绝同步；转换失败不启动实例。
+
+- 人设读取当前共享基础提示词，包括有效的 append/replace 覆盖，写入 `personality.personality`；通称写入 `bot.nickname`、`bot.alias_names`。不调用 DB 人格编译，不把酒后状态、旧 agent 工具治理或行为指纹混入目标，也不安装风格指导 Hook。
+- `replyer`、`planner` 读取 Pallas 的 `llm_chat` 有效端点，`utils` 读取 `turn_decision`，Embedding 只使用真实远程 Embedding 线路；其余模型角色保留目标原生或手工配置。任务输出上限、温度等执行参数保留 MaiBot 原生/手工值，不把旧 agent 的短回复预算套给规划或摘要任务。Chat Completions/Responses 分别使用上游对应客户端，保留已明确的 effort 参数及 CPA 流式要求；请求配置为关闭思考不代表服务端确实关闭。
+- 首轮不支持无法等价执行的多候选回退、多密钥轮换、原生 Anthropic/Ollama 请求协议，以及适用的 provider 日费用/token 封顶和 Pallas 聊天日调用/token 封顶。这些情况在写盘前明确拒绝，不选择首模型或静默放宽预算。
+- 同步仅接受已核对的目标版本：`bot_config.toml` 的 `[inner].version` 为 `8.15.47`，`model_config.toml` 为 `1.17.24`；版本变化需更新适配，不伪造上游版本。
+
+只更新受管字段和 `pallas-` 前缀的模型记录，保留其他配置与注释。首次接管备份为同目录的 `*.toml.pallas-backup`，不会覆盖内容不同的既有备份；配置目录、目标和备份不接受符号链接。密钥只写入实例模型文件，目标、临时文件与备份使用 `0600`，不进入日志。`.pallas-managed.json` 仅记录受管字段摘要，检测到手工修改受管内容时拒绝覆盖。
+
+重复同步相同输入不改写文件；dry-run 不落盘。两文件先完成渲染和关键结构校验再替换，普通失败回滚原文件；进程在跨文件替换中被强制 KILL 的事务恢复不在首轮保证内。校验覆盖已冻结的版本、类型、引用和任务范围约束，不等于在本机执行了完整上游配置加载器。
 
 ## 出站发送队列
 

@@ -209,6 +209,22 @@ def test_existing_pallas_managed_off_keeps_old_behavior(monkeypatch, tmp_path: P
     assert aux_called == [1]
 
 
+def test_existing_pallas_sync_enabled_requires_restart(monkeypatch, tmp_path: Path, capsys):
+    from pallas.console.cli import maibot_aux
+
+    _arm_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(unified_lifecycle, "is_bot_running", lambda: True)
+    monkeypatch.setattr(unified_lifecycle, "read_pid_file", lambda _p: 42)
+    monkeypatch.setattr(maibot_aux, "load_managed_config", lambda: maibot_aux.ManagedMaiBotConfig(enabled=True))
+    monkeypatch.setattr(maibot_aux, "_config_sync_enabled", lambda: True)
+    aux_called: list = []
+    monkeypatch.setattr(unified_lifecycle, "start_aux_services", lambda: aux_called.append(1) or 0)
+
+    assert unified_lifecycle.start_bot(detach=True) == 1
+    assert aux_called == []  # running Pallas must not silently swallow the sync need
+    assert "restart" in capsys.readouterr().err
+
+
 def test_existing_pallas_invalid_managed_returns_nonzero(monkeypatch, tmp_path: Path, capsys):
     from pallas.console.cli import maibot_aux
 

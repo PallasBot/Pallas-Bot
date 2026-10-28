@@ -216,6 +216,12 @@ def start_bot(*, skip_port_sync: bool = False, detach: bool = False) -> int:
         print(f"unified 已在运行 (pid {read_pid_file(PID_FILE)})")
         from pallas.console.cli import maibot_aux
 
+        if maibot_aux.config_sync_requested():
+            print(
+                "unified 已在运行；已启用 MaiBot 配置同步，需 restart 才能应用（本次不写文件）",
+                file=sys.stderr,
+            )
+            return 1
         state = maibot_aux.managed_runtime_state()
         if state == "invalid":
             print("unified 已在运行，但托管 MaiBot 配置无效；请修复后 restart", file=sys.stderr)
