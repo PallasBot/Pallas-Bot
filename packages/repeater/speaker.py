@@ -121,16 +121,12 @@ class Speaker:
             if not len(group_replies) or len(group_msgs) < basic_msgs_len:
                 continue
 
-            group_replies_front = list(group_replies.values())[0]
-            if not len(group_replies_front) or group_replies_front[-1]["time"] > group_msgs[-1].time:
-                continue
-
-            msgs_len = len(group_msgs)
-            latest_time = group_msgs[-1].time
-            duration = latest_time - group_msgs[0].time
-            avg_interval = duration / msgs_len
-
             candidate_bot_ids = [bid for bid in group_replies.keys() if bid]
+            from pallas.product.agent_bridge.runtime import bridge_suppresses
+
+            # Drop bridge-owned accounts before persona/reply_dict writes, keeping
+            # out-of-scope accounts reachable.
+            candidate_bot_ids = [bid for bid in candidate_bot_ids if not bridge_suppresses(bid, group_id)]
             from pallas.core.platform.shard.registry.config import is_sharding_active
 
             from .shard_opt import local_connected_bot_ids
@@ -140,6 +136,18 @@ class Speaker:
                 candidate_bot_ids = [bid for bid in candidate_bot_ids if bid in local_bots]
             if not candidate_bot_ids:
                 continue
+
+            # Front must be a retained candidate, else the SPEAK_FLAG write below
+            # would land on a bridge-owned queue.
+            group_replies_front = group_replies[candidate_bot_ids[0]]
+            if not len(group_replies_front) or group_replies_front[-1]["time"] > group_msgs[-1].time:
+                continue
+
+            msgs_len = len(group_msgs)
+            latest_time = group_msgs[-1].time
+            duration = latest_time - group_msgs[0].time
+            avg_interval = duration / msgs_len
+
             speak_bias = 1.0
             activity_persona = None
             for bid in candidate_bot_ids:

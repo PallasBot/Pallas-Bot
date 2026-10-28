@@ -285,3 +285,50 @@ async def test_forward_refused_when_remote_scrub_raises(monkeypatch):
     bot = SimpleNamespace(self_id=str(BOT_ID))
     assert await runtime.forward_owned_event(bot, _event(), command_traffic=False) is False
     assert bridge.forwarded == []
+
+
+def _multi_config(**overrides):
+    base = {
+        "enabled": True,
+        "url": "ws://127.0.0.1:18000/ws",
+        "bot_id": 0,
+        "bot_ids": frozenset({BOT_ID, OTHER_BOT}),
+        "group_ids": frozenset({GROUP_ID}),
+        "platform": "pallas-qq",
+        "token": "",
+    }
+    base.update(overrides)
+    return MaiBotBridgeConfig(**base)
+
+
+def test_multi_account_owns_every_snapshot_account(monkeypatch):
+    _arm(monkeypatch, owner=_multi_config())
+    assert runtime.bridge_owns(BOT_ID, GROUP_ID) is True
+    assert runtime.bridge_owns(OTHER_BOT, GROUP_ID) is True
+    assert runtime.bridge_owns_account(BOT_ID) is True
+    assert runtime.bridge_owns_account(OTHER_BOT) is True
+    assert runtime.bridge_owns_account(99999) is False
+
+
+def test_multi_account_communication_follows_live_set(monkeypatch):
+    _arm(monkeypatch, owner=_multi_config(), live=_multi_config(bot_ids=frozenset({BOT_ID})))
+    assert runtime.communication_allowed(BOT_ID, GROUP_ID) is True
+    assert runtime.communication_allowed(OTHER_BOT, GROUP_ID) is False  # live removed it
+
+
+def test_bridge_status_reports_bot_ids_without_url(monkeypatch):
+    _arm(monkeypatch, owner=_multi_config())
+    status = runtime.bridge_status()
+    assert status["bot_ids"] == [BOT_ID, OTHER_BOT]
+    assert "url" not in status
+    assert status["url_configured"] is True
+
+
+async def test_forward_filters_managed_peer_account(monkeypatch):
+    _arm(monkeypatch, owner=_multi_config())
+    bridge = _patch_forward(monkeypatch)
+    bot = SimpleNamespace(self_id=str(BOT_ID))
+    assert await runtime.forward_owned_event(bot, _event(user_id=OTHER_BOT), command_traffic=False) is False
+    assert bridge.forwarded == []
+    assert await runtime.forward_owned_event(bot, _event(user_id=7), command_traffic=False) is True
+    assert len(bridge.forwarded) == 1

@@ -27,6 +27,7 @@ from pallas.product.agent_bridge import runtime
 from pallas.product.agent_bridge.config import MaiBotBridgeConfig
 
 BOT_ID = 10001
+OTHER_BOT = 10002
 GROUP_ID = 700001
 OTHER_GROUP = 700002
 PLATFORM = "pallas-qq"
@@ -45,10 +46,10 @@ def _config(**overrides):
     return MaiBotBridgeConfig(**base)
 
 
-def _event(*, user_id=7, group_id=GROUP_ID, message_id=123, text="synthetic text", to_me=False):
+def _event(*, user_id=7, group_id=GROUP_ID, message_id=123, text="synthetic text", to_me=False, self_id=BOT_ID):
     return GroupMessageEvent(
         time=1800000000,
-        self_id=BOT_ID,
+        self_id=self_id,
         post_type="message",
         message_type="group",
         sub_type="normal",
@@ -315,6 +316,32 @@ async def test_scope_owned_chat_captures_forwards_and_echoes(monkeypatch, framew
         "echo": "mai-out-1",
         "actual_id": "500001",
     }
+
+
+@pytest.mark.parametrize("to_me", [False, True])
+async def test_multi_account_scope_suppresses_every_owned_account(
+    monkeypatch, framework_state, fake_mai, qq_queue, to_me
+):
+    kernel_calls: list[str] = []
+    captures: list[str] = []
+    llm_probe: list[str] = []
+    _register_pool()
+    _patch_boundaries(monkeypatch, kernel_calls=kernel_calls, captures=captures, llm_probe=llm_probe)
+    owner = _config(url=fake_mai.url, bot_id=0, bot_ids=frozenset({BOT_ID, OTHER_BOT}))
+    monkeypatch.setattr(runtime, "load_bridge_config", lambda: owner)
+    monkeypatch.setattr(runtime, "_live_config_or_none", lambda: owner)
+    assert await runtime.start_bridge() is True
+    await fake_mai.wait_connected()
+
+    other = Bot(Adapter(nonebot.get_driver()), self_id=str(OTHER_BOT))
+    await md.patched_handle_event_now(other, _event(self_id=OTHER_BOT, to_me=to_me))
+
+    assert captures == ["run"]  # both owned accounts capture exactly once
+    assert kernel_calls == []  # old repeater kernel not called for the peer account
+    assert llm_probe == []  # old llm_chat matcher suppressed before its rule
+    await _wait(lambda: fake_mai.frames())
+    assert fake_mai.frames()[0]["account_id"] == str(OTHER_BOT)
+    assert fake_mai.frames()[0]["message_info"]["additional_config"]["account_id"] == str(OTHER_BOT)
 
 
 async def test_scope_owned_command_runs_but_is_not_forwarded(monkeypatch, framework_state, fake_mai, qq_queue):

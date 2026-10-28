@@ -1,9 +1,11 @@
 """Strict static MaiBot bridge configuration from ``config/pallas.toml [env]``.
 
 Keys (all ``MAIBOT_BRIDGE_*``): ``ENABLED`` (default false), ``URL``,
-``BOT_ID``, ``GROUP_IDS`` (JSON list), ``PLATFORM``, optional ``TOKEN``.
-Explicitly enabling with an unusable value raises instead of silently guessing
-an account or group. Disabled config never validates the other keys.
+``BOT_ID`` (single account) or ``BOT_IDS`` (non-empty JSON list, mutually
+exclusive with a non-empty ``BOT_ID``), ``GROUP_IDS`` (JSON list, shared),
+``PLATFORM``, optional ``TOKEN``. Explicitly enabling with an unusable value
+raises instead of silently guessing an account or group. Disabled config never
+validates the other keys.
 """
 
 from __future__ import annotations
@@ -20,11 +22,12 @@ if TYPE_CHECKING:
 ENABLED_KEY = "MAIBOT_BRIDGE_ENABLED"
 URL_KEY = "MAIBOT_BRIDGE_URL"
 BOT_ID_KEY = "MAIBOT_BRIDGE_BOT_ID"
+BOT_IDS_KEY = "MAIBOT_BRIDGE_BOT_IDS"
 GROUP_IDS_KEY = "MAIBOT_BRIDGE_GROUP_IDS"
 PLATFORM_KEY = "MAIBOT_BRIDGE_PLATFORM"
 TOKEN_KEY = "MAIBOT_BRIDGE_TOKEN"
 
-BRIDGE_KEYS = (ENABLED_KEY, URL_KEY, BOT_ID_KEY, GROUP_IDS_KEY, PLATFORM_KEY, TOKEN_KEY)
+BRIDGE_KEYS = (ENABLED_KEY, URL_KEY, BOT_ID_KEY, BOT_IDS_KEY, GROUP_IDS_KEY, PLATFORM_KEY, TOKEN_KEY)
 
 _TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
 _FALSE_VALUES = frozenset({"0", "false", "no", "off"})
@@ -44,9 +47,32 @@ class MaiBotBridgeConfig:
     group_ids: frozenset[int] = frozenset()
     platform: str = ""
     token: str = ""
+    bot_ids: frozenset[int] = frozenset()
+
+    def __post_init__(self) -> None:
+        effective = frozenset(self.bot_ids)
+        if self.bot_id:
+            effective = effective | {self.bot_id}
+        object.__setattr__(self, "bot_ids", effective)
 
     def owns_group(self, group_id: int) -> bool:
         return self.enabled and int(group_id) in self.group_ids
+
+    def owns_bot(self, bot_id: object) -> bool:
+        try:
+            value = int(bot_id)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return False
+        return self.enabled and value in self.bot_ids
+
+    @property
+    def multi_account(self) -> bool:
+        return len(self.bot_ids) > 1
+
+    @property
+    def default_bot_id(self) -> int | None:
+        """Single fixed binding only; multi-account never guesses a first account."""
+        return self.bot_id or None
 
 
 def parse_enabled(raw: object) -> bool:
@@ -106,6 +132,32 @@ def parse_group_ids(raw: object) -> frozenset[int]:
     return frozenset(parse_positive_int(item, GROUP_IDS_KEY) for item in data)
 
 
+def parse_bot_ids(raw: Mapping[str, object]) -> frozenset[int]:
+    """Resolve the account set from ``BOT_IDS`` (list) or legacy single ``BOT_ID``.
+
+    Non-empty ``BOT_IDS`` and non-empty ``BOT_ID`` are mutually exclusive; neither
+    present is an explicit error (never guess the first account).
+    """
+    single = str(raw.get(BOT_ID_KEY) or "").strip()
+    many = str(raw.get(BOT_IDS_KEY) or "").strip()
+    if single and many:
+        raise BridgeConfigError(f"{BOT_ID_KEY} and {BOT_IDS_KEY} are mutually exclusive")
+    if many:
+        try:
+            data = json.loads(many)
+        except ValueError as exc:
+            raise BridgeConfigError(f"{BOT_IDS_KEY} must be a JSON list of positive integers") from exc
+        if not isinstance(data, list) or not data:
+            raise BridgeConfigError(f"{BOT_IDS_KEY} must be a non-empty JSON list of positive integers")
+        ids = frozenset(parse_positive_int(item, BOT_IDS_KEY) for item in data)
+        if not ids:
+            raise BridgeConfigError(f"{BOT_IDS_KEY} must be a non-empty JSON list of positive integers")
+        return ids
+    if single:
+        return frozenset({parse_positive_int(single, BOT_ID_KEY)})
+    raise BridgeConfigError(f"enabling the bridge requires {BOT_ID_KEY} or {BOT_IDS_KEY}")
+
+
 def parse_bridge_config(raw: Mapping[str, object]) -> MaiBotBridgeConfig:
     """Pure parser; ``raw`` maps each ``BRIDGE_KEYS`` entry to a raw value."""
     enabled = parse_enabled(raw.get(ENABLED_KEY))
@@ -115,10 +167,13 @@ def parse_bridge_config(raw: Mapping[str, object]) -> MaiBotBridgeConfig:
     platform = parse_header_value(raw.get(PLATFORM_KEY), PLATFORM_KEY)
     if not platform:
         raise BridgeConfigError(f"{PLATFORM_KEY} is required when the bridge is enabled")
+    bot_ids = parse_bot_ids(raw)
+    single = next(iter(bot_ids)) if len(bot_ids) == 1 else 0
     return MaiBotBridgeConfig(
         enabled=True,
         url=url,
-        bot_id=parse_positive_int(raw.get(BOT_ID_KEY), BOT_ID_KEY),
+        bot_id=single,
+        bot_ids=bot_ids,
         group_ids=parse_group_ids(raw.get(GROUP_IDS_KEY)),
         platform=platform,
         token=parse_header_value(raw.get(TOKEN_KEY), TOKEN_KEY),

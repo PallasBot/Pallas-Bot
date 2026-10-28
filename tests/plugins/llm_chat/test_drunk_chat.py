@@ -107,6 +107,44 @@ async def test_drunk_chat_yields_to_extension_plugin(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.asyncio
+async def test_drunk_rule_skips_bridge_owned_before_db(monkeypatch: pytest.MonkeyPatch) -> None:
+    from packages.llm_chat import drunk_chat as chat_mod
+
+    db_calls: list[str] = []
+
+    class FakeBotConfig:
+        def __init__(self, *_args, **_kwargs) -> None:
+            db_calls.append("BotConfig")
+
+        async def drunkenness(self) -> int:
+            return 1
+
+    monkeypatch.setattr(chat_mod, "BotConfig", FakeBotConfig)
+    monkeypatch.setattr(chat_mod, "extension_drunk_chat_loaded", lambda: False)
+    monkeypatch.setattr(chat_mod, "is_llm_chat_service_enabled", lambda: True)
+    monkeypatch.setattr(chat_mod, "is_legacy_rwkv_drunk_chat_enabled", lambda: False)
+    monkeypatch.setattr("pallas.product.agent_bridge.runtime.bridge_suppresses", lambda _b, _g: True)
+
+    class DummyEvent:
+        self_id = "1"
+        group_id = 2
+
+        def is_tome(self) -> bool:
+            return True
+
+        def get_plaintext(self) -> str:
+            return "牛牛 你好"
+
+    assert await chat_mod.is_to_drunk_chat(DummyEvent()) is False
+    assert db_calls == []  # no DB/task side effect before the bridge gate
+
+    # out-of-scope positive control: the rule still consults the DB
+    monkeypatch.setattr("pallas.product.agent_bridge.runtime.bridge_suppresses", lambda _b, _g: False)
+    assert await chat_mod.is_to_drunk_chat(DummyEvent()) is True
+    assert db_calls == ["BotConfig"]
+
+
+@pytest.mark.asyncio
 async def test_sober_up_keeps_llm_history_and_clears_service_session(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

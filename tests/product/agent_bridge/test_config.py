@@ -4,6 +4,7 @@ import pytest
 
 from pallas.product.agent_bridge.config import (
     BOT_ID_KEY,
+    BOT_IDS_KEY,
     ENABLED_KEY,
     GROUP_IDS_KEY,
     PLATFORM_KEY,
@@ -93,6 +94,54 @@ def test_url_must_be_absolute_ws_or_wss(url):
 def test_valid_ws_and_wss_urls_accepted():
     assert parse_bridge_config({**_ENABLED_BASE, URL_KEY: "ws://127.0.0.1:18000/ws"}).url == "ws://127.0.0.1:18000/ws"
     assert parse_bridge_config({**_ENABLED_BASE, URL_KEY: "wss://bot.example/ws"}).url == "wss://bot.example/ws"
+
+
+_MULTI_BASE = {key: value for key, value in _ENABLED_BASE.items() if key != BOT_ID_KEY}
+
+
+def test_single_account_keeps_legacy_binding():
+    config = parse_bridge_config(_ENABLED_BASE)
+    assert config.bot_id == 10001
+    assert config.bot_ids == frozenset({10001})
+    assert config.multi_account is False
+    assert config.default_bot_id == 10001
+    assert config.owns_bot(10001) is True
+    assert config.owns_bot(10002) is False
+
+
+def test_multi_account_bot_ids_parsed_without_first_account_guess():
+    config = parse_bridge_config({**_MULTI_BASE, BOT_IDS_KEY: "[10001, 10002]"})
+    assert config.bot_ids == frozenset({10001, 10002})
+    assert config.bot_id == 0
+    assert config.multi_account is True
+    assert config.default_bot_id is None
+    assert config.owns_bot(10002) is True
+
+
+def test_bot_id_and_bot_ids_are_mutually_exclusive():
+    with pytest.raises(BridgeConfigError):
+        parse_bridge_config({**_ENABLED_BASE, BOT_IDS_KEY: "[10002]"})
+
+
+def test_enabled_without_any_bot_identity_raises():
+    with pytest.raises(BridgeConfigError):
+        parse_bridge_config(_MULTI_BASE)
+
+
+@pytest.mark.parametrize("raw", ["[]", "not-json", "123", "[0]", "[-1]", '["a"]', "[10001, 0]"])
+def test_bot_ids_rejects_bad_values(raw):
+    with pytest.raises(BridgeConfigError):
+        parse_bridge_config({**_MULTI_BASE, BOT_IDS_KEY: raw})
+
+
+def test_bot_ids_dedupes_repeated_ids():
+    config = parse_bridge_config({**_MULTI_BASE, BOT_IDS_KEY: "[10001, 10001]"})
+    assert config.bot_ids == frozenset({10001})
+
+
+def test_empty_bot_id_falls_back_to_bot_ids():
+    config = parse_bridge_config({**_MULTI_BASE, BOT_ID_KEY: "", BOT_IDS_KEY: "[10001, 10002]"})
+    assert config.bot_ids == frozenset({10001, 10002})
 
 
 @pytest.mark.parametrize("field", [PLATFORM_KEY, "MAIBOT_BRIDGE_TOKEN"])

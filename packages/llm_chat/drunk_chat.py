@@ -69,6 +69,12 @@ async def on_sober_up(bot_id, group_id, drunkenness) -> None:
 
 
 async def is_to_drunk_chat(event: GroupMessageEvent) -> bool:
+    # MaiBot bridge-owned (bot, group): the shared MaiBot runtime serves this
+    # chat, so the old drunk path must not touch DB/task state.
+    from pallas.product.agent_bridge.runtime import bridge_suppresses
+
+    if bridge_suppresses(event.self_id, event.group_id):
+        return False
     if extension_drunk_chat_loaded():
         return False
     if not (is_llm_chat_service_enabled() or is_legacy_rwkv_drunk_chat_enabled()):

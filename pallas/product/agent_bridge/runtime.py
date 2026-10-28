@@ -89,7 +89,13 @@ def live_bridge_config() -> MaiBotBridgeConfig:
 def bridge_owns(bot_id: int, group_id: int) -> bool:
     """Ownership from the fixed startup snapshot only; live edits never release it."""
     owner = _owner_config
-    return owner is not None and owner.bot_id == int(bot_id) and owner.owns_group(int(group_id))
+    return owner is not None and owner.owns_bot(int(bot_id)) and owner.owns_group(int(group_id))
+
+
+def bridge_owns_account(bot_id: object) -> bool:
+    """Whether a startup account is managed (used to filter peer-account traffic)."""
+    owner = _owner_config
+    return owner is not None and owner.owns_bot(bot_id)
 
 
 def communication_allowed(bot_id: int, group_id: int) -> bool:
@@ -99,7 +105,7 @@ def communication_allowed(bot_id: int, group_id: int) -> bool:
     live = _live_config_or_none()
     if live is None:
         return False
-    return live.enabled and live.bot_id == int(bot_id) and int(group_id) in live.group_ids
+    return live.enabled and live.owns_bot(int(bot_id)) and int(group_id) in live.group_ids
 
 
 def bridge_suppresses(bot_id: object, group_id: object) -> bool:
@@ -115,14 +121,16 @@ def bridge_suppresses(bot_id: object, group_id: object) -> bool:
 def bridge_status() -> dict[str, Any]:
     live = live_bridge_config()
     owner = _owner_config
+    source = owner if owner is not None else live
     return {
         "enabled": live.enabled,
         "armed": owner is not None,
         "connected": bool(_bridge is not None and _bridge.connected),
         "bot_id": owner.bot_id if owner is not None else live.bot_id,
-        "platform": owner.platform if owner is not None else live.platform,
-        "group_ids": sorted(owner.group_ids) if owner is not None else sorted(live.group_ids),
-        "url_configured": bool(owner.url if owner is not None else live.url),
+        "bot_ids": sorted(source.bot_ids),
+        "platform": source.platform,
+        "group_ids": sorted(source.group_ids),
+        "url_configured": bool(source.url),
     }
 
 
@@ -145,7 +153,7 @@ async def start_bridge() -> bool:
         raise BridgeUnsupportedDeploymentError("MaiBot bridge does not support a sharded deployment")
     scope = BridgeScope(
         enabled=True,
-        bot_id=config.bot_id,
+        bot_ids=config.bot_ids,
         allowed_group_ids=config.group_ids,
         platform=config.platform,
     )
@@ -221,8 +229,8 @@ async def forward_owned_event(bot: Any, event: Any, *, command_traffic: bool) ->
             interval_sec=30.0,
         )
         return False
-    if int(getattr(event, "user_id", 0) or 0) == bot_id:
-        return False  # never forward the bound account's own message
+    if bridge_owns_account(getattr(event, "user_id", None)):
+        return False  # never forward a managed peer account's own message
     from pallas.product.message_scrub import is_message_scrub_blocked_async
 
     try:

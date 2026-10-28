@@ -277,3 +277,52 @@ async def test_speak_excludes_invalid_payload_before_selection_and_dedup(monkeyp
     assert str(result[2][0]) == "allowed-content"
     assert list(Speaker._recent_speak[group_id]) == ["allowed-content"]
     assert all(record["reply"] != "[CQ:markdown]" for record in reply_dict[group_id][bot_id])
+
+
+@pytest.mark.asyncio
+async def test_speak_excludes_bridge_owned_accounts(beanie_fixture, monkeypatch) -> None:
+    from packages.repeater.message_store import MessageStore
+    from packages.repeater.speaker import Speaker
+    from pallas.product.persona.model import ResolvedPersona
+
+    group_id = 39401
+    owned_bot = 10001
+    other_bot = 10002
+    messages = [_build_message(group_id, 20001 + i, f"warmup-{i}", f"warmup-{i}", i + 1) for i in range(10)]
+    monkeypatch.setattr(MessageStore, "_message_dict", defaultdict(list, {group_id: messages}))
+    monkeypatch.setattr(Speaker, "_recent_speak", defaultdict(lambda: deque(maxlen=Speaker.DUPLICATE_REPLY)))
+    reply_dict = defaultdict(lambda: defaultdict(list))
+    reply_dict[group_id][owned_bot] = [{"time": 1, "reply": "x", "reply_keywords": "x"}]
+    reply_dict[group_id][other_bot] = [{"time": 1, "reply": "y", "reply_keywords": "y"}]
+
+    resolved: list[int] = []
+
+    async def resolve_persona(bot_id, _group_id=None):
+        resolved.append(int(bot_id))
+        return ResolvedPersona(speak_bias=2.0, chaos_bias=0.1, length_pref="short")
+
+    monkeypatch.setattr("packages.repeater.speaker.resolve_persona", resolve_persona)
+    monkeypatch.setattr("packages.repeater.speaker.blocks_proactive_speak", lambda _g: False)
+    monkeypatch.setattr("packages.repeater.speaker.Speaker._pick_speak_message", lambda *_a, **_k: messages[-1])
+    monkeypatch.setattr("packages.repeater.speaker.random.random", lambda: 1.0)
+    monkeypatch.setattr("packages.repeater.speaker.BanManager.find_ban_keywords", AsyncMock(return_value=set()))
+    monkeypatch.setattr("packages.repeater.speaker.BotConfig.taken_name", AsyncMock(return_value=-1))
+    monkeypatch.setattr("packages.repeater.reply_record_sync.publish_reply_record", lambda *_a: None)
+    monkeypatch.setattr("pallas.product.llm.proactive_emitter.emit_proactive", AsyncMock())
+    monkeypatch.setattr("packages.repeater.speaker.time.time", lambda: 10000)
+    monkeypatch.setattr("pallas.core.platform.shard.registry.config.is_sharding_active", lambda: False)
+    monkeypatch.setattr(
+        "pallas.core.platform.multi_bot.platform_utils.pick_connected_bot_id", lambda *_a, **_k: other_bot
+    )
+    monkeypatch.setattr(
+        "pallas.product.agent_bridge.runtime.bridge_suppresses", lambda bot_id, _g: int(bot_id) == owned_bot
+    )
+
+    owned_before = list(reply_dict[group_id][owned_bot])
+    result = await Speaker.speak(reply_dict, asyncio.Lock(), defaultdict(lambda: deque(maxlen=16)), asyncio.Lock())
+
+    assert result is not None
+    assert result[0] == other_bot  # out-of-scope account stays reachable
+    assert owned_bot not in resolved  # owned account never reaches persona resolution
+    assert list(reply_dict[group_id][owned_bot]) == owned_before  # owned queue untouched (front is a retained bot)
+    assert len(reply_dict[group_id][other_bot]) == 3  # initial + front placeholder + reply record
