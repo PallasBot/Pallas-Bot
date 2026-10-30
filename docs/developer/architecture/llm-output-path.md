@@ -16,6 +16,14 @@
 
 标准 OpenAI 输入计数中的缓存读取部分从普通输入桶中扣除；Anthropic Messages 的 `input_tokens` 本身不含缓存读写，按显式协议保留。未文档化的供应方 cache-write 字段可能与输入重叠，不推断其额外计费语义。此结果接口不等同于 MaiBot Provider 插件、旧聊天日限额或完整 Agent 生命周期已接线。
 
+### MaiBot 原生模型与预算
+
+首次受管启动将旧模型、凭据及可映射的任务主备迁入 MaiBot，后续请求直接使用 MaiBot 原生客户端，不经 Pallas Provider HTTP 或 SDK 代理插件。原生 WebUI 的模型及插件管理保留，不再持续同步旧 Pallas 配置。
+
+重试、模型选择、用量及预算遵循 MaiBot 原生行为；旧 Pallas 的每日额度、整轮 HTTP 尝试次数、时限和 key 轮换不会自动成为 MaiBot 的治理规则。多 key 迁为原生候选，`sequential` 每次从首项开始、失败才切换，不等价旧轮换。需要控制费用时应在原生配置或供应商侧设置，不能依赖 Pallas 的旧聊天开关/预算。
+
+远程文本 Embedding 可迁为原生配置，本地进程内后端和 stub 不伪装成原生服务。MaiBot 记忆的向量空间与数据生命周期随后由其原生实现负责；更换模型不代表旧向量已重建。Pallas 保留自身媒体、标注与检索所需的共享 Provider/Embedding，两边配置及记账不再持续联动。
+
 ## 出口总闸
 
 Pallas 共享 LLM 出口（`complete_chat_message`、`fetch_embeddings_sync`）仍受 `pallas.product.llm.availability.llm_calls_enabled` 约束：`LLM_CHAT_ENABLED` 为关，或 `llm_chat` 插件被全实例禁用时，不发请求。保留能力的后台循环与 work/embed 辅进程仍遵守各自作用域门禁。该开关不再启用旧聊天 agent，也不控制独立 MaiBot 的模型请求；不要为了退役旧聊天将它强制关闭而误伤 Embedding 或标注。治理细节见 [插件治理](plugin-governance.md)。

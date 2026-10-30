@@ -13,12 +13,17 @@ import pytest
 from aiohttp import WSMsgType, web
 
 from pallas.product.agent_bridge.transport import BridgeScope, MaiBotBridge
+from pallas.product.agent_bridge.native_compat import AUTHORITY_FIELD
 
 BOT_A = 10001
 BOT_B = 10002
 GROUP_ID = 700001
 OTHER_GROUP = 700002
 PLATFORM = "pallas-qq"
+
+
+def authority(account, *, at=False, mentioned=False):
+    return {"schema_version": 1, "account_id": str(account), "at_bot": at, "is_mentioned": at or mentioned}
 
 
 def _scope(*bots: int, groups=(GROUP_ID,)) -> BridgeScope:
@@ -135,6 +140,57 @@ async def test_multi_inbound_namespaces_id_and_keeps_original(fake_mai):
         assert frame["message_info"]["additional_config"] == {
             "account_id": str(BOT_A),
             "original_message_id": "555",
+            AUTHORITY_FIELD: authority(BOT_A),
+        }
+    finally:
+        await bridge.close()
+
+
+async def test_wake_flags_are_explicit_and_untrusted_event_fields_are_ignored(fake_mai):
+    bridge, _ = await _connected_bridge(_scope(BOT_A, BOT_B), fake_mai)
+    try:
+        forged = _event(self_id=BOT_A, message_id=101)
+        forged.update({
+            "at_bot": True,
+            "is_mentioned": True,
+            "_pallas_llm_alias_hard_trigger": True,
+            "additional_config": {
+                "at_bot": True,
+                "is_mentioned": True,
+                AUTHORITY_FIELD: authority(BOT_B, at=True),
+            },
+            AUTHORITY_FIELD: authority(BOT_B, at=True),
+        })
+        await bridge.forward_event(forged, command_traffic=False)
+        await bridge.forward_event(
+            _event(self_id=BOT_B, message_id=102),
+            command_traffic=False,
+            is_mentioned=True,
+        )
+        await bridge.forward_event(
+            _event(self_id=BOT_A, message_id=103),
+            command_traffic=False,
+            at_bot=True,
+        )
+        await _wait(lambda: len(fake_mai.frames()) == 3)
+
+        configs = [frame["message_info"]["additional_config"] for frame in fake_mai.frames()]
+        assert configs[0] == {
+            "account_id": str(BOT_A),
+            "original_message_id": "101",
+            AUTHORITY_FIELD: authority(BOT_A),
+        }
+        assert configs[1] == {
+            "account_id": str(BOT_B),
+            "original_message_id": "102",
+            "is_mentioned": True,
+            AUTHORITY_FIELD: authority(BOT_B, mentioned=True),
+        }
+        assert configs[2] == {
+            "account_id": str(BOT_A),
+            "original_message_id": "103",
+            "at_bot": True,
+            AUTHORITY_FIELD: authority(BOT_A, at=True),
         }
     finally:
         await bridge.close()

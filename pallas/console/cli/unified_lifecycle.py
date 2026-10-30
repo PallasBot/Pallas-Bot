@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import os
 import runpy
+import signal
 import sys
+import threading
 import time
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -124,6 +126,87 @@ def is_bot_running() -> bool:
     return pid is not None and pid_alive(pid)
 
 
+def _managed_paths():
+    from pallas.console.cli.managed_lifecycle import ManagedPaths
+
+    return ManagedPaths(
+        project_root=PROJECT_ROOT,
+        run_dir=RUN_DIR,
+        pid_file=PID_FILE,
+        owner_file=RUN_DIR / "bot.owner.json",
+        lock_file=RUN_DIR / "managed.lock",
+        log_file=launcher_log_path(),
+    )
+
+
+def _start_managed_bot(*, port: int, skip_port_sync: bool, detach: bool) -> int:
+    from pallas.console.cli import managed_lifecycle
+
+    paths = _managed_paths()
+    recorded_pid = read_pid_file(PID_FILE)
+    if recorded_pid is not None and pid_alive(recorded_pid):
+        if managed_lifecycle.owned_bot_pid(paths) != recorded_pid:
+            print("unified 已运行，但 Pallas PID 身份无法核实；拒绝接管或停止", file=sys.stderr)
+            return 1
+        from pallas.console.cli import maibot_aux
+
+        if maibot_aux.config_sync_requested():
+            print("unified 已在运行；已启用 MaiBot 配置同步，需 restart 才能应用（本次不写文件）", file=sys.stderr)
+            return 1
+        status = managed_lifecycle.managed_status(paths, port)
+        print(f"unified 已在运行 · pid {recorded_pid}")
+        print(f"MaiBot 托管状态：{status}")
+        if not status.startswith("component ready:"):
+            print("当前受管组件未达到启动就绪证据，请先 restart", file=sys.stderr)
+        return 0 if status.startswith("component ready:") else 1
+
+    stop_event = threading.Event()
+    received_signal: list[int] = []
+    previous_handlers: dict[int, object] = {}
+
+    def request_stop(signum, _frame) -> None:
+        if not received_signal:
+            received_signal.append(signum)
+        stop_event.set()
+
+    on_main_thread = threading.current_thread() is threading.main_thread()
+    if on_main_thread:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            previous_handlers[sig] = signal.getsignal(sig)
+            signal.signal(sig, request_stop)
+    try:
+        runtime = managed_lifecycle.start_managed_runtime(
+            port,
+            paths=paths,
+            detached=detach,
+            stop_requested=stop_event.is_set,
+            pre_launch=lambda: prepare_unified_ports(port, skip_port_sync=skip_port_sync) == 0,
+        )
+        if runtime is None:
+            return 128 + received_signal[0] if received_signal else 1
+        if stop_event.is_set():
+            return managed_lifecycle.wait_foreground(
+                runtime,
+                stop_requested=stop_event.is_set,
+                stop_signal=lambda: received_signal[0] if received_signal else None,
+            )
+        if detach:
+            print(f"unified 已转入后台 · pid {runtime.pid} · port {port}")
+            print(f"启动器日志 {paths.log_file}")
+            return 0
+        print(f"unified 前台运行 · port {port}")
+        print(f"控制台 http://127.0.0.1:{port}/pallas/")
+        print("按 Ctrl+C 停止本次受管 Pallas/MaiBot 组件与本次启动的辅进程。")
+        return managed_lifecycle.wait_foreground(
+            runtime,
+            stop_requested=stop_event.is_set,
+            stop_signal=lambda: received_signal[0] if received_signal else None,
+        )
+    finally:
+        for sig, handler in previous_handlers.items():
+            signal.signal(sig, handler)
+
+
 def read_listen_port() -> int:
     raw = os.environ.get("PORT", "").strip()
     if raw.isdigit():
@@ -210,6 +293,16 @@ def print_startup_failure(log_path: Path) -> None:
 
 
 def start_bot(*, skip_port_sync: bool = False, detach: bool = False) -> int:
+    from pallas.console.cli import maibot_aux
+
+    try:
+        managed_config = maibot_aux.load_managed_config()
+    except maibot_aux.ManagedConfigError as exc:
+        print(f"unified 启动失败：MaiBot 托管配置无效：{exc}", file=sys.stderr)
+        return 1
+    if managed_config.enabled or (RUN_DIR / "bot.owner.json").is_file():
+        return _start_managed_bot(port=read_listen_port(), skip_port_sync=skip_port_sync, detach=detach)
+
     RUN_DIR.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     if is_bot_running():
@@ -332,6 +425,22 @@ def start_bot(*, skip_port_sync: bool = False, detach: bool = False) -> int:
 
 
 def stop_bot(*, stop_managed: bool = True) -> int:
+    from pallas.console.cli import maibot_aux
+
+    managed_paths = _managed_paths()
+    managed_enabled = managed_paths.owner_file.is_file()
+    try:
+        managed_enabled = managed_enabled or maibot_aux.load_managed_config().enabled
+    except maibot_aux.ManagedConfigError:
+        pass
+    if managed_enabled:
+        if not stop_managed:
+            print("managed 运行时不能跳过 MaiBot 停止", file=sys.stderr)
+            return 1
+        from pallas.console.cli import managed_lifecycle
+
+        return 0 if managed_lifecycle.stop_running_managed(read_listen_port(), paths=managed_paths) else 1
+
     stop_aux_services()
     pid = read_pid_file(PID_FILE)
     if pid is None or not pid_alive(pid):
@@ -348,9 +457,29 @@ def stop_bot(*, stop_managed: bool = True) -> int:
 
 def status_bot() -> int:
     port = read_listen_port()
+    from pallas.console.cli import maibot_aux
+
+    managed_paths = _managed_paths()
+    try:
+        managed_enabled = managed_paths.owner_file.is_file() or maibot_aux.load_managed_config().enabled
+    except maibot_aux.ManagedConfigError:
+        managed_enabled = managed_paths.owner_file.is_file()
     print("Pallas · 统一运行时")
     print(f"  监听端口   {port}")
-    if is_bot_running():
+    if managed_enabled:
+        from pallas.console.cli import managed_lifecycle
+
+        paths = _managed_paths()
+        pid = managed_lifecycle.owned_bot_pid(paths)
+        if pid is not None:
+            print(f"  消息实例   运行中 · pid {pid}")
+            print(f"  控制台     http://127.0.0.1:{port}/pallas/")
+        elif is_bot_running():
+            print("  消息实例   运行中但 PID 身份无法核实")
+        else:
+            print("  消息实例   未运行")
+        print(f"  MaiBot 托管状态：{managed_lifecycle.managed_status(paths, port)}")
+    elif is_bot_running():
         print(f"  消息实例   运行中 · pid {read_pid_file(PID_FILE)}")
         print(f"  控制台     http://127.0.0.1:{port}/pallas/")
     else:

@@ -17,6 +17,7 @@ _COMMAND_MODULES = (
     "pallas.console.cli.commands.maintenance_cmd",
     "pallas.console.cli.commands.deploy_cmd",
     "pallas.console.cli.commands.ai_cmd",
+    "pallas.console.cli.commands.maibot_cmd",
     "pallas.console.cli.commands.redis_cmd",
     "pallas.console.cli.commands.daemon_cmd",
     "pallas.console.cli.commands.console_token_cmd",

@@ -1,4 +1,4 @@
-"""Unified lifecycle ordering/rollback for the managed MaiBot pre-step."""
+"""Unified legacy and managed lifecycle contract tests."""
 
 from __future__ import annotations
 
@@ -13,6 +13,9 @@ if TYPE_CHECKING:
 
 
 def _arm_paths(monkeypatch, tmp_path: Path) -> None:
+    from pallas.console.cli import maibot_aux
+
+    monkeypatch.setattr(maibot_aux, "repo_env_raw_value", lambda _key: None)
     monkeypatch.setattr(unified_lifecycle, "RUN_DIR", tmp_path / "run")
     monkeypatch.setattr(unified_lifecycle, "LOG_DIR", tmp_path / "logs")
     monkeypatch.setattr(unified_lifecycle, "PID_FILE", tmp_path / "run" / "bot.pid")
@@ -34,14 +37,14 @@ def test_default_off_does_not_touch_maibot(monkeypatch):
     assert (rc, pid) == (0, None)
 
 
-def test_managed_started_before_detached_spawn(monkeypatch, tmp_path: Path):
+def test_managed_off_detached_uses_legacy_bot_spawn(monkeypatch, tmp_path: Path):
     order: list[str] = []
     state = {"running": False}
     _arm_paths(monkeypatch, tmp_path)
     monkeypatch.setattr(unified_lifecycle, "is_bot_running", lambda: state["running"])
     monkeypatch.setattr(unified_lifecycle, "cleanup_launcher_logs", lambda: None)
     monkeypatch.setattr(unified_lifecycle, "launcher_log_path", lambda: tmp_path / "logs" / "bot.log")
-    monkeypatch.setattr(unified_lifecycle, "start_managed_maibot", lambda: order.append("managed") or (0, True))
+    monkeypatch.setattr(unified_lifecycle, "start_managed_maibot", lambda: (0, None))
     monkeypatch.setattr(unified_lifecycle, "wait_for_bot_startup", lambda _p: True)
 
     def spawn(cmd, *, cwd, env=None, log_path=None):
@@ -53,35 +56,37 @@ def test_managed_started_before_detached_spawn(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(unified_lifecycle, "start_aux_services", lambda: 0)
 
     assert unified_lifecycle.start_bot(detach=True) == 0
-    assert order == ["managed", "spawn"]
+    assert order == ["spawn"]
 
 
-def test_managed_started_before_foreground_runpy(monkeypatch, tmp_path: Path):
+def test_managed_off_foreground_keeps_runpy_path(monkeypatch, tmp_path: Path):
     order: list[str] = []
     _arm_paths(monkeypatch, tmp_path)
     monkeypatch.setattr(unified_lifecycle, "is_bot_running", lambda: False)
-    monkeypatch.setattr(unified_lifecycle, "start_managed_maibot", lambda: order.append("managed") or (0, 4242))
+    monkeypatch.setattr(unified_lifecycle, "start_managed_maibot", lambda: (0, None))
     monkeypatch.setattr(unified_lifecycle, "start_aux_services", lambda: 0)
     monkeypatch.setattr(unified_lifecycle, "stop_aux_services", lambda: None)
-    monkeypatch.setattr(unified_lifecycle, "stop_spawned_maibot", lambda pid: order.append(("stop", pid)))
+    monkeypatch.setattr(
+        unified_lifecycle, "stop_spawned_maibot", lambda pid: order.append(("stop", pid)) if pid else None
+    )
     monkeypatch.setattr(unified_lifecycle.runpy, "run_path", lambda path, run_name: order.append("runpy"))
     monkeypatch.setattr(unified_lifecycle, "write_pid_file", lambda _p, _pid: None)
     monkeypatch.setattr(unified_lifecycle, "clear_pid_file", lambda _p: None)
 
     assert unified_lifecycle.start_bot(detach=False) == 0
-    assert order == ["managed", "runpy", ("stop", 4242)]
+    assert order == ["runpy"]
 
 
-def test_rollback_stops_managed_only_when_spawned(monkeypatch, tmp_path: Path):
+def test_legacy_rollback_does_not_stop_mai_when_managed_off(monkeypatch, tmp_path: Path):
     state = {"running": False}
     _arm_paths(monkeypatch, tmp_path)
     monkeypatch.setattr(unified_lifecycle, "cleanup_launcher_logs", lambda: None)
     monkeypatch.setattr(unified_lifecycle, "launcher_log_path", lambda: tmp_path / "logs" / "bot.log")
     monkeypatch.setattr(unified_lifecycle, "is_bot_running", lambda: state["running"])
     monkeypatch.setattr(unified_lifecycle, "start_aux_services", lambda: 1)  # aux fails
-    monkeypatch.setattr(unified_lifecycle, "start_managed_maibot", lambda: (0, 4242))
+    monkeypatch.setattr(unified_lifecycle, "start_managed_maibot", lambda: (0, None))
     stopped: list = []
-    monkeypatch.setattr(unified_lifecycle, "stop_spawned_maibot", lambda pid: stopped.append(pid))
+    monkeypatch.setattr(unified_lifecycle, "stop_spawned_maibot", lambda pid: stopped.append(pid) if pid else None)
     monkeypatch.setattr(unified_lifecycle, "stop_bot", lambda *, stop_managed=True: 1)
 
     def spawn(*_a, **_k):
@@ -91,15 +96,15 @@ def test_rollback_stops_managed_only_when_spawned(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(unified_lifecycle, "spawn_detached", spawn)
 
     assert unified_lifecycle.start_bot(detach=True) == 1
-    assert stopped == [4242]
+    assert stopped == []
 
 
-def test_rollback_keeps_preexisting_managed_on_spawn_failure(monkeypatch, tmp_path: Path):
+def test_managed_off_spawn_failure_does_not_touch_mai(monkeypatch, tmp_path: Path):
     from pallas.console.cli import maibot_aux
 
     _arm_paths(monkeypatch, tmp_path)
     monkeypatch.setattr(unified_lifecycle, "is_bot_running", lambda: False)
-    monkeypatch.setattr(unified_lifecycle, "start_managed_maibot", lambda: (0, None))  # already running
+    monkeypatch.setattr(unified_lifecycle, "start_managed_maibot", lambda: (0, None))
     stopped: list = []
     monkeypatch.setattr(maibot_aux, "stop_spawned_pid", lambda pid: stopped.append(pid))
 
@@ -113,9 +118,12 @@ def test_rollback_keeps_preexisting_managed_on_spawn_failure(monkeypatch, tmp_pa
     assert stopped == []
 
 
-def test_stop_bot_stops_managed_after_pallas(monkeypatch, tmp_path: Path):
+def test_managed_off_stop_keeps_legacy_order(monkeypatch, tmp_path: Path):
     order: list[str] = []
+    from pallas.console.cli import maibot_aux
+
     _arm_paths(monkeypatch, tmp_path)
+    monkeypatch.setattr(maibot_aux, "load_managed_config", lambda: maibot_aux.ManagedMaiBotConfig(enabled=False))
     monkeypatch.setattr(unified_lifecycle, "stop_aux_services", lambda: None)
     monkeypatch.setattr(unified_lifecycle, "read_pid_file", lambda _p: 555)
     monkeypatch.setattr(unified_lifecycle, "pid_alive", lambda _pid: True)
@@ -165,34 +173,62 @@ def test_invalid_managed_config_fails_unified_without_spawn_or_runpy(monkeypatch
 
 
 def test_existing_pallas_managed_missing_requires_restart(monkeypatch, tmp_path: Path, capsys):
-    from pallas.console.cli import maibot_aux
+    from pallas.console.cli import maibot_aux, managed_lifecycle
 
     _arm_paths(monkeypatch, tmp_path)
-    monkeypatch.setattr(unified_lifecycle, "is_bot_running", lambda: True)
+    monkeypatch.setattr(unified_lifecycle, "pid_alive", lambda _pid: True)
     monkeypatch.setattr(unified_lifecycle, "read_pid_file", lambda _p: 42)
     monkeypatch.setattr(maibot_aux, "load_managed_config", lambda: maibot_aux.ManagedMaiBotConfig(enabled=True))
-    monkeypatch.setattr(maibot_aux, "current_managed_process", lambda: None)
+    monkeypatch.setattr(managed_lifecycle, "owned_bot_pid", lambda _paths: 42)
+    monkeypatch.setattr(managed_lifecycle, "managed_status", lambda *_a: "component readiness not confirmed")
     aux_called: list = []
     monkeypatch.setattr(unified_lifecycle, "start_aux_services", lambda: aux_called.append(1) or 0)
 
     assert unified_lifecycle.start_bot(detach=True) == 1
     out = capsys.readouterr().err
     assert "restart" in out
+    assert aux_called == []
 
 
 def test_existing_pallas_managed_running_is_idempotent(monkeypatch, tmp_path: Path):
-    from pallas.console.cli import maibot_aux
+    from pallas.console.cli import maibot_aux, managed_lifecycle
 
     _arm_paths(monkeypatch, tmp_path)
-    monkeypatch.setattr(unified_lifecycle, "is_bot_running", lambda: True)
+    monkeypatch.setattr(unified_lifecycle, "pid_alive", lambda _pid: True)
     monkeypatch.setattr(unified_lifecycle, "read_pid_file", lambda _p: 42)
     monkeypatch.setattr(maibot_aux, "load_managed_config", lambda: maibot_aux.ManagedMaiBotConfig(enabled=True))
-    monkeypatch.setattr(maibot_aux, "current_managed_process", lambda: 999)
+    monkeypatch.setattr(maibot_aux, "config_sync_requested", lambda: False)
+    monkeypatch.setattr(managed_lifecycle, "owned_bot_pid", lambda _paths: 42)
+    monkeypatch.setattr(managed_lifecycle, "managed_status", lambda *_a: "component ready: fixture evidence")
     aux_called: list = []
     monkeypatch.setattr(unified_lifecycle, "start_aux_services", lambda: aux_called.append(1) or 0)
 
     assert unified_lifecycle.start_bot(detach=True) == 0
-    assert aux_called == [1]
+    assert aux_called == []
+
+
+def test_status_keeps_managed_owner_visible_after_config_toggle(monkeypatch, tmp_path: Path, capsys):
+    from pallas.console.cli import maibot_aux, managed_lifecycle
+
+    paths = managed_lifecycle.ManagedPaths(
+        project_root=tmp_path,
+        run_dir=tmp_path / "run",
+        pid_file=tmp_path / "run" / "bot.pid",
+        owner_file=tmp_path / "run" / "bot.owner.json",
+        lock_file=tmp_path / "run" / "managed.lock",
+        log_file=tmp_path / "logs" / "bot.log",
+    )
+    paths.run_dir.mkdir()
+    paths.owner_file.touch()
+    monkeypatch.setattr(unified_lifecycle, "_managed_paths", lambda: paths)
+    monkeypatch.setattr(unified_lifecycle, "read_listen_port", lambda: 9090)
+    monkeypatch.setattr(maibot_aux, "load_managed_config", lambda: maibot_aux.ManagedMaiBotConfig(enabled=False))
+    monkeypatch.setattr(managed_lifecycle, "owned_bot_pid", lambda _paths: 42)
+    monkeypatch.setattr(managed_lifecycle, "managed_status", lambda *_a: "component readiness not confirmed")
+    monkeypatch.setattr(unified_lifecycle, "print_aux_services_status", lambda: None)
+
+    assert unified_lifecycle.status_bot() == 0
+    assert "component readiness not confirmed" in capsys.readouterr().out
 
 
 def test_existing_pallas_managed_off_keeps_old_behavior(monkeypatch, tmp_path: Path):
@@ -210,13 +246,14 @@ def test_existing_pallas_managed_off_keeps_old_behavior(monkeypatch, tmp_path: P
 
 
 def test_existing_pallas_sync_enabled_requires_restart(monkeypatch, tmp_path: Path, capsys):
-    from pallas.console.cli import maibot_aux
+    from pallas.console.cli import maibot_aux, managed_lifecycle
 
     _arm_paths(monkeypatch, tmp_path)
-    monkeypatch.setattr(unified_lifecycle, "is_bot_running", lambda: True)
+    monkeypatch.setattr(unified_lifecycle, "pid_alive", lambda _pid: True)
     monkeypatch.setattr(unified_lifecycle, "read_pid_file", lambda _p: 42)
     monkeypatch.setattr(maibot_aux, "load_managed_config", lambda: maibot_aux.ManagedMaiBotConfig(enabled=True))
-    monkeypatch.setattr(maibot_aux, "_config_sync_enabled", lambda: True)
+    monkeypatch.setattr(maibot_aux, "config_sync_requested", lambda: True)
+    monkeypatch.setattr(managed_lifecycle, "owned_bot_pid", lambda _paths: 42)
     aux_called: list = []
     monkeypatch.setattr(unified_lifecycle, "start_aux_services", lambda: aux_called.append(1) or 0)
 
@@ -240,21 +277,21 @@ def test_existing_pallas_invalid_managed_returns_nonzero(monkeypatch, tmp_path: 
     capsys.readouterr()
 
 
-def test_detached_bot_failure_rolls_back_spawned_managed(monkeypatch, tmp_path: Path):
+def test_managed_off_detached_bot_failure_rolls_back_without_mai(monkeypatch, tmp_path: Path):
     _arm_paths(monkeypatch, tmp_path)
     monkeypatch.setattr(unified_lifecycle, "cleanup_launcher_logs", lambda: None)
     monkeypatch.setattr(unified_lifecycle, "launcher_log_path", lambda: tmp_path / "logs" / "bot.log")
     monkeypatch.setattr(unified_lifecycle, "is_bot_running", lambda: False)
-    monkeypatch.setattr(unified_lifecycle, "start_managed_maibot", lambda: (0, 777))
+    monkeypatch.setattr(unified_lifecycle, "start_managed_maibot", lambda: (0, None))
     monkeypatch.setattr(unified_lifecycle, "spawn_detached", lambda *a, **k: 1)
     monkeypatch.setattr(unified_lifecycle, "write_pid_file", lambda *a: None)
     monkeypatch.setattr(unified_lifecycle, "clear_pid_file", lambda *a: None)
     monkeypatch.setattr(unified_lifecycle, "print_startup_failure", lambda *a: None)
     stopped: list = []
-    monkeypatch.setattr(unified_lifecycle, "stop_spawned_maibot", lambda pid: stopped.append(pid))
+    monkeypatch.setattr(unified_lifecycle, "stop_spawned_maibot", lambda pid: stopped.append(pid) if pid else None)
 
     assert unified_lifecycle.start_bot(detach=True) == 1
-    assert stopped == [777]
+    assert stopped == []
 
 
 def test_stop_bot_propagates_managed_failure(monkeypatch, tmp_path: Path):
@@ -275,18 +312,20 @@ def test_restart_cancels_when_stop_fails(monkeypatch):
     assert calls == []
 
 
-def test_foreground_shutdown_callback_cleanup_is_idempotent(monkeypatch, tmp_path: Path):
+def test_managed_off_foreground_shutdown_callback_cleanup_is_idempotent(monkeypatch, tmp_path: Path):
     from pallas.core.foundation import asgi_runner
 
     order: list = []
     _arm_paths(monkeypatch, tmp_path)
     monkeypatch.setattr(unified_lifecycle, "is_bot_running", lambda: False)
-    monkeypatch.setattr(unified_lifecycle, "start_managed_maibot", lambda: (0, 4242))
+    monkeypatch.setattr(unified_lifecycle, "start_managed_maibot", lambda: (0, None))
     monkeypatch.setattr(unified_lifecycle, "start_aux_services", lambda: 0)
     monkeypatch.setattr(unified_lifecycle, "write_pid_file", lambda *a: None)
     monkeypatch.setattr(unified_lifecycle, "clear_pid_file", lambda *a: order.append("clear"))
     monkeypatch.setattr(unified_lifecycle, "stop_aux_services", lambda: order.append("aux"))
-    monkeypatch.setattr(unified_lifecycle, "stop_spawned_maibot", lambda pid: order.append(("maibot", pid)))
+    monkeypatch.setattr(
+        unified_lifecycle, "stop_spawned_maibot", lambda pid: order.append(("maibot", pid)) if pid else None
+    )
 
     def fake_runpy(path, run_name):
         asgi_runner.run_process_shutdown_callback()  # simulates os._exit path
@@ -297,35 +336,37 @@ def test_foreground_shutdown_callback_cleanup_is_idempotent(monkeypatch, tmp_pat
     with pytest.raises(SystemExit):
         unified_lifecycle.start_bot(detach=False)
     # callback does the full cleanup once; the finally must not repeat it
-    assert order == ["clear", "aux", ("maibot", 4242)]
+    assert order == ["clear", "aux"]
 
 
-def test_detached_failure_stops_specific_bot_pid_then_managed(monkeypatch, tmp_path: Path):
+def test_managed_off_detached_failure_stops_specific_bot_pid(monkeypatch, tmp_path: Path):
     order: list = []
     _arm_paths(monkeypatch, tmp_path)
     monkeypatch.setattr(unified_lifecycle, "cleanup_launcher_logs", lambda: None)
     monkeypatch.setattr(unified_lifecycle, "launcher_log_path", lambda: tmp_path / "logs" / "bot.log")
     monkeypatch.setattr(unified_lifecycle, "is_bot_running", lambda: False)
-    monkeypatch.setattr(unified_lifecycle, "start_managed_maibot", lambda: (0, 777))
+    monkeypatch.setattr(unified_lifecycle, "start_managed_maibot", lambda: (0, None))
     monkeypatch.setattr(unified_lifecycle, "spawn_detached", lambda *a, **k: 321)
     monkeypatch.setattr(unified_lifecycle, "write_pid_file", lambda *a: None)
     monkeypatch.setattr(unified_lifecycle, "print_startup_failure", lambda *a: None)
     monkeypatch.setattr(unified_lifecycle, "pid_alive", lambda _pid: True)
     monkeypatch.setattr(unified_lifecycle, "stop_pid", lambda pid, timeout_s: order.append(("bot", pid)) or True)
-    monkeypatch.setattr(unified_lifecycle, "stop_spawned_maibot", lambda pid: order.append(("maibot", pid)))
+    monkeypatch.setattr(
+        unified_lifecycle, "stop_spawned_maibot", lambda pid: order.append(("maibot", pid)) if pid else None
+    )
 
     assert unified_lifecycle.start_bot(detach=True) == 1
-    assert order == [("bot", 321), ("maibot", 777)]
+    assert order == [("bot", 321)]
 
 
-def test_detached_rollback_stops_aux_bot_then_managed(monkeypatch, tmp_path: Path):
+def test_managed_off_detached_rollback_stops_aux_then_bot(monkeypatch, tmp_path: Path):
     order: list = []
     state = {"running": False}
     _arm_paths(monkeypatch, tmp_path)
     monkeypatch.setattr(unified_lifecycle, "cleanup_launcher_logs", lambda: None)
     monkeypatch.setattr(unified_lifecycle, "launcher_log_path", lambda: tmp_path / "logs" / "bot.log")
     monkeypatch.setattr(unified_lifecycle, "is_bot_running", lambda: state["running"])
-    monkeypatch.setattr(unified_lifecycle, "start_managed_maibot", lambda: (0, 777))
+    monkeypatch.setattr(unified_lifecycle, "start_managed_maibot", lambda: (0, None))
 
     def spawn(*_a, **_k):
         state["running"] = True
@@ -339,10 +380,12 @@ def test_detached_rollback_stops_aux_bot_then_managed(monkeypatch, tmp_path: Pat
     monkeypatch.setattr(unified_lifecycle, "print_startup_failure", lambda *a: None)
     monkeypatch.setattr(unified_lifecycle, "pid_alive", lambda _pid: True)
     monkeypatch.setattr(unified_lifecycle, "stop_pid", lambda pid, timeout_s: order.append(("bot", pid)) or True)
-    monkeypatch.setattr(unified_lifecycle, "stop_spawned_maibot", lambda pid: order.append(("maibot", pid)))
+    monkeypatch.setattr(
+        unified_lifecycle, "stop_spawned_maibot", lambda pid: order.append(("maibot", pid)) if pid else None
+    )
 
     assert unified_lifecycle.start_bot(detach=True) == 1
-    assert order == ["aux", ("bot", 321), ("maibot", 777)]
+    assert order == ["aux", ("bot", 321)]
 
 
 def test_rollback_without_spawn_does_not_stop_aux(monkeypatch, tmp_path: Path):
@@ -368,7 +411,7 @@ def test_rollback_continues_when_aux_stop_raises(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(unified_lifecycle, "cleanup_launcher_logs", lambda: None)
     monkeypatch.setattr(unified_lifecycle, "launcher_log_path", lambda: tmp_path / "logs" / "bot.log")
     monkeypatch.setattr(unified_lifecycle, "is_bot_running", lambda: state["running"])
-    monkeypatch.setattr(unified_lifecycle, "start_managed_maibot", lambda: (0, 777))
+    monkeypatch.setattr(unified_lifecycle, "start_managed_maibot", lambda: (0, None))
 
     def spawn(*_a, **_k):
         state["running"] = True
@@ -381,7 +424,9 @@ def test_rollback_continues_when_aux_stop_raises(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(unified_lifecycle, "print_startup_failure", lambda *a: None)
     monkeypatch.setattr(unified_lifecycle, "pid_alive", lambda _pid: True)
     monkeypatch.setattr(unified_lifecycle, "stop_pid", lambda pid, timeout_s: order.append(("bot", pid)) or True)
-    monkeypatch.setattr(unified_lifecycle, "stop_spawned_maibot", lambda pid: order.append(("maibot", pid)))
+    monkeypatch.setattr(
+        unified_lifecycle, "stop_spawned_maibot", lambda pid: order.append(("maibot", pid)) if pid else None
+    )
 
     def boom():
         raise RuntimeError("aux stop failed")
@@ -390,5 +435,5 @@ def test_rollback_continues_when_aux_stop_raises(monkeypatch, tmp_path: Path):
 
     with pytest.raises(RuntimeError):
         unified_lifecycle.start_bot(detach=True)
-    # even when aux stop raises, the specific bot pid and this call's managed pid are rolled back
-    assert order == [("bot", 321), ("maibot", 777)]
+    # even when aux stop raises, the specific Bot PID is rolled back
+    assert order == [("bot", 321)]

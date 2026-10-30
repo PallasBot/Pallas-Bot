@@ -19,6 +19,7 @@ from aiohttp import WSMsgType, web
 from nonebot import matcher as nb_matcher
 from nonebot import message as nb_message
 from nonebot.adapters.onebot.v11 import Adapter, Bot, GroupMessageEvent, Message
+from nonebot.exception import IgnoredException
 from nonebot.rule import TrieRule
 
 from pallas.core.platform.ingress import matcher_dispatch as md
@@ -164,9 +165,12 @@ async def qq_queue(monkeypatch):
 
 @pytest.fixture(autouse=True)
 async def _reset_runtime():
+    from pallas.core.platform.ingress.alias_route import clear_alias_route_state
+
     runtime._owner_config = None
     runtime._bridge = None
     runtime.clear_bridge_runtime_cache()
+    clear_alias_route_state()
     md._BRIDGE_SUPPRESSED_MATCHERS = None
     send_queue.reset_send_queue_for_tests()
     try:
@@ -175,6 +179,7 @@ async def _reset_runtime():
         await runtime.stop_bridge()
         send_queue.reset_send_queue_for_tests()
         runtime.clear_bridge_runtime_cache()
+        clear_alias_route_state()
         md._BRIDGE_SUPPRESSED_MATCHERS = None
         _restore_plugin_names()
         from pallas.core.platform.ingress.plugin_command_plaintext import clear_plugin_command_plaintext_cache
@@ -267,7 +272,7 @@ async def _arm_bridge(monkeypatch, fake_mai, *, live_patch=True):
     if live_patch:
         monkeypatch.setattr(runtime, "_live_config_or_none", lambda: owner)
     assert await runtime.start_bridge() is True
-    await fake_mai.wait_connected()
+    assert await runtime.wait_bridge_ready(timeout=2.0) is True
 
 
 async def _wait(predicate, within: float = 2.0) -> None:
@@ -328,7 +333,7 @@ async def test_multi_account_scope_suppresses_every_owned_account(
     monkeypatch.setattr(runtime, "load_bridge_config", lambda: owner)
     monkeypatch.setattr(runtime, "_live_config_or_none", lambda: owner)
     assert await runtime.start_bridge() is True
-    await fake_mai.wait_connected()
+    assert await runtime.wait_bridge_ready(timeout=2.0) is True
 
     other = Bot(Adapter(nonebot.get_driver()), self_id=str(OTHER_BOT))
     await md.patched_handle_event_now(other, _event(self_id=OTHER_BOT, to_me=to_me))
@@ -458,6 +463,132 @@ async def test_scope_owned_admission_deny_captures_without_forward(monkeypatch, 
     assert captures == ["run"]  # still captured
     assert kernel_calls == []  # old agent still suppressed
     assert fake_mai.frames() == []  # but not forwarded
+
+
+async def test_permission_denial_captures_once_and_does_not_forward(monkeypatch, framework_state, fake_mai, qq_queue):
+    kernel_calls: list[str] = []
+    captures: list[str] = []
+    llm_probe: list[str] = []
+    _register_pool()
+    _patch_boundaries(monkeypatch, kernel_calls=kernel_calls, captures=captures, llm_probe=llm_probe)
+    monkeypatch.setattr("pallas.core.perm.check.satisfies_command_permission", _deny)
+    await _arm_bridge(monkeypatch, fake_mai)
+
+    await md.patched_handle_event_now(qq_queue.bot, _event())
+
+    assert captures == ["run"]
+    assert kernel_calls == []
+    assert fake_mai.frames() == []
+
+
+async def _deny(*_args, **_kwargs):
+    return False
+
+
+async def test_exclusive_alias_ingress_routes_wake_and_reply_by_account(
+    monkeypatch, framework_state, fake_mai, qq_queue
+):
+    from pallas.core.platform.ingress import gate
+    from pallas.core.platform.ingress.alias_route import clear_alias_route_state
+
+    clear_alias_route_state()
+    aliases = {BOT_ID: "泰坦牛牛", OTHER_BOT: "豆包牛牛"}
+    monkeypatch.setattr("pallas.core.platform.multi_bot.fleet.get_fleet_bot_ids", lambda: frozenset(aliases))
+    monkeypatch.setattr(
+        "pallas.product.persona.self_identity.resolve_cached_login_nickname",
+        lambda bot_id: aliases[int(bot_id)],
+    )
+    monkeypatch.setattr("pallas.product.persona.self_identity.resolve_managed_display_name", lambda _bot_id: "")
+    monkeypatch.setattr(gate, "ingress_gate_active", lambda: True)
+    monkeypatch.setattr(gate.shard_ctx, "sharding_active", lambda: False)
+    monkeypatch.setattr(gate, "should_record_ingress_metrics", lambda _bot_id: False)
+    monkeypatch.setattr(gate, "remember_local_group_bot", lambda *_args: None)
+    monkeypatch.setattr(gate, "fleet_bot_ids_contains", lambda _user_id: False)
+    monkeypatch.setattr(gate, "federate_peer_bot_ids_contains", lambda _user_id: False)
+
+    async def admin_passes(*_args):
+        return SimpleNamespace(passes=True, fallback_to_fanout=False)
+
+    async def claim_passes(*_args, **_kwargs):
+        return True
+
+    async def message_claim(*_args, **_kwargs):
+        return ()
+
+    async def no_dream_gate(*_args):
+        return True
+
+    monkeypatch.setattr(gate, "group_admin_owner_ingress_decision", admin_passes)
+    monkeypatch.setattr(gate, "ingress_fanout_bypasses_claim", lambda _plain: False)
+    monkeypatch.setattr(gate, "touch_federate_present_group", lambda *_args: None)
+    monkeypatch.setattr(gate, "should_yield_federate_ingress_for_peer_command", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(gate, "ingress_once_claim_safe_before_host_gates", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(gate, "hosted_activity_claim_is_hosted", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(gate, "hosted_activity_ingress_passes", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(gate, "dream_session_ingress_passes", no_dream_gate)
+    monkeypatch.setattr(gate, "run_ingress_message_claim", message_claim)
+    monkeypatch.setattr(gate, "claim_federate_group_message_ingress", claim_passes)
+
+    owner = _config(url=fake_mai.url, bot_id=0, bot_ids=frozenset(aliases))
+    monkeypatch.setattr(runtime, "load_bridge_config", lambda: owner)
+    monkeypatch.setattr(runtime, "_live_config_or_none", lambda: owner)
+    assert await runtime.start_bridge() is True
+    assert await runtime.wait_bridge_ready(timeout=2.0) is True
+
+    bot_a = qq_queue.bot
+    bot_b = Bot(bot_a.adapter, self_id=str(OTHER_BOT))
+    bots = {str(BOT_ID): bot_a, str(OTHER_BOT): bot_b}
+    monkeypatch.setattr(runtime, "get_bot", lambda bot_id: bots.get(str(bot_id)))
+    captures: list[str] = []
+    _register_pool()
+    _patch_boundaries(monkeypatch, kernel_calls=[], captures=captures, llm_probe=[])
+
+    from pallas.core.platform.ingress.gate import ingress_group_message_gate
+
+    events = (
+        (bot_a, bot_b, BOT_ID, "泰坦牛牛，请回应", 501),
+        (bot_b, bot_a, OTHER_BOT, "豆包牛牛，请回应", 502),
+    )
+    for owner_bot, peer_bot, bot_id, text, message_id in events:
+        peer_event = _event(self_id=int(peer_bot.self_id), text=text, message_id=message_id)
+        with pytest.raises(IgnoredException, match="peer alias"):
+            await ingress_group_message_gate(peer_bot, peer_event)
+        assert not getattr(peer_event, "_pallas_llm_alias_hard_trigger", False)
+
+        event = _event(self_id=bot_id, text=text, message_id=message_id)
+        await ingress_group_message_gate(owner_bot, event)
+        assert event._pallas_llm_alias_hard_trigger is True
+        await md.patched_handle_event_now(owner_bot, event)
+
+    await _wait(lambda: len(fake_mai.frames()) == 2)
+    assert captures == ["run", "run"]
+    frames = {int(frame["account_id"]): frame for frame in fake_mai.frames()}
+    assert set(frames) == set(aliases)
+    for bot_id, expected_text in ((BOT_ID, "泰坦牛牛，请回应"), (OTHER_BOT, "豆包牛牛，请回应")):
+        config = frames[bot_id]["message_info"]["additional_config"]
+        assert config["account_id"] == str(bot_id)
+        assert config["is_mentioned"] is True
+        assert "at_bot" not in config
+        assert frames[bot_id]["message_segment"]["data"] == expected_text
+
+    for bot_id in (BOT_ID, OTHER_BOT):
+        await fake_mai.send({
+            "message_info": {
+                "platform": PLATFORM,
+                "message_id": f"reply-{bot_id}",
+                "time": 1800000010.0,
+                "group_info": {"platform": PLATFORM, "group_id": str(GROUP_ID)},
+                "user_info": {"platform": PLATFORM, "user_id": str(bot_id)},
+                "additional_config": {"account_id": str(bot_id)},
+            },
+            "message_segment": {"type": "text", "data": f"reply to {bot_id}"},
+        })
+    await _wait(lambda: len(qq_queue.sent) == 2)
+    assert [int(item["bot"]) for item in qq_queue.sent] == [BOT_ID, OTHER_BOT]
+    assert [item["data"]["message"] for item in qq_queue.sent] == [
+        f"reply to {BOT_ID}",
+        f"reply to {OTHER_BOT}",
+    ]
 
 
 async def test_scope_owned_live_invalid_suppresses_old_agent_without_forward(

@@ -32,6 +32,9 @@ from pallas.product.agent_bridge.transport import (
 )
 
 CONNECT_TIMEOUT_SEC = 10.0
+STARTUP_DEADLINE_SEC = 60.0
+RECONNECT_INITIAL_DELAY_SEC = 1.0
+RECONNECT_MAX_DELAY_SEC = 10.0
 
 
 class BridgeUnsupportedDeploymentError(RuntimeError):
@@ -44,6 +47,11 @@ class BridgeSendRefusedError(RuntimeError):
 
 _owner_config: MaiBotBridgeConfig | None = None
 _bridge: MaiBotBridge | None = None
+_connector_task: asyncio.Task[None] | None = None
+_ready_event: asyncio.Event | None = None
+_quiesced = False
+_connected_once = False
+_startup_failed = False
 
 _config_cache: MaiBotBridgeConfig | None = None
 _config_cache_raw: tuple[object, ...] | None = None
@@ -99,8 +107,8 @@ def bridge_owns_account(bot_id: object) -> bool:
 
 
 def communication_allowed(bot_id: int, group_id: int) -> bool:
-    """Shared forward/reply admission: live config must still enable this bot+group."""
-    if not bridge_owns(bot_id, group_id):
+    """Live config and lifecycle state must still permit this owned scope."""
+    if _quiesced or not bridge_owns(bot_id, group_id):
         return False
     live = _live_config_or_none()
     if live is None:
@@ -122,9 +130,24 @@ def bridge_status() -> dict[str, Any]:
     live = live_bridge_config()
     owner = _owner_config
     source = owner if owner is not None else live
+    if owner is None:
+        state = "disabled"
+    elif _quiesced:
+        state = "quiesced"
+    elif _startup_failed:
+        state = "startup_failed"
+    elif _bridge is not None and _bridge.connected:
+        state = "connected"
+    elif _connected_once:
+        state = "reconnecting"
+    elif _connector_task is not None:
+        state = "connecting"
+    else:
+        state = "connector_stopped"
     return {
         "enabled": live.enabled,
         "armed": owner is not None,
+        "state": state,
         "connected": bool(_bridge is not None and _bridge.connected),
         "bot_id": owner.bot_id if owner is not None else live.bot_id,
         "bot_ids": sorted(source.bot_ids),
@@ -141,11 +164,11 @@ async def start_bridge() -> bool:
     ``BridgeUnsupportedDeploymentError`` for a sharded deployment, instead of
     silently returning ``False``. Returns whether the bridge was armed.
     """
-    global _bridge, _owner_config
+    global _bridge, _owner_config, _connector_task, _ready_event, _quiesced, _connected_once, _startup_failed
+    if _owner_config is not None:
+        return True
     config = load_bridge_config()
     if not config.enabled:
-        _owner_config = None
-        _bridge = None
         return False
     from pallas.core.platform.shard import context as shard_ctx
 
@@ -160,20 +183,135 @@ async def start_bridge() -> bool:
     bridge = MaiBotBridge(scope, bridge_send_reply)
     _owner_config = config
     _bridge = bridge
-    try:
-        await asyncio.wait_for(bridge.connect(config.url, config.token or None), timeout=CONNECT_TIMEOUT_SEC)
-    except Exception as exc:
-        logger.error("MaiBot bridge connect failed; scope stays owned, no local fallback: {}", exc)
+    _quiesced = False
+    _connected_once = False
+    _startup_failed = False
+    _ready_event = asyncio.Event()
+    _connector_task = asyncio.create_task(_connector_loop(bridge, config), name="maibot-bridge.connector")
     return True
 
 
-async def stop_bridge() -> None:
-    global _bridge, _owner_config
-    bridge = _bridge
-    _bridge = None
-    _owner_config = None
+async def _connector_loop(bridge: MaiBotBridge, config: MaiBotBridgeConfig) -> None:
+    global _connector_task
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + STARTUP_DEADLINE_SEC
+    delay = RECONNECT_INITIAL_DELAY_SEC
+    try:
+        while not _quiesced:
+            remaining = deadline - loop.time()
+            if not _connected_once and remaining <= 0:
+                _mark_startup_failed()
+                return
+            connect_timeout = CONNECT_TIMEOUT_SEC if _connected_once else min(CONNECT_TIMEOUT_SEC, remaining)
+            connected = await _wait_for_bridge_connection(bridge, config, connect_timeout)
+            if connected:
+                delay = RECONNECT_INITIAL_DELAY_SEC
+            await bridge.close()
+            if not _connected_once and loop.time() >= deadline:
+                _mark_startup_failed()
+                return
+            if _quiesced:
+                return
+            sleep_for = delay if _connected_once else min(delay, max(0.0, deadline - loop.time()))
+            if sleep_for:
+                await asyncio.sleep(sleep_for)
+            delay = min(delay * 2, RECONNECT_MAX_DELAY_SEC)
+    except asyncio.CancelledError:
+        return
+    finally:
+        await bridge.close()
+        if _connector_task is asyncio.current_task():
+            _connector_task = None
+
+
+async def _wait_for_bridge_connection(bridge: MaiBotBridge, config: MaiBotBridgeConfig, connect_timeout: float) -> bool:
+    global _connected_once
+    connected = False
+    try:
+        await asyncio.wait_for(bridge.connect(config.url, config.token or None), timeout=connect_timeout)
+        connected = True
+        _connected_once = True
+        if _ready_event is not None:
+            _ready_event.set()
+        await bridge.wait_closed()
+        if _ready_event is not None:
+            _ready_event.clear()
+        log_rate_limited(
+            logger,
+            "warning",
+            "maibot_bridge_disconnected",
+            "MaiBot bridge connection closed; retrying while retaining scope ownership.",
+            interval_sec=30.0,
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        log_rate_limited(
+            logger,
+            "warning",
+            "maibot_bridge_connect_failed",
+            f"MaiBot bridge connection attempt failed ({type(exc).__name__}); scope remains owned.",
+            interval_sec=30.0,
+        )
+    return connected
+
+
+def _mark_startup_failed() -> None:
+    global _startup_failed
+    _startup_failed = True
+    if _ready_event is not None:
+        _ready_event.set()
+    logger.error("MaiBot bridge startup deadline expired; scope stays owned without local fallback.")
+
+
+async def wait_bridge_ready(timeout: float) -> bool:  # noqa: ASYNC109 - timeout is the public API contract
+    """Wait for a current WebSocket connection, not a historical successful handshake."""
+    if _bridge_available():
+        return True
+    ready = _ready_event
+    if _owner_config is None or ready is None or _quiesced or _startup_failed:
+        return False
+    try:
+        await asyncio.wait_for(ready.wait(), timeout=timeout)
+    except TimeoutError:
+        return False
+    return _bridge_available()
+
+
+async def quiesce_bridge() -> None:
+    """Stop bridge communication while preserving fixed-scope ownership."""
+    global _quiesced
+    _quiesced = True
+    if _ready_event is not None:
+        _ready_event.set()
+    bridge, task = _bridge, _connector_task
+    if task is not None and task is not asyncio.current_task():
+        if not task.done():
+            task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            if asyncio.current_task().cancelling():
+                raise
     if bridge is not None:
         await bridge.close()
+
+
+async def stop_bridge() -> None:
+    global _bridge, _owner_config, _connector_task, _ready_event, _quiesced, _connected_once, _startup_failed
+    await quiesce_bridge()
+    _bridge = None
+    _owner_config = None
+    _connector_task = None
+    _ready_event = None
+    _quiesced = False
+    _connected_once = False
+    _startup_failed = False
+
+
+def _bridge_available(bridge: MaiBotBridge | None = None) -> bool:
+    current = _bridge if bridge is None else bridge
+    return not _quiesced and current is not None and current.connected
 
 
 async def group_ban_refusal(bot_id: int, group_id: int) -> str | None:
@@ -273,7 +411,7 @@ async def forward_owned_event(bot: Any, event: Any, *, command_traffic: bool) ->
         )
         return False
     bridge = _bridge
-    if bridge is None or not bridge.connected:
+    if not _bridge_available(bridge) or not communication_allowed(bot_id, group_id):
         log_rate_limited(
             logger,
             "info",
@@ -283,7 +421,18 @@ async def forward_owned_event(bot: Any, event: Any, *, command_traffic: bool) ->
         )
         return False
     try:
-        await bridge.forward_event(onebot_event_dict(event), command_traffic=command_traffic)
+        alias_trigger = bool(getattr(event, "_pallas_llm_alias_hard_trigger", False))
+        explicit_at = alias_trigger and any(
+            getattr(segment, "type", None) == "at"
+            and str(getattr(segment, "data", {}).get("qq", "")) == str(bot.self_id)
+            for segment in (getattr(event, "original_message", None) or ())
+        )
+        await bridge.forward_event(
+            onebot_event_dict(event),
+            command_traffic=command_traffic,
+            at_bot=bool(getattr(event, "to_me", False)) and (not alias_trigger or explicit_at),
+            is_mentioned=alias_trigger,
+        )
     except BridgeNotConnectedError:
         log_rate_limited(
             logger,
@@ -305,6 +454,8 @@ async def bridge_send_reply(bot_id: int, group_id: int, text: str) -> int:
 
     if not communication_allowed(int(bot_id), int(group_id)):
         raise BridgeSendRefusedError("bridge no longer owns this group")
+    if not _bridge_available():
+        raise BridgeSendRefusedError("bridge is offline or quiesced")
     reason = await group_output_refusal(int(bot_id), int(group_id))
     if reason is not None:
         raise BridgeSendRefusedError(f"group output refused: {reason}")
@@ -315,6 +466,8 @@ async def bridge_send_reply(bot_id: int, group_id: int, text: str) -> int:
         bot_id=int(bot_id),
     ):
         raise BridgeSendRefusedError("outgoing text blocked by message scrub")
+    if not communication_allowed(int(bot_id), int(group_id)) or not _bridge_available():
+        raise BridgeSendRefusedError("bridge became unavailable before reply delivery")
     try:
         bot = get_bot(str(int(bot_id)))
     except ValueError as exc:

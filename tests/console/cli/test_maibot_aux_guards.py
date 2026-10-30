@@ -9,11 +9,12 @@ import socket
 import subprocess
 import sys
 import time
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import pytest
 
-from pallas.console.cli import maibot_aux, process_util
+from pallas.console.cli import maibot_assets, maibot_aux, maibot_dashboard, process_util
 from pallas.product.agent_bridge.config import MaiBotBridgeConfig
 
 if TYPE_CHECKING:
@@ -32,8 +33,34 @@ def _md5(text: str) -> str:
 
 def _bridge(url: str, *, enabled: bool = True) -> MaiBotBridgeConfig:
     return MaiBotBridgeConfig(
-        enabled=enabled, url=url, bot_id=10001, group_ids=frozenset({700001}), platform="pallas-qq"
+        enabled=enabled,
+        url=url,
+        bot_id=10001,
+        group_ids=frozenset({700001}),
+        platform="pallas-qq",
+        token="bridge-token",
     )
+
+
+@pytest.fixture(autouse=True)
+def _managed_runtime_fixtures(monkeypatch):
+    original, patched = b"compat original\n", b"compat patched\n"
+    monkeypatch.setattr(
+        maibot_aux.native_compat,
+        "PATCHES",
+        tuple(
+            replace(
+                spec,
+                original_sha256=hashlib.sha256(original).hexdigest(),
+                patched_sha256=hashlib.sha256(patched).hexdigest(),
+                edits=((original.decode(), patched.decode()),),
+            )
+            for spec in maibot_aux.native_compat.PATCHES
+        ),
+    )
+    monkeypatch.setattr(maibot_aux, "_effective_config_ready", lambda _instance: True)
+    monkeypatch.setattr(maibot_aux, "_config_sync_enabled", lambda: False)
+    monkeypatch.setattr(maibot_dashboard, "validate_dashboard_build", lambda _root: True)
 
 
 def _make_instance(
@@ -51,7 +78,7 @@ def _make_instance(
     (root / "eula.confirmed").write_text(_md5(eula), encoding="utf-8")
     (root / "privacy.confirmed").write_text(_md5("privacy text"), encoding="utf-8")
     (root / "config" / "bot_config.toml").write_text(
-        f'[maim_message]\nws_server_host = "{host}"\nws_server_port = {port}\n',
+        f'[maim_message]\nws_server_host = "{host}"\nws_server_port = {port}\nauth_token = "bridge-token"\n',
         encoding="utf-8",
     )
     (root / "config" / "model_config.toml").write_text("[models]\n", encoding="utf-8")
@@ -64,6 +91,24 @@ def _make_instance(
             "EULA_AGREE",
             "MAIBOT_INSTANCE_DIR",
             "PYTHONUNBUFFERED",
+            "PYTHONDONTWRITEBYTECODE",
+            "PALLAS_MAIBOT_PROVIDER_URL",
+            "PALLAS_MAIBOT_PROVIDER_TOKEN",
+            "PALLAS_MAIBOT_MENTION_PLATFORM",
+            "PALLAS_MAIBOT_PYTHON",
+            "LLM_API_KEY",
+            "OPENAI_API_KEY",
+            "DATABASE_URL",
+            "REDIS_URL",
+            "APP_SECRET",
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "TZ",
+            "TMPDIR",
+            "XDG_CACHE_HOME",
+            "SSL_CERT_FILE",
+            "PATH",
         ]
         bot_py = (
             "import json, os, socket, time\n"
@@ -77,6 +122,12 @@ def _make_instance(
             "    time.sleep(0.5)\n"
         )
     (root / "bot.py").write_text(bot_py, encoding="utf-8")
+    for spec in maibot_aux.native_compat.PATCHES:
+        path = root / spec.relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"compat original\n")
+    maibot_aux.native_compat.apply_native_compat(root)
+    maibot_assets.deploy_assets(root)
     return root
 
 
@@ -234,6 +285,20 @@ async def test_real_spawn_env_is_clean(monkeypatch, tmp_path: Path):
     monkeypatch.setenv("PYTHONPATH", "/parent/path")
     monkeypatch.setenv("MAIBOT_WORKER_PROCESS", "1")
     monkeypatch.setenv("EULA_AGREE", "x")
+    for key in ("LLM_API_KEY", "OPENAI_API_KEY", "DATABASE_URL", "REDIS_URL", "APP_SECRET", "PALLAS_MAIBOT_PYTHON"):
+        monkeypatch.setenv(key, "fixture-secret")
+    system_env = {
+        "HOME": str(tmp_path / "home"),
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "TZ": "UTC",
+        "TMPDIR": str(tmp_path),
+        "XDG_CACHE_HOME": str(tmp_path / "cache"),
+        "SSL_CERT_FILE": str(tmp_path / "ca.pem"),
+    }
+    for key, value in system_env.items():
+        monkeypatch.setenv(key, value)
+    original_path = os.environ["PATH"]
     try:
         result = maibot_aux.start_maibot_aux(ready_timeout_s=10.0)
         assert result.rc == 0
@@ -245,6 +310,23 @@ async def test_real_spawn_env_is_clean(monkeypatch, tmp_path: Path):
         assert dump["EULA_AGREE"] is None
         assert dump["MAIBOT_INSTANCE_DIR"] == str(instance)
         assert dump["PYTHONUNBUFFERED"] == "1"
+        assert dump["PYTHONDONTWRITEBYTECODE"] == "1"
+        assert dump["PALLAS_MAIBOT_PROVIDER_URL"] is None
+        assert dump["PALLAS_MAIBOT_PROVIDER_TOKEN"] is None
+        assert dump["PALLAS_MAIBOT_MENTION_PLATFORM"] == "pallas-qq"
+        assert all(
+            dump[key] is None
+            for key in (
+                "PALLAS_MAIBOT_PYTHON",
+                "LLM_API_KEY",
+                "OPENAI_API_KEY",
+                "DATABASE_URL",
+                "REDIS_URL",
+                "APP_SECRET",
+            )
+        )
+        assert {key: dump[key] for key in system_env} == system_env
+        assert dump["PATH"] == original_path
         assert maibot_aux.current_managed_process() == result.spawned_pid
         maibot_aux.stop_maibot_aux()
         assert maibot_aux.maibot_aux_running() is False
@@ -435,6 +517,26 @@ def test_stop_spawned_pid_returns_bool(monkeypatch, tmp_path: Path):
     assert maibot_aux.stop_spawned_pid(123) is False
 
 
+def test_stop_revalidates_expected_identity_after_acquiring_lock(monkeypatch, tmp_path: Path):
+    from contextlib import contextmanager
+
+    _patch_paths(monkeypatch, tmp_path)
+    expected = {"pid": 123, "starttime": "old", "boot_id": "boot", "instance_dir": str(tmp_path)}
+    current = dict(expected)
+
+    @contextmanager
+    def lock(_path):
+        current["starttime"] = "new"
+        yield
+
+    monkeypatch.setattr(maibot_aux, "interprocess_file_lock", lock)
+    monkeypatch.setattr(maibot_aux, "_read_owner", lambda: current)
+    monkeypatch.setattr(maibot_aux, "current_managed_process", lambda: 123)
+    monkeypatch.setattr(maibot_aux, "_stop_owned_pid", lambda *a, **k: pytest.fail("reused PID must not be killed"))
+    assert maibot_aux.stop_spawned_pid(123, expected_owner=expected) is False
+    assert current["starttime"] == "new"
+
+
 def test_stop_reports_orphan_group_when_leader_dead(monkeypatch, tmp_path: Path):
     """leader 已退出（current_managed_process()==None）但同组仍有活成员：报未解决孤组、保留记录、不 kill。"""
     _patch_paths(monkeypatch, tmp_path)
@@ -486,3 +588,62 @@ def test_stop_clears_when_recorded_group_is_gone(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(maibot_aux, "maibot_aux_running", lambda: False)
     assert maibot_aux.stop_maibot_aux() is True
     assert maibot_aux.read_pid_file(maibot_aux.PID_FILE) is None
+
+
+def test_opt_in_native_sdk_import_keeps_managed_assets_current(tmp_path: Path):
+    python = os.environ.get("PALLAS_MAIBOT_PYTHON")
+    if not python:
+        pytest.skip("PALLAS_MAIBOT_PYTHON not set; native SDK smoke test is opt-in")
+    assert os.path.isfile(python)
+
+    instance = tmp_path / "maibot-instance"
+    instance.mkdir()
+    maibot_assets.deploy_assets(instance)
+    home = tmp_path / "home"
+    home.mkdir()
+    env = maibot_aux.build_managed_env(
+        instance,
+        mention_platform="pallas-qq",
+    )
+    env["HOME"] = str(home)
+    for key in ("XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME"):
+        path = tmp_path / key.lower()
+        path.mkdir()
+        env[key] = str(path)
+
+    script = """
+import os
+import socket
+import sys
+
+def deny(*args, **kwargs):
+    raise AssertionError("network access denied in this smoke test")
+
+base_socket = socket.socket
+class DeniedSocket(base_socket):
+    connect = deny
+    connect_ex = deny
+    sendto = deny
+
+socket.socket = DeniedSocket
+socket.create_connection = deny
+socket.getaddrinfo = deny
+assert os.environ["PYTHONDONTWRITEBYTECODE"] == "1"
+assert os.environ.get("PALLAS_MAIBOT_PROVIDER_TOKEN") is None
+assert os.environ.get("LLM_API_KEY") is None
+sys.path.insert(0, sys.argv[1])
+import plugin
+assert callable(plugin.create_plugin)
+"""
+    plugin_dir = instance / "plugins" / maibot_assets.PLUGIN_DIR_NAME
+    result = subprocess.run(
+        [python, "-c", script, str(plugin_dir)],
+        cwd=instance,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert maibot_assets.inspect_assets(instance) == "current"

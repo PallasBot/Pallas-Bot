@@ -17,11 +17,17 @@ def register_kernel_runtime() -> None:
     register_ai_callback_http()
     # 旧 llm tools HTTP 根注册已退役（不是 MaiBot 网关）；不再默认挂载该路由。
     if not is_hub_role():
+        from nonebot import get_app
+
         from pallas.core.platform.bot_runtime.ingress_dispatch_runtime import register_ingress_dispatch_runtime
         from pallas.core.platform.ingress.gate import register_ingress_gate_runtime
         from pallas.core.platform.ingress.message_recorder import bind_message_recorder_lifecycle
+        from pallas.product.agent_bridge.config import load_bridge_config
+        from pallas.product.agent_bridge.managed_control import register_managed_control_http
         from pallas.product.service_gateways.runtime import register_service_gateways_runtime
 
+        if load_bridge_config().enabled:
+            register_managed_control_http(get_app())
         register_bot_filter_runtime()
         register_ingress_gate_runtime()
         bind_message_recorder_lifecycle()

@@ -5,9 +5,12 @@ from __future__ import annotations
 import hashlib
 import socket
 import sys
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
-from pallas.console.cli import maibot_aux
+import pytest
+
+from pallas.console.cli import maibot_assets, maibot_aux, maibot_dashboard
 from pallas.product.agent_bridge.config import MaiBotBridgeConfig
 
 if TYPE_CHECKING:
@@ -24,6 +27,26 @@ def _md5(text: str) -> str:
     return hashlib.md5(text.encode("utf-8")).hexdigest()
 
 
+@pytest.fixture(autouse=True)
+def _managed_runtime_fixtures(monkeypatch):
+    original, patched = b"compat original\n", b"compat patched\n"
+    monkeypatch.setattr(
+        maibot_aux.native_compat,
+        "PATCHES",
+        tuple(
+            replace(
+                spec,
+                original_sha256=hashlib.sha256(original).hexdigest(),
+                patched_sha256=hashlib.sha256(patched).hexdigest(),
+                edits=((original.decode(), patched.decode()),),
+            )
+            for spec in maibot_aux.native_compat.PATCHES
+        ),
+    )
+    monkeypatch.setattr(maibot_aux, "_effective_config_ready", lambda _instance: True)
+    monkeypatch.setattr(maibot_dashboard, "validate_dashboard_build", lambda _root: True)
+
+
 def _instance(root: Path, *, port: int) -> Path:
     root.mkdir(parents=True, exist_ok=True)
     (root / "config").mkdir(exist_ok=True)
@@ -32,16 +55,29 @@ def _instance(root: Path, *, port: int) -> Path:
     (root / "eula.confirmed").write_text(_md5("eula text"), encoding="utf-8")
     (root / "privacy.confirmed").write_text(_md5("privacy text"), encoding="utf-8")
     (root / "config" / "bot_config.toml").write_text(
-        f'[maim_message]\nws_server_host = "127.0.0.1"\nws_server_port = {port}\n',
+        f'[maim_message]\nws_server_host = "127.0.0.1"\nws_server_port = {port}\nauth_token = "bridge-token"\n',
         encoding="utf-8",
     )
     (root / "config" / "model_config.toml").write_text("[models]\n", encoding="utf-8")
     (root / "bot.py").write_text("import time\nwhile True:\n    time.sleep(0.5)\n", encoding="utf-8")
+    for spec in maibot_aux.native_compat.PATCHES:
+        path = root / spec.relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"compat original\n")
+    maibot_aux.native_compat.apply_native_compat(root)
+    maibot_assets.deploy_assets(root)
     return root
 
 
 def _bridge(url: str) -> MaiBotBridgeConfig:
-    return MaiBotBridgeConfig(enabled=True, url=url, bot_id=10001, group_ids=frozenset({700001}), platform="pallas-qq")
+    return MaiBotBridgeConfig(
+        enabled=True,
+        url=url,
+        bot_id=10001,
+        group_ids=frozenset({700001}),
+        platform="pallas-qq",
+        token="bridge-token",
+    )
 
 
 def _patch_paths(monkeypatch, tmp_path: Path) -> None:
@@ -106,7 +142,7 @@ def test_default_off_creates_no_lock_or_process(monkeypatch, tmp_path: Path):
 
 def test_sync_runs_before_spawn(monkeypatch, tmp_path: Path):
     port = _free_port()
-    _prepare(monkeypatch, tmp_path, port=port, sync_enabled=True)
+    instance = _prepare(monkeypatch, tmp_path, port=port, sync_enabled=True)
     _patch_process(monkeypatch, owned=None)
     order: list[str] = []
     monkeypatch.setattr(
@@ -118,15 +154,27 @@ def test_sync_runs_before_spawn(monkeypatch, tmp_path: Path):
         "spawn_detached",
         lambda *a, **k: order.append("spawn") or real_spawn(*a, **k),
     )
+    monkeypatch.setattr(maibot_aux, "_effective_config_ready", lambda _instance: order.append("preflight") or True)
+    original_retire = maibot_assets.retire_managed_provider_assets
+
+    def retire(root):
+        assert root == instance
+        order.append("retire")
+        return original_retire(root)
+
+    monkeypatch.setattr(maibot_assets, "retire_managed_provider_assets", retire)
     result = maibot_aux.start_maibot_aux()
     assert result.rc == 0
-    assert order == ["sync:False", "spawn"]
+    assert order == ["sync:False", "preflight", "retire", "spawn"]
     assert _lock_file(tmp_path).exists()
+    assert not (instance / "plugins" / maibot_assets.PLUGIN_DIR_NAME).exists()
+    assert len(list(instance.glob(".pallas-retired-provider-*/pallas-managed-provider"))) == 1
 
 
 def test_dry_run_writes_nothing(monkeypatch, tmp_path: Path):
-    _prepare(monkeypatch, tmp_path, port=_free_port(), sync_enabled=True)
+    instance = _prepare(monkeypatch, tmp_path, port=_free_port(), sync_enabled=True)
     _patch_process(monkeypatch, owned=None)
+    before = {path.relative_to(instance): path.read_bytes() for path in instance.rglob("*") if path.is_file()}
     recorded: list[bool] = []
     monkeypatch.setattr(maibot_aux, "_sync_instance", lambda config, *, dry_run: recorded.append(dry_run) or True)
     spawned: list = []
@@ -136,6 +184,8 @@ def test_dry_run_writes_nothing(monkeypatch, tmp_path: Path):
     assert spawned == []
     assert not _lock_file(tmp_path).exists()
     assert not (tmp_path / "run").exists()
+    after = {path.relative_to(instance): path.read_bytes() for path in instance.rglob("*") if path.is_file()}
+    assert after == before
 
 
 def test_unknown_live_pid_rejected_before_sync(monkeypatch, tmp_path: Path):
@@ -180,6 +230,20 @@ def test_running_owned_with_sync_requires_restart(monkeypatch, tmp_path: Path):
     assert spawned == []
 
 
+def test_running_migrated_instance_does_not_request_restart_or_read_legacy_source(monkeypatch, tmp_path: Path):
+    from pallas.product.agent_bridge import config_sync
+
+    instance = _prepare(monkeypatch, tmp_path, port=_free_port(), sync_enabled=True)
+    _patch_process(monkeypatch, owned=4321)
+    (instance / "config" / config_sync.MARKER_FILENAME).write_text(config_sync._marker_text(), encoding="utf-8")
+    monkeypatch.setattr(config_sync, "get_llm_config", lambda: pytest.fail("completed migration must not read source"))
+    monkeypatch.setattr(
+        maibot_aux, "_sync_instance", lambda *_a, **_k: pytest.fail("completed migration must not sync")
+    )
+    assert maibot_aux.config_sync_requested() is False
+    assert maibot_aux.start_maibot_aux().rc == 0
+
+
 def test_running_owned_without_sync_keeps_old_wait(monkeypatch, tmp_path: Path):
     _prepare(monkeypatch, tmp_path, port=_free_port(), sync_enabled=False)
     _patch_process(monkeypatch, owned=4321)
@@ -198,6 +262,42 @@ def test_sync_failure_does_not_spawn(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(maibot_aux, "spawn_detached", lambda *a, **k: spawned.append(1) or 1)
     assert maibot_aux.start_maibot_aux().rc == 1
     assert spawned == []
+
+
+def test_unready_effective_config_does_not_spawn_after_sync(monkeypatch, tmp_path: Path):
+    instance = _prepare(monkeypatch, tmp_path, port=_free_port(), sync_enabled=True)
+    _patch_process(monkeypatch, owned=None)
+    order: list[str] = []
+    monkeypatch.setattr(maibot_aux, "_sync_instance", lambda config, *, dry_run: order.append("sync") or True)
+    monkeypatch.setattr(maibot_aux, "_effective_config_ready", lambda _instance: order.append("preflight") or False)
+    monkeypatch.setattr(maibot_aux, "spawn_detached", lambda *a, **k: order.append("spawn") or 1)
+    assert maibot_aux.start_maibot_aux().rc == 1
+    assert order == ["sync", "preflight"]
+    assert (instance / "plugins" / maibot_assets.PLUGIN_DIR_NAME).exists()
+    assert list(instance.glob(".pallas-retired-provider-*")) == []
+
+
+def test_legacy_retirement_failure_prevents_spawn(monkeypatch, tmp_path: Path):
+    instance = _prepare(monkeypatch, tmp_path, port=_free_port(), sync_enabled=False)
+    _patch_process(monkeypatch, owned=None)
+
+    def failed_retire(_root):
+        raise maibot_assets.MaiBotAssetsError("fixture archive failure")
+
+    monkeypatch.setattr(maibot_assets, "retire_managed_provider_assets", failed_retire)
+    monkeypatch.setattr(maibot_aux, "spawn_detached", lambda *a, **k: pytest.fail("archive failure must prevent spawn"))
+    assert maibot_aux.start_maibot_aux().rc == 1
+    assert (instance / "plugins" / maibot_assets.PLUGIN_DIR_NAME).exists()
+
+
+def test_native_start_does_not_require_provider_context(monkeypatch, tmp_path: Path):
+    _prepare(monkeypatch, tmp_path, port=_free_port(), sync_enabled=False)
+    _patch_process(monkeypatch, owned=None)
+    spawned: list = []
+    original_spawn = maibot_aux.spawn_detached
+    monkeypatch.setattr(maibot_aux, "spawn_detached", lambda *a, **k: spawned.append(1) or original_spawn(*a, **k))
+    assert maibot_aux.start_maibot_aux().rc == 0
+    assert spawned == [1]
 
 
 def test_invalid_sync_switch_rejected(monkeypatch, tmp_path: Path):
@@ -281,6 +381,7 @@ def test_stop_spawned_pid_holds_instance_lock(monkeypatch, tmp_path: Path):
 
     _patch_paths(monkeypatch, tmp_path)
     maibot_aux.write_pid_file(maibot_aux.PID_FILE, 321)
+    owner = {"pid": 321, "starttime": "fixture", "boot_id": "fixture"}
     order: list[str] = []
 
     @contextmanager
@@ -290,13 +391,15 @@ def test_stop_spawned_pid_holds_instance_lock(monkeypatch, tmp_path: Path):
         order.append("unlock")
 
     monkeypatch.setattr(maibot_aux, "interprocess_file_lock", fake_lock)
+    monkeypatch.setattr(maibot_aux, "_read_owner", lambda: order.append("identity") or owner)
+    monkeypatch.setattr(maibot_aux, "current_managed_process", lambda: order.append("verify") or 321)
     monkeypatch.setattr(maibot_aux, "_stop_owned_pid", lambda pid, force=False: order.append("stop") or True)
     monkeypatch.setattr(maibot_aux, "read_pid_file", lambda _p: order.append("read") or 321)
     monkeypatch.setattr(maibot_aux, "clear_pid_file", lambda _p: order.append("clear"))
     monkeypatch.setattr(maibot_aux, "_clear_owner", lambda: order.append("owner"))
 
-    assert maibot_aux.stop_spawned_pid(321) is True
-    assert order == ["lock", "stop", "read", "clear", "owner", "unlock"]
+    assert maibot_aux.stop_spawned_pid(321, expected_owner=owner) is True
+    assert order == ["lock", "identity", "verify", "stop", "read", "clear", "owner", "unlock"]
 
 
 def test_config_sync_requested_tracks_managed_and_switch(monkeypatch, tmp_path: Path):
@@ -310,3 +413,30 @@ def test_config_sync_requested_tracks_managed_and_switch(monkeypatch, tmp_path: 
 
     monkeypatch.setattr(maibot_aux, "load_managed_config", boom)
     assert maibot_aux.config_sync_requested() is False
+
+
+def test_sync_preview_consumes_rendered_native_readiness(monkeypatch, tmp_path: Path, capsys):
+    from pallas.product.agent_bridge import config_sync
+
+    instance = _prepare(monkeypatch, tmp_path, port=_free_port(), sync_enabled=True)
+    config = maibot_aux.load_managed_config()
+    monkeypatch.setattr(
+        config_sync,
+        "sync_maibot_config",
+        lambda root, *, dry_run: {"ready": root == instance and dry_run, "warnings": ["daily_limits_not_migrated"]},
+    )
+    assert maibot_aux._sync_instance(config, dry_run=True) is True
+    assert "旧每日额度不约束 MaiBot" in capsys.readouterr().err
+    monkeypatch.setattr(config_sync, "sync_maibot_config", lambda *_a, **_k: {"ready": False, "warnings": []})
+    assert maibot_aux._sync_instance(config, dry_run=True) is False
+
+
+def test_first_preview_uses_rendered_check_not_unmodified_placeholder_file(monkeypatch, tmp_path: Path):
+    _prepare(monkeypatch, tmp_path, port=_free_port(), sync_enabled=True)
+    _patch_process(monkeypatch, owned=None)
+    monkeypatch.setattr(maibot_aux, "_sync_instance", lambda *_a, **_k: True)
+    monkeypatch.setattr(
+        maibot_aux, "_effective_config_ready", lambda *_a: pytest.fail("preview must validate rendered config")
+    )
+    assert maibot_aux.start_maibot_aux(dry_run=True).rc == 0
+    assert not _lock_file(tmp_path).exists()

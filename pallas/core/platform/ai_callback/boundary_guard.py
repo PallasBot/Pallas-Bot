@@ -21,9 +21,16 @@ _log = logging.getLogger(__name__)
 _CALLBACK_PREFIX = "/callback/"
 _INTERNAL_TASKS_PREFIX = "/pallas/api/internal/ai/tasks"
 _TOOLS_PATH = "/pallas/api/internal/llm/tools/execute"
+_MAIBOT_CONTROL_PREFIX = "/pallas/api/internal/maibot/control/"
 _API_KEY_HEADER = "x-pallas-api-key"
-_SINGLETON_HEADERS = ("authorization", internal_auth.INTERNAL_TOKEN_HEADER.lower(), _API_KEY_HEADER)
+_SINGLETON_HEADERS = (
+    "authorization",
+    internal_auth.INTERNAL_TOKEN_HEADER.lower(),
+    _API_KEY_HEADER,
+    "content-length",
+)
 _MAX_CONTENT_LENGTH_DIGITS = 20
+_MAIBOT_CONTROL_MAX_BYTES = 2 * 1024
 
 
 def _bearer_auth(headers: dict[str, str]) -> tuple[bool, int]:
@@ -39,6 +46,18 @@ def _internal_auth(headers: dict[str, str]) -> tuple[bool, int]:
         return False, 503
     if internal_auth.verify_internal_token(
         internal_auth.PURPOSE_AI_TASK_REGISTRATION,
+        headers.get(internal_auth.INTERNAL_TOKEN_HEADER.lower()),
+    ):
+        return True, 0
+    return False, 403
+
+
+def _maibot_control_auth(headers: dict[str, str]) -> tuple[bool, int]:
+    purpose = internal_auth.PURPOSE_MAIBOT_CONTROL_V1
+    if not internal_auth.derive_internal_token(purpose):
+        return False, 503
+    if internal_auth.verify_internal_token(
+        purpose,
         headers.get(internal_auth.INTERNAL_TOKEN_HEADER.lower()),
     ):
         return True, 0
@@ -72,6 +91,8 @@ def match_rule(path: str) -> tuple[Callable[[dict[str, str]], tuple[bool, int]],
         return _internal_auth, internal_json_max_bytes
     if path == _TOOLS_PATH:
         return _tools_auth, internal_json_max_bytes
+    if path.startswith(_MAIBOT_CONTROL_PREFIX):
+        return _maibot_control_auth, lambda: _MAIBOT_CONTROL_MAX_BYTES
     return None
 
 
@@ -106,11 +127,14 @@ class AiBoundaryGuard:
             (key.decode("latin-1").lower(), value.decode("latin-1")) for key, value in scope.get("headers") or []
         ]
         counts = Counter(name for name, _ in raw_headers)
-        # 鉴权相关 header 重复出现即歧义（下游 Starlette 取首值、守卫取末值会不一致）→ 拒绝
+        # 鉴权与长度 header 重复出现即歧义（下游 Starlette 与守卫可能取不同值）→ 拒绝
         if any(counts.get(name, 0) > 1 for name in _SINGLETON_HEADERS):
-            await _send_plain(send, 400, b'{"detail":"ambiguous_auth_headers"}')
+            await _send_plain(send, 400, b'{"detail":"ambiguous_headers"}')
             return
         headers = dict(raw_headers)
+        if headers.get("content-length") is not None and headers.get("transfer-encoding") is not None:
+            await _send_plain(send, 400, b'{"detail":"ambiguous_body_length"}')
+            return
         ok, status = auth(headers)
         if not ok:
             await _send_plain(send, status, b'{"detail":"unauthorized"}')
@@ -150,7 +174,7 @@ class AiBoundaryGuard:
             try:
                 return next(pending)
             except StopIteration:
-                return {"type": "http.request", "body": b"", "more_body": False}
+                return await receive()
 
         await self.app(scope, replay, send)
 

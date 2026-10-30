@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 INTERNAL_TOKEN_HEADER = "X-Pallas-Internal-Token"
 PURPOSE_AI_TASK_REGISTRATION = "ai-task-registration"
+PURPOSE_MAIBOT_CONTROL_V1 = "maibot-control-v1"
 
 _SESSION_SECRET_NAME = "session_secret.bin"
 _LABEL_PREFIX = "pallas-internal-v1:"
@@ -52,7 +53,7 @@ def derive_internal_token(purpose: str) -> str:
 def verify_internal_token(purpose: str, presented: str | None) -> bool:
     expected = derive_internal_token(purpose)
     given = str(presented or "").strip()
-    if not expected or not given:
+    if not expected or not given or not given.isascii():
         return False
     return hmac.compare_digest(expected, given)
 

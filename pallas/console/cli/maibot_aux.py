@@ -3,6 +3,7 @@
 只支持维护者已安装依赖、已在前台完成协议确认的本机源码实例；不下载/安装、
 不写实例配置、不注入协议同意或升级绕过环境变量。开启托管必须同时开启有效桥，
 且桥地址为本机明文 ``ws://loopback:port/ws``，与实例 ``[maim_message]`` 监听端口一致。
+模型配置首次迁入后由 MaiBot 管理；子进程只接收显式桥平台，不继承 Pallas 凭据。
 """
 
 from __future__ import annotations
@@ -16,11 +17,12 @@ import time
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
+from pallas.console.cli import maibot_assets
 from pallas.console.cli.process_util import (
     clear_pid_file,
-    env_for_nested_project,
     group_has_live_member,
     is_windows,
     pid_alive,
@@ -33,10 +35,17 @@ from pallas.console.cli.process_util import (
 from pallas.core.foundation.config.repo_settings import repo_env_raw_value
 from pallas.core.foundation.fs_lock import interprocess_file_lock
 from pallas.core.foundation.paths import PROJECT_ROOT
+from pallas.product.agent_bridge import native_compat
+from pallas.product.agent_bridge.native_compat import MENTION_PLATFORM_ENV
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 MANAGED_ENABLED_KEY = "MAIBOT_MANAGED_ENABLED"
 MANAGED_DIR_KEY = "MAIBOT_MANAGED_DIR"
 MANAGED_PYTHON_KEY = "MAIBOT_MANAGED_PYTHON"
+MANAGED_INSTALL_MARKER = ".pallas-maibot-install.json"
+MANAGED_INSTALL_PIN = "062d45cf8bd4272ac57d7ec03fcf405e5a458211"
 
 RUN_DIR = PROJECT_ROOT / "data" / "pallas_maibot" / "run"
 LOG_DIR = PROJECT_ROOT / "data" / "pallas_maibot" / "logs"
@@ -50,14 +59,19 @@ STOP_GRACE_S = 55.0
 
 _TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
 _FALSE_VALUES = frozenset({"0", "false", "no", "off"})
-_DROP_ENV = (
-    "PYTHONPATH",
-    "MAIBOT_WORKER_PROCESS",
-    "MAIBOT_INSTANCE_DIR",
-    "EULA_AGREE",
-    "PRIVACY_AGREE",
-    "MAIBOT_LEGACY_0X_UPGRADE_CONFIRMED",
-)
+_MANAGED_SYSTEM_ENV = frozenset({
+    "PATH",
+    "HOME",
+    "LANG",
+    "LANGUAGE",
+    "TZ",
+    "TMP",
+    "TMPDIR",
+    "TEMP",
+    "TEMPDIR",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+})
 
 
 class ManagedConfigError(RuntimeError):
@@ -75,6 +89,7 @@ class ManagedMaiBotConfig:
 class ManagedStartResult:
     rc: int
     spawned_pid: int | None = None
+    owner: dict | None = None
 
 
 def _parse_enabled(raw: object) -> bool:
@@ -140,6 +155,14 @@ def _config_sync_enabled() -> bool:
     return config_sync_enabled()
 
 
+def config_migration_pending(config: ManagedMaiBotConfig) -> bool:
+    from pallas.product.agent_bridge.config_sync import config_migration_completed
+
+    return _config_sync_enabled() and (
+        config.instance_dir is None or not config_migration_completed(config.instance_dir)
+    )
+
+
 def config_sync_requested() -> bool:
     """True when managed is on and config sync is explicitly requested.
 
@@ -153,7 +176,7 @@ def config_sync_requested() -> bool:
     if not config.enabled:
         return False
     try:
-        return _config_sync_enabled()
+        return config_migration_pending(config)
     except Exception:
         return True
 
@@ -251,11 +274,29 @@ def _protocol_problems(instance_dir: Path) -> list[str]:
     return problems
 
 
-def validate_managed_instance(config: ManagedMaiBotConfig, bridge) -> list[str]:
-    """只读预检；返回问题列表（空表示可启动），不回显桥地址原文。"""
+def _valid_mention_platform(value: object) -> bool:
+    return (
+        isinstance(value, str) and bool(value.strip()) and not any(ord(char) < 32 or ord(char) == 127 for char in value)
+    )
+
+
+def _auth_token_matches(bot_data: dict | None, bridge) -> bool:
+    if not isinstance(bridge.token, str) or not bridge.token:
+        return False
+    maim = bot_data.get("maim_message") if isinstance(bot_data, dict) else None
+    auth_token = maim.get("auth_token") if isinstance(maim, dict) else None
+    if isinstance(auth_token, str):
+        return auth_token == bridge.token
+    return isinstance(auth_token, list) and any(isinstance(item, str) and item == bridge.token for item in auth_token)
+
+
+def _validate_static_instance(
+    config: ManagedMaiBotConfig,
+    bridge,
+) -> tuple[list[str], dict | None]:
     problems: list[str] = []
     if config.instance_dir is None or config.python is None:
-        return ["托管配置未解析实例目录/解释器"]
+        return ["托管配置未解析实例目录/解释器"], None
     instance_dir = config.instance_dir
     if not instance_dir.is_dir():
         problems.append(f"实例目录不存在：{instance_dir}")
@@ -266,8 +307,49 @@ def validate_managed_instance(config: ManagedMaiBotConfig, bridge) -> list[str]:
     elif not os.access(config.python, os.X_OK):
         problems.append(f"解释器不可执行：{config.python}")
 
+    install_marker = instance_dir / MANAGED_INSTALL_MARKER
+    if install_marker.is_symlink():
+        problems.append("MaiBot CLI 安装标记是符号链接，拒绝托管")
+    elif install_marker.exists():
+        try:
+            marker = json.loads(install_marker.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, ValueError):
+            marker = None
+        digest = marker.get("dependency_hash") if isinstance(marker, dict) else None
+        valid_digest = isinstance(digest, str) and len(digest) == 64 and all(c in "0123456789abcdef" for c in digest)
+        if (
+            not isinstance(marker, dict)
+            or marker.get("pin") != MANAGED_INSTALL_PIN
+            or not isinstance(marker.get("state"), str)
+            or marker.get("state") not in {"incomplete", "complete"}
+            or not valid_digest
+        ):
+            problems.append("MaiBot CLI 安装标记无效，拒绝托管")
+        elif marker["state"] == "incomplete":
+            problems.append("MaiBot CLI 安装未完成；请执行 pallas maibot install 重试")
+
+    try:
+        compat_state = native_compat.native_compat_state(instance_dir, expected_pin=MANAGED_INSTALL_PIN)
+    except (native_compat.NativeCompatError, OSError):
+        compat_state = "invalid"
+    if compat_state != "patched":
+        problems.append("MaiBot 固定版本提及与启动兼容补丁缺失或无效，拒绝托管")
+    from pallas.console.cli.maibot_dashboard import validate_dashboard_build
+
+    if not validate_dashboard_build(instance_dir):
+        problems.append("MaiBot 子路径前端缺失或校验失败，请执行 pallas maibot install")
+    try:
+        asset_state = maibot_assets.inspect_assets(instance_dir)
+    except maibot_assets.MaiBotAssetsError:
+        asset_state = "invalid"
+    if asset_state == "invalid":
+        problems.append("Pallas 托管插件资产无效或已被外部修改，拒绝托管")
+
     bot_data = _safe_toml(instance_dir / "config" / "bot_config.toml", problems)
     _safe_toml(instance_dir / "config" / "model_config.toml", problems)
+
+    if not _valid_mention_platform(bridge.platform):
+        problems.append("桥平台无效，拒绝托管")
 
     bridge_addr = bridge_host_port(bridge.url)
     if bridge_addr is None:
@@ -286,17 +368,65 @@ def validate_managed_instance(config: ManagedMaiBotConfig, bridge) -> list[str]:
             problems.append("实例 maim_message.ws_server_port 不是整数")
         elif bridge_addr is not None and bridge_addr[1] != port:
             problems.append(f"桥端口 {bridge_addr[1]} 与实例 ws_server_port {port} 不一致")
+    if not _auth_token_matches(bot_data, bridge):
+        problems.append("桥认证 token 未与实例 maim_message.auth_token 精确匹配，拒绝托管")
 
     problems.extend(_protocol_problems(instance_dir))
+    return problems, bot_data
+
+
+def _effective_config_ready(instance_dir: Path) -> bool:
+    from pallas.product.agent_bridge.config_sync import config_sync_preflight
+
+    try:
+        report = config_sync_preflight(instance_dir)
+    except Exception:
+        return False
+    if not isinstance(report, dict):
+        return False
+    _print_migration_warnings(report)
+    return report.get("ready") is True
+
+
+def _print_migration_warnings(report: dict) -> None:
+    messages = {
+        "daily_limits_not_migrated": "旧每日额度不约束 MaiBot；请在 MaiBot 或供应商侧设置费用限制。",
+        "non_cny_pricing_not_migrated": "非人民币计价未转换，请核对 MaiBot 原生计价设置。",
+        "unsupported_request_method": "部分旧协议无原生等价实现，未导入；请核对 MaiBot 模型名册。",
+        "local_embedding_not_migrated": "本地进程内 Embedding 未导入，请核对 MaiBot 原生向量配置。",
+    }
+    for code in report.get("warnings", []):
+        if code in messages:
+            print(f"  · MaiBot 迁移提示：{messages[code]}", file=sys.stderr)
+
+
+def validate_managed_instance(
+    config: ManagedMaiBotConfig,
+    bridge,
+) -> list[str]:
+    """只读完整预检；不回显桥地址、凭据、模型名或 provider 配置。"""
+    problems, _ = _validate_static_instance(config, bridge)
+    if not problems and config.instance_dir is not None and not _effective_config_ready(config.instance_dir):
+        problems.append("MaiBot 原生模型配置未就绪，拒绝启动")
     return problems
 
 
-def build_managed_env(instance_dir: Path) -> dict[str, str]:
-    env = env_for_nested_project()
-    for key in _DROP_ENV:
-        env.pop(key, None)
+def build_managed_env(
+    instance_dir: Path,
+    *,
+    mention_platform: str | None = None,
+) -> dict[str, str]:
+    env = {
+        key: value for key, value in os.environ.items() if key in _MANAGED_SYSTEM_ENV or key.startswith(("LC_", "XDG_"))
+    }
+    if mention_platform is not None:
+        if not _valid_mention_platform(mention_platform):
+            raise ManagedConfigError("桥平台无效")
+        env[MENTION_PLATFORM_ENV] = mention_platform
     env["MAIBOT_INSTANCE_DIR"] = str(instance_dir)
+    env["MAIBOT_WEBUI_USE_LOCAL_DASHBOARD"] = "1"
     env["PYTHONUNBUFFERED"] = "1"
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
     return env
 
 
@@ -342,17 +472,19 @@ def _read_owner() -> dict | None:
     return data if isinstance(data, dict) else None
 
 
-def _write_owner(pid: int, instance_dir: Path) -> None:
+def _write_owner(pid: int, instance_dir: Path) -> dict:
     OWNER_FILE.parent.mkdir(parents=True, exist_ok=True)
+    owner = {
+        "pid": pid,
+        "instance_dir": str(instance_dir),
+        "starttime": _proc_starttime(pid),
+        "boot_id": _proc_boot_id(),
+    }
     OWNER_FILE.write_text(
-        json.dumps({
-            "pid": pid,
-            "instance_dir": str(instance_dir),
-            "starttime": _proc_starttime(pid),
-            "boot_id": _proc_boot_id(),
-        }),
+        json.dumps(owner),
         encoding="utf-8",
     )
+    return owner
 
 
 def _clear_owner() -> None:
@@ -421,14 +553,18 @@ def _stop_owned_pid(pid: int, *, force: bool = False) -> bool:
     return stop_pid(pid, timeout_s=STOP_GRACE_S, force=force, wait_for_group=True)
 
 
-def stop_spawned_pid(pid: int) -> bool:
+def stop_spawned_pid(pid: int, *, expected_owner: dict | None = None) -> bool:
     """回滚本次 spawn 的 pid（不读 pid 文件盲停）；返回是否已确认停止。
 
     与 start/stop 共用实例管理锁，避免回滚停止后新 start 的记录被误删。
     """
     if pid <= 0:
         return True
+    if not isinstance(expected_owner, dict) or expected_owner.get("pid") != pid:
+        return False
     with interprocess_file_lock(_lock_path()):
+        if _read_owner() != expected_owner or current_managed_process() != pid:
+            return False
         ok = _stop_owned_pid(pid)
         if read_pid_file(PID_FILE) == pid and ok:
             clear_pid_file(PID_FILE)
@@ -441,9 +577,19 @@ def _print_problems(problems: list[str]) -> None:
         print(f"  · MaiBot 托管：{problem}", file=sys.stderr)
 
 
-def _wait_transport_ready(host: str, port: int, *, timeout_s: float, owned_pid: int | None) -> int:
+def _wait_transport_ready(
+    host: str,
+    port: int,
+    *,
+    timeout_s: float,
+    owned_pid: int | None,
+    stop_requested: Callable[[], bool] = lambda: False,
+) -> int:
     deadline = time.monotonic() + timeout_s
     while True:
+        if stop_requested():
+            print("  · MaiBot 托管：启动已取消", file=sys.stderr)
+            return 1
         if owned_pid is not None and not pid_alive(owned_pid):
             print("  · MaiBot 托管：进程已退出，未就绪", file=sys.stderr)
             return 1
@@ -464,7 +610,14 @@ def _rollback_spawn(pid: int | None) -> None:
     _clear_owner()
 
 
-def start_maibot_aux(*, dry_run: bool = False, ready_timeout_s: float = READY_TIMEOUT_S) -> ManagedStartResult:
+def start_maibot_aux(
+    *,
+    dry_run: bool = False,
+    ready_timeout_s: float = READY_TIMEOUT_S,
+    stop_requested: Callable[[], bool] = lambda: False,
+) -> ManagedStartResult:
+    if stop_requested():
+        return ManagedStartResult(rc=1)
     try:
         config = load_managed_config()
     except ManagedConfigError as exc:
@@ -472,7 +625,6 @@ def start_maibot_aux(*, dry_run: bool = False, ready_timeout_s: float = READY_TI
         return ManagedStartResult(rc=1)
     if not config.enabled:
         return ManagedStartResult(rc=0)
-
     bridge, bridge_error = _load_bridge()
     if bridge is None:
         print(f"  · MaiBot 托管：桥配置无效：{bridge_error}", file=sys.stderr)
@@ -481,7 +633,7 @@ def start_maibot_aux(*, dry_run: bool = False, ready_timeout_s: float = READY_TI
         print("  · MaiBot 托管：桥未启用，拒绝托管（请先配置 MAIBOT_BRIDGE_ENABLED）", file=sys.stderr)
         return ManagedStartResult(rc=1)
 
-    problems = validate_managed_instance(config, bridge)
+    problems, _ = _validate_static_instance(config, bridge)
     if problems:
         _print_problems(problems)
         return ManagedStartResult(rc=1)
@@ -491,9 +643,9 @@ def start_maibot_aux(*, dry_run: bool = False, ready_timeout_s: float = READY_TI
     host, port = addr
 
     try:
-        sync_enabled = _config_sync_enabled()
+        sync_enabled = config_migration_pending(config)
     except Exception as exc:
-        print(f"  · MaiBot 托管：配置同步开关无效：{type(exc).__name__}", file=sys.stderr)
+        print(f"  · MaiBot 托管：迁移状态或开关无效：{type(exc).__name__}", file=sys.stderr)
         return ManagedStartResult(rc=1)
 
     # Platform support is checked before any sync / lock file creation (incl. dry-run).
@@ -503,14 +655,30 @@ def start_maibot_aux(*, dry_run: bool = False, ready_timeout_s: float = READY_TI
 
     if dry_run:
         # Zero writes: no lock dir, no sync, no spawn.
-        return _start_dry_run(config, host, port, sync_enabled=sync_enabled, ready_timeout_s=ready_timeout_s)
+        return _start_dry_run(
+            config,
+            bridge,
+            host,
+            port,
+            sync_enabled=sync_enabled,
+            ready_timeout_s=ready_timeout_s,
+        )
 
     with interprocess_file_lock(_lock_path()):
-        return _start_locked(config, host, port, sync_enabled=sync_enabled, ready_timeout_s=ready_timeout_s)
+        return _start_locked(
+            config,
+            bridge,
+            host,
+            port,
+            sync_enabled=sync_enabled,
+            ready_timeout_s=ready_timeout_s,
+            stop_requested=stop_requested,
+        )
 
 
 def _start_dry_run(
     config: ManagedMaiBotConfig,
+    bridge,
     host: str,
     port: int,
     *,
@@ -538,25 +706,41 @@ def _start_dry_run(
         return ManagedStartResult(rc=1)
     if sync_enabled and not _sync_instance(config, dry_run=True):
         return ManagedStartResult(rc=1)
+    problems = [] if sync_enabled else validate_managed_instance(config, bridge)
+    if problems:
+        _print_problems(problems)
+        return ManagedStartResult(rc=1)
     print("  · MaiBot 托管：将启动（预览）")
     return ManagedStartResult(rc=0)
 
 
 def _start_locked(
     config: ManagedMaiBotConfig,
+    bridge,
     host: str,
     port: int,
     *,
     sync_enabled: bool,
     ready_timeout_s: float,
+    stop_requested: Callable[[], bool],
 ) -> ManagedStartResult:
+    if stop_requested():
+        return ManagedStartResult(rc=1)
     owned = current_managed_process()
     if owned is not None:
         if sync_enabled:
             print("  · MaiBot 托管：已在运行；已启用配置同步，需 restart 才能应用（未写文件）", file=sys.stderr)
             return ManagedStartResult(rc=1)
         print(f"  · MaiBot 托管：已在运行 pid={owned}")
-        return ManagedStartResult(rc=_wait_transport_ready(host, port, timeout_s=ready_timeout_s, owned_pid=owned))
+        return ManagedStartResult(
+            rc=_wait_transport_ready(
+                host,
+                port,
+                timeout_s=ready_timeout_s,
+                owned_pid=owned,
+                stop_requested=stop_requested,
+            )
+        )
     if maibot_aux_running():
         print("  · MaiBot 托管：检测到 pid 存活但无法核实身份，拒绝接管（请手动处理）", file=sys.stderr)
         return ManagedStartResult(rc=1)
@@ -572,13 +756,29 @@ def _start_locked(
     if sync_enabled and not _sync_instance(config, dry_run=False):
         return ManagedStartResult(rc=1)
 
+    problems = validate_managed_instance(config, bridge)
+    if problems:
+        _print_problems(problems)
+        return ManagedStartResult(rc=1)
+    if stop_requested():
+        return ManagedStartResult(rc=1)
+
     assert config.instance_dir is not None
     assert config.python is not None
+    try:
+        maibot_assets.retire_managed_provider_assets(config.instance_dir)
+    except maibot_assets.MaiBotAssetsError as exc:
+        print(f"  · MaiBot 托管：旧代理归档失败：{exc}", file=sys.stderr)
+        return ManagedStartResult(rc=1)
     RUN_DIR.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     cmd = [str(config.python), "-u", "bot.py"]
-    env = build_managed_env(config.instance_dir)
+    env = build_managed_env(
+        config.instance_dir,
+        mention_platform=bridge.platform,
+    )
     spawned_pid: int | None = None
+    spawned_owner: dict | None = None
     try:
         spawned_pid = spawn_detached(
             cmd,
@@ -588,12 +788,18 @@ def _start_locked(
             inherit_env=False,
         )
         write_pid_file(PID_FILE, spawned_pid)
-        _write_owner(spawned_pid, config.instance_dir)
+        spawned_owner = _write_owner(spawned_pid, config.instance_dir)
         if current_managed_process() != spawned_pid:
             print("  · MaiBot 托管：无法建立受管进程身份，回滚", file=sys.stderr)
             _rollback_spawn(spawned_pid)
             return ManagedStartResult(rc=1)
-        rc = _wait_transport_ready(host, port, timeout_s=ready_timeout_s, owned_pid=spawned_pid)
+        rc = _wait_transport_ready(
+            host,
+            port,
+            timeout_s=ready_timeout_s,
+            owned_pid=spawned_pid,
+            stop_requested=stop_requested,
+        )
     except OSError as exc:
         print(f"  · MaiBot 托管：启动失败：{exc}", file=sys.stderr)
         _rollback_spawn(spawned_pid)
@@ -605,7 +811,7 @@ def _start_locked(
         _rollback_spawn(spawned_pid)
         return ManagedStartResult(rc=1)
     print(f"  · MaiBot 托管：已启动 pid={spawned_pid} 日志 {LOG_FILE}")
-    return ManagedStartResult(rc=0, spawned_pid=spawned_pid)
+    return ManagedStartResult(rc=0, spawned_pid=spawned_pid, owner=spawned_owner)
 
 
 def _sync_instance(config: ManagedMaiBotConfig, *, dry_run: bool) -> bool:
@@ -620,13 +826,18 @@ def _sync_instance(config: ManagedMaiBotConfig, *, dry_run: bool) -> bool:
     from pallas.product.agent_bridge.config_sync import ConfigSyncError, sync_maibot_config
 
     try:
-        sync_maibot_config(config.instance_dir, dry_run=dry_run)
+        report = sync_maibot_config(config.instance_dir, dry_run=dry_run)
     except ConfigSyncError as exc:
         print(f"  · MaiBot 托管：配置同步失败：{exc}", file=sys.stderr)
         return False
     except OSError:
         print("  · MaiBot 托管：配置同步写盘失败（IO 错误）", file=sys.stderr)
         return False
+    if dry_run:
+        if not isinstance(report, dict) or report.get("ready") is not True:
+            print("  · MaiBot 托管：迁移预览的原生模型配置未就绪", file=sys.stderr)
+            return False
+        _print_migration_warnings(report)
     return True
 
 

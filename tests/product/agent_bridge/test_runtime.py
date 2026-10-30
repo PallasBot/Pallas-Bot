@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 
 import pytest
-from nonebot.adapters.onebot.v11 import GroupMessageEvent
+from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message, MessageSegment
 
 from pallas.product.agent_bridge import runtime
 from pallas.product.agent_bridge.config import MaiBotBridgeConfig
@@ -30,13 +30,15 @@ def _config(**overrides):
 def _arm(monkeypatch, owner=None, live="same"):
     owner = owner or _config()
     monkeypatch.setattr(runtime, "_owner_config", owner)
+    monkeypatch.setattr(runtime, "_bridge", SimpleNamespace(connected=True))
+    monkeypatch.setattr(runtime, "_quiesced", False)
     if live == "same":
         monkeypatch.setattr(runtime, "_live_config_or_none", lambda: owner)
     else:
         monkeypatch.setattr(runtime, "_live_config_or_none", lambda: live)
 
 
-def _event(*, user_id=7, group_id=GROUP_ID):
+def _event(*, user_id=7, group_id=GROUP_ID, to_me=False):
     return GroupMessageEvent.model_validate({
         "time": 1800000000,
         "self_id": BOT_ID,
@@ -50,6 +52,7 @@ def _event(*, user_id=7, group_id=GROUP_ID):
         "raw_message": "synthetic text",
         "font": 0,
         "sender": {"user_id": user_id, "nickname": "synthetic user", "role": "member"},
+        "to_me": to_me,
     })
 
 
@@ -176,6 +179,13 @@ async def test_callback_refuses_when_disabled(monkeypatch):
         await runtime.bridge_send_reply(BOT_ID, GROUP_ID, "hi")
 
 
+async def test_callback_refuses_when_bridge_is_offline(monkeypatch):
+    _arm(monkeypatch)
+    monkeypatch.setattr(runtime, "_bridge", SimpleNamespace(connected=False))
+    with pytest.raises(runtime.BridgeSendRefusedError):
+        await runtime.bridge_send_reply(BOT_ID, GROUP_ID, "hi")
+
+
 async def test_callback_delivers_and_returns_real_message_id(monkeypatch):
     _arm(monkeypatch)
     _install_gates(monkeypatch)
@@ -203,9 +213,11 @@ class _FakeBridge:
     def __init__(self):
         self.connected = True
         self.forwarded: list[dict] = []
+        self.wake_flags: list[tuple[bool, bool]] = []
 
-    async def forward_event(self, payload, *, command_traffic):
+    async def forward_event(self, payload, *, command_traffic, at_bot=False, is_mentioned=False):
         self.forwarded.append(payload)
+        self.wake_flags.append((at_bot, is_mentioned))
 
 
 def _patch_forward(monkeypatch, *, scrub_blocked=False, scrub_raises=False):
@@ -243,6 +255,38 @@ async def test_forward_converts_event_to_plain_onebot_dict(monkeypatch):
     assert payload["self_id"] == BOT_ID
     assert payload["group_id"] == GROUP_ID
     assert payload["message_id"] == 123
+
+
+@pytest.mark.parametrize(("target", "expected_at"), [(BOT_ID, True), (OTHER_BOT, False)])
+async def test_alias_and_explicit_at_keep_the_actual_target(monkeypatch, target, expected_at):
+    _arm(monkeypatch)
+    bridge = _patch_forward(monkeypatch)
+    event = _event(to_me=True)
+    event._pallas_llm_alias_hard_trigger = True
+    event.original_message = Message([MessageSegment.at(target), MessageSegment.text("synthetic text")])
+    assert await runtime.forward_owned_event(SimpleNamespace(self_id=str(BOT_ID)), event, command_traffic=False)
+    assert bridge.wake_flags == [(expected_at, True)]
+
+
+@pytest.mark.parametrize(
+    ("to_me", "alias_trigger", "expected"),
+    [
+        (True, False, (True, False)),
+        (False, True, (False, True)),
+        (True, True, (False, True)),
+        (False, False, (False, False)),
+    ],
+)
+async def test_forward_keeps_at_and_exclusive_alias_wake_signals_distinct(monkeypatch, to_me, alias_trigger, expected):
+    _arm(monkeypatch)
+    bridge = _patch_forward(monkeypatch)
+    bot = SimpleNamespace(self_id=str(BOT_ID))
+    event = _event(to_me=to_me)
+    if alias_trigger:
+        event._pallas_llm_alias_hard_trigger = True
+
+    assert await runtime.forward_owned_event(bot, event, command_traffic=False) is True
+    assert bridge.wake_flags == [expected]
 
 
 async def test_forward_rejects_the_bound_bot_own_message(monkeypatch):

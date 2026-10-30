@@ -1,0 +1,24 @@
+{
+  "manifest_version": 2,
+  "version": "1.0.0",
+  "name": "Pallas Managed Provider",
+  "description": "MaiBot SDK provider plugin that routes response and embedding requests through Pallas.",
+  "author": {"name": "Pallas Bot", "url": "https://github.com/PallasBot/Pallas-Bot"},
+  "license": "MIT",
+  "urls": {"repository": "https://github.com/PallasBot/Pallas-Bot"},
+  "host_application": {"min_version": "1.3.15", "max_version": "1.3.15"},
+  "sdk": {"min_version": "2.16.0", "max_version": "2.16.0"},
+  "dependencies": [],
+  "llm_providers": [
+    {
+      "client_type": "pallas-managed",
+      "name": "Pallas Managed Provider",
+      "description": "Routes MaiBot response and embedding requests through Pallas managed providers.",
+      "version": "1.0.0"
+    }
+  ],
+  "capabilities": [],
+  "i18n": {"default_locale": "zh-CN", "supported_locales": ["zh-CN"]},
+  "id": "pallas.maibot_managed_provider",
+  "plugin_type": "extension"
+}

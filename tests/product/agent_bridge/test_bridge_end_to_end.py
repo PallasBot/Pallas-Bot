@@ -189,7 +189,7 @@ async def _start_bridge(monkeypatch, fake_mai, *, live_patch=True, **config_over
     if live_patch:
         monkeypatch.setattr(runtime, "_live_config_or_none", lambda: owner)
     assert await runtime.start_bridge() is True
-    await fake_mai.wait_connected()
+    assert await runtime.wait_bridge_ready(timeout=2.0) is True
 
 
 async def test_end_to_end_forward_and_real_id_echo(monkeypatch, fake_mai, qq):

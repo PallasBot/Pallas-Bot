@@ -1,0 +1,788 @@
+--- /dev/null
++++ b/dashboard/src/__tests__/router-subpath.test.ts
+@@ -0,0 +1,15 @@
++import { afterEach, expect, it, vi } from 'vitest'
++
++afterEach(() => {
++  vi.unstubAllEnvs()
++  vi.resetModules()
++})
++
++it('mounts the router under the configured MaiBot public base', async () => {
++  vi.stubEnv('BASE_URL', '/pallas/maibot/')
++  vi.resetModules()
++
++  const { router } = await import('@/router')
++
++  expect(router.options.basepath).toBe('/pallas/maibot')
++})
+--- a/dashboard/src/components/error-boundary.tsx
++++ b/dashboard/src/components/error-boundary.tsx
+@@ -8,6 +8,7 @@
+ import { ScrollArea } from '@/components/ui/scroll-area'
+ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+ import { useState } from 'react'
++import { getAppPath } from '@/lib/api-base'
+ 
+ interface Props {
+   children: ReactNode
+@@ -209,7 +210,7 @@
+ }) {
+   const { t } = useTranslation()
+   const handleGoHome = () => {
+-    window.location.href = '/'
++    window.location.href = getAppPath('/')
+   }
+ 
+   const handleRefresh = () => {
+--- a/dashboard/src/components/restart-overlay.tsx
++++ b/dashboard/src/components/restart-overlay.tsx
+@@ -17,6 +17,7 @@
+  */
+ 
+ import { useEffect, useState, useCallback } from 'react'
++import { getAppPath, resolveApiPath } from '@/lib/api-base'
+ import { createPortal } from 'react-dom'
+ import { useTranslation } from 'react-i18next'
+ import {
+@@ -325,7 +326,7 @@
+       }))
+ 
+       try {
+-        const response = await fetch('/api/webui/system/status', {
++        const response = await fetch(await resolveApiPath('/api/webui/system/status'), {
+           method: 'GET',
+           signal: AbortSignal.timeout(3000),
+         })
+@@ -334,7 +335,7 @@
+           setState((prev) => ({ ...prev, status: 'success', progress: 100 }))
+           setTimeout(() => {
+             onComplete?.()
+-            window.location.href = '/auth'
++            window.location.href = getAppPath('/auth')
+           }, 1500)
+           return
+         }
+@@ -412,4 +413,3 @@
+     </div>
+   )
+ }
+-
+--- a/dashboard/src/components/theme-provider.tsx
++++ b/dashboard/src/components/theme-provider.tsx
+@@ -2,6 +2,7 @@
+ import type { ReactNode } from 'react'
+ 
+ import { ThemeProviderContext } from '@/lib/theme-context'
++import { isAuthPath } from '@/lib/api-base'
+ import { getBotConfig, updateBotConfigSection } from '@/lib/config-api'
+ import { buildFutureRetroTexture } from '@/lib/theme/future-retro'
+ import { DEFAULT_DASHBOARD_STYLE, DEFAULT_FUTURE_RETRO_STYLE_CONFIG } from '@/lib/theme/tokens'
+@@ -47,7 +48,7 @@
+ }
+ 
+ function shouldSyncRemoteWebUIStyle(): boolean {
+-  return !window.location.pathname.startsWith('/auth')
++  return !isAuthPath()
+ }
+ 
+ export function ThemeProvider({
+--- a/dashboard/src/lib/__tests__/plugin-upload.test.ts
++++ b/dashboard/src/lib/__tests__/plugin-upload.test.ts
+@@ -2,6 +2,7 @@
+ import { uploadPluginWebUI } from '@/lib/plugin-webui'
+ 
+ vi.mock('@/lib/api-base', () => ({
++  getAppPath: (path: string) => path,
+   resolveApiPath: async (path: string) => path,
+   onBackendUrlChanged: () => () => {},
+   getApiBaseUrl: async () => '',
+--- a/dashboard/src/lib/__tests__/unified-ws.test.ts
++++ b/dashboard/src/lib/__tests__/unified-ws.test.ts
+@@ -10,7 +10,8 @@
+   wsBaseUrl: 'ws://test-host',
+ }))
+ 
+-vi.mock('@/lib/api-base', () => ({
++vi.mock('@/lib/api-base', async (importOriginal) => ({
++  ...(await importOriginal<typeof import('@/lib/api-base')>()),
+   getWsBaseUrl: async () => apiState.wsBaseUrl,
+ }))
+ 
+@@ -178,6 +179,21 @@
+     expect(connections).toEqual([false, false, true])
+   })
+ 
++  it('WebSocket 使用同域 MaiBot 子路径', async () => {
++    const client = await loadClient()
++    apiState.wsBaseUrl = 'wss://console.example.com/pallas/maibot'
++    const connectPromise = client.connect()
++    await flushMicrotasks()
++    const socket = FakeWebSocket.instances[0]
++
++    expect(socket.url).toBe(
++      'wss://console.example.com/pallas/maibot/api/webui/ws?token=token%2F1'
++    )
++    socket.serverOpen()
++    await connectPromise
++    client.disconnect()
++  })
++
+   it('token 获取失败时 connect 抛错并回到 idle 状态', async () => {
+     apiState.tokenResponse = { success: false }
+     const client = await loadClient()
+--- a/dashboard/src/lib/api-base.test.ts
++++ b/dashboard/src/lib/api-base.test.ts
+@@ -50,13 +50,64 @@
+     restoreLocation()
+     delete window.electronAPI
+     vi.unstubAllEnvs()
++    vi.resetModules()
+   })
+ 
+   it('浏览器环境下 HTTP 基址为空，路径原样返回', async () => {
+-    const { getApiBaseUrl, resolveApiPath } = await import('./api-base')
++    const { getApiBaseUrl, getApiPath, getAppPath, resolveApiPath } = await import('./api-base')
+ 
+     await expect(getApiBaseUrl()).resolves.toBe('')
+     await expect(resolveApiPath('/api/webui/status')).resolves.toBe('/api/webui/status')
++    expect(getApiPath('/api/webui/status')).toBe('/api/webui/status')
++    expect(getAppPath('/auth')).toBe('/auth')
++  })
++
++  it('浏览器子路径构建把 HTTP 与 WS 保持在同一 MaiBot 前缀且不重复', async () => {
++    vi.stubEnv('BASE_URL', '/pallas/maibot/')
++    vi.resetModules()
++    stubLocation({ protocol: 'https:', host: 'console.example.com' })
++    const { getApiBaseUrl, getApiPath, getAppPath, getWsBaseUrl, resolveApiPath } =
++      await import('./api-base')
++
++    await expect(getApiBaseUrl()).resolves.toBe('/pallas/maibot')
++    await expect(resolveApiPath('/api/webui/status')).resolves.toBe(
++      '/pallas/maibot/api/webui/status'
++    )
++    await expect(resolveApiPath('/pallas/maibot/api/webui/status')).resolves.toBe(
++      '/pallas/maibot/api/webui/status'
++    )
++    expect(getAppPath('/auth')).toBe('/pallas/maibot/auth')
++    expect(getAppPath('/maimai.ico')).toBe('/pallas/maibot/maimai.ico')
++    expect(getAppPath('/fonts/Jersey20-Regular.ttf')).toBe(
++      '/pallas/maibot/fonts/Jersey20-Regular.ttf'
++    )
++    expect(getApiPath('/api/webui/auth/update')).toBe('/pallas/maibot/api/webui/auth/update')
++    await expect(getWsBaseUrl()).resolves.toBe('wss://console.example.com/pallas/maibot')
++  })
++
++  it('子路径拼接不接受跨源 API 路径', async () => {
++    const { joinBasePath } = await import('./api-base')
++
++    expect(() => joinBasePath('/pallas/maibot', 'https://other.example/api')).toThrow(
++      'API paths must not change origin'
++    )
++    expect(() => joinBasePath('/pallas/maibot', '//other.example/api')).toThrow(
++      'API paths must not change origin'
++    )
++  })
++
++  it('子路径拼接拒绝明文与编码后的路径穿越', async () => {
++    const { joinBasePath } = await import('./api-base')
++
++    expect(() => joinBasePath('/pallas/maibot', '/../api')).toThrow(
++      'API paths must not escape the base path'
++    )
++    expect(() => joinBasePath('/pallas/maibot', '/api/%2e%2e/pallas/api')).toThrow(
++      'API paths must not escape the base path'
++    )
++    expect(() => joinBasePath('/pallas/maibot', '/api/%2e%2e%2fpallas/api')).toThrow(
++      'API paths must not escape the base path'
++    )
+   })
+ 
+   it('Electron 使用活动后端 URL，缺失时回落为空字符串', async () => {
+--- a/dashboard/src/lib/api-base.ts
++++ b/dashboard/src/lib/api-base.ts
+@@ -8,11 +8,61 @@
+ 
+ import { isElectron } from './runtime'
+ 
++const DASHBOARD_BASE_PATH = normalizeBasePath(import.meta.env.BASE_URL)
++
++function normalizeBasePath(base: string): string {
++  if (!base || base === '/') return ''
++  if (!base.startsWith('/') || base.startsWith('//') || /[?#]/.test(base)) return ''
++  return `/${base.split('/').filter(Boolean).join('/')}`
++}
++
++export function joinBasePath(base: string, path: string): string {
++  if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(path)) {
++    throw new Error('API paths must not change origin')
++  }
++  const pathname = path.split(/[?#]/, 1)[0]
++  if (
++    pathname.includes('\\') ||
++    pathname.split('/').some((segment) => {
++      try {
++        const decoded = decodeURIComponent(segment)
++        return ['.', '..'].includes(decoded) || /[\\/%]/.test(decoded)
++      } catch {
++        return true
++      }
++    })
++  ) {
++    throw new Error('API paths must not escape the base path')
++  }
++  const normalizedPath = `/${path.replace(/^\/+/, '')}`
++  if (/^(?:https?|wss?):\/\//i.test(base)) {
++    return `${base.replace(/\/+$/, '')}${normalizedPath}`
++  }
++
++  const normalizedBase = normalizeBasePath(base)
++  if (!normalizedBase) return normalizedPath
++  if (normalizedPath === normalizedBase || normalizedPath.startsWith(`${normalizedBase}/`)) {
++    return normalizedPath
++  }
++  return `${normalizedBase}${normalizedPath}`
++}
++
++export function getAppPath(path: string): string {
++  return joinBasePath(DASHBOARD_BASE_PATH, path)
++}
++
++export function getApiPath(path: string): string {
++  return isElectron() ? path : getAppPath(path)
++}
++
++export function isAuthPath(pathname = window.location.pathname): boolean {
++  return pathname === getAppPath('/auth')
++}
++
+ /**
+  * Get API base URL for HTTP/HTTPS requests
+  * - Electron: User-configured backend URL from main process
+- * - Browser DEV: Empty string (Vite proxy handles /api prefix)
+- * - Browser PROD: Empty string (same-origin deployment)
++ * - Browser: Same-origin base path from Vite's build configuration
+  */
+ export async function getApiBaseUrl(): Promise<string> {
+   if (isElectron()) {
+@@ -21,17 +71,14 @@
+     return backendUrl ?? ''
+   }
+ 
+-  // Browser (DEV & PROD): Return empty string
+-  // In DEV: Vite proxy forwards /api requests to backend
+-  // In PROD: API is deployed on same origin as frontend
+-  return ''
++  // Browser requests stay same-origin and follow Vite's configured public base.
++  return DASHBOARD_BASE_PATH
+ }
+ 
+ /**
+  * Get WebSocket base URL
+  * - Electron: Convert HTTP/HTTPS URL to WS/WSS
+- * - Browser DEV: Use same-origin WS URL and let Vite proxy forward requests
+- * - Browser PROD: Construct WS URL from window.location
++ * - Browser: Construct same-origin WS URL with Vite's configured base path
+  */
+ export async function getWsBaseUrl(): Promise<string> {
+   if (isElectron()) {
+@@ -50,28 +97,27 @@
+   // Browser DEV: Use same-origin URL so Vite proxy can forward WebSocket requests
+   if (import.meta.env.DEV) {
+     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+-    return `${protocol}//${window.location.host}`
++    return `${protocol}//${window.location.host}${DASHBOARD_BASE_PATH}`
+   }
+ 
+   // Browser PROD: Construct WS URL from current location
+   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+   const host = window.location.host
+-  return `${protocol}//${host}`
++  return `${protocol}//${host}${DASHBOARD_BASE_PATH}`
+ }
+ 
+ /**
+  * Resolve full API path by prepending base URL if needed
+  * - Electron: Prepends configured backend URL
+- * - Browser: Path remains unchanged (proxy/same-origin handling)
++ * - Browser: Prefixes the same-origin API path with Vite's configured base path
+  */
+ export async function resolveApiPath(path: string): Promise<string> {
+   if (isElectron()) {
+     const baseUrl = await getApiBaseUrl()
+-    return baseUrl ? `${baseUrl}${path}` : path
++    return baseUrl ? joinBasePath(baseUrl, path) : path
+   }
+ 
+-  // Browser: Path is used as-is
+-  return path
++  return getAppPath(path)
+ }
+ 
+ /**
+--- a/dashboard/src/lib/auth.ts
++++ b/dashboard/src/lib/auth.ts
+@@ -5,6 +5,7 @@
+  * 在这两个场景里 401 / 未认证是正常业务结果，不应触发整页跳转。
+  */
+ import { authApi } from '@/lib/http'
++import { getAppPath } from '@/lib/api-base'
+ 
+ export interface AuthStatus {
+   authenticated: boolean
+@@ -29,7 +30,7 @@
+     console.error('登出请求失败:', error)
+   }
+   // 无论成功与否都跳转到登录页
+-  window.location.href = '/auth'
++  window.location.href = getAppPath('/auth')
+ }
+ 
+ /**
+--- a/dashboard/src/lib/avatar-url.ts
++++ b/dashboard/src/lib/avatar-url.ts
+@@ -1,6 +1,6 @@
+ import { useEffect, useMemo, useState } from 'react'
+ 
+-import { resolveApiPath } from '@/lib/api-base'
++import { getApiPath, resolveApiPath } from '@/lib/api-base'
+ import { backendApi } from '@/lib/http'
+ import { isElectron } from '@/lib/runtime'
+ import { getSetting } from '@/lib/settings-manager'
+@@ -59,7 +59,7 @@
+   const routeQuery =
+     (route?.accountId ? `&account_id=${encodeURIComponent(route.accountId)}` : '') +
+     (route?.scope ? `&scope=${encodeURIComponent(route.scope)}` : '')
+-  return `/api/webui/avatar?platform=${encodeURIComponent(normalizedPlatform)}&${idParam}=${encodeURIComponent(normalizedTargetId)}${versionQuery}${routeQuery}`
++  return getApiPath(`/api/webui/avatar?platform=${encodeURIComponent(normalizedPlatform)}&${idParam}=${encodeURIComponent(normalizedTargetId)}${versionQuery}${routeQuery}`)
+ }
+ 
+ export function useResolvedAvatarUrl(
+--- a/dashboard/src/lib/http/__tests__/client.test.ts
++++ b/dashboard/src/lib/http/__tests__/client.test.ts
+@@ -54,6 +54,19 @@
+       expect(fetchMock.mock.calls[0][0]).toBe('http://backend:8000/api/webui/chats')
+     })
+ 
++    it('为同域子路径请求加前缀且不重复已有前缀', async () => {
++      const fetchMock = mockFetch(jsonResponse({ ok: true }))
++      const client = makeClient({ resolveBaseUrl: async () => '/pallas/maibot' })
++
++      await client.get('/api/webui/status')
++      await client.get('/pallas/maibot/api/webui/status')
++
++      expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
++        '/pallas/maibot/api/webui/status',
++        '/pallas/maibot/api/webui/status',
++      ])
++    })
++
+     it('序列化 query 参数：跳过 undefined/null，布尔转字符串，数组展开', async () => {
+       const fetchMock = mockFetch(jsonResponse({}))
+       const client = makeClient()
+--- /dev/null
++++ b/dashboard/src/lib/http/__tests__/subpath.test.ts
+@@ -0,0 +1,22 @@
++import { afterEach, expect, it, vi } from 'vitest'
++
++afterEach(() => {
++  vi.unstubAllEnvs()
++  vi.unstubAllGlobals()
++  vi.resetModules()
++})
++
++it('prefixes native API requests and keeps a 401 redirect inside MaiBot', async () => {
++  vi.stubEnv('BASE_URL', '/pallas/maibot/')
++  vi.resetModules()
++  const location = { href: 'https://console.example.com/pallas/maibot/' }
++  vi.stubGlobal('location', location)
++  const fetchMock = vi.fn().mockResolvedValue(new Response('', { status: 401 }))
++  vi.stubGlobal('fetch', fetchMock)
++
++  const { backendApi } = await import('../instances')
++  await expect(backendApi.get('/api/webui/auth/check')).rejects.toMatchObject({ status: 401 })
++
++  expect(fetchMock.mock.calls[0][0]).toBe('/pallas/maibot/api/webui/auth/check')
++  expect(location.href).toBe('/pallas/maibot/auth')
++})
+--- a/dashboard/src/lib/http/client.ts
++++ b/dashboard/src/lib/http/client.ts
+@@ -11,6 +11,7 @@
+  * 所有失败统一抛出 ApiError（见 errors.ts），调用方不再手写 response.ok 分支。
+  */
+ import { formatApiError } from '@/lib/api-error'
++import { joinBasePath } from '@/lib/api-base'
+ 
+ import { ApiError } from './errors'
+ 
+@@ -106,7 +107,7 @@
+ 
+     // 拼接完整 URL：base + path + query
+     const base = await resolveBaseUrl()
+-    let url = `${base}${path}`
++    let url = joinBasePath(base, path)
+     if (query) {
+       const params = buildSearchParams(query)
+       const queryString = params.toString()
+--- a/dashboard/src/lib/http/instances.ts
++++ b/dashboard/src/lib/http/instances.ts
+@@ -4,7 +4,7 @@
+  * - backendApi：主后端（MaiBot 本体 HTTP API），Cookie 认证，401 跳转登录页
+  * - statsApi：统计服务（Cloudflare Workers 上的问卷/插件统计），无认证
+  */
+-import { getApiBaseUrl } from '@/lib/api-base'
++import { getApiBaseUrl, getAppPath } from '@/lib/api-base'
+ 
+ import { createApiClient } from './client'
+ 
+@@ -16,7 +16,7 @@
+   resolveBaseUrl: getApiBaseUrl,
+   auth: 'cookie',
+   onUnauthorized: () => {
+-    window.location.href = '/auth'
++    window.location.href = getAppPath('/auth')
+   },
+ })
+ 
+--- a/dashboard/src/lib/log-websocket.ts
++++ b/dashboard/src/lib/log-websocket.ts
+@@ -4,6 +4,7 @@
+  */
+ 
+ import { checkAuthStatus } from './auth'
++import { isAuthPath } from './api-base'
+ import { getSetting } from './settings-manager'
+ import { unifiedWsClient } from './unified-ws'
+ 
+@@ -237,7 +238,7 @@
+ 
+   async connect(): Promise<void> {
+     if (
+-      window.location.pathname === '/auth' ||
++      isAuthPath() ||
+       this.logCallbacks.size === 0 ||
+       this.subscriptionActive
+     ) {
+--- a/dashboard/src/lib/plugin-page-theme.ts
++++ b/dashboard/src/lib/plugin-page-theme.ts
+@@ -1,3 +1,5 @@
++import { getAppPath } from '@/lib/api-base'
++
+ /** Only trusted host component appearance crosses the sandbox, never host DOM or code. */
+ const APPEARANCE = [
+   'background-color',
+@@ -44,7 +46,7 @@
+       if (!fonts.has(file))
+         fonts.set(
+           file,
+-          fetch(`/fonts/${file}`).then(async (response) => {
++          fetch(getAppPath(`/fonts/${file}`)).then(async (response) => {
+             if (!response.ok) throw new Error(`Theme font unavailable: ${file}`)
+             const blob = await response.blob()
+             if (blob.size > 2 * 1024 * 1024) throw new Error('Theme font exceeds 2 MiB')
+--- a/dashboard/src/lib/plugin-webui.ts
++++ b/dashboard/src/lib/plugin-webui.ts
+@@ -2,8 +2,7 @@
+ import { useEffect, useSyncExternalStore } from 'react'
+ 
+ import { backendApi } from '@/lib/http'
+-import { onBackendUrlChanged } from '@/lib/api-base'
+-import { resolveApiPath } from '@/lib/api-base'
++import { getAppPath, onBackendUrlChanged, resolveApiPath } from '@/lib/api-base'
+ 
+ export type Scalar = string | number | boolean | null
+ export type JSONValue = Scalar | JSONValue[] | { [key: string]: JSONValue }
+@@ -362,7 +361,7 @@
+     }
+     xhr.onerror = () => reject(new Error('Upload connection failed'))
+     xhr.onload = () => {
+-      if (xhr.status === 401) window.location.href = '/auth'
++      if (xhr.status === 401) window.location.href = getAppPath('/auth')
+       try {
+         if (xhr.status < 200 || xhr.status >= 300) {
+           let detail = `HTTP ${xhr.status}: ${xhr.statusText || 'Upload failed'}`
+--- a/dashboard/src/lib/restart-context.tsx
++++ b/dashboard/src/lib/restart-context.tsx
+@@ -18,6 +18,7 @@
+   type ReactNode,
+ } from 'react'
+ import { restartMaiBot } from './system-api'
++import { getAppPath, resolveApiPath } from './api-base'
+ 
+ // ============ 类型定义 ============
+ 
+@@ -158,7 +159,7 @@
+           CONFIG.CHECK_TIMEOUT
+         )
+ 
+-        const response = await fetch(healthCheckUrl, {
++        const response = await fetch(await resolveApiPath(healthCheckUrl), {
+           method: 'GET',
+           headers: { 'Content-Type': 'application/json' },
+           credentials: 'include',
+@@ -202,7 +203,7 @@
+         setTimeout(() => {
+           onRestartComplete?.()
+           // 默认跳转到 auth 页面
+-          window.location.href = '/auth'
++          window.location.href = getAppPath('/auth')
+         }, CONFIG.SUCCESS_REDIRECT_DELAY)
+       } else if (currentAttempt >= attemptLimit) {
+         // 失败
+--- a/dashboard/src/lib/system-api.ts
++++ b/dashboard/src/lib/system-api.ts
+@@ -7,6 +7,7 @@
+  * （例如重启期间后端短暂不可达导致的预期失败）。
+  */
+ import { backendApi } from '@/lib/http'
++import { getApiPath } from '@/lib/api-base'
+ import { getApiBaseUrl } from '@/lib/api-base'
+ 
+ /**
+@@ -499,7 +500,7 @@
+     target,
+     relative_path: relativePath,
+   })
+-  return `/api/webui/system/local-cache/images/preview?${query.toString()}`
++  return getApiPath(`/api/webui/system/local-cache/images/preview?${query.toString()}`)
+ }
+ 
+ export async function getLocalCacheStats(): Promise<LocalCacheStats> {
+--- a/dashboard/src/lib/unified-ws.ts
++++ b/dashboard/src/lib/unified-ws.ts
+@@ -1,4 +1,4 @@
+-import { getWsBaseUrl } from '@/lib/api-base'
++import { getAppPath, getWsBaseUrl, isAuthPath, joinBasePath } from '@/lib/api-base'
+ import { backendApi } from '@/lib/http'
+ 
+ import { getSetting } from './settings-manager'
+@@ -232,7 +232,7 @@
+       if (!wsBaseUrl || !wsToken) {
+         return null
+       }
+-      return `${wsBaseUrl}/api/webui/ws?token=${encodeURIComponent(wsToken)}`
++      return joinBasePath(wsBaseUrl, `/api/webui/ws?token=${encodeURIComponent(wsToken)}`)
+     } catch (error) {
+       console.error('构建统一 WebSocket 地址失败:', error)
+       return null
+@@ -362,8 +362,8 @@
+     if (event.code === 4001) {
+       this.manualDisconnect = true
+       this.setRecoveryWatch(false)
+-      if (window.location.pathname !== '/auth') {
+-        window.location.href = '/auth'
++      if (!isAuthPath()) {
++        window.location.href = getAppPath('/auth')
+       }
+       return
+     }
+--- a/dashboard/src/lib/version-compatibility-api.ts
++++ b/dashboard/src/lib/version-compatibility-api.ts
+@@ -1,4 +1,4 @@
+-import { getApiBaseUrl } from '@/lib/api-base'
++import { getApiBaseUrl, joinBasePath } from '@/lib/api-base'
+ import { APP_VERSION } from '@/lib/version'
+ 
+ export type VersionCompatibilityStatus = 'compatible' | 'webui_outdated' | 'main_program_outdated'
+@@ -33,7 +33,7 @@
+ ): Promise<VersionCompatibilityResult> {
+   const baseUrl = await getApiBaseUrl()
+   const query = new URLSearchParams({ webui_version: APP_VERSION })
+-  const response = await fetch(`${baseUrl}/api/webui/version-compatibility?${query.toString()}`, {
++  const response = await fetch(joinBasePath(baseUrl, `/api/webui/version-compatibility?${query.toString()}`), {
+     credentials: 'include',
+     signal,
+     cache: 'no-store',
+--- a/dashboard/src/router.tsx
++++ b/dashboard/src/router.tsx
+@@ -11,6 +11,7 @@
+ import { RoutePendingFallback } from './components/route-pending-fallback'
+ import { checkAuth } from './hooks/use-auth'
+ import { RouteErrorBoundary } from './components/error-boundary'
++import { getAppPath } from './lib/api-base'
+ 
+ // Root 路由
+ const rootRoute = createRootRoute({
+@@ -96,7 +97,7 @@
+     const search = params.size ? `?${params.toString()}` : ''
+     // 兼容此前内嵌 WebUI 设置的链接，保留页签参数和 hash。
+     const hash = location.hash ? `#${location.hash.replace(/^#/, '')}` : ''
+-    throw redirect({ href: `/settings${search}${hash}`, replace: true })
++    throw redirect({ href: `${getAppPath('/settings')}${search}${hash}`, replace: true })
+   },
+   component: lazyRouteComponent(() => import('./routes/config/bot'), 'BotConfigPage'),
+ })
+@@ -437,6 +438,7 @@
+ // 创建路由器
+ export const router = createRouter({
+   routeTree,
++  basepath: import.meta.env.BASE_URL === '/' ? '/' : import.meta.env.BASE_URL.replace(/\/$/, ''),
+   defaultNotFoundComponent: NotFoundPage,
+   defaultErrorComponent: ({ error }) => <RouteErrorBoundary error={error} />,
+   defaultPendingComponent: RoutePendingFallback,
+--- a/dashboard/src/routes/config/bot/hooks/complexFieldHooks.tsx
++++ b/dashboard/src/routes/config/bot/hooks/complexFieldHooks.tsx
+@@ -1,5 +1,6 @@
+ import { TimeRangeTrack, TimeRangeTicks } from '@/components/ui/time-range-track'
+ import { formatTalkTimeRange, getTimelineSegments, parseTalkTimeRange, type TimelineRange } from '@/lib/time-range'
++import { getAppPath } from '@/lib/api-base'
+ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+ 
+ import {
+@@ -3313,7 +3314,7 @@
+         <div className="flex shrink-0 items-center gap-2">
+           {isSharedMemoryGroup && (
+             <Button asChild size="sm" variant="outline" className="h-8">
+-              <a href="/config/bot?mode=groups&kind=memory">
++              <a href={getAppPath('/config/bot?mode=groups&kind=memory')}>
+                 <ExternalLink className="h-3.5 w-3.5" />
+                 共享组设置
+               </a>
+--- a/dashboard/src/routes/config/model/hooks/useModelTour.ts
++++ b/dashboard/src/routes/config/model/hooks/useModelTour.ts
+@@ -3,6 +3,7 @@
+  */
+ import { useCallback, useEffect, useRef } from 'react'
+ import { useNavigate } from '@tanstack/react-router'
++import { getAppPath } from '@/lib/api-base'
+ 
+ import { useTour } from '@/components/tour'
+ import {
+@@ -81,7 +82,7 @@
+     }
+ 
+     const targetRoute = STEP_ROUTE_MAP[tourState.stepIndex]
+-    if (targetRoute && window.location.pathname !== targetRoute) {
++    if (targetRoute && window.location.pathname !== getAppPath(targetRoute)) {
+       navigate({ to: targetRoute })
+     }
+   }, [tourState.stepIndex, tourState.activeTourId, tourState.isRunning, navigate])
+--- a/dashboard/src/routes/monitor/maisaka-monitor.tsx
++++ b/dashboard/src/routes/monitor/maisaka-monitor.tsx
+@@ -63,6 +63,7 @@
+ import { useVirtualizerUnmountGuard } from '@/lib/use-virtualizer-unmount-guard'
+ import { useToast } from '@/hooks/use-toast'
+ import { backendApi } from '@/lib/http'
++import { getApiPath } from '@/lib/api-base'
+ import { cn } from '@/lib/utils'
+ 
+ import type {
+@@ -1100,7 +1101,7 @@
+ 
+   if (
+     url.origin !== window.location.origin ||
+-    url.pathname !== '/api/webui/config/maisaka-prompt-preview'
++    url.pathname !== getApiPath('/api/webui/config/maisaka-prompt-preview')
+   ) {
+     return null
+   }
+--- a/dashboard/src/routes/plugin-config/utils.ts
++++ b/dashboard/src/routes/plugin-config/utils.ts
+@@ -3,12 +3,16 @@
+  * 从 plugin-config.tsx 抽出，供编辑器 hook 与 Section 渲染共用。
+  */
+ 
++import { getAppPath } from '@/lib/api-base'
++
+ export function isEmbeddedPluginConfigPath(pathname = window.location.pathname): boolean {
+-  return pathname === '/plugin-config/embed' || pathname.startsWith('/plugin-config/embed/')
++  const path = getAppPath('/plugin-config/embed')
++  return pathname === path || pathname.startsWith(`${path}/`)
+ }
+ 
+ export function isAdapterManagementPath(pathname = window.location.pathname): boolean {
+-  return pathname === '/adapter-management' || pathname.startsWith('/adapter-management/')
++  const path = getAppPath('/adapter-management')
++  return pathname === path || pathname.startsWith(`${path}/`)
+ }
+ 
+ export function getPluginConfigRoutePath(pathname = window.location.pathname): string {
+--- a/dashboard/src/routes/plugins/PluginIcon.tsx
++++ b/dashboard/src/routes/plugins/PluginIcon.tsx
+@@ -19,6 +19,7 @@
+ } from 'lucide-react'
+ 
+ import { cn } from '@/lib/utils'
++import { getApiPath } from '@/lib/api-base'
+ import type { PluginDisplayIcon, PluginType } from '@/types/plugin'
+ 
+ interface PluginIconManifest {
+@@ -107,13 +108,13 @@
+   }
+ 
+   if (installed) {
+-    return `/api/webui/plugins/icon/${encodeURIComponent(pluginId)}`
++    return getApiPath(`/api/webui/plugins/icon/${encodeURIComponent(pluginId)}`)
+   }
+ 
+   const url = marketplaceIconUrl?.trim()
+   // CNB Raw 禁止跨站嵌图，由 WebUI 同源端点读取。
+   if (url?.startsWith('https://cnb.cool/Mai-with-u/plugin-repo/-/git/raw/')) {
+-    return `/api/webui/plugins/market-icon?url=${encodeURIComponent(url)}`
++    return getApiPath(`/api/webui/plugins/market-icon?url=${encodeURIComponent(url)}`)
+   }
+   return url || null
+ }
+--- a/dashboard/src/routes/settings/SecurityTab.tsx
++++ b/dashboard/src/routes/settings/SecurityTab.tsx
+@@ -15,6 +15,7 @@
+ 
+ import { useNavigate } from '@tanstack/react-router'
+ import { cn } from '@/lib/utils'
++import { getApiPath } from '@/lib/api-base'
+ import { logout } from '@/lib/auth'
+ import { useToast } from '@/hooks/use-toast'
+ import { validateToken } from '@/lib/token-validator'
+@@ -85,7 +86,7 @@
+     setIsUpdating(true)
+ 
+     try {
+-      const response = await fetch('/api/webui/auth/update', {
++      const response = await fetch(getApiPath('/api/webui/auth/update'), {
+         method: 'POST',
+         headers: {
+           'Content-Type': 'application/json',
+@@ -133,7 +134,7 @@
+     setIsRegenerating(true)
+ 
+     try {
+-      const response = await fetch('/api/webui/auth/regenerate', {
++      const response = await fetch(getApiPath('/api/webui/auth/regenerate'), {
+         method: 'POST',
+         headers: {
+           'Content-Type': 'application/json',
+--- a/dashboard/src/routes/statistics/index.tsx
++++ b/dashboard/src/routes/statistics/index.tsx
+@@ -24,6 +24,7 @@
+ } from '@/components/ui/table'
+ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+ import { cn } from '@/lib/utils'
++import { getAppPath } from '@/lib/api-base'
+ 
+ import type {
+   DetailedDistributionItem,
+@@ -1009,7 +1010,7 @@
+                   {t('statisticsPage.actions.refresh')}
+                 </Button>
+                 <Button asChild variant="outline" size="sm">
+-                  <a href="/maibot_statistics.html" target="_blank" rel="noopener noreferrer">
++                  <a href={getAppPath('/maibot_statistics.html')} target="_blank" rel="noopener noreferrer">
+                     <ExternalLink />
+                     {t('statisticsPage.actions.openHtml')}
+                   </a>
+--- a/dashboard/vite.config.ts
++++ b/dashboard/vite.config.ts
+@@ -28,7 +28,13 @@
+ }
+ 
+ // https://vite.dev/config/
++const dashboardBase = process.env.MAIBOT_DASHBOARD_BASE ?? '/'
++if (!['/', '/pallas/maibot/'].includes(dashboardBase)) {
++  throw new Error('MAIBOT_DASHBOARD_BASE must be / or /pallas/maibot/')
++}
++
+ export default defineConfig({
++  base: dashboardBase,
+   plugins: [tailwindcss(), react(), watchErrorGuard()],
+   define: dashboardVersionDefine,
+   server: {

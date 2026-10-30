@@ -1,0 +1,215 @@
+{
+  "source": {
+    "repository": "Mai-with-u/MaiBot",
+    "checkout_remote": "https://github.com/MaiM-with-u/MaiBot.git",
+    "commit": "062d45cf8bd4272ac57d7ec03fcf405e5a458211",
+    "patch_root": "repository root (contains dashboard/)",
+    "repository_name_note": "GitHub redirects the checkout URL to canonical Mai-with-u/MaiBot."
+  },
+  "build": {
+    "environment_variable": "MAIBOT_DASHBOARD_BASE",
+    "default": "/",
+    "maibot_subpath": "/pallas/maibot/",
+    "subpath_build": "MAIBOT_DASHBOARD_BASE=/pallas/maibot/ npm run build (from dashboard/)",
+    "allowed_values": [
+      "/",
+      "/pallas/maibot/"
+    ]
+  },
+  "files": [
+    {
+      "path": "dashboard/src/__tests__/router-subpath.test.ts",
+      "sha256_before": null,
+      "sha256_after": "e9cf141114e3eaf4b9ce24915fa33936295db842e9a8dcf8210d76248311fe33"
+    },
+    {
+      "path": "dashboard/src/components/error-boundary.tsx",
+      "sha256_before": "c37b38077355ed5d11b6b458d256f268a4663a05fd31eb98e69f3ed43f444d27",
+      "sha256_after": "f5e18952db079851afa36f8c1580bd4420f43d82356996142a4d4f45fa50f9a1"
+    },
+    {
+      "path": "dashboard/src/components/restart-overlay.tsx",
+      "sha256_before": "4d03746b022f0be0774c415eafad98d125cb6ca1e738e294e124c6898621f23f",
+      "sha256_after": "60fecaf7a8014fd4fd1e4f9d818e28c7d2ed8d1ee78cc073e19d9436b1f4b406"
+    },
+    {
+      "path": "dashboard/src/components/theme-provider.tsx",
+      "sha256_before": "0c48df1dd0a44c60ce87feb2ca4e215a7b55c4fa2c0676fa9f6078e21a2baad7",
+      "sha256_after": "13115eaba03f33c2f92f188402c5aed829666d97f8576bc42e8a867cce1f6145"
+    },
+    {
+      "path": "dashboard/src/lib/__tests__/plugin-upload.test.ts",
+      "sha256_before": "486c0801fab94b0b91ac68611fb20f1b5c88679bc545d9d2b60544d53e2ccf52",
+      "sha256_after": "2c72e8bcd9883f0e319f5fbb149e10a5a57590a9e523fefb86eb29d39b534e2b"
+    },
+    {
+      "path": "dashboard/src/lib/__tests__/unified-ws.test.ts",
+      "sha256_before": "8dbeb1e8a694580769584ab4ac497393567f0d9e2953e6d0b51a06988b676887",
+      "sha256_after": "ffa2fe39e960bf28394e426d72bbd23d7178d0c5e130899734b77fc9986976c7"
+    },
+    {
+      "path": "dashboard/src/lib/api-base.test.ts",
+      "sha256_before": "5da4a1ac96cd3b3581573efa713b1ee255d2955434b5bddee42b5649587a7d9b",
+      "sha256_after": "2a64aaa083b9bb9dfae48febe6f036d9da8e375f26c517041b13404912644e46"
+    },
+    {
+      "path": "dashboard/src/lib/api-base.ts",
+      "sha256_before": "f0786b2c16d5320d4cc59e12dd2df284cbd0d7fdfa5556b370a86254f62c46be",
+      "sha256_after": "7a7393a1beb0e79c9fa8c7bebe29badf39a88c51ab3fae2d9e0251e738f895e2"
+    },
+    {
+      "path": "dashboard/src/lib/auth.ts",
+      "sha256_before": "37c33c0d13754c10d4d9814d795f466e7f70611a85fb2f68c604feb01763deb0",
+      "sha256_after": "51cf4821c0fbf4b77d9efafcf530678824bc0a6a9f289a0395d6b699ea30fbb4"
+    },
+    {
+      "path": "dashboard/src/lib/avatar-url.ts",
+      "sha256_before": "3219e05ca388a9e57c47ded273612f77f2581d198de94dabaa7869548f85cb6f",
+      "sha256_after": "27ef49957e1f87c79e07191c3be36994423145c3b84cfc5a55614cbc7bbc7cd9"
+    },
+    {
+      "path": "dashboard/src/lib/http/__tests__/client.test.ts",
+      "sha256_before": "52134c7751e4e84dff49b25d208ed5bd6e974f0f45cb75af96b2c0daca0f9164",
+      "sha256_after": "9f55ffcaebbe416660b51ca24b55b5d31307f0a3606dc1f95cc7e735254ed460"
+    },
+    {
+      "path": "dashboard/src/lib/http/__tests__/subpath.test.ts",
+      "sha256_before": null,
+      "sha256_after": "022ee5c91a4e5d917ab50cca623316ce835b3e04676e4ab76d6f1db0fec24d7b"
+    },
+    {
+      "path": "dashboard/src/lib/http/client.ts",
+      "sha256_before": "52def128a6b90e7d3ce251c1cc29ec6220d9ba8c4e3447121d5898bb908707a7",
+      "sha256_after": "58a7bccb4165d991960d784d9bca5dbfb46d01fbd6c12f610ce40e24fe54b8ca"
+    },
+    {
+      "path": "dashboard/src/lib/http/instances.ts",
+      "sha256_before": "5d9d14200edcf04cbf57c0039d37641cecd3e0646e02571bf66db1e4cd867e35",
+      "sha256_after": "8f76b973c91f5cbebdceae56813fcae8603f566faac18b9afd59a21affe3b198"
+    },
+    {
+      "path": "dashboard/src/lib/log-websocket.ts",
+      "sha256_before": "cd8109579162b7340d338a7ea287759c0246b7e76f410026765e5f93cb570dc0",
+      "sha256_after": "f679026e5b1c246540538ca12023b31c43157ecac195d185e463f13915185ece"
+    },
+    {
+      "path": "dashboard/src/lib/plugin-page-theme.ts",
+      "sha256_before": "776f9b56c419cb1db377ea4f7e4b5df99986bf552e35de728b42336f5efb701a",
+      "sha256_after": "e2e3546cc3e630395594b3367731f3e9fa963444767ce1fe03096850a0302ff6"
+    },
+    {
+      "path": "dashboard/src/lib/plugin-webui.ts",
+      "sha256_before": "8f9d76dbaf6ebe0248e5e857b9c23e64697d7500230e75e91e904855e892c33e",
+      "sha256_after": "6cdc2d5d0365cc2ff85585dce0fef92b9857e569c8f7cf6d95a82b896b69512b"
+    },
+    {
+      "path": "dashboard/src/lib/restart-context.tsx",
+      "sha256_before": "66838dbb01813674db8494b9d633ea553cada157d01d31198629582604b5c658",
+      "sha256_after": "18e183cb2a6122f52d57bd5cccaf9e5d3ec91f778447b02af6966fad444a8b38"
+    },
+    {
+      "path": "dashboard/src/lib/system-api.ts",
+      "sha256_before": "075c545363370ad3803b9fa2d5f714aef654a69d4b747ee5534482c84e8a8ddc",
+      "sha256_after": "6ccdac9e839e7df9ed03859ca5bdae0b7890fabe2daf88c5c30939845ddc224f"
+    },
+    {
+      "path": "dashboard/src/lib/unified-ws.ts",
+      "sha256_before": "9d2f8b68e4701ba72ed9e5f8dcad08520c78244aade7344458e3120f1ae43e97",
+      "sha256_after": "a09218d7b1c811936267b4f6dcce5619a1cb07e67d1fa2292e4532756556af0d"
+    },
+    {
+      "path": "dashboard/src/lib/version-compatibility-api.ts",
+      "sha256_before": "06d58aaa65530e45ec0b75e6a5c2c73f6ab0a71b66e192a56d2cee50ecb6c7d7",
+      "sha256_after": "583a131bcd6f473d1c7769bbaaa1c330e641af6ee69d7108d33ea6580ef1c83e"
+    },
+    {
+      "path": "dashboard/src/router.tsx",
+      "sha256_before": "8a009a5fb5916a2d507165efbe680fcf2fe1544b4c497da2ea04fccfac67376a",
+      "sha256_after": "e791a9610d0bdcaf885da1467a8960184ccc207bd971dae4c53246b26764d6d2"
+    },
+    {
+      "path": "dashboard/src/routes/config/bot/hooks/complexFieldHooks.tsx",
+      "sha256_before": "b0af5ae7e128b009ab5443b04cdaa7661fb265e388eff642be5dd7ccf1e829d9",
+      "sha256_after": "c25cb7c925e4ebe855f5fb4d6ba941bf0623953fee136eb1adcc25f6c037e83b"
+    },
+    {
+      "path": "dashboard/src/routes/config/model/hooks/useModelTour.ts",
+      "sha256_before": "2cfe58147ad6d3f8871234bb244478054c4bf2fa648d8f4f5c96b3a86e73b946",
+      "sha256_after": "b339ff30467f89a93294ebd048f650d4e549b9f63f3ba1ea6207a0eeef28b4d2"
+    },
+    {
+      "path": "dashboard/src/routes/monitor/maisaka-monitor.tsx",
+      "sha256_before": "6af3a51d333a3facef4c396e9ca729e7139b76b41183c67dd3ecacc0a58e0fb1",
+      "sha256_after": "77071e6aea128d75c0ccdb0c9072f87f2f57479179eabfea5dadd7b278fb22a1"
+    },
+    {
+      "path": "dashboard/src/routes/plugin-config/utils.ts",
+      "sha256_before": "5c26448c71be018b0811b9dd7c27e76847426cc9ba1bd40b6efe9c9d116b947e",
+      "sha256_after": "2817f976b991bc507107ad9e64c6bcdfe95389f563555a77c067adb99855568a"
+    },
+    {
+      "path": "dashboard/src/routes/plugins/PluginIcon.tsx",
+      "sha256_before": "6f39390828451be7ec129d1f95e45e06790836dbdcb145dc0f2c6d3498276d94",
+      "sha256_after": "b531292aff0d36e569a2b800029133fe63613283694683c1f37b142e5e236601"
+    },
+    {
+      "path": "dashboard/src/routes/settings/SecurityTab.tsx",
+      "sha256_before": "09f3d0f78c1a2238d99e24b6789d339e72ae803426bada42fdfefa19a66ef77f",
+      "sha256_after": "eb550ccb4c6e05a4bd100368c0293c66fd0de1cdd55351531001a1c3f890a81d"
+    },
+    {
+      "path": "dashboard/src/routes/statistics/index.tsx",
+      "sha256_before": "1080e392bbf2d92ca33ad2e4db922ff65a0229e28117bbad006fedf4f98a9717",
+      "sha256_after": "89cca560bc73397ebb6b57d4268aff42f74a3f99930d0096123cb853e8b65607"
+    },
+    {
+      "path": "dashboard/vite.config.ts",
+      "sha256_before": "dbc8dda766c5613d9bfd77732270631fd89416de6288936aecc4b764d9afb5b7",
+      "sha256_after": "06a1beebb0168e0a27d52583904c9c5c6942270e30e1b9d07bce08f886daeef2"
+    }
+  ],
+  "tests": [
+    "dashboard/src/lib/api-base.test.ts",
+    "dashboard/src/lib/http/__tests__/client.test.ts",
+    "dashboard/src/lib/http/__tests__/subpath.test.ts",
+    "dashboard/src/lib/__tests__/unified-ws.test.ts",
+    "dashboard/src/lib/__tests__/plugin-upload.test.ts",
+    "dashboard/src/__tests__/router-subpath.test.ts"
+  ],
+  "proxy_contract": {
+    "spa_entry": "GET /pallas/maibot/ serves the built dashboard index.",
+    "spa_fallback": "Fallback only HTML navigation GET/HEAD under /pallas/maibot/ to that index; never fallback /pallas/maibot/api/*, /assets/*, /fonts/*, /maimai.ico, /maibot_statistics.html, or other static misses.",
+    "assets": [
+      "/pallas/maibot/assets/*",
+      "/pallas/maibot/fonts/*",
+      "/pallas/maibot/maimai.ico",
+      "/pallas/maibot/maibot_statistics.html"
+    ],
+    "font_files": [
+      "ArkPixel12-ZhHans.woff2",
+      "DepartureMono-Regular.woff2",
+      "Jersey20-Regular.ttf",
+      "JetBrainsMono-Medium.ttf",
+      "ArkPixel-OFL.txt",
+      "DepartureMono-OFL.txt",
+      "Jersey20-OFL.txt"
+    ],
+    "native_static_passthrough": "GET /pallas/maibot/maibot_statistics.html maps to MaiBot /maibot_statistics.html; do not serve the dashboard SPA for this path.",
+    "http_api": "Forward /pallas/maibot/api/* to MaiBot /api/* after stripping only /pallas/maibot; preserve method, query, body, response status, and content type. Do not route or rewrite /pallas/api/*.",
+    "websocket": "Proxy Upgrade /pallas/maibot/api/webui/ws including query token; ws-token is HTTP GET /pallas/maibot/api/webui/ws-token and maps to MaiBot /api/webui/ws-token.",
+    "authentication": {
+      "native_cookie_name": "maibot_session",
+      "browser_cookie_name": "pallas_maibot_session",
+      "response": "For MaiBot responses only, rename Set-Cookie maibot_session to pallas_maibot_session and rewrite Path=/ to Path=/pallas/maibot/ for both set and delete cookies; remove any backend Domain attribute.",
+      "request": "For MaiBot paths only, translate pallas_maibot_session back to maibot_session in the upstream Cookie header; do not forward Pallas cookies or credentials to MaiBot.",
+      "redirects": "Rewrite native root-relative Location /auth and /setup to /pallas/maibot/auth and /pallas/maibot/setup only on MaiBot responses; do not apply a site-wide Location rewrite.",
+      "forwarded_protocol": "Set X-Forwarded-Proto to the public request scheme so MaiBot Secure-cookie behavior remains correct."
+    },
+    "external_stats": "Do not proxy the dashboard external stats service through Pallas; it remains a credential-free external request."
+  },
+  "verification": {
+    "viewport_browser": "Firefox 158 via local WebDriver fixture; deep config/model refresh, assets, fonts, API/ws-token and WS URL prefix checked.",
+    "mobile_viewport": "Firefox reports a minimum CSS viewport of 500px even when requested at 390px; 390px-specific visual verification remains outstanding.",
+    "authentication": "Fresh synthetic-fixture session rendered the auth page; no real MaiBot host, proxy cookie rewrite, or production authentication chain was tested."
+  }
+}

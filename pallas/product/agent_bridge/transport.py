@@ -19,6 +19,8 @@ from dataclasses import dataclass
 
 import aiohttp
 
+from pallas.product.agent_bridge.native_compat import AUTHORITY_FIELD
+
 MAX_TEXT_LEN = 2000
 MAX_FRAME_BYTES = 256 * 1024
 DEDUP_WINDOW = 512
@@ -120,7 +122,14 @@ class MaiBotBridge:
         self._closed.clear()
         self._reader = asyncio.create_task(self._read_loop(ws), name="maibot-bridge.read")
 
-    async def forward_event(self, event: Mapping[str, object], *, command_traffic: bool) -> None:
+    async def forward_event(
+        self,
+        event: Mapping[str, object],
+        *,
+        command_traffic: bool,
+        at_bot: bool = False,
+        is_mentioned: bool = False,
+    ) -> None:
         if not self.scope.enabled:
             raise BridgeDisabledError("bridge scope is disabled; refusing to forward")
         if command_traffic:
@@ -140,9 +149,21 @@ class MaiBotBridge:
             self._record_error("inbound internal id exceeds the upstream length limit")
             return
         self._seen_inbound.append(key)
-        additional: dict[str, object] = {"account_id": str(bot_id)}
+        additional: dict[str, object] = {
+            "account_id": str(bot_id),
+            AUTHORITY_FIELD: {
+                "schema_version": 1,
+                "account_id": str(bot_id),
+                "at_bot": bool(at_bot),
+                "is_mentioned": bool(at_bot or is_mentioned),
+            },
+        }
         if self.scope.multi_account:
             additional["original_message_id"] = str(message_id)
+        if at_bot:
+            additional["at_bot"] = True
+        if is_mentioned:
+            additional["is_mentioned"] = True
         await self._send_json({
             "account_id": str(bot_id),
             "message_info": {
@@ -160,9 +181,11 @@ class MaiBotBridge:
         task = self._reader
         if task is not None and not task.done():
             try:
-                await task
+                await asyncio.shield(task)
             except asyncio.CancelledError:
-                pass
+                current = asyncio.current_task()
+                if current is not None and current.cancelling():
+                    raise
             except Exception as exc:  # surfaced through errors, not lost
                 self._record_error(f"reader task ended with an error: {type(exc).__name__}: {exc}")
         await self._closed.wait()
