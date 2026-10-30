@@ -12,7 +12,7 @@ from pallas.core.platform.shard.coord.ai_task_registry import (
 from pallas.core.platform.shard.registry.config import get_shard_registry_settings
 
 
-def test_register_and_resolve_worker_port(tmp_path, monkeypatch):
+def test_register_and_resolve_worker_port(tmp_path, monkeypatch, request):
     records: dict[str, dict] = {}
 
     def write_record(rec: dict, *, ttl_sec: int) -> bool:
@@ -52,7 +52,9 @@ def test_register_and_resolve_worker_port(tmp_path, monkeypatch):
     monkeypatch.setenv("PALLAS_SHARD_ENABLED", "true")
     monkeypatch.setenv("PALLAS_BOT_ROLE", "worker")
     monkeypatch.setenv("PALLAS_SHARD_ID", "2")
+    monkeypatch.setenv("PALLAS_SHARD_WORKER_BASE_PORT", "7970")
     get_shard_registry_settings.cache_clear()
+    request.addfinalizer(get_shard_registry_settings.cache_clear)
     monkeypatch.setattr("pallas.core.platform.shard.registry.store._cached", None)
     monkeypatch.setattr(
         "pallas.core.platform.shard.registry.store._registry_path",
