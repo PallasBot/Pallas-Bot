@@ -1,3 +1,7 @@
+import json
+import subprocess
+import sys
+
 import pytest
 
 from pallas.core.platform.shard.registry.config import get_shard_registry_settings
@@ -51,6 +55,51 @@ def test_existing_bot_keeps_shard():
     save_shard_registry(reg)
     clear_shard_registry_cache()
     assert assign_bot_to_shard("999") == 3
+
+
+@pytest.mark.parametrize("corrupt", [False, True], ids=["missing", "corrupt"])
+def test_cold_registry_initialization_persists_and_reloads(corrupt, monkeypatch, tmp_path):
+    path = tmp_path / "pallas_shard" / "registry.json"
+    if corrupt:
+        path.write_text("{invalid json", encoding="utf-8")
+    monkeypatch.setenv("PALLAS_SHARD_ENABLED", "false")
+
+    script = """
+import json
+import sys
+from pathlib import Path
+
+from pallas.core.platform.shard.registry.store import (
+    clear_shard_registry_cache,
+    get_shard_registry,
+)
+
+path = Path(sys.argv[1])
+import pallas.core.platform.shard.registry.store as store
+store._registry_path = lambda: path
+clear_shard_registry_cache()
+
+registry = get_shard_registry()
+persisted = json.loads(path.read_text(encoding="utf-8"))
+assert persisted == registry.model_dump(mode="json")
+assert get_shard_registry() is registry
+
+clear_shard_registry_cache()
+reloaded = get_shard_registry()
+assert reloaded.model_dump(mode="json") == persisted
+"""
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", script, str(path)],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired:
+        pytest.fail("cold registry initialization deadlocked in the child process")
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(path.read_text(encoding="utf-8"))
 
 
 def test_rebalance_production_assignments_compacts_shards(monkeypatch):

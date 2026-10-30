@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pallas.core.foundation.paths import plugin_data_dir
 from pallas.core.platform.shard.registry.config import get_shard_registry_settings
 
-_lock = threading.Lock()
+_lock = threading.RLock()
 _cached: ShardRegistry | None = None
 
 _REGISTRY_FILE = "registry.json"
