@@ -121,6 +121,10 @@ if not is_sharded_worker():
         from .extended_api import _ensure_log_sink
 
         _ensure_log_sink()
+        if not is_sharded_worker():
+            from pallas.product.agent_bridge.dashboard_proxy import register_dashboard_proxy
+
+            register_dashboard_proxy(app)
         register_routes(
             app,
             public_dir=public,

@@ -85,6 +85,14 @@ durable work handler 可以返回 `DirectWorkResult`，其中的 `DirectBotActio
 
 生命周期在发送队列就绪后连接桥，在关闭发送队列前停止桥。连接握手最多等待 10 秒；连接失败时命令服务仍可继续，但移交群保持仅采集、不回退。当前仅支持纯文本，去重窗口只在进程内有效；无自动重连、离线补发、跨重启去重、媒体桥、旧记忆迁移或语义风格 Hook。共享核心人设可通过下述显式同步迁移；DB 中的账号行为权重、学习别名和群风格未做完整迁移。协议服务端回环与模拟 dispatch / 发送队列测试不能代替真实 MaiBot 和 QQ 联调。
 
+### 同域 MaiBot 控制台代理
+
+`/pallas/maibot/` 在 Pallas WebUI 的 SPA catch-all 之前注册，HTTP、静态资源与 WS 均先验证真实控制台会话 Cookie，再交由 MaiBot 原生登录鉴权。API Key、查询参数或原生 WS token 不能代替 Pallas 会话；写请求检查同源 Origin/Referer，WS 强制同源并周期重验会话与受管进程身份。
+
+代理仅访问受管实例配置的字面量 loopback 地址，不接管外部实例。浏览器原生 Cookie 为 `pallas_maibot_session`、Path 为 `/pallas/maibot/`，上游映射为 `maibot_session`；设置、删除与安全属性一并处理，Pallas Cookie、API Key 和内部 token 不外传。仅改写该前缀内的原生重定向，拒绝外部跳转；资源缺失不伪装为 SPA HTML。HTTP 请求体上限为 101 MiB，WS 单消息上限为 4 MiB，断连关闭上游流。
+
+代理提供传输与会话隔离，不证明模型可调用，也不限制原生模型或插件管理；本机管理员、可信插件代码及目标监听端口的 OS 归属不由该代理沙箱化。缺少可核实的受管进程或合法目标时返回 503。
+
 ### 自研 agent 入口退役
 
 Pallas 的旧聊天提交与 kernel 调度不再接受生成请求，遗留 RWKV 聊天不再访问 AI Runtime 聊天端点。旧任务类型 `llm_chat`、`ollama`、`chat` 不再登记到本地或 Redis；历史记录仍可被 callback 原子领取，随后终止，不获取 Bot、不写入对话结果、不发送文本/语音/失败提示。媒体任务 `draw`、`sing`、`play`、`request`、`tts` 保持原回调能力。
