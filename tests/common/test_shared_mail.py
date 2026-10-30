@@ -2,14 +2,23 @@
 
 from __future__ import annotations
 
-import pallas.core.foundation.config.repo_settings as repo_settings
+import pytest
+
+from pallas.console.webui import plugin_config
 from pallas.core.shared.utils import mail as mail_mod
+
+
+@pytest.fixture(autouse=True)
+def clear_smtp_config_cache():
+    mail_mod.clear_smtp_config_cache()
+    yield
+    mail_mod.clear_smtp_config_cache()
 
 
 def _isolate_env(monkeypatch, env: dict[str, str]) -> None:
     """让 SmtpConfig 只从给定 env 读取（屏蔽磁盘 .env 合并值）。"""
-    monkeypatch.setattr(repo_settings, "merged_repo_settings_upper", lambda: dict(env))
-    monkeypatch.setattr("pallas.console.webui.plugin_config.repo_env_raw_value", lambda key: env.get(key))
+    monkeypatch.setattr(plugin_config, "repo_env_raw_value", lambda key: env.get(key))
+    monkeypatch.setattr(plugin_config, "repo_settings_files_exist", lambda: True)
     for key, value in env.items():
         monkeypatch.setenv(key, value)
     mail_mod.clear_smtp_config_cache()
@@ -30,7 +39,6 @@ def test_smtp_config_reads_pallas_smtp_env(monkeypatch):
     assert cfg.smtp_password == "secret-token"
     assert cfg.smtp_server == "smtp.qq.com"
     assert cfg.smtp_port == 465
-    mail_mod.clear_smtp_config_cache()
 
 
 def test_build_mail_config_uses_given_recipient(monkeypatch):
@@ -49,11 +57,9 @@ def test_build_mail_config_uses_given_recipient(monkeypatch):
     assert mail.port == 587
     assert mail.notice_email == "player@qq.com"
     assert mail.check_params() is True
-    mail_mod.clear_smtp_config_cache()
 
 
 def test_mail_config_check_params_requires_all_fields(monkeypatch):
     _isolate_env(monkeypatch, {"PALLAS_SMTP_USER": "sender@qq.com"})
     # 缺 password/server，凭据不完整
     assert mail_mod.build_mail_config("player@qq.com").check_params() is False
-    mail_mod.clear_smtp_config_cache()

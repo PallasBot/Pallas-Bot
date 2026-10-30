@@ -8,10 +8,20 @@ from pallas.core.platform.multi_bot import claim as claim_mod
 @pytest.fixture
 def claim_plugin_data(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     root = tmp_path / "draw"
+    from pallas.core.platform.coord import redis_claim
+
+    claim_mod._claim_roots_ready.clear()
+    claim_mod._last_prune_at.clear()
+    claim_mod._claim_file_estimate.clear()
     monkeypatch.setattr(
         claim_mod, "plugin_data_dir", lambda name, create=True: root if name == "draw" else tmp_path / name
     )
-    return root
+    monkeypatch.setattr(claim_mod, "_sharding_requires_redis", lambda: False)
+    monkeypatch.setattr(redis_claim, "try_claim_message_redis_sync", lambda *_args, **_kwargs: None)
+    yield root
+    claim_mod._claim_roots_ready.clear()
+    claim_mod._last_prune_at.clear()
+    claim_mod._claim_file_estimate.clear()
 
 
 def test_only_one_bot_claims_same_message(claim_plugin_data: Path) -> None:
@@ -56,22 +66,22 @@ def test_prune_tolerates_deleted_claim_file(claim_plugin_data: Path, monkeypatch
     claim_mod._prune_old_claims("draw", max_files=500)
 
 
-def test_maybe_prune_old_claims_throttled(claim_plugin_data: Path) -> None:
-    claim_mod._last_prune_at.clear()
-    claim_mod._claim_file_estimate.clear()
+def test_maybe_prune_old_claims_throttled(claim_plugin_data: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
 
     def spy(plugin: str, *, max_files: int = 500) -> int:
         calls.append(plugin)
         return 0
 
-    claim_mod._prune_old_claims = spy  # type: ignore[method-assign]
+    monkeypatch.setattr(claim_mod, "_prune_old_claims", spy)
     claim_mod._maybe_prune_old_claims("draw")
     claim_mod._maybe_prune_old_claims("draw")
     assert calls == ["draw"]
 
 
-def test_maybe_prune_old_claims_forced_when_estimate_high(claim_plugin_data: Path) -> None:
+def test_maybe_prune_old_claims_forced_when_estimate_high(
+    claim_plugin_data: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     import time
 
     claim_mod._last_prune_at["draw"] = time.monotonic()
@@ -82,6 +92,6 @@ def test_maybe_prune_old_claims_forced_when_estimate_high(claim_plugin_data: Pat
         calls.append(plugin)
         return 100
 
-    claim_mod._prune_old_claims = spy  # type: ignore[method-assign]
+    monkeypatch.setattr(claim_mod, "_prune_old_claims", spy)
     claim_mod._maybe_prune_old_claims("draw")
     assert calls == ["draw"]

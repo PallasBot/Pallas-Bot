@@ -57,14 +57,18 @@ def test_cli_official_list_excludes_retired_protocol_package(monkeypatch, capsys
     assert "pallas-plugin-duel" in output
 
 
-def test_build_official_extension_rows_webui_install_flag():
+@pytest.mark.parametrize("enabled", [True, False])
+def test_build_official_extension_rows_webui_install_flag(monkeypatch, enabled):
+    monkeypatch.setattr("pallas.console.webui.plugin_registry.webui_extension_install_enabled", lambda: enabled)
+    monkeypatch.setattr("pallas.console.webui.plugin_registry.pip_package_installed", lambda _package: False)
+
     rows = build_official_extension_rows()
     duel = next(r for r in rows if r["package"] == "pallas-plugin-duel")
     assert isinstance(duel["webui_install"], bool)
     assert isinstance(duel["pip_installed"], bool)
     assert isinstance(duel["can_install"], bool)
     assert isinstance(duel["can_uninstall"], bool)
-    assert duel["webui_install"] is True
+    assert duel["webui_install"] is enabled
 
 
 @pytest.mark.asyncio

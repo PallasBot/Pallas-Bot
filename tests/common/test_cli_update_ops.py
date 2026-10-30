@@ -19,6 +19,10 @@ def test_validate_docker_bot_update_capabilities() -> None:
 @pytest.mark.asyncio
 async def test_apply_bot_update_with_restart(monkeypatch):
     monkeypatch.setattr(
+        "packages.pb_webui.manager.inspect_bot_deployment",
+        lambda: {"deployment_mode": "git", "git_available": True},
+    )
+    monkeypatch.setattr(
         "packages.pb_webui.manager.apply_bot_repository_update",
         AsyncMock(return_value={"tag": "v4.0.0", "message": "仓库已更新。"}),
     )

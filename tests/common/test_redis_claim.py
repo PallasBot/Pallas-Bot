@@ -10,10 +10,11 @@ from pallas.core.platform.multi_bot import claim as claim_mod
 
 
 @pytest.fixture(autouse=True)
-def clear_redis_caches():
+def clear_redis_caches(monkeypatch):
     rs.clear_coord_redis_settings_cache()
     rc.clear_coord_redis_client_cache()
     yield
+    monkeypatch.undo()
     rs.clear_coord_redis_settings_cache()
     rc.clear_coord_redis_client_cache()
 

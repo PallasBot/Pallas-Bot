@@ -19,9 +19,10 @@ class _FakeSession:
 @pytest.mark.asyncio
 async def test_get_session_read_only_uses_autocommit(monkeypatch):
     from pallas.core.foundation.db import repository_pg as mod
+    from pallas.core.foundation.db.repository_pg import lifecycle
 
     fake = _FakeSession()
-    monkeypatch.setattr(mod, "_session_factory", lambda: fake)
+    monkeypatch.setattr(lifecycle, "_session_factory", lambda: fake)
 
     async with mod.get_session(read_only=True) as session:
         assert session is fake
@@ -35,9 +36,10 @@ async def test_get_session_read_only_uses_autocommit(monkeypatch):
 @pytest.mark.asyncio
 async def test_get_session_write_rolls_back_on_exit(monkeypatch):
     from pallas.core.foundation.db import repository_pg as mod
+    from pallas.core.foundation.db.repository_pg import lifecycle
 
     fake = _FakeSession()
-    monkeypatch.setattr(mod, "_session_factory", lambda: fake)
+    monkeypatch.setattr(lifecycle, "_session_factory", lambda: fake)
 
     async with mod.get_session() as session:
         assert session is fake
@@ -50,9 +52,10 @@ async def test_get_session_write_rolls_back_on_exit(monkeypatch):
 @pytest.mark.asyncio
 async def test_get_session_write_rolls_back_on_error(monkeypatch):
     from pallas.core.foundation.db import repository_pg as mod
+    from pallas.core.foundation.db.repository_pg import lifecycle
 
     fake = _FakeSession()
-    monkeypatch.setattr(mod, "_session_factory", lambda: fake)
+    monkeypatch.setattr(lifecycle, "_session_factory", lambda: fake)
 
     with pytest.raises(RuntimeError, match="boom"):
         async with mod.get_session():

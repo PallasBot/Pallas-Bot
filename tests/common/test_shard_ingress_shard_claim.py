@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 
 from pallas.core.platform.multi_bot.dedup import (
@@ -7,6 +9,32 @@ from pallas.core.platform.multi_bot.dedup import (
     try_claim_cross_bot_message_memory,
     try_claim_cross_shard_message,
 )
+
+
+@pytest.fixture(autouse=True)
+def isolate_shard_claims(tmp_path, monkeypatch):
+    from pallas.core.platform.coord import redis_claim
+    from pallas.core.platform.multi_bot import claim as claim_mod
+    from pallas.core.platform.multi_bot import dedup as dedup_mod
+
+    claim_mod._claim_roots_ready.clear()
+    claim_mod._last_prune_at.clear()
+    claim_mod._claim_file_estimate.clear()
+    dedup_mod._cross_bot_claim_owners.clear()
+    dedup_mod._shard_ingress_file_locks.clear()
+    monkeypatch.setattr(claim_mod, "plugin_data_dir", lambda plugin, create=True: tmp_path / plugin)
+    monkeypatch.setattr(claim_mod, "_sharding_requires_redis", lambda: False)
+    monkeypatch.setattr(redis_claim, "get_coord_redis_client", lambda: None)
+    monkeypatch.setattr(
+        "pallas.core.platform.shard.registry.get_shard_registry",
+        lambda: SimpleNamespace(shards=[SimpleNamespace(id=sid) for sid in (0, 1, 3, 6)]),
+    )
+    yield
+    claim_mod._claim_roots_ready.clear()
+    claim_mod._last_prune_at.clear()
+    claim_mod._claim_file_estimate.clear()
+    dedup_mod._cross_bot_claim_owners.clear()
+    dedup_mod._shard_ingress_file_locks.clear()
 
 
 @pytest.mark.asyncio

@@ -9,13 +9,14 @@ from pallas.core.platform.shard.coord import ai_task_registry as mod
 
 
 @pytest.fixture(autouse=True)
-def clear_redis_caches():
+def clear_redis_caches(monkeypatch):
     from pallas.core.platform.coord import redis_claim as rc
     from pallas.core.platform.coord import redis_settings as rs
 
     rs.clear_coord_redis_settings_cache()
     rc.clear_coord_redis_client_cache()
     yield
+    monkeypatch.undo()
     rs.clear_coord_redis_settings_cache()
     rc.clear_coord_redis_client_cache()
 

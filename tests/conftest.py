@@ -119,6 +119,14 @@ def pytest_configure(config):  # noqa: ARG001
     """Initialize NoneBot before running tests."""
     import nonebot
 
+    try:
+        from nonebug import NONEBOT_START_LIFESPAN
+    except ImportError:
+        pass
+    else:
+        # 插件导入会登记全局启动钩子；单测不隐式启动真实 DB 和后台任务。
+        config.stash[NONEBOT_START_LIFESPAN] = False
+
     # Check if NoneBot is already initialized
     try:
         nonebot.get_driver()

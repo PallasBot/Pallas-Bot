@@ -177,6 +177,7 @@ def test_run_without_mode_uses_auto_runtime(monkeypatch):
 def test_unified_start_when_already_running(monkeypatch, capsys):
     monkeypatch.setattr(unified_lifecycle, "is_bot_running", lambda: True)
     monkeypatch.setattr(unified_lifecycle, "read_pid_file", lambda _p: 42)
+    monkeypatch.setattr(unified_lifecycle, "start_aux_services", lambda: 0)
     assert unified_lifecycle.start_bot() == 0
     assert "已在运行" in capsys.readouterr().out
 

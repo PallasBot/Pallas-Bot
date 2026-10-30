@@ -18,6 +18,9 @@ def test_parse_command_limits_stub_reads_command_limit_list_rows() -> None:
         "blacklist.scrub_add",
         "blacklist.scrub_remove",
         "blacklist.scrub_list",
+        "blacklist.bot_scrub_add",
+        "blacklist.bot_scrub_remove",
+        "blacklist.bot_scrub_list",
     ]
 
 
