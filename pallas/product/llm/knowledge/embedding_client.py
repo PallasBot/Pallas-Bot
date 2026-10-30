@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 from operator import itemgetter
 from typing import TYPE_CHECKING, Any
 
@@ -96,22 +97,33 @@ def parse_embeddings_response(payload: object) -> list[list[float]]:
     if not isinstance(payload, dict):
         return []
     rows = payload.get("data")
-    if not isinstance(rows, list):
+    if not isinstance(rows, list) or not rows:
         return []
     parsed: list[tuple[int, list[float]]] = []
-    for item in rows:
+    for position, item in enumerate(rows):
         if not isinstance(item, dict):
-            continue
+            return []
         vec = item.get("embedding")
         if not isinstance(vec, list) or not vec:
-            continue
+            return []
+        if any(type(value) not in (int, float) for value in vec):
+            return []
         try:
-            floats = [float(x) for x in vec]
-        except (TypeError, ValueError):
-            continue
+            floats = [float(value) for value in vec]
+        except (OverflowError, ValueError):
+            return []
+        if any(not math.isfinite(value) for value in floats):
+            return []
         raw_index = item.get("index")
-        index = int(raw_index) if raw_index is not None else len(parsed)
+        if raw_index is not None and (type(raw_index) is not int or raw_index < 0):
+            return []
+        index = raw_index if raw_index is not None else position
         parsed.append((index, floats))
+    indices = [index for index, _ in parsed]
+    if len(set(indices)) != len(rows) or set(indices) != set(range(len(rows))):
+        return []
+    if len({len(vector) for _, vector in parsed}) != 1:
+        return []
     parsed.sort(key=itemgetter(0))
     return [vec for _, vec in parsed]
 

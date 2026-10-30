@@ -313,7 +313,7 @@ def get_embedding_provider(cfg: LlmConfig | None = None) -> EmbeddingProvider:
     local_in_process = name == "local" and role == "embed"
     cache_key = f"{name}|{model}|{'native' if local_in_process or name != 'local' else 'queue'}"
     hit = _provider_cache.get(cache_key)
-    if hit is not None:
+    if hit is not None and (not hasattr(hit, "cfg") or hit.cfg is cfg):
         return hit
     if name == "stub":
         provider: EmbeddingProvider = StubEmbeddingProvider()

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import sys
 
+import httpx
 import pytest
 
 from pallas.product.llm.config import LlmConfig
@@ -147,6 +149,59 @@ def test_fetch_via_provider_openai(monkeypatch) -> None:
     )
     assert fetch_embeddings_sync(["hello"], cfg=cfg) == [[0.5, 0.5]]
     assert embedding_capability_trace(cfg)["embedding_provider"] == "openai"
+
+
+def test_fetch_provider_cache_tracks_new_config_route_and_key(monkeypatch) -> None:
+    import pallas.product.llm.knowledge.embedding_provider as ep
+
+    clear_embedding_provider_cache()
+    monkeypatch.setattr(
+        "pallas.product.llm.providers_store.resolve_endpoint_for_task",
+        lambda *_a, **_k: type("E", (), {"base_url": "", "api_key": "", "provider_id": ""})(),
+    )
+    calls: list[tuple[str, str, str]] = []
+
+    def vendor(request: httpx.Request) -> httpx.Response:
+        payload = json.loads(request.content)
+        calls.append((request.url.host, request.headers.get("authorization", ""), payload["model"]))
+        value = 1.0 if request.url.host == "embed-a.invalid" else 2.0
+        return httpx.Response(200, json={"data": [{"index": 0, "embedding": [value, value + 1]}]})
+
+    client = httpx.Client(transport=httpx.MockTransport(vendor), trust_env=False)
+    monkeypatch.setattr(ep.httpx, "post", client.post)
+    cfg_a = LlmConfig(
+        llm_chat_enabled=True,
+        llm_embedding_provider="openai",
+        llm_embedding_model="shared-model",
+        llm_embedding_base_url="https://embed-a.invalid/v1",
+        llm_embedding_api_key="synthetic-key-a",
+    )
+    cfg_b = cfg_a.model_copy(
+        update={
+            "llm_embedding_base_url": "https://embed-b.invalid/v1",
+            "llm_embedding_api_key": "synthetic-key-b",
+        }
+    )
+    cfg_b_rotated = cfg_b.model_copy(update={"llm_embedding_api_key": "synthetic-key-c"})
+    try:
+        provider_a = get_embedding_provider(cfg_a)
+        assert get_embedding_provider(cfg_a) is provider_a
+        assert fetch_embeddings_sync(["same input"], cfg=cfg_a, fallback_stub=False) == [[1.0, 2.0]]
+
+        provider_b = get_embedding_provider(cfg_b)
+        assert provider_b is not provider_a
+        assert provider_b.cfg is cfg_b
+        assert fetch_embeddings_sync(["same input"], cfg=cfg_b, fallback_stub=False) == [[2.0, 3.0]]
+        assert fetch_embeddings_sync(["same input"], cfg=cfg_b_rotated, fallback_stub=False) == [[2.0, 3.0]]
+    finally:
+        client.close()
+        clear_embedding_provider_cache()
+
+    assert calls == [
+        ("embed-a.invalid", "Bearer synthetic-key-a", "shared-model"),
+        ("embed-b.invalid", "Bearer synthetic-key-b", "shared-model"),
+        ("embed-b.invalid", "Bearer synthetic-key-c", "shared-model"),
+    ]
 
 
 def test_resolve_embedding_http_endpoint_prefers_catalog(monkeypatch) -> None:

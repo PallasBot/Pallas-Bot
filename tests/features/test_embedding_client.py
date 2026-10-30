@@ -30,6 +30,25 @@ def test_parse_embeddings_response_sorts_by_index() -> None:
     assert vectors == [[1.0, 0.0], [0.2, 0.8]]
 
 
+@pytest.mark.parametrize("value", [True, "0.5", float("nan"), float("inf")])
+def test_parse_embeddings_response_rejects_non_numeric_or_non_finite_values(value) -> None:
+    assert parse_embeddings_response({"data": [{"index": 0, "embedding": [value]}]}) == []
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        [{"index": 0, "embedding": [1.0]}, {"index": 0, "embedding": [2.0]}],
+        [{"index": 0.0, "embedding": [1.0]}],
+        [{"index": True, "embedding": [1.0]}],
+        [{"index": 1, "embedding": [1.0]}],
+        [{"index": 0, "embedding": [1.0]}, {"index": 1, "embedding": [2.0, 3.0]}],
+    ],
+)
+def test_parse_embeddings_response_fails_closed_on_suspicious_batch_indices(rows) -> None:
+    assert parse_embeddings_response({"data": rows}) == []
+
+
 def test_stub_embedding_forces_keyword_retrieve() -> None:
     cfg = LlmConfig(llm_embedding_model="stub", llm_embedding_provider="stub", llm_vector_retrieve="hybrid")
 
