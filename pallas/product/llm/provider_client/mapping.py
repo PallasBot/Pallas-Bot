@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from typing import Any
 
 from pallas.product.llm import provider_client as _repo
@@ -17,6 +18,37 @@ ANTHROPIC_EFFORT_BUDGET_TOKENS: dict[str, int] = {
     "xhigh": 16384,
     "enable": 4096,
 }
+
+
+def apply_response_format(payload: dict[str, Any], options: dict[str, Any], *, request_method: str) -> None:
+    response_format = options.get("response_format")
+    if response_format is None:
+        return
+    if not isinstance(response_format, dict):
+        raise _repo.LlmProviderError("invalid response_format")
+    kind = response_format.get("type")
+    if not isinstance(kind, str) or kind not in {"text", "json_object", "json_schema"}:
+        raise _repo.LlmProviderError("invalid response_format type")
+    allowed = {"type", "json_schema"} if kind == "json_schema" else {"type"}
+    if response_format.keys() - allowed:
+        raise _repo.LlmProviderError("unsupported response_format fields")
+    schema = response_format.get("json_schema")
+    if kind == "json_schema":
+        if not isinstance(schema, dict) or not isinstance(schema.get("name"), str) or not schema["name"].strip():
+            raise _repo.LlmProviderError("invalid response_format schema name")
+        if not isinstance(schema.get("schema"), dict) or schema.keys() - {"name", "description", "schema", "strict"}:
+            raise _repo.LlmProviderError("invalid response_format schema")
+        if schema.get("strict") is not None and not isinstance(schema["strict"], bool):
+            raise _repo.LlmProviderError("invalid response_format strict flag")
+        if schema.get("description") is not None and not isinstance(schema["description"], str):
+            raise _repo.LlmProviderError("invalid response_format description")
+    if request_method == "chat_completions":
+        payload["response_format"] = deepcopy(response_format)
+    elif request_method == "responses":
+        value = {"type": kind, **deepcopy(schema)} if kind == "json_schema" else deepcopy(response_format)
+        payload["text"] = {"format": value}
+    else:
+        raise _repo.LlmProviderError("response_format is not supported by this request method")
 
 
 def _append_responses_reasoning_item(input_items: list[dict[str, Any]], message: dict[str, Any]) -> None:
@@ -271,6 +303,7 @@ def messages_to_responses_payload(
         max_tokens = options.get("max_tokens")
     if max_tokens is not None:
         payload["max_output_tokens"] = int(max_tokens)
+    apply_response_format(payload, options, request_method="responses")
     apply_model_effort_to_payload(payload, options, model=model, request_method="responses")
     return payload
 

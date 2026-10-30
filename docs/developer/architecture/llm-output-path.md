@@ -10,6 +10,12 @@
 
 共享 Provider、Embedding、贴纸标注、媒体助手及显式命令工具仍保留。绘图、歌曲和 TTS 沿原媒体 callback 投递。旧工具 HTTP 入口不再默认注册，不能充当 MaiBot 工具网关。详见 [Agent 生命周期](agent-lifecycle.md)。
 
+### 共享 Provider 结果与用量
+
+`complete_chat_message` 的成功消息可包含 `_provider_usage`：`prompt_tokens`、`completion_tokens`、`cache_read_tokens`、`cache_write_tokens` 和按这些归一化桶求和的 `total_tokens`。元数据属于该次请求结果，不依赖全局 observer；已有 Pallas 记账路径仍只记录一次，消费方不得因读取结果再次记账。缺少可解析计数时不附加该字段，明确的零计数与缺失不同；记账失败不丢弃已解析的结果用量，但也不表示账本已持久化成功。
+
+标准 OpenAI 输入计数中的缓存读取部分从普通输入桶中扣除；Anthropic Messages 的 `input_tokens` 本身不含缓存读写，按显式协议保留。未文档化的供应方 cache-write 字段可能与输入重叠，不推断其额外计费语义。此结果接口不等同于 MaiBot Provider 插件、旧聊天日限额或完整 Agent 生命周期已接线。
+
 ## 出口总闸
 
 Pallas 共享 LLM 出口（`complete_chat_message`、`fetch_embeddings_sync`）仍受 `pallas.product.llm.availability.llm_calls_enabled` 约束：`LLM_CHAT_ENABLED` 为关，或 `llm_chat` 插件被全实例禁用时，不发请求。保留能力的后台循环与 work/embed 辅进程仍遵守各自作用域门禁。该开关不再启用旧聊天 agent，也不控制独立 MaiBot 的模型请求；不要为了退役旧聊天将它强制关闭而误伤 Embedding 或标注。治理细节见 [插件治理](plugin-governance.md)。

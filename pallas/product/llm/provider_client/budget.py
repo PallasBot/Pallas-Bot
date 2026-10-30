@@ -39,22 +39,37 @@ def _record_usage_from_payload(
     model: str,
     local: bool = False,
     telemetry_context: dict[str, str] | None = None,
-) -> None:
+    protocol: str | None = None,
+) -> dict[str, int] | None:
+    """记录用量并返回归一化分桶；未提供可解析计数时返回 ``None``。
+
+    ``total_tokens`` 是 prompt/completion/cache 分桶之和，按各桶互不重叠计算。
+    未文档化的供应方 cache-write 字段可能与 prompt 重叠；此处不推断。
+    """
     try:
-        from pallas.product.llm.token_metrics import record_llm_token_usage
         from pallas.product.llm.token_usage import (
+            has_local_chat_usage,
+            has_remote_chat_usage,
             usage_from_local_chat_response,
             usage_from_remote_chat_response,
         )
 
+        usage_provided = has_local_chat_usage(data) or has_remote_chat_usage(data)
         if local:
             prompt, completion, cache_read, cache_write = usage_from_local_chat_response(data)
             if prompt == 0 and completion == 0:
-                prompt, completion, cache_read, cache_write = usage_from_remote_chat_response(data)
+                prompt, completion, cache_read, cache_write = usage_from_remote_chat_response(data, protocol=protocol)
         else:
-            prompt, completion, cache_read, cache_write = usage_from_remote_chat_response(data)
+            prompt, completion, cache_read, cache_write = usage_from_remote_chat_response(data, protocol=protocol)
             if prompt == 0 and completion == 0 and cache_read == 0 and cache_write == 0:
                 prompt, completion, cache_read, cache_write = usage_from_local_chat_response(data)
+
+    except Exception:
+        return None
+
+    try:
+        from pallas.product.llm.token_metrics import record_llm_token_usage
+
         record_llm_token_usage(
             task=task,
             provider=provider_id or None,
@@ -67,3 +82,13 @@ def _record_usage_from_payload(
         )
     except Exception:
         pass
+
+    if not usage_provided:
+        return None
+    return {
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "cache_read_tokens": cache_read,
+        "cache_write_tokens": cache_write,
+        "total_tokens": prompt + completion + cache_read + cache_write,
+    }

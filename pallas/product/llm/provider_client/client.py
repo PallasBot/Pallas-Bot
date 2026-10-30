@@ -10,6 +10,7 @@ import httpx
 from nonebot import logger
 
 from pallas.product.llm import provider_client as _repo
+from pallas.product.llm.provider_client.mapping import apply_response_format
 from pallas.product.llm.turn_budget import (
     LlmTurnBudget,
     LlmTurnBudgetExceeded,
@@ -510,6 +511,8 @@ async def _post_provider_chat(
 
     async def request(use_options: dict[str, Any]) -> dict[str, Any]:
         method = _repo.resolve_request_method(request_method, base_url)
+        if method not in {"chat_completions", "responses"} and use_options.get("response_format") is not None:
+            raise _repo.LlmProviderError("response_format is not supported by this request method")
         if method == "responses":
             return await _repo._post_responses(
                 messages,
@@ -710,17 +713,20 @@ async def _post_anthropic_messages(
         _raise_provider_output_error("invalid_payload")
     if data.get("content") is not None and not isinstance(data.get("content"), (list, str)):
         _raise_provider_output_error("invalid_payload")
-    _repo._record_usage_from_payload(
+    provider_usage = _repo._record_usage_from_payload(
         data,
         task=task,
         provider_id=provider_id,
         model=model_name,
         telemetry_context=telemetry_context,
+        protocol="anthropic_messages",
     )
     message_obj = _repo.parse_anthropic_message(data)
     failure_class = _provider_output_failure_class("anthropic_messages", data, message_obj)
     if failure_class:
         _raise_provider_output_error(failure_class)
+    if provider_usage is not None:
+        message_obj["_provider_usage"] = provider_usage
     return message_obj
 
 
@@ -764,7 +770,7 @@ async def _post_responses(
         _raise_provider_output_error("invalid_payload")
     if data.get("output") is not None and not isinstance(data.get("output"), list):
         _raise_provider_output_error("invalid_payload")
-    _repo._record_usage_from_payload(
+    provider_usage = _repo._record_usage_from_payload(
         data,
         task=task,
         provider_id=provider_id,
@@ -775,6 +781,8 @@ async def _post_responses(
     failure_class = _provider_output_failure_class("responses", data, message_obj)
     if failure_class:
         _raise_provider_output_error(failure_class)
+    if provider_usage is not None:
+        message_obj["_provider_usage"] = provider_usage
     return message_obj
 
 
@@ -814,6 +822,7 @@ async def _post_chat_completions(
         max_tokens = options.get("max_tokens")
     if max_tokens is not None:
         payload["max_tokens"] = int(max_tokens)
+    apply_response_format(payload, options, request_method="chat_completions")
     from pallas.product.llm.providers_store import (
         find_provider,
         provider_model_reasoning_effort_none_on_disable,
@@ -870,7 +879,7 @@ async def _post_chat_completions(
             if "usage" not in wrapped_data and "usage" in data:
                 wrapped_data = {**wrapped_data, "usage": data["usage"]}
             data = wrapped_data
-    _repo._record_usage_from_payload(
+    provider_usage = _repo._record_usage_from_payload(
         {"usage": data.get("usage")} if is_sse else data,
         task=task,
         provider_id=provider_id,
@@ -890,6 +899,8 @@ async def _post_chat_completions(
     failure_class = _provider_output_failure_class("chat_completions", data, message_obj)
     if failure_class:
         _raise_provider_output_error(failure_class)
+    if provider_usage is not None:
+        message_obj["_provider_usage"] = provider_usage
     return message_obj
 
 
@@ -945,7 +956,7 @@ async def _post_ollama_chat(
     data = _provider_response_json(response)
     if not isinstance(data, dict):
         _raise_provider_output_error("invalid_payload")
-    _repo._record_usage_from_payload(
+    provider_usage = _repo._record_usage_from_payload(
         data,
         task=task,
         provider_id=provider_id,
@@ -975,6 +986,8 @@ async def _post_ollama_chat(
     failure_class = _provider_output_failure_class("ollama_chat", data, message_obj)
     if failure_class:
         _raise_provider_output_error(failure_class)
+    if provider_usage is not None:
+        message_obj["_provider_usage"] = provider_usage
     return message_obj
 
 
