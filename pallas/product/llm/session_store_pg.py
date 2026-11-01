@@ -203,64 +203,57 @@ class PgLlmSessionMessageBackend:
         user_id: int | None,
         limit: int,
     ) -> list[LlmHistorySessionSummary]:
-        stmt = (
-            select(
-                LlmChatMessageRow.bot_id,
-                LlmChatMessageRow.group_id,
-                LlmChatMessageRow.user_id,
-                func.count().label("turn_count"),
-                func.min(LlmChatMessageRow.created_at).label("first_created_at"),
-                func.max(LlmChatMessageRow.created_at).label("last_created_at"),
-            )
-            .group_by(
-                LlmChatMessageRow.bot_id,
-                LlmChatMessageRow.group_id,
-                LlmChatMessageRow.user_id,
-            )
-            .order_by(func.max(LlmChatMessageRow.created_at).desc())
-            .limit(limit)
+        session_key = (LlmChatMessageRow.bot_id, LlmChatMessageRow.group_id, LlmChatMessageRow.user_id)
+        session_rank = func.row_number().over(
+            partition_by=session_key,
+            order_by=(LlmChatMessageRow.created_at.desc(), LlmChatMessageRow.id.desc()),
+        )
+        ranked = select(
+            LlmChatMessageRow.bot_id.label("bot_id"),
+            LlmChatMessageRow.group_id.label("group_id"),
+            LlmChatMessageRow.user_id.label("user_id"),
+            LlmChatMessageRow.role.label("last_role"),
+            LlmChatMessageRow.content.label("last_content"),
+            LlmChatMessageRow.created_at.label("latest_created_at"),
+            LlmChatMessageRow.id.label("latest_message_id"),
+            func.count().over(partition_by=session_key).label("turn_count"),
+            func.min(LlmChatMessageRow.created_at).over(partition_by=session_key).label("first_created_at"),
+            func.max(LlmChatMessageRow.created_at).over(partition_by=session_key).label("last_created_at"),
+            session_rank.label("session_rank"),
         )
 
         if bot_id is not None:
-            stmt = stmt.where(LlmChatMessageRow.bot_id == int(bot_id))
+            ranked = ranked.where(LlmChatMessageRow.bot_id == int(bot_id))
         if group_id is not None:
-            stmt = stmt.where(LlmChatMessageRow.group_id == int(group_id))
+            ranked = ranked.where(LlmChatMessageRow.group_id == int(group_id))
         if user_id is not None:
-            stmt = stmt.where(LlmChatMessageRow.user_id == int(user_id))
+            ranked = ranked.where(LlmChatMessageRow.user_id == int(user_id))
+
+        ranked_sessions = ranked.subquery()
+        stmt = (
+            select(ranked_sessions)
+            .where(ranked_sessions.c.session_rank == 1)
+            .order_by(ranked_sessions.c.latest_created_at.desc(), ranked_sessions.c.latest_message_id.desc())
+            .limit(limit)
+        )
 
         async with get_session(read_only=True) as session:
             rows = (await session.execute(stmt)).all()
 
-            out: list[LlmHistorySessionSummary] = []
-            for row in rows:
-                latest_stmt = (
-                    select(LlmChatMessageRow)
-                    .where(
-                        LlmChatMessageRow.bot_id == int(row.bot_id),
-                        LlmChatMessageRow.group_id == int(row.group_id),
-                        LlmChatMessageRow.user_id == int(row.user_id),
-                    )
-                    .order_by(LlmChatMessageRow.created_at.desc(), LlmChatMessageRow.id.desc())
-                    .limit(1)
-                )
-                latest = (await session.execute(latest_stmt)).scalars().first()
-                if latest is None:
-                    continue
-                role = latest.role if latest.role in ALLOWED_ROLES else "user"
-                out.append(
-                    LlmHistorySessionSummary(
-                        session_key=f"{int(row.bot_id)}:{int(row.group_id)}:{int(row.user_id)}",
-                        bot_id=int(row.bot_id),
-                        group_id=int(row.group_id),
-                        user_id=int(row.user_id),
-                        turn_count=int(row.turn_count or 0),
-                        first_created_at=int(row.first_created_at or 0),
-                        last_created_at=int(row.last_created_at or 0),
-                        last_role=role,
-                        last_content=str(latest.content or ""),
-                    )
-                )
-        return out
+        return [
+            LlmHistorySessionSummary(
+                session_key=f"{int(row.bot_id)}:{int(row.group_id)}:{int(row.user_id)}",
+                bot_id=int(row.bot_id),
+                group_id=int(row.group_id),
+                user_id=int(row.user_id),
+                turn_count=int(row.turn_count or 0),
+                first_created_at=int(row.first_created_at or 0),
+                last_created_at=int(row.last_created_at or 0),
+                last_role=row.last_role if row.last_role in ALLOWED_ROLES else "user",
+                last_content=str(row.last_content or ""),
+            )
+            for row in rows
+        ]
 
     async def clear_group(self, bot_id: int, group_id: int) -> int:
         async with get_session() as session:

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
 
+from pallas.core.foundation.db.repository_pg import LlmChatMessageRow, get_session
 from pallas.product.llm.behavior import BehaviorAction, BehaviorOutcome, BehaviorPattern, BehaviorRun, BehaviorScene
 from pallas.product.llm.behavior_store import append_behavior_run, list_behavior_patterns, save_behavior_patterns
 from pallas.product.llm.config import LlmConfig, clear_llm_config_cache
@@ -78,7 +80,7 @@ async def test_llm_session_user_window_independent(pg_engine, monkeypatch) -> No
         llm_session_user_ttl_sec=0,
     )
     monkeypatch.setattr("pallas.product.llm.session_store.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.session_store.is_postgresql_backend", lambda: True)
+    monkeypatch.setattr("pallas.core.foundation.db.runtime.get_db_backend", lambda: "postgresql")
 
     for index in range(3):
         assert await append_llm_message(10001, 20002, 30003, "user", f"a-{index}") is True
@@ -92,7 +94,7 @@ async def test_llm_session_user_window_independent(pg_engine, monkeypatch) -> No
 
     ambient = await list_group_ambient_messages(10001, 20002)
     assert len(ambient) == 2
-    assert {turn.content for turn in ambient} == {"a-2", "b-2"}
+    assert {turn.content for turn in ambient} == {"b-1", "b-2"}
 
 
 @pytest.mark.asyncio
@@ -105,7 +107,7 @@ async def test_build_llm_chat_messages_skips_history_when_policy_disabled(pg_eng
         llm_session_group_window=4,
     )
     monkeypatch.setattr("pallas.product.llm.session_store.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.session_store.is_postgresql_backend", lambda: True)
+    monkeypatch.setattr("pallas.core.foundation.db.runtime.get_db_backend", lambda: "postgresql")
 
     await append_llm_message(1, 100, 300, "user", "my-old")
     await append_llm_message(1, 100, 300, "assistant", "my-reply")
@@ -120,13 +122,14 @@ async def test_build_llm_chat_messages_skips_history_when_policy_disabled(pg_eng
 async def test_build_llm_chat_messages_user_thread_and_ambient(pg_engine, monkeypatch) -> None:
     clear_llm_config_cache()
     cfg = LlmConfig(
+        llm_chat_enabled=True,
         llm_session_enabled=True,
         llm_session_user_window=8,
         llm_session_group_window=4,
         llm_session_user_ttl_sec=0,
     )
     monkeypatch.setattr("pallas.product.llm.session_store.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.session_store.is_postgresql_backend", lambda: True)
+    monkeypatch.setattr("pallas.core.foundation.db.runtime.get_db_backend", lambda: "postgresql")
 
     await append_llm_message(1, 100, 200, "user", "other-user-msg")
     await append_llm_message(1, 100, 200, "assistant", "reply-to-other")
@@ -304,13 +307,14 @@ async def test_build_llm_chat_messages_excludes_ambient_turn_clipped_from_block(
 async def test_build_llm_chat_messages_uses_full_session_window_without_ambient(pg_engine, monkeypatch) -> None:
     clear_llm_config_cache()
     cfg = LlmConfig(
+        llm_chat_enabled=True,
         llm_session_enabled=True,
         llm_session_user_window=8,
         llm_session_group_window=4,
         llm_session_user_ttl_sec=0,
     )
     monkeypatch.setattr("pallas.product.llm.session_store.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.session_store.is_postgresql_backend", lambda: True)
+    monkeypatch.setattr("pallas.core.foundation.db.runtime.get_db_backend", lambda: "postgresql")
 
     await append_llm_message(1, 100, 200, "user", "other-user-msg")
     await append_llm_message(1, 100, 200, "assistant", "reply-to-other")
@@ -329,11 +333,12 @@ async def test_build_llm_chat_messages_uses_full_session_window_without_ambient(
         include_group_ambient=False,
     )
 
-    assert [item.role for item in messages] == ["user", "assistant", "user"]
-    assert "story-user" in messages[0].content
-    assert messages[1].content == "story-reply"
-    assert "继续讲" in messages[2].content
-    assert not any("old-user" in item.content for item in messages)
+    assert [item.role for item in messages] == ["user", "assistant", "user", "assistant", "user"]
+    assert "old-user" in messages[0].content
+    assert messages[1].content == "old-reply"
+    assert "story-user" in messages[2].content
+    assert messages[3].content == "story-reply"
+    assert "继续讲" in messages[4].content
     assert not any("群环境摘录" in item.content for item in messages)
 
 
@@ -397,7 +402,7 @@ async def test_clear_user_llm_messages(pg_engine, monkeypatch) -> None:
     clear_llm_config_cache()
     cfg = LlmConfig(llm_session_enabled=True, llm_session_user_ttl_sec=0)
     monkeypatch.setattr("pallas.product.llm.session_store.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.session_store.is_postgresql_backend", lambda: True)
+    monkeypatch.setattr("pallas.core.foundation.db.runtime.get_db_backend", lambda: "postgresql")
 
     await append_llm_message(1, 100, 200, "user", "a")
     await append_llm_message(1, 100, 300, "user", "b")
@@ -418,7 +423,7 @@ async def test_list_llm_history_sessions_and_detail(pg_engine, monkeypatch) -> N
         llm_session_user_ttl_sec=0,
     )
     monkeypatch.setattr("pallas.product.llm.session_store.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.session_store.is_postgresql_backend", lambda: True)
+    monkeypatch.setattr("pallas.core.foundation.db.runtime.get_db_backend", lambda: "postgresql")
 
     await append_llm_message(10, 100, 200, "user", "u200-1")
     await append_llm_message(10, 100, 200, "assistant", "a200-1")
@@ -438,6 +443,89 @@ async def test_list_llm_history_sessions_and_detail(pg_engine, monkeypatch) -> N
 
 
 @pytest.mark.asyncio
+async def test_list_llm_history_sessions_same_timestamp_uses_latest_message_id(pg_engine, monkeypatch) -> None:
+    clear_llm_config_cache()
+    cfg = LlmConfig(llm_session_enabled=True, llm_session_user_ttl_sec=0)
+    monkeypatch.setattr("pallas.product.llm.session_store.get_llm_config", lambda: cfg)
+    monkeypatch.setattr("pallas.core.foundation.db.runtime.get_db_backend", lambda: "postgresql")
+
+    async with get_session() as session:
+        session.add_all(
+            [
+                LlmChatMessageRow(
+                    id=1, bot_id=10, group_id=100, user_id=200, role="user", content="a-first", created_at=1000
+                ),
+                LlmChatMessageRow(
+                    id=2, bot_id=10, group_id=100, user_id=300, role="user", content="b-first", created_at=1000
+                ),
+                LlmChatMessageRow(
+                    id=3, bot_id=10, group_id=100, user_id=200, role="assistant", content="a-latest", created_at=1000
+                ),
+                LlmChatMessageRow(
+                    id=4,
+                    bot_id=10,
+                    group_id=100,
+                    user_id=300,
+                    role="assistant",
+                    content="b-latest",
+                    created_at=1000,
+                ),
+            ]
+        )
+        await session.commit()
+
+    sessions = await list_llm_history_sessions(bot_id=10, group_id=100, limit=1)
+    assert len(sessions) == 1
+    latest = sessions[0]
+    assert latest.session_key == "10:100:300"
+    assert latest.turn_count == 2
+    assert latest.first_created_at == 1000
+    assert latest.last_created_at == 1000
+    assert latest.last_role == "assistant"
+    assert latest.last_content == "b-latest"
+
+
+@pytest.mark.asyncio
+async def test_list_llm_history_sessions_orders_by_time_not_global_message_id(pg_engine, monkeypatch) -> None:
+    clear_llm_config_cache()
+    cfg = LlmConfig(llm_session_enabled=True, llm_session_user_ttl_sec=0)
+    monkeypatch.setattr("pallas.product.llm.session_store.get_llm_config", lambda: cfg)
+    monkeypatch.setattr("pallas.core.foundation.db.runtime.get_db_backend", lambda: "postgresql")
+
+    async with get_session() as session:
+        session.add_all(
+            [
+                LlmChatMessageRow(
+                    id=300, bot_id=10, group_id=100, user_id=200, role="user", content="a-first", created_at=1000
+                ),
+                LlmChatMessageRow(
+                    id=100,
+                    bot_id=10,
+                    group_id=100,
+                    user_id=200,
+                    role="assistant",
+                    content="a-latest-by-time",
+                    created_at=3000,
+                ),
+                LlmChatMessageRow(
+                    id=500, bot_id=10, group_id=100, user_id=300, role="user", content="b-latest", created_at=2000
+                ),
+            ]
+        )
+        await session.commit()
+
+    sessions = await list_llm_history_sessions(bot_id=10, group_id=100, limit=1)
+    assert len(sessions) == 1
+    latest = sessions[0]
+    assert latest.session_key == "10:100:200"
+    assert latest.turn_count == 2
+    assert latest.first_created_at == 1000
+    assert latest.last_created_at == 3000
+    assert latest.last_role == "assistant"
+    assert latest.last_content == "a-latest-by-time"
+
+
+@pytest.mark.asyncio
 async def test_llm_history_detail_includes_behavior_runs(pg_engine, monkeypatch, tmp_path) -> None:
     clear_llm_config_cache()
     monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
@@ -448,7 +536,7 @@ async def test_llm_history_detail_includes_behavior_runs(pg_engine, monkeypatch,
         llm_session_user_ttl_sec=0,
     )
     monkeypatch.setattr("pallas.product.llm.session_store.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.session_store.is_postgresql_backend", lambda: True)
+    monkeypatch.setattr("pallas.core.foundation.db.runtime.get_db_backend", lambda: "postgresql")
 
     await append_llm_message(10, 100, 200, "user", "u200-1")
     await append_llm_message(10, 100, 200, "assistant", "a200-1")
@@ -482,12 +570,13 @@ async def test_llm_history_detail_auto_settles_behavior_outcome(pg_engine, monke
         llm_session_user_ttl_sec=0,
     )
     monkeypatch.setattr("pallas.product.llm.session_store.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.session_store.is_postgresql_backend", lambda: True)
+    monkeypatch.setattr("pallas.core.foundation.db.runtime.get_db_backend", lambda: "postgresql")
 
     await append_llm_message(10, 100, 200, "user", "你又来这套")
     await append_llm_message(10, 100, 200, "assistant", "少来。")
     turns = await list_user_llm_messages(10, 100, 200, limit=10)
     assistant_turn = next(item for item in turns if item.role == "assistant")
+    run_created_at = assistant_turn.created_at
     save_behavior_patterns([
         BehaviorPattern(
             pattern_id="p1",
@@ -502,14 +591,22 @@ async def test_llm_history_detail_auto_settles_behavior_outcome(pg_engine, monke
             bot_id=10,
             group_id=100,
             user_id=200,
-            created_at=assistant_turn.created_at,
+            created_at=run_created_at,
             scene=BehaviorScene.PROVOCATION,
             reply_text="少来。",
             selected_pattern_ids=["p1"],
             selected_actions=[BehaviorAction.LIGHT_TEASE_AND_CLOSE],
         )
     )
+    followup_created_at = run_created_at + 1
+    monkeypatch.setattr(
+        "pallas.product.llm.session_store_pg.time",
+        SimpleNamespace(time=lambda: followup_created_at),
+    )
     await append_llm_message(10, 100, 200, "user", "哈哈那然后呢？")
+    followup_turn = (await list_user_llm_messages(10, 100, 200, limit=10))[-1]
+    assert followup_turn.created_at == run_created_at + 1
+    assert assistant_turn.created_at < followup_turn.created_at
 
     detail = await get_llm_history_session_detail(bot_id=10, group_id=100, user_id=200, limit=10)
     assert detail is not None
@@ -532,12 +629,13 @@ async def test_llm_history_detail_auto_settles_behavior_outcome_from_group_ambie
         llm_session_user_ttl_sec=0,
     )
     monkeypatch.setattr("pallas.product.llm.session_store.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.session_store.is_postgresql_backend", lambda: True)
+    monkeypatch.setattr("pallas.core.foundation.db.runtime.get_db_backend", lambda: "postgresql")
 
     await append_llm_message(10, 100, 200, "user", "你又来这套")
     await append_llm_message(10, 100, 200, "assistant", "少来。")
     turns = await list_user_llm_messages(10, 100, 200, limit=10)
     assistant_turn = next(item for item in turns if item.role == "assistant")
+    run_created_at = assistant_turn.created_at
     save_behavior_patterns([
         BehaviorPattern(
             pattern_id="p1",
@@ -552,14 +650,22 @@ async def test_llm_history_detail_auto_settles_behavior_outcome_from_group_ambie
             bot_id=10,
             group_id=100,
             user_id=200,
-            created_at=assistant_turn.created_at,
+            created_at=run_created_at,
             scene=BehaviorScene.PROVOCATION,
             reply_text="少来。",
             selected_pattern_ids=["p1"],
             selected_actions=[BehaviorAction.LIGHT_TEASE_AND_CLOSE],
         )
     )
+    followup_created_at = run_created_at + 1
+    monkeypatch.setattr(
+        "pallas.product.llm.session_store_pg.time",
+        SimpleNamespace(time=lambda: followup_created_at),
+    )
     await append_llm_message(10, 100, 300, "user", "哈哈那然后呢？")
+    followup_turn = (await list_user_llm_messages(10, 100, 300, limit=10))[-1]
+    assert followup_turn.created_at == run_created_at + 1
+    assert assistant_turn.created_at < followup_turn.created_at
 
     detail = await get_llm_history_session_detail(bot_id=10, group_id=100, user_id=200, limit=10)
     assert detail is not None
@@ -582,12 +688,13 @@ async def test_llm_history_detail_auto_settles_behavior_outcome_from_group_ambie
         llm_session_user_ttl_sec=0,
     )
     monkeypatch.setattr("pallas.product.llm.session_store.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.session_store.is_postgresql_backend", lambda: True)
+    monkeypatch.setattr("pallas.core.foundation.db.runtime.get_db_backend", lambda: "postgresql")
 
     await append_llm_message(10, 100, 200, "user", "在聊抽卡")
     await append_llm_message(10, 100, 200, "assistant", "突然去聊庆典。")
     turns = await list_user_llm_messages(10, 100, 200, limit=10)
     assistant_turn = next(item for item in turns if item.role == "assistant")
+    run_created_at = assistant_turn.created_at
     save_behavior_patterns([
         BehaviorPattern(
             pattern_id="p2",
@@ -602,14 +709,22 @@ async def test_llm_history_detail_auto_settles_behavior_outcome_from_group_ambie
             bot_id=10,
             group_id=100,
             user_id=200,
-            created_at=assistant_turn.created_at,
+            created_at=run_created_at,
             scene=BehaviorScene.SMALLTALK,
             reply_text="突然去聊庆典。",
             selected_pattern_ids=["p2"],
             selected_actions=[BehaviorAction.AVOID_FORCED_TOPIC_SHIFT],
         )
     )
+    followup_created_at = run_created_at + 1
+    monkeypatch.setattr(
+        "pallas.product.llm.session_store_pg.time",
+        SimpleNamespace(time=lambda: followup_created_at),
+    )
     await append_llm_message(10, 100, 300, "user", "你别转话题啊，还在说抽卡")
+    followup_turn = (await list_user_llm_messages(10, 100, 300, limit=10))[-1]
+    assert followup_turn.created_at == run_created_at + 1
+    assert assistant_turn.created_at < followup_turn.created_at
 
     detail = await get_llm_history_session_detail(bot_id=10, group_id=100, user_id=200, limit=10)
     assert detail is not None

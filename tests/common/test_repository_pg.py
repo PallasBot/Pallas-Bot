@@ -941,6 +941,9 @@ async def test_message_find_recent_in_group(pg_engine):
     rows = await repo.find_recent_in_group(gid, before_time=250, limit=8)
 
     assert [row.plain_text for row in rows] == ["a", "b"]
+    one = await repo.find_recent_in_group(gid, before_time=250, user_id=20, limit=1)
+    assert len(one) == 1
+    assert one[0].plain_text == "b"
 
 
 @pytest.mark.asyncio
@@ -966,13 +969,10 @@ async def test_message_find_recent_in_group_keeps_timeline_metadata(pg_engine):
     ])
 
     row = (await repo.find_recent_in_group(88002))[0]
+    assert row.plain_text == "还是笨蛋欸"
     assert row.sender_name == "兔兔"
     assert row.message_id == 101
     assert row.reply_to_message_id == 90
-    assert [m.plain_text for m in rows] == ["a", "b"]
-    one = await repo.find_recent_in_group(gid, before_time=250, user_id=20, limit=1)
-    assert len(one) == 1
-    assert one[0].plain_text == "b"
 
 
 @pytest.mark.asyncio
@@ -1271,8 +1271,9 @@ async def test_image_cache_prune_applies_retention_tiers_and_byte_limit(pg_engin
     )
 
     assert result.deleted_rows == 3
-    assert result.deleted_blob_bytes == 15
-    assert result.remaining_blob_bytes == 10
+    # 容量上限按整行删除，最终可能低于 max_blob_bytes。
+    assert result.deleted_blob_bytes == 12
+    assert result.remaining_blob_bytes == 8
     assert await repo.find_by_cq_code("absolute-old") is None
     assert await repo.find_by_cq_code("single-old") is None
     assert await repo.find_by_cq_code("single-new") is None

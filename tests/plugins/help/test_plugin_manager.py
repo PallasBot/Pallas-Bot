@@ -484,18 +484,17 @@ async def test_collect_disabled_plugin_names_short_circuits_when_pg_not_ready(mo
 
 
 @pytest.mark.asyncio
-async def test_fill_plugin_status_reuses_disabled_plugin_gate_cache(beanie_fixture, monkeypatch):
+async def test_fill_plugin_status_collects_disabled_names_by_scope(beanie_fixture, monkeypatch):
     from packages.help import plugin_manager
 
     await plugin_manager.reset_disabled_plugin_gate_cache()
 
-    calls: list[bool] = []
+    calls: list[tuple[int | None, bool]] = []
 
     async def counting_collect(bot_id, group_id, *, ignore_cache=False):
-        calls.append(bool(ignore_cache))
+        calls.append((group_id, bool(ignore_cache)))
         assert bot_id == 1234
-        assert group_id == 5678
-        return frozenset({"chat"})
+        return frozenset({"chat"}) if group_id == 5678 else frozenset()
 
     monkeypatch.setattr(plugin_manager, "collect_disabled_plugin_names", counting_collect)
     monkeypatch.setattr(
@@ -514,7 +513,7 @@ async def test_fill_plugin_status_reuses_disabled_plugin_gate_cache(beanie_fixtu
 
     await plugin_manager.fill_plugin_status("|1|?|chat|\n|2|?|other|", bot_id=1234, group_id=5678)
 
-    assert calls == [False]
+    assert calls == [(5678, False), (None, False)]
 
 
 @pytest.mark.asyncio
