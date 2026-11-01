@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from tools.experimental import llm_persona_ab as tool
 
@@ -104,6 +105,9 @@ def test_event_mode_writes_two_variant_rows(tmp_path, monkeypatch) -> None:
         return _FakeResult(status="delivered", reply=reply, route="llm_chat")
 
     monkeypatch.setattr("tools.llm_event_harness.run_event_case", fake_run_event_case)
+    init_db = AsyncMock()
+    monkeypatch.setattr("pallas.core.foundation.db.init_db", init_db)
+    monkeypatch.setattr("pallas.core.foundation.config.repo_settings.apply_repo_settings_to_environ", lambda: None)
 
     code = asyncio.run(
         _run([
@@ -122,6 +126,7 @@ def test_event_mode_writes_two_variant_rows(tmp_path, monkeypatch) -> None:
     )
 
     assert code == 0
+    init_db.assert_awaited_once()
     assert len(captured_calls) == 2
     assert captured_calls[0]["variant"] == "A"
     assert captured_calls[0]["prompt"] == "prompt-a"
@@ -188,6 +193,9 @@ def test_event_mode_from_fixture(tmp_path, monkeypatch) -> None:
 
     monkeypatch.setattr("tools.llm_event_harness.run_event_case", fake_run_event_case)
     monkeypatch.setattr("tools.llm_event_harness.load_event_fixtures", lambda p: [SimpleNamespace(name="custom")])
+    init_db = AsyncMock()
+    monkeypatch.setattr("pallas.core.foundation.db.init_db", init_db)
+    monkeypatch.setattr("pallas.core.foundation.config.repo_settings.apply_repo_settings_to_environ", lambda: None)
 
     code = asyncio.run(
         _run([
@@ -203,6 +211,7 @@ def test_event_mode_from_fixture(tmp_path, monkeypatch) -> None:
     )
 
     assert code == 0
+    init_db.assert_awaited_once()
     assert captured[0]["name"] == "custom"
     rows = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
     assert rows[0]["case"] == "custom"

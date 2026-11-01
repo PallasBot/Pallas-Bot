@@ -207,7 +207,7 @@ def test_retrieve_bot_scoped_source_only_for_that_bot() -> None:
         RegisteredKnowledgeSource,
     )
 
-    cfg = LlmConfig(llm_chat_enabled=True, llm_knowledge_sources_enabled=True)
+    cfg = LlmConfig(llm_chat_enabled=True, llm_knowledge_sources_enabled=True, llm_knowledge_min_score=0)
     bot_only = KnowledgeSourceDecl(
         source_id="test.bot_only",
         title="某牛的私有知识",

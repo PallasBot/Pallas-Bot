@@ -58,7 +58,7 @@ async def test_enrich_memory_context_returns_trace(monkeypatch: pytest.MonkeyPat
         AsyncMock(return_value=[]),
     )
     result = await enrich_system_with_memory_context("base", bot_id=1, group_id=2, query_text="银灰", cfg=cfg)
-    assert "相关群内旧事" in result.system_prompt
+    assert "已确认群事件" in result.system_prompt
     assert result.trace["hit_count"] == 1
     assert result.trace["sources"] == ["episode_note"]
 

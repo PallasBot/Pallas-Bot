@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pallas.product.llm.config import LlmConfig
 from pallas.product.llm.knowledge.embedding_client import fetch_embeddings_sync, stub_embedding
 from pallas.product.llm.local_routing_store import (
     clear_local_routing_cache,
@@ -18,10 +19,23 @@ def test_stub_embedding_deterministic() -> None:
     assert len(a) == 16
 
 
-def test_fetch_embeddings_sync_local() -> None:
-    vectors = fetch_embeddings_sync(["a", "b"])
+def test_fetch_embeddings_sync_local(monkeypatch) -> None:
+    from pallas.product.llm.knowledge import embed_redis
+
+    calls = []
+    monkeypatch.setattr(embed_redis, "redis_embed_available", lambda: True)
+
+    def fake_request_embeddings(texts, **_kwargs):
+        calls.append(list(texts))
+        return [[0.1, 0.2] for _ in texts]
+
+    monkeypatch.setattr(embed_redis, "request_embeddings", fake_request_embeddings)
+    cfg = LlmConfig(llm_chat_enabled=True, llm_embedding_provider="local")
+    vectors = fetch_embeddings_sync(["a", "b"], cfg=cfg)
+
     assert vectors is not None
     assert len(vectors) == 2
+    assert calls == [["a", "b"]]
 
 
 def test_local_routing_store_roundtrip(tmp_path, monkeypatch) -> None:

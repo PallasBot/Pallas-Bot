@@ -201,7 +201,7 @@ async def test_memory_inject_still_retrieves_when_current_turn_allows_persistent
 
 
 @pytest.mark.asyncio
-async def test_direct_chat_short_social_reads_relationship_but_skips_person_facts(
+async def test_direct_chat_explicitly_denies_relationship_and_person_facts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     memory_mock = AsyncMock(return_value=MemoryInjectionResult(system_prompt="memory", trace={"hit_count": 0}))
@@ -231,20 +231,14 @@ async def test_direct_chat_short_social_reads_relationship_but_skips_person_fact
         allow_persistent_memory=False,
     )
 
-    relationship_mock.assert_awaited_once_with(
-        "",
-        bot_id=1,
-        group_id=2,
-        user_id=3,
-        cfg=LlmConfig(llm_chat_enabled=True),
-        include_fallback=False,
-    )
+    relationship_mock.assert_not_awaited()
     person_facts_mock.assert_not_awaited()
     assert result.memory == "memory"
     assert result.knowledge == "knowledge"
-    assert result.relationship == "relationship"
+    assert result.relationship == ""
     assert result.person_facts == ""
-    assert result.relationship_trace == {"hit_count": 1}
+    assert result.relationship_trace["hit_count"] == 0
+    assert result.relationship_trace["skipped_short_social_turn"] is True
     assert set(result.stage_durations_ms) == {"memory", "knowledge", "relationship", "person_facts", "mid_term"}
 
 

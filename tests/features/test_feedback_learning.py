@@ -210,6 +210,11 @@ def test_find_semantic_matched_replies_uses_embeddings(monkeypatch, tmp_path) ->
         lambda _model, _text: None,
     )
     monkeypatch.setattr(
+        "pallas.product.llm.knowledge.embedding_provider.resolve_embedding_provider_name",
+        lambda _cfg=None: "local",
+    )
+    monkeypatch.setattr("pallas.product.llm.knowledge.embed_redis.redis_embed_available", lambda: True)
+    monkeypatch.setattr(
         "pallas.product.llm.knowledge.embed_redis.request_embeddings",
         fake_remote,
     )

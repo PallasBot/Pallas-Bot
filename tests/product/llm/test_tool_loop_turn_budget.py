@@ -383,79 +383,29 @@ async def test_chat_reply_finishes_without_extra_llm(monkeypatch: pytest.MonkeyP
 
 
 @pytest.mark.asyncio
-async def test_kernel_budget_exhausted_delivers_once_without_retry(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("tools_enabled", [False, True])
+@pytest.mark.parametrize("firewall_enabled", [False, True])
+async def test_kernel_chat_job_stops_at_retired_gate_before_provider(
+    monkeypatch: pytest.MonkeyPatch, tools_enabled: bool, firewall_enabled: bool
+) -> None:
     from pallas.product.llm import kernel_runner
 
     calls: list[str] = []
     _register_echo(calls)
     posts = _patch_http(
         monkeypatch,
-        lambda index: {"role": "assistant", "content": "", "tool_calls": [_tool_call("demo__echo")]},
+        lambda _index: {"role": "assistant", "content": "", "tool_calls": [_tool_call("demo__echo")]},
     )
     cfg = LlmConfig(
-        llm_tools_enabled=True,
+        llm_tools_enabled=tools_enabled,
         llm_model="m",
         llm_chat_enabled=True,
-        llm_persona_output_firewall={"enabled": False},
+        llm_persona_output_firewall={"enabled": firewall_enabled},
         llm_chat_turn_max_http_attempts=1,
+        llm_chat_turn_timeout_sec=1,
     )
-    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
-    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", AsyncMock(return_value=False))
-    delivered = AsyncMock(return_value={"message": "ok"})
-    monkeypatch.setattr(kernel_runner, "deliver_llm_chat_result", delivered)
-    monkeypatch.setattr(kernel_runner.TaskManager, "remove_task", AsyncMock())
-    traces: list[dict] = []
-    monkeypatch.setattr(
-        "pallas.product.llm.runtime_debug.append_runtime_trace",
-        lambda **kwargs: traces.append(kwargs["trace"]),
-    )
-
-    await kernel_runner.run_kernel_chat_job(
-        "budget-kernel-task",
-        system_prompt="sys",
-        messages=[{"role": "user", "content": "做事"}],
-        metadata={
-            "task": "llm_chat",
-            "bot_id": 1,
-            "group_id": 2,
-            "user_id": 3,
-            "tools_enabled": True,
-            "tool_schemas": [{"type": "function", "function": {"name": "demo__echo"}}],
-        },
-        cfg=cfg,
-    )
-
-    assert posts == [1]
-    assert calls == ["echo"]
-    delivered.assert_awaited_once()
-    assert traces
-    assert traces[-1]["status"] == "budget_exhausted"
-    assert traces[-1]["budget_exhausted"] is True
-
-
-@pytest.mark.asyncio
-async def test_kernel_no_tools_budget_exhausted_is_silent(monkeypatch: pytest.MonkeyPatch) -> None:
-    from pallas.product.llm import kernel_runner
-
-    cfg = LlmConfig(
-        llm_tools_enabled=False,
-        llm_model="m",
-        llm_chat_enabled=True,
-        llm_persona_output_firewall={"enabled": False},
-    )
-    monkeypatch.setattr(
-        "pallas.product.llm.turn_budget.new_llm_chat_turn_budget",
-        lambda _cfg, *, started_at=None: LlmTurnBudget(
-            deadline_monotonic=time.monotonic() - 1,
-            max_http_attempts=6,
-        ),
-    )
-    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
-    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", AsyncMock(return_value=False))
+    complete = AsyncMock()
+    monkeypatch.setattr(kernel_runner, "complete_with_tool_loop", complete)
     delivered = AsyncMock(return_value={"message": "ok"})
     monkeypatch.setattr(kernel_runner, "deliver_llm_chat_result", delivered)
     removed = AsyncMock()
@@ -465,21 +415,45 @@ async def test_kernel_no_tools_budget_exhausted_is_silent(monkeypatch: pytest.Mo
         "pallas.product.llm.runtime_debug.append_runtime_trace",
         lambda **kwargs: traces.append(kwargs["trace"]),
     )
+    released: list[object] = []
+    monkeypatch.setattr(
+        kernel_runner,
+        "release_llm_execution_slot",
+        lambda slot, cfg=None: released.append(slot),
+    )
+    slot = object()
+    request_id = f"retired-{tools_enabled}-{firewall_enabled}"
 
     await kernel_runner.run_kernel_chat_job(
-        "no-tools-budget-task",
+        request_id,
         system_prompt="sys",
-        messages=[{"role": "user", "content": "你好"}],
-        metadata={"task": "llm_chat", "bot_id": 1, "group_id": 2, "user_id": 3},
+        messages=[{"role": "user", "content": "do work"}],
+        metadata={
+            "task": "llm_chat",
+            "bot_id": 1,
+            "group_id": 2,
+            "user_id": 3,
+            "tools_enabled": tools_enabled,
+            "tool_schemas": [{"type": "function", "function": {"name": "demo__echo"}}],
+        },
         cfg=cfg,
+        execution_slot=slot,
     )
 
+    assert posts == []
+    assert calls == []
+    complete.assert_not_awaited()
     delivered.assert_not_awaited()
-    removed.assert_awaited()
-    assert traces
-    assert traces[-1]["status"] == "budget_exhausted"
-    assert traces[-1]["budget_exhausted"] is True
-    assert traces[-1]["budget_http_attempts_max"] == 6
+    removed.assert_awaited_once_with(request_id)
+    assert traces == [
+        {
+            "status": "skipped",
+            "skip_reason": "legacy_agent_retired",
+            "side_effect_started": False,
+            "agent_trace": None,
+        }
+    ]
+    assert released == [slot]
 
 
 @pytest.mark.asyncio
@@ -535,51 +509,6 @@ async def test_inline_history_consumes_parent_budget_cap_two(monkeypatch: pytest
     # 父轮第 1 次 + 工具内联第 2 次共占满 cap；若未共享会继续发起第 3 次。
     assert posts == [1, 2]
     assert history_mod._recent_summary_cache
-
-
-@pytest.mark.asyncio
-async def test_kernel_persona_retry_shares_budget_no_extra_http(monkeypatch: pytest.MonkeyPatch) -> None:
-    from pallas.product.llm import kernel_runner
-
-    posts = _patch_http(monkeypatch, lambda index: {"role": "assistant", "content": "第一次生成"})
-    cfg = LlmConfig(
-        llm_tools_enabled=False,
-        llm_model="m",
-        llm_chat_enabled=True,
-        llm_persona_output_firewall={"enabled": True},
-        llm_chat_turn_max_http_attempts=1,
-    )
-    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
-    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", AsyncMock(return_value=False))
-    calls = {"n": 0}
-
-    def resolve(content, **_kwargs):
-        calls["n"] += 1
-        return SimpleNamespace(
-            action="retry" if calls["n"] == 1 else "allow",
-            text=content,
-            trace={"rule_count": 1, "chat_quality": {}},
-        )
-
-    monkeypatch.setattr("pallas.product.llm.persona_output_firewall.resolve_persona_output", resolve)
-    delivered = AsyncMock(return_value={"message": "ok"})
-    monkeypatch.setattr(kernel_runner, "deliver_llm_chat_result", delivered)
-    monkeypatch.setattr(kernel_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr("pallas.product.llm.runtime_debug.append_runtime_trace", lambda **_kwargs: None)
-
-    await kernel_runner.run_kernel_chat_job(
-        "persona-budget-task",
-        system_prompt="sys",
-        messages=[{"role": "user", "content": "hi"}],
-        metadata={"task": "llm_chat", "bot_id": 1, "group_id": 2, "user_id": 3},
-        cfg=cfg,
-    )
-
-    # 预算已用尽：persona retry 不再发起 HTTP，已取得的首次生成照常送出。
-    assert posts == [1]
-    delivered.assert_awaited_once()
 
 
 def test_background_context_excludes_turn_budget(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
@@ -818,165 +747,6 @@ def test_firewall_redaction_keeps_budget_fields() -> None:
 
 
 @pytest.mark.asyncio
-async def test_kernel_firewall_keeps_budget_trace(monkeypatch: pytest.MonkeyPatch) -> None:
-    from pallas.product.llm import kernel_runner
-
-    register_reply_tools()
-    posts = _patch_http(
-        monkeypatch,
-        lambda index: {
-            "role": "assistant",
-            "content": "",
-            "tool_calls": [_tool_call("chat__reply", '{"text": "我是人工智能助手"}')],
-        },
-    )
-    cfg = LlmConfig(
-        llm_tools_enabled=True,
-        llm_model="m",
-        llm_chat_enabled=True,
-        llm_persona_output_firewall={"enabled": True},
-        llm_chat_turn_max_http_attempts=1,
-    )
-    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
-    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", AsyncMock(return_value=False))
-    delivered = AsyncMock(return_value={"message": "ok"})
-    monkeypatch.setattr(kernel_runner, "deliver_llm_chat_result", delivered)
-    monkeypatch.setattr(kernel_runner.TaskManager, "remove_task", AsyncMock())
-    traces: list[dict] = []
-    monkeypatch.setattr(
-        "pallas.product.llm.runtime_debug.append_runtime_trace",
-        lambda **kwargs: traces.append(kwargs["trace"]),
-    )
-
-    await kernel_runner.run_kernel_chat_job(
-        "firewall-budget-task",
-        system_prompt="sys",
-        messages=[{"role": "user", "content": "hi"}],
-        metadata={
-            "task": "llm_chat",
-            "bot_id": 1,
-            "group_id": 2,
-            "user_id": 3,
-            "tools_enabled": True,
-            "tool_schemas": [{"type": "function", "function": {"name": "chat__reply"}}],
-        },
-        cfg=cfg,
-    )
-
-    # 真实 persona firewall 命中（我是人工智能助手）触发 redaction，预算字段仍保留。
-    assert posts == [1]
-    assert traces
-    assert traces[-1]["budget_exhausted"] is True
-    assert traces[-1]["budget_exhaust_reason"] == "http_attempts_exhausted"
-
-
-@pytest.mark.asyncio
-async def test_kernel_deadline_anchored_to_job_start(monkeypatch: pytest.MonkeyPatch) -> None:
-    import pallas.product.llm.turn_budget as tb
-    from pallas.product.llm import kernel_runner
-
-    captured: dict = {}
-    real_factory = tb.new_llm_chat_turn_budget
-
-    def factory(cfg, *, started_at=None):
-        budget = real_factory(cfg, started_at=started_at)
-        captured["budget"] = budget
-        captured["started_at"] = started_at
-        return budget
-
-    monkeypatch.setattr("pallas.product.llm.turn_budget.new_llm_chat_turn_budget", factory)
-    _patch_http(monkeypatch, lambda index: {"role": "assistant", "content": "hi"})
-    cfg = LlmConfig(
-        llm_tools_enabled=False,
-        llm_model="m",
-        llm_chat_enabled=True,
-        llm_chat_turn_timeout_sec=60,
-        llm_persona_output_firewall={"enabled": False},
-    )
-    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
-    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", AsyncMock(return_value=False))
-    monkeypatch.setattr(kernel_runner, "deliver_llm_chat_result", AsyncMock(return_value={"message": "ok"}))
-    monkeypatch.setattr(kernel_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr("pallas.product.llm.runtime_debug.append_runtime_trace", lambda **_kwargs: None)
-
-    await kernel_runner.run_kernel_chat_job(
-        "anchor-task",
-        system_prompt="sys",
-        messages=[{"role": "user", "content": "hi"}],
-        metadata={"task": "llm_chat", "bot_id": 1, "group_id": 2, "user_id": 3},
-        cfg=cfg,
-    )
-
-    # deadline 锚在 job 起始，而非首次 provider 调用前另起时钟。
-    assert captured["started_at"] is not None
-    assert captured["budget"].deadline_monotonic == pytest.approx(captured["started_at"] + 60, abs=0.001)
-
-
-@pytest.mark.asyncio
-async def test_kernel_no_tools_provider_await_deadline_is_silent(monkeypatch: pytest.MonkeyPatch) -> None:
-    from pallas.product.llm import kernel_runner
-
-    monkeypatch.setattr(
-        "pallas.product.llm.turn_budget.new_llm_chat_turn_budget",
-        lambda _cfg, *, started_at=None: LlmTurnBudget(deadline_monotonic=time.monotonic() + 0.05, max_http_attempts=6),
-    )
-
-    class HangingClient:
-        async def post(self, *_args, **_kwargs):
-            await asyncio.sleep(30)
-            return SimpleNamespace(status_code=200, headers={}, content=b"", text="")
-
-    async def fake_client():
-        return HangingClient()
-
-    from pallas.product.llm.providers_store import ResolvedLlmEndpoint
-
-    monkeypatch.setattr("pallas.product.llm.provider_client.get_llm_shared_httpx_client", fake_client)
-    monkeypatch.setattr("pallas.product.llm.availability.llm_calls_enabled", lambda cfg=None: True)
-    monkeypatch.setattr("pallas.product.llm.providers_store.find_provider", lambda _pid: None)
-    monkeypatch.setattr(
-        "pallas.product.llm.providers_store.resolve_endpoint_candidates_for_task",
-        lambda _task: [
-            ResolvedLlmEndpoint(provider_id="p1", base_url="https://x/v1", api_key="sk", model="m", api_keys=("sk",))
-        ],
-    )
-    cfg = LlmConfig(
-        llm_tools_enabled=False, llm_model="m", llm_chat_enabled=True, llm_persona_output_firewall={"enabled": False}
-    )
-    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
-    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", AsyncMock(return_value=False))
-    delivered = AsyncMock(return_value={"message": "ok"})
-    monkeypatch.setattr(kernel_runner, "deliver_llm_chat_result", delivered)
-    removed = AsyncMock()
-    monkeypatch.setattr(kernel_runner.TaskManager, "remove_task", removed)
-    traces: list[dict] = []
-    monkeypatch.setattr(
-        "pallas.product.llm.runtime_debug.append_runtime_trace",
-        lambda **kwargs: traces.append(kwargs["trace"]),
-    )
-
-    await kernel_runner.run_kernel_chat_job(
-        "no-tools-await-task",
-        system_prompt="sys",
-        messages=[{"role": "user", "content": "hi"}],
-        metadata={"task": "llm_chat", "bot_id": 1, "group_id": 2, "user_id": 3},
-        cfg=cfg,
-    )
-
-    delivered.assert_not_awaited()
-    removed.assert_awaited()
-    assert traces
-    assert traces[-1]["status"] == "budget_exhausted"
-    assert traces[-1]["budget_exhaust_reason"] == "deadline_exceeded"
-
-
-@pytest.mark.asyncio
 async def test_no_endpoint_prepare_deadline_propagates(monkeypatch: pytest.MonkeyPatch) -> None:
     async def slow_prepare(*_args, **_kwargs):
         await asyncio.sleep(30)
@@ -997,60 +767,6 @@ async def test_no_endpoint_prepare_deadline_propagates(monkeypatch: pytest.Monke
             cfg=LlmConfig(llm_model="m"),
             turn_budget=budget,
         )
-
-
-@pytest.mark.asyncio
-async def test_kernel_external_cancellation_propagates_and_releases_slot(monkeypatch: pytest.MonkeyPatch) -> None:
-    from pallas.product.llm import kernel_runner
-
-    started = asyncio.Event()
-
-    class HangingClient:
-        async def post(self, *_args, **_kwargs):
-            started.set()
-            await asyncio.sleep(30)
-
-    async def fake_client():
-        return HangingClient()
-
-    from pallas.product.llm.providers_store import ResolvedLlmEndpoint
-
-    monkeypatch.setattr("pallas.product.llm.provider_client.get_llm_shared_httpx_client", fake_client)
-    monkeypatch.setattr("pallas.product.llm.availability.llm_calls_enabled", lambda cfg=None: True)
-    monkeypatch.setattr("pallas.product.llm.providers_store.find_provider", lambda _pid: None)
-    monkeypatch.setattr(
-        "pallas.product.llm.providers_store.resolve_endpoint_candidates_for_task",
-        lambda _task: [
-            ResolvedLlmEndpoint(provider_id="p1", base_url="https://x/v1", api_key="sk", model="m", api_keys=("sk",))
-        ],
-    )
-    cfg = LlmConfig(
-        llm_tools_enabled=False, llm_model="m", llm_chat_enabled=True, llm_persona_output_firewall={"enabled": False}
-    )
-    monkeypatch.setattr("pallas.product.llm.config.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.availability.get_llm_config", lambda: cfg)
-    monkeypatch.setattr("pallas.product.llm.availability.is_llm_plugin_globally_disabled", lambda: False)
-    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", AsyncMock(return_value=False))
-    monkeypatch.setattr(kernel_runner, "deliver_llm_chat_result", AsyncMock(return_value={"message": "ok"}))
-    released: list[int] = []
-    monkeypatch.setattr(kernel_runner, "release_llm_execution_slot", lambda slot, cfg=None: released.append(1))
-    monkeypatch.setattr(kernel_runner.TaskManager, "remove_task", AsyncMock())
-    monkeypatch.setattr("pallas.product.llm.runtime_debug.append_runtime_trace", lambda **_kwargs: None)
-
-    task = asyncio.create_task(
-        kernel_runner.run_kernel_chat_job(
-            "cancel-task",
-            system_prompt="sys",
-            messages=[{"role": "user", "content": "hi"}],
-            metadata={"task": "llm_chat", "bot_id": 1, "group_id": 2, "user_id": 3},
-            cfg=cfg,
-        )
-    )
-    await started.wait()
-    task.cancel()
-    with pytest.raises(asyncio.CancelledError):
-        await task
-    assert released == [1]
 
 
 @pytest.mark.asyncio

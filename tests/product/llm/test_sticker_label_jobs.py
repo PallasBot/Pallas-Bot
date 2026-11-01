@@ -12,6 +12,7 @@ def _mock_realtime_budget(monkeypatch: pytest.MonkeyPatch) -> None:
     from pallas.product.llm import sticker_label_jobs
 
     monkeypatch.setattr(sticker_label_jobs, "sticker_label_realtime_budget_ok", lambda: True)
+    monkeypatch.setattr("pallas.product.llm.availability.llm_calls_enabled", lambda cfg=None: True)
 
 
 def test_label_runtime_state_is_shared_by_producer_and_worker(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -220,6 +221,28 @@ async def test_enqueue_candidate_counts_coalesced_when_job_already_pending(
     assert queued is True
     assert not any(call.args[1] == "submit_ok" for call in metric.call_args_list)
     assert any(call.args == ("sticker_label", "background_coalesced") for call in metric.call_args_list)
+
+
+@pytest.mark.asyncio
+async def test_enqueue_candidate_respects_llm_gate(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.product.llm import sticker_label_jobs
+    from pallas.product.llm.sticker_label_jobs import StickerLabelSource
+
+    repository = SimpleNamespace(get=AsyncMock())
+    store = SimpleNamespace(requeue_terminal=AsyncMock())
+    monkeypatch.setattr("pallas.product.llm.availability.llm_calls_enabled", lambda: False)
+    monkeypatch.setattr(sticker_label_jobs, "sticker_label_repository", lambda: repository)
+    monkeypatch.setattr(sticker_label_jobs, "build_work_job_store", lambda: store)
+
+    queued = await sticker_label_jobs.enqueue_sticker_label_candidate(
+        cache_key="[CQ:image,file=blocked.image]",
+        content=b"blocked",
+        source=StickerLabelSource.FOLLOWUP_CANDIDATE,
+    )
+
+    assert queued is False
+    repository.get.assert_not_awaited()
+    store.requeue_terminal.assert_not_awaited()
 
 
 @pytest.mark.asyncio

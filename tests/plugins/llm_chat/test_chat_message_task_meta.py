@@ -1216,9 +1216,8 @@ async def test_handle_llm_chat_records_route_and_fallback_meta(
     assert "「行啊」「好呀」" in submit_request.system_prompt
     # 措辞提示并入 prepared_messages 参与预算裁剪，不再经 request.style_user_hints。
     style_hints = "\n".join(str(item.content or "") for item in (submit_request.prepared_messages or []))
-    assert "【本轮表达去重】" in style_hints
     assert "其实" in style_hints
-    assert "【收尾变化参考】" in style_hints
+    assert "【本轮表达去重】" in style_hints
     assert submit_request.style_user_hints == []
     assert "persona_shaping_active" not in submit_request.llm_rewrite_metadata
     assert "variation_hint" not in submit_request.llm_rewrite_metadata
@@ -1585,12 +1584,12 @@ async def test_handle_llm_chat_coalesces_second_rapid_message(
 
 
 @pytest.mark.asyncio
-async def test_handle_llm_chat_merged_pending_text_reaches_background_worker(
+async def test_handle_llm_chat_pending_text_reaches_background_worker(
     monkeypatch: pytest.MonkeyPatch,
     capture_create_task: list[object],
 ) -> None:
     from packages.llm_chat import chat_message as mod
-    from pallas.product.llm.chat_queue import finish_chat_turn
+    from pallas.product.llm.chat_queue import finish_chat_turn, take_pending_chat_one_entry
     from pallas.product.llm.config import LlmConfig
 
     def make_event(plain: str) -> SimpleNamespace:
@@ -1632,8 +1631,13 @@ async def test_handle_llm_chat_merged_pending_text_reaches_background_worker(
     await mod.handle_llm_chat(bot, make_event("好的"))
     assert len(capture_create_task) == 2
     await capture_create_task[1]
+    assert len(capture_create_task) == 3
+    await capture_create_task[2]
 
-    assert worker_kwargs[-1]["plain"] == "现在几点\n好的"
+    assert worker_kwargs[-1]["plain"] == "现在几点"
+    next_pending = take_pending_chat_one_entry(10001, 20002, 30003)
+    assert next_pending is not None
+    assert next_pending.text == "好的"
 
 
 @pytest.mark.asyncio

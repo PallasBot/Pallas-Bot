@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -8,6 +9,7 @@ import pytest
 from pallas.product.llm.assembler.chat_prompt import ChatPromptAssembler
 from pallas.product.llm.assembler.context import assemble_direct_chat_context
 from pallas.product.llm.config import LlmConfig
+from pallas.product.llm.knowledge import inject as knowledge_inject
 from pallas.product.llm.knowledge.inject import (
     enrich_system_with_knowledge_sources,
     looks_like_invite_followup,
@@ -32,6 +34,11 @@ from pallas.product.llm.session_store import LlmChatTurn
 from pallas.product.llm.turn_policy import TurnPolicy
 
 NOW = int(time.time())
+
+
+@pytest.fixture(autouse=True)
+def freeze_knowledge_clock(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(knowledge_inject, "time", SimpleNamespace(time=lambda: NOW))
 
 
 def _invite_turn(*, user_id: int = 7, age: int = 10, text: str = "我想邀请牛牛进群") -> LlmChatTurn:

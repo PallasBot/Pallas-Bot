@@ -242,6 +242,7 @@ def _patch_boundaries(monkeypatch, *, kernel_calls, captures, llm_probe, stale=F
 
     monkeypatch.setattr(repeater_message, "build_repeater_event_context", build_ctx)
     monkeypatch.setattr(repeater_message, "is_message_scrub_blocked_async", scrub)
+    monkeypatch.setattr("pallas.product.message_scrub.is_message_scrub_blocked_async", scrub)
     monkeypatch.setattr(
         "pallas.product.llm.reply_target_candidates.record_reply_target_candidate",
         lambda **_kwargs: None,
@@ -287,6 +288,7 @@ async def test_scope_owned_chat_captures_forwards_and_echoes(monkeypatch, framew
     captures: list[str] = []
     llm_probe: list[str] = []
     _register_pool()
+    monkeypatch.setattr("pallas.product.message_scrub.is_message_scrub_blocked_async", _allow)
     _patch_boundaries(monkeypatch, kernel_calls=kernel_calls, captures=captures, llm_probe=llm_probe)
     await _arm_bridge(monkeypatch, fake_mai)
 

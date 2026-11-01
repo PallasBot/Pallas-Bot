@@ -92,7 +92,6 @@ class _DummyStatRepo:
         ]
 
 
-
 class _DummyImageRepo:
     def __init__(self, hash_by_code):
         self._hash_by_code = hash_by_code
@@ -434,6 +433,7 @@ async def test_enqueue_label_respects_gates(monkeypatch) -> None:
     monkeypatch.setattr(jobs_mod, "lazy_sticker_labels_paused", lambda: False)
     monkeypatch.setattr(jobs_mod, "sticker_label_circuit_open", lambda: False)
     monkeypatch.setattr(jobs_mod, "sticker_label_realtime_budget_ok", lambda: True)
+    monkeypatch.setattr("pallas.product.llm.availability.llm_calls_enabled", lambda cfg=None: True)
     monkeypatch.setattr("pallas.core.platform.work_jobs.runtime.build_work_job_store", lambda: _FakeStore())
     monkeypatch.setattr("pallas.product.llm.task_metrics.record_bot_llm_task", lambda *a, **k: None)
 
@@ -447,6 +447,11 @@ async def test_enqueue_label_respects_gates(monkeypatch) -> None:
 
     monkeypatch.setattr(jobs_mod, "sticker_label_realtime_budget_ok", lambda: True)
     monkeypatch.setattr(jobs_mod, "lazy_sticker_labels_paused", lambda: True)
+    assert await mod._enqueue_sticker_label_for_hash(CAT_HASH) is False
+    assert len(created) == 1
+
+    monkeypatch.setattr(jobs_mod, "lazy_sticker_labels_paused", lambda: False)
+    monkeypatch.setattr("pallas.product.llm.availability.llm_calls_enabled", lambda cfg=None: False)
     assert await mod._enqueue_sticker_label_for_hash(CAT_HASH) is False
     assert len(created) == 1
 
