@@ -104,6 +104,8 @@ ORDER BY mean_exec_time DESC
 LIMIT :limit
 """
 
+_STATEMENTS_AVAILABLE_SQL = "SELECT to_regclass('pg_stat_statements') IS NOT NULL"
+
 
 def pg_activity_diag_mode() -> str:
     raw = repo_env_raw_value("PG_ACTIVITY_DIAG_ENABLED")
@@ -304,18 +306,20 @@ async def collect_pg_activity_snapshot() -> PgActivitySnapshot:
             snap.idle_in_tx = [dict(r) for r in idle_rows]
 
             try:
-                stmt_rows = (
-                    (
-                        await conn.execute(
-                            text(_STATEMENTS_TOP_SQL),
-                            {"limit": pg_stat_statements_top_n()},
+                statements_available = (await conn.execute(text(_STATEMENTS_AVAILABLE_SQL))).scalar_one()
+                if statements_available:
+                    stmt_rows = (
+                        (
+                            await conn.execute(
+                                text(_STATEMENTS_TOP_SQL),
+                                {"limit": pg_stat_statements_top_n()},
+                            )
                         )
+                        .mappings()
+                        .all()
                     )
-                    .mappings()
-                    .all()
-                )
-                snap.statements_top = [dict(r) for r in stmt_rows]
-                snap.statements_available = True
+                    snap.statements_top = [dict(r) for r in stmt_rows]
+                    snap.statements_available = True
             except Exception as e:
                 logger.debug("pg_stat_statements probe skipped: {}", e)
     except Exception as e:
