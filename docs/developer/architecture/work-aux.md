@@ -24,6 +24,8 @@ PostgreSQL work-job 的单条入队、批量入队与终态重入队共用 JSONB
 
 `uv run pallas`、`uv run pallas run unified` 会同时维护消息实例与一个 `work aux`；`uv run pallas status` 显示它的 pid 和日志。完整分片启动也只维护一个 aux，避免每个 worker 重复拉起消费者。
 
+PostgreSQL 的 schema 初始化在同一事务内持有数据库级 advisory lock，协调消息进程和 work aux 的建表与 schema 补全；事务提交或回滚时自动释放。该锁只协调使用此协议并连接同一数据库的进程。
+
 当至少有两个并发槽且两类 handler 都存在时，work aux 将同一总预算静态分池：向上取整的一半留给 `repeater.message`、`repeater.learn`、`image_cache.capture`，其余槽处理其他任务。短链路池通过 `kinds` 限定，另一池用 `exclude_kinds` 排除短链路 kind，同时仍可消费外部 handler 与未知 kind；`bot_action.send` 等显式排除对两池都生效。不会动态借出保留槽，也不会增加总容量。
 
 短链路池按 `created_at` FIFO，不使用严格优先级，避免持续消息/学习积压令图片采集永远排在后面。其他池继续使用 `priority_tiers`，例如交互任务优先于其余派生工作。单槽或缺少任一类 handler 时不分池；存在短链路 handler 时回退 FIFO，避免严格优先级长期饿死某类任务，也不为不存在的 handler 空留槽。单槽无法隔离正在执行的长任务；`image_cache.capture` 还需下载外部图片，因此分池不保证任务必在图片 TTL 内完成，现有 TTL 和超时保持不变。

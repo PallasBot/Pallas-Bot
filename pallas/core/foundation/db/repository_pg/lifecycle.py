@@ -53,6 +53,8 @@ _session_factory: async_sessionmaker[AsyncSession] | None = None
 _reply_query_snapshot_cache: OrderedDict[str, tuple[float, Any]] = OrderedDict()
 _reply_query_snapshot_inflight: dict[str, asyncio.Task[Any]] = {}
 _reply_query_snapshot_lock = asyncio.Lock()
+_PG_SCHEMA_INIT_LOCK_NAMESPACE = 0x50475343  # Distinct from image-cache advisory locks.
+_PG_SCHEMA_INIT_LOCK_KEY = 0x494E4954
 
 
 def _ensure_pg_image_cache_blob_data(connection) -> None:
@@ -601,6 +603,12 @@ async def init_pg(engine: AsyncEngine) -> None:
     _session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
     async with engine.begin() as conn:
+        # Database-local transaction lock: serialize cold DDL across processes and
+        # release automatically when this schema transaction commits or rolls back.
+        await conn.execute(
+            text("SELECT pg_advisory_xact_lock(:namespace, :key)"),
+            {"namespace": _PG_SCHEMA_INIT_LOCK_NAMESPACE, "key": _PG_SCHEMA_INIT_LOCK_KEY},
+        )
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(run_registered_pg_ensures)
 

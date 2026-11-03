@@ -16,10 +16,205 @@ PostgreSQL Repository 集成测试。
 from __future__ import annotations
 
 import asyncio
+import os
 import uuid
 
 import pytest
 from sqlalchemy.dialects import postgresql
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fail_create_all", [False, True])
+async def test_init_pg_locks_before_schema_ddl_and_propagates_failures(monkeypatch, fail_create_all):
+    from pallas.core.foundation.db import schema_registry
+    from pallas.core.foundation.db.repository_pg import lifecycle
+
+    calls = []
+
+    class FakeConnection:
+        async def execute(self, statement, parameters):
+            calls.append(("lock", str(statement), parameters))
+
+        async def run_sync(self, callback):
+            return callback(self)
+
+    class FakeEngine:
+        connection = FakeConnection()
+        exit_exception = None
+
+        def begin(self):
+            return self
+
+        async def __aenter__(self):
+            return self.connection
+
+        async def __aexit__(self, exc_type, exc, _traceback):
+            self.exit_exception = exc
+            return False
+
+    engine = FakeEngine()
+
+    def create_all(connection):
+        calls.append(("create_all", connection))
+        if fail_create_all:
+            raise RuntimeError("schema DDL failed")
+
+    def run_ensures(connection):
+        calls.append(("ensures", connection))
+
+    monkeypatch.setattr(lifecycle, "_engine", None)
+    monkeypatch.setattr(lifecycle, "_session_factory", None)
+    monkeypatch.setattr(lifecycle, "async_sessionmaker", lambda *_args, **_kwargs: object())
+    monkeypatch.setattr(lifecycle.Base.metadata, "create_all", create_all)
+    monkeypatch.setattr(schema_registry, "run_registered_pg_ensures", run_ensures)
+
+    if fail_create_all:
+        with pytest.raises(RuntimeError, match="schema DDL failed"):
+            await lifecycle.init_pg(engine)
+        assert isinstance(engine.exit_exception, RuntimeError)
+        assert [call[0] for call in calls] == ["lock", "create_all"]
+    else:
+        await lifecycle.init_pg(engine)
+        assert engine.exit_exception is None
+        assert [call[0] for call in calls] == ["lock", "create_all", "ensures"]
+
+    lock_call = calls[0]
+    assert "pg_advisory_xact_lock(:namespace, :key)" in lock_call[1]
+    assert lock_call[2] == {
+        "namespace": lifecycle._PG_SCHEMA_INIT_LOCK_NAMESPACE,
+        "key": lifecycle._PG_SCHEMA_INIT_LOCK_KEY,
+    }
+    assert lifecycle._PG_SCHEMA_INIT_LOCK_NAMESPACE != 0x50414C4C
+    assert all(call[-1] is engine.connection for call in calls[1:])
+
+
+@pytest.mark.asyncio
+async def test_init_pg_serializes_cold_schema_creation_across_connections(monkeypatch):
+    """两个独立连接在空 schema 初始化时，一个等待另一个的事务级 schema 锁。"""
+    dsn = os.getenv("PG_TEST_DSN")
+    if not dsn:
+        pytest.skip("需要设置 PG_TEST_DSN 指向测试 PG 实例")
+
+    from sqlalchemy import event, inspect, text
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from pallas.core.foundation.db import schema_registry
+    from pallas.core.foundation.db.repository_pg import Base, init_pg, lifecycle
+
+    schema = f"pallas_init_{uuid.uuid4().hex}"
+    app_names = (f"pallas-init-a-{uuid.uuid4().hex[:8]}", f"pallas-init-b-{uuid.uuid4().hex[:8]}")
+    startup_lock = (0x50475343, 0x494E4954)
+    barrier_lock = (0x50475342, 0x42415252)
+    create_calls = 0
+    ensure_calls = 0
+    admin_engine = create_async_engine(dsn)
+    engines = [
+        create_async_engine(
+            dsn,
+            connect_args={"server_settings": {"search_path": schema, "application_name": app_name}},
+        )
+        for app_name in app_names
+    ]
+    tasks: list[asyncio.Task[None]] = []
+    barrier_conn = None
+    metadata_listener_added = False
+
+    def pause_before_create(_metadata, connection, **_kwargs):
+        nonlocal create_calls
+        create_calls += 1
+        connection.execute(
+            text("SELECT pg_advisory_xact_lock(:namespace, :key)"),
+            {"namespace": barrier_lock[0], "key": barrier_lock[1]},
+        )
+
+    # Restore process-local init state after direct calls with two separate engines.
+    monkeypatch.setattr(lifecycle, "_engine", lifecycle._engine)
+    monkeypatch.setattr(lifecycle, "_session_factory", lifecycle._session_factory)
+
+    try:
+        async with admin_engine.begin() as conn:
+            await conn.execute(text(f'CREATE SCHEMA "{schema}"'))
+            tables = await conn.execute(
+                text("SELECT tablename FROM pg_tables WHERE schemaname = :schema"),
+                {"schema": schema},
+            )
+            assert tables.all() == []
+
+        original_run_ensures = schema_registry.run_registered_pg_ensures
+
+        def count_ensures(connection):
+            nonlocal ensure_calls
+            ensure_calls += 1
+            original_run_ensures(connection)
+
+        monkeypatch.setattr(schema_registry, "run_registered_pg_ensures", count_ensures)
+        event.listen(Base.metadata, "before_create", pause_before_create)
+        metadata_listener_added = True
+
+        barrier_conn = await admin_engine.connect()
+        await barrier_conn.begin()
+        await barrier_conn.execute(
+            text("SELECT pg_advisory_xact_lock(:namespace, :key)"),
+            {"namespace": barrier_lock[0], "key": barrier_lock[1]},
+        )
+        tasks = [asyncio.create_task(init_pg(engine)) for engine in engines]
+
+        async def waiting_locks():
+            async with admin_engine.connect() as observer:
+                result = await observer.execute(
+                    text(
+                        "SELECT a.pid, a.application_name, l.classid::integer, l.objid::integer "
+                        "FROM pg_stat_activity AS a JOIN pg_locks AS l ON l.pid = a.pid "
+                        "WHERE a.application_name IN (:app_a, :app_b) "
+                        "AND l.locktype = 'advisory' AND l.objsubid = 2 AND NOT l.granted"
+                    ),
+                    {"app_a": app_names[0], "app_b": app_names[1]},
+                )
+                return [(row[0], row[1], row[2], row[3]) for row in result]
+
+        async def wait_for_two_lock_waiters():
+            deadline = asyncio.get_running_loop().time() + 15
+            while asyncio.get_running_loop().time() < deadline:
+                locks = await waiting_locks()
+                if len(locks) == 2:
+                    return locks
+                await asyncio.sleep(0.02)
+            raise AssertionError("两个初始化连接未同时进入 advisory-lock 等待")
+
+        try:
+            observed_locks = await wait_for_two_lock_waiters()
+            assert len(observed_locks) == 2
+            assert len({row[0] for row in observed_locks}) == 2
+            assert len({row[1] for row in observed_locks}) == 2
+            assert {(row[2], row[3]) for row in observed_locks} == {startup_lock, barrier_lock}
+            assert create_calls == 1
+        finally:
+            await barrier_conn.commit()
+
+        await asyncio.wait_for(asyncio.gather(*tasks), timeout=60)
+        assert create_calls == 2
+        assert ensure_calls == 2
+
+        async with engines[0].connect() as conn:
+            table_names = await conn.run_sync(lambda sync_conn: set(inspect(sync_conn).get_table_names()))
+        assert table_names == set(Base.metadata.tables)
+    finally:
+        if barrier_conn is not None:
+            if barrier_conn.in_transaction():
+                await barrier_conn.rollback()
+            await barrier_conn.close()
+        if tasks:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+        if metadata_listener_added:
+            event.remove(Base.metadata, "before_create", pause_before_create)
+        for engine in engines:
+            await engine.dispose()
+        async with admin_engine.begin() as conn:
+            await conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema}" CASCADE'))
+        await admin_engine.dispose()
 
 
 @pytest.mark.asyncio
