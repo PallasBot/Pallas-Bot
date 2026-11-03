@@ -9,7 +9,7 @@ from typing import Any, Protocol
 
 from sqlalchemy import delete, text
 
-from pallas.core.foundation.db.blob_store import delete_image_blob, iter_image_blob_files
+from pallas.core.foundation.db.blob_store import canonical_image_blob_hash, delete_image_blob, iter_image_blob_files
 
 from .lifecycle_models import LifecycleObjectStat, LifecyclePolicy
 from .lifecycle_registry import classify_object
@@ -159,9 +159,18 @@ class PostgresLifecycleAdapter:
     async def _image_cache_referenced_hashes(self) -> set[str]:
         async with self.session_factory(read_only=True) as session:
             result = await session.execute(
-                text("SELECT content_hash FROM image_cache WHERE blob_path IS NOT NULL AND content_hash IS NOT NULL")
+                text(
+                    "SELECT content_hash, blob_path FROM image_cache "
+                    "WHERE content_hash IS NOT NULL OR blob_path IS NOT NULL"
+                )
             )
-            return {str(row[0]) for row in result}
+            referenced = set()
+            for content_hash, blob_path in result:
+                if content_hash:
+                    referenced.add(str(content_hash))
+                if blob_path and (path_hash := canonical_image_blob_hash(str(blob_path))):
+                    referenced.add(path_hash)
+            return referenced
 
     async def preview_image_cache_files(self) -> tuple[int, int]:
         orphans = orphan_image_cache_files(await self._image_cache_referenced_hashes())
@@ -169,9 +178,14 @@ class PostgresLifecycleAdapter:
 
     async def prune_image_cache_files(self) -> tuple[int, int]:
         orphans = orphan_image_cache_files(await self._image_cache_referenced_hashes())
-        for content_hash, _size in orphans:
-            delete_image_blob(content_hash)
-        return len(orphans), sum(size for _, size in orphans)
+        if not orphans:
+            return 0, 0
+        from pallas.core.foundation.db.repository_pg.image_cache_repo import image_cache_cleanup_orphan_blobs
+
+        deleted = await image_cache_cleanup_orphan_blobs(
+            [content_hash for content_hash, _size in orphans], session_factory=self.session_factory
+        )
+        return len(deleted), sum(size for _, size in deleted)
 
     async def _sticker_label_orphan_hashes(self) -> list[str]:
         async with self.session_factory(read_only=True) as session:

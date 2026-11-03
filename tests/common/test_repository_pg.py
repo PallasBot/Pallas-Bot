@@ -1281,6 +1281,1126 @@ async def test_image_cache_prune_applies_retention_tiers_and_byte_limit(pg_engin
     assert await repo.find_by_cq_code("popular-newest") is not None
 
 
+def _observe_image_cache_race_sessions(
+    monkeypatch,
+    *,
+    candidate_locked=None,
+    resume_candidate=None,
+    touch_started=None,
+    touch_updated=None,
+    resume_touch=None,
+):
+    from contextlib import asynccontextmanager
+
+    from sqlalchemy import text
+
+    from pallas.core.foundation.db import repository_pg
+
+    original_get_session = repository_pg.get_session
+    observed = {"candidate_pids": [], "touch_pids": []}
+    candidate_pause_used = False
+
+    class SessionProbe:
+        def __init__(self, session):
+            self.session = session
+
+        def __getattr__(self, name):
+            return getattr(self.session, name)
+
+        async def execute(self, statement, *args, **kwargs):
+            nonlocal candidate_pause_used
+            if getattr(statement, "_for_update_arg", None) is not None:
+                pid = await self.session.scalar(text("SELECT pg_backend_pid()"))
+                observed["candidate_pids"].append(pid)
+                result = await self.session.execute(statement, *args, **kwargs)
+                if candidate_locked is not None and not candidate_pause_used:
+                    candidate_pause_used = True
+                    candidate_locked.set()
+                    await resume_candidate.wait()
+                return result
+            if type(statement).__name__ == "Update" and statement.table.name == "image_cache":
+                pid = await self.session.scalar(text("SELECT pg_backend_pid()"))
+                observed["touch_pids"].append(pid)
+                if touch_started is not None:
+                    touch_started.set()
+                result = await self.session.execute(statement, *args, **kwargs)
+                if touch_updated is not None:
+                    touch_updated.set()
+                    await resume_touch.wait()
+                return result
+            return await self.session.execute(statement, *args, **kwargs)
+
+    @asynccontextmanager
+    async def observed_get_session(*, read_only=False):
+        async with original_get_session(read_only=read_only) as session:
+            yield SessionProbe(session)
+
+    monkeypatch.setattr(repository_pg, "get_session", observed_get_session)
+    return observed
+
+
+@pytest.mark.asyncio
+async def test_image_cache_prune_skips_row_locked_by_touch_and_rechecks_after_commit(pg_engine, monkeypatch):
+    from pallas.core.foundation.db.modules import ImageCache
+    from pallas.core.foundation.db.repository import ImageCachePrunePolicy
+    from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
+
+    repo = PgImageCacheRepository()
+    await repo.insert(
+        ImageCache.model_construct(cq_code="touch-prune-order", blob_data=None, ref_times=1, date=20260101)
+    )
+    touch_updated = asyncio.Event()
+    resume_touch = asyncio.Event()
+    observed = _observe_image_cache_race_sessions(
+        monkeypatch,
+        touch_updated=touch_updated,
+        resume_touch=resume_touch,
+    )
+    policy = ImageCachePrunePolicy(
+        single_use_before=20260801,
+        absolute_before=20260801,
+        max_blob_bytes=1000,
+        batch_size=10,
+    )
+
+    touch_task = asyncio.create_task(repo.touch("touch-prune-order", date=20260810))
+    try:
+        await asyncio.wait_for(touch_updated.wait(), timeout=5)
+        while_touch_uncommitted = await asyncio.wait_for(repo.prune(policy), timeout=5)
+        assert while_touch_uncommitted.deleted_rows == 0
+        assert observed["candidate_pids"]
+        assert observed["candidate_pids"][0] != observed["touch_pids"][0]
+    finally:
+        resume_touch.set()
+        await asyncio.wait_for(asyncio.gather(touch_task, return_exceptions=True), timeout=5)
+
+    after_touch_commit = await asyncio.wait_for(repo.prune(policy), timeout=5)
+    found = await repo.find_by_cq_code("touch-prune-order")
+    touch_task.result()
+    assert after_touch_commit.deleted_rows == 0
+    assert found is not None
+    assert found.ref_times == 2
+    assert found.date == 20260810
+
+
+@pytest.mark.asyncio
+async def test_image_cache_prune_holds_row_lock_before_touch_without_deadlock(pg_engine, monkeypatch):
+    from sqlalchemy import text
+
+    from pallas.core.foundation.db.modules import ImageCache
+    from pallas.core.foundation.db.repository import ImageCachePrunePolicy
+    from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
+
+    repo = PgImageCacheRepository()
+    await repo.insert(
+        ImageCache.model_construct(cq_code="prune-touch-order", blob_data=None, ref_times=1, date=20260101)
+    )
+    candidate_locked = asyncio.Event()
+    resume_prune = asyncio.Event()
+    touch_started = asyncio.Event()
+    observed = _observe_image_cache_race_sessions(
+        monkeypatch,
+        candidate_locked=candidate_locked,
+        resume_candidate=resume_prune,
+        touch_started=touch_started,
+    )
+    policy = ImageCachePrunePolicy(
+        single_use_before=20260801,
+        absolute_before=20260801,
+        max_blob_bytes=1000,
+        batch_size=10,
+    )
+    prune_task = asyncio.create_task(repo.prune(policy))
+    touch_task = None
+    try:
+        await asyncio.wait_for(candidate_locked.wait(), timeout=5)
+        touch_task = asyncio.create_task(repo.touch("prune-touch-order", date=20260810))
+        await asyncio.wait_for(touch_started.wait(), timeout=5)
+        touch_pid = observed["touch_pids"][0]
+
+        async def wait_until_touch_is_blocked():
+            async with pg_engine.connect() as monitor:
+                while True:
+                    wait_type = await monitor.scalar(
+                        text("SELECT wait_event_type FROM pg_stat_activity WHERE pid = :pid"),
+                        {"pid": touch_pid},
+                    )
+                    if wait_type == "Lock":
+                        return
+                    await asyncio.sleep(0.01)
+
+        await asyncio.wait_for(wait_until_touch_is_blocked(), timeout=5)
+        assert observed["candidate_pids"]
+        assert observed["candidate_pids"][0] != touch_pid
+    finally:
+        resume_prune.set()
+        pending = [task for task in (prune_task, touch_task) if task is not None]
+        await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=5)
+
+    prune_result = prune_task.result()
+    assert touch_task is not None
+    touch_task.result()
+    assert prune_result.deleted_rows == 1
+    assert await repo.find_by_cq_code("prune-touch-order") is None
+
+
+@pytest.mark.asyncio
+async def test_image_cache_concurrent_prune_counts_delete_once(pg_engine, monkeypatch):
+    from sqlalchemy import update
+
+    from pallas.core.foundation.db import repository_pg as pg_mod
+    from pallas.core.foundation.db.modules import ImageCache
+    from pallas.core.foundation.db.repository import ImageCachePrunePolicy
+    from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
+    from pallas.core.foundation.db.repository_pg.schema import ImageCacheRow
+
+    repo = PgImageCacheRepository()
+    await repo.insert(ImageCache.model_construct(cq_code="double-prune", blob_data=None, ref_times=1, date=20260101))
+    async with pg_mod.get_session() as session:
+        await session.execute(update(ImageCacheRow).where(ImageCacheRow.cq_code == "double-prune").values(blob_size=13))
+        await session.commit()
+
+    candidate_locked = asyncio.Event()
+    resume_prune = asyncio.Event()
+    observed = _observe_image_cache_race_sessions(
+        monkeypatch,
+        candidate_locked=candidate_locked,
+        resume_candidate=resume_prune,
+    )
+    policy = ImageCachePrunePolicy(
+        single_use_before=20260801,
+        absolute_before=20260801,
+        max_blob_bytes=1000,
+        batch_size=10,
+    )
+    first_prune = asyncio.create_task(repo.prune(policy))
+    try:
+        await asyncio.wait_for(candidate_locked.wait(), timeout=5)
+        second_result = await asyncio.wait_for(repo.prune(policy), timeout=5)
+        assert second_result.deleted_rows == 0
+        assert second_result.deleted_blob_bytes == 0
+        assert len(observed["candidate_pids"]) == 2
+        assert observed["candidate_pids"][0] != observed["candidate_pids"][1]
+    finally:
+        resume_prune.set()
+        await asyncio.wait_for(asyncio.gather(first_prune, return_exceptions=True), timeout=5)
+
+    first_result = first_prune.result()
+    assert first_result.deleted_rows == 1
+    assert first_result.deleted_blob_bytes == 13
+    assert first_result.deleted_rows + second_result.deleted_rows == 1
+    assert first_result.deleted_blob_bytes + second_result.deleted_blob_bytes == 13
+
+
+def _image_blob_lock_key(content_hash: str) -> int:
+    import hashlib
+
+    return int.from_bytes(hashlib.sha256(content_hash.encode()).digest()[:4], "big", signed=True)
+
+
+async def _wait_for_image_blob_lock_waiters(engine, content_hash: str, count: int, *, tasks=()) -> set[int]:
+    from sqlalchemy import text
+
+    namespace = 0x50414C4C
+    lock_key = _image_blob_lock_key(content_hash) & 0xFFFFFFFF
+    async with engine.connect() as monitor:
+        for _ in range(250):
+            for task in tasks:
+                if task.done():
+                    task.result()
+                    raise AssertionError("image-cache operation completed before waiting for its blob lock")
+            await monitor.execute(text("SELECT pg_stat_clear_snapshot()"))
+            result = await monitor.execute(
+                text(
+                    "SELECT DISTINCT pid FROM pg_locks WHERE locktype = 'advisory' AND NOT granted "
+                    "AND database = (SELECT oid FROM pg_database WHERE datname = current_database()) "
+                    "AND classid = CAST(:namespace AS oid) AND objid = CAST(:key AS oid) "
+                    "AND objsubid = 2 AND pid <> pg_backend_pid()"
+                ),
+                {"namespace": namespace, "key": lock_key},
+            )
+            pids = set(result.scalars().all())
+            if len(pids) >= count:
+                return pids
+            await asyncio.sleep(0.02)
+    raise AssertionError(f"expected {count} PostgreSQL waiters for image blob lock [{content_hash}]")
+
+
+async def _wait_for_image_cache_row_lock_waiter(engine, *, tasks=()) -> None:
+    from sqlalchemy import text
+
+    async with engine.connect() as monitor:
+        for _ in range(250):
+            for task in tasks:
+                if task.done():
+                    task.result()
+                    raise AssertionError("image-cache operation completed before waiting for its row lock")
+            await monitor.execute(text("SELECT pg_stat_clear_snapshot()"))
+            result = await monitor.execute(
+                text(
+                    "SELECT pid FROM pg_stat_activity WHERE datname = current_database() "
+                    "AND pid <> pg_backend_pid() AND wait_event_type = 'Lock' "
+                    "AND query ILIKE '%FROM image_cache%' AND query ILIKE '%FOR UPDATE%'"
+                )
+            )
+            if result.first() is not None:
+                return
+            await asyncio.sleep(0.02)
+    raise AssertionError("expected a PostgreSQL image_cache row-lock waiter")
+
+
+def _isolate_image_blob_files(tmp_path, monkeypatch):
+    from pallas.core.foundation.db import blob_store
+
+    monkeypatch.setattr(blob_store, "DATA_ROOT", tmp_path)
+    monkeypatch.setattr(blob_store, "_BLOB_ROOT", tmp_path / blob_store.BLOB_ROOT_NAME)
+
+
+@pytest.mark.asyncio
+async def test_image_cache_save_and_independent_blob_gc_share_pg_hash_lock(pg_engine, tmp_path, monkeypatch):
+    import hashlib
+
+    from sqlalchemy import text
+
+    from pallas.core.foundation.db import blob_store, repository_pg
+    from pallas.core.foundation.db.lifecycle_adapters import PostgresLifecycleAdapter
+    from pallas.core.foundation.db.modules import ImageCache
+    from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
+
+    _isolate_image_blob_files(tmp_path, monkeypatch)
+    content = b"shared image blob"
+    content_hash = hashlib.sha256(content).hexdigest()
+    blob_store.write_image_blob(content_hash, content)
+    repo = PgImageCacheRepository()
+    adapter = PostgresLifecycleAdapter()
+    save_task = None
+    insert_task = None
+    hash_only_task = None
+    hash_only_insert_task = None
+    gc_task = None
+
+    async with repository_pg.get_session() as holder:
+        await holder.execute(
+            text("SELECT pg_advisory_xact_lock(:namespace, :key)"),
+            {"namespace": 0x50414C4C, "key": _image_blob_lock_key(content_hash)},
+        )
+        holder_pid = await holder.scalar(text("SELECT pg_backend_pid()"))
+        save_task = asyncio.create_task(
+            repo.save(
+                ImageCache.model_construct(
+                    cq_code="locked-save", content_hash=content_hash, blob_data=content, ref_times=1, date=20261103
+                )
+            )
+        )
+        insert_task = asyncio.create_task(
+            repo.insert(
+                ImageCache.model_construct(
+                    cq_code="locked-insert", content_hash=content_hash, blob_data=content, ref_times=1, date=20261103
+                )
+            )
+        )
+        hash_only_task = asyncio.create_task(
+            repo.save(
+                ImageCache.model_construct(
+                    cq_code="locked-hash-only",
+                    content_hash=f"{content_hash}\x00",
+                    blob_data=None,
+                    ref_times=1,
+                    date=20261103,
+                )
+            )
+        )
+        hash_only_insert_task = asyncio.create_task(
+            repo.insert(
+                ImageCache.model_construct(
+                    cq_code="locked-hash-only-insert",
+                    content_hash=content_hash,
+                    blob_data=None,
+                    ref_times=1,
+                    date=20261103,
+                )
+            )
+        )
+        gc_task = asyncio.create_task(adapter.prune_image_cache_files())
+        try:
+            waiter_pids = await _wait_for_image_blob_lock_waiters(
+                pg_engine,
+                content_hash,
+                5,
+                tasks=(save_task, insert_task, hash_only_task, hash_only_insert_task, gc_task),
+            )
+            assert holder_pid not in waiter_pids
+            assert not save_task.done()
+            assert not insert_task.done()
+            assert not hash_only_task.done()
+            assert not hash_only_insert_task.done()
+            assert not gc_task.done()
+            assert blob_store.read_image_blob(content_hash) == content
+        finally:
+            await holder.commit()
+            await asyncio.wait_for(
+                asyncio.gather(
+                    save_task, insert_task, hash_only_task, hash_only_insert_task, gc_task, return_exceptions=True
+                ),
+                timeout=5,
+            )
+
+    save_task.result()
+    insert_task.result()
+    hash_only_task.result()
+    hash_only_insert_task.result()
+    gc_task.result()
+    for cq_code in ("locked-save", "locked-insert"):
+        found = await repo.find_by_cq_code(cq_code)
+        assert found is not None
+        assert found.blob_data == content
+    hash_only = await repo.find_by_cq_code("locked-hash-only")
+    assert hash_only is not None
+    assert hash_only.content_hash == content_hash
+    assert hash_only.blob_path is None
+    assert hash_only.blob_data is None
+    hash_only_insert = await repo.find_by_cq_code("locked-hash-only-insert")
+    assert hash_only_insert is not None
+    assert hash_only_insert.content_hash == content_hash
+    assert hash_only_insert.blob_path is None
+    assert hash_only_insert.blob_data is None
+    assert blob_store.read_image_blob(content_hash) == content
+
+
+@pytest.mark.asyncio
+async def test_image_cache_prune_commits_row_delete_before_waiting_for_blob_lock(pg_engine, tmp_path, monkeypatch):
+    import hashlib
+
+    from sqlalchemy import text
+
+    from pallas.core.foundation.db import blob_store, repository_pg
+    from pallas.core.foundation.db.modules import ImageCache
+    from pallas.core.foundation.db.repository import ImageCachePrunePolicy
+    from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
+
+    _isolate_image_blob_files(tmp_path, monkeypatch)
+    content = b"pruned image blob"
+    content_hash = hashlib.sha256(content).hexdigest()
+    repo = PgImageCacheRepository()
+    await repo.save(
+        ImageCache.model_construct(
+            cq_code="locked-prune", content_hash=content_hash, blob_data=content, ref_times=1, date=20260101
+        )
+    )
+    prune_task = None
+
+    async with repository_pg.get_session() as holder:
+        await holder.execute(
+            text("SELECT pg_advisory_xact_lock(:namespace, :key)"),
+            {"namespace": 0x50414C4C, "key": _image_blob_lock_key(content_hash)},
+        )
+        prune_task = asyncio.create_task(
+            repo.prune(
+                ImageCachePrunePolicy(
+                    single_use_before=20260801,
+                    absolute_before=20260801,
+                    max_blob_bytes=1000,
+                    batch_size=10,
+                )
+            )
+        )
+        try:
+            await _wait_for_image_blob_lock_waiters(pg_engine, content_hash, 1, tasks=(prune_task,))
+            assert not prune_task.done()
+            assert await repo.find_by_cq_code("locked-prune") is None
+        finally:
+            await holder.commit()
+            await asyncio.wait_for(asyncio.gather(prune_task, return_exceptions=True), timeout=5)
+
+    assert prune_task.result().deleted_rows == 1
+    assert blob_store.read_image_blob(content_hash) is None
+
+
+@pytest.mark.asyncio
+async def test_image_cache_cleanup_and_gc_keep_canonical_path_with_mismatched_hash(pg_engine, tmp_path, monkeypatch):
+    import hashlib
+
+    from pallas.core.foundation.db import blob_store, repository_pg
+    from pallas.core.foundation.db.lifecycle_adapters import PostgresLifecycleAdapter
+    from pallas.core.foundation.db.repository_pg import image_cache_cleanup_blobs
+    from pallas.core.foundation.db.repository_pg.schema import ImageCacheRow
+
+    _isolate_image_blob_files(tmp_path, monkeypatch)
+    content = b"historically mismatched metadata"
+    content_hash = hashlib.sha256(content).hexdigest()
+    rel_path = str(blob_store.image_blob_rel_path(content_hash))
+    blob_store.write_image_blob(content_hash, content)
+    async with repository_pg.get_session() as session:
+        session.add(
+            ImageCacheRow(
+                cq_code="mismatched-path-reference",
+                content_hash="b" * 64,
+                blob_data=None,
+                blob_path=rel_path,
+                blob_size=len(content),
+                ref_times=1,
+                date=20261103,
+            )
+        )
+        await session.commit()
+
+    await image_cache_cleanup_blobs([content_hash])
+    assert blob_store.read_image_blob(content_hash) == content
+    assert await PostgresLifecycleAdapter().prune_image_cache_files() == (0, 0)
+    assert blob_store.read_image_blob(content_hash) == content
+
+
+@pytest.mark.asyncio
+async def test_image_cache_bytea_migration_uses_actual_hash_and_pg_hash_lock(pg_engine, tmp_path, monkeypatch):
+    import hashlib
+
+    from sqlalchemy import select, text
+
+    from pallas.core.foundation.db import blob_store, repository_pg
+    from pallas.core.foundation.db.blob_store import image_blob_abs_path, image_blob_rel_path
+    from pallas.core.foundation.db.image_cache_migration import migrate_image_cache_blobs
+    from pallas.core.foundation.db.repository_pg.schema import ImageCacheRow
+
+    _isolate_image_blob_files(tmp_path, monkeypatch)
+    content = b"legacy bytea image"
+    content_hash = hashlib.sha256(content).hexdigest()
+    legacy_hash = "c" * 64
+    existing_claimed_blob = b"preserve the file at the inconsistent hash"
+    blob_store.write_image_blob(legacy_hash, existing_claimed_blob)
+    async with repository_pg.get_session() as session:
+        session.add(
+            ImageCacheRow(
+                cq_code="legacy-bytea",
+                content_hash=legacy_hash,
+                blob_data=content,
+                blob_path=None,
+                blob_size=None,
+                ref_times=1,
+                date=20261103,
+            )
+        )
+        await session.commit()
+
+    migration_task = None
+    async with repository_pg.get_session() as holder:
+        await holder.execute(
+            text("SELECT pg_advisory_xact_lock(:namespace, :key)"),
+            {"namespace": 0x50414C4C, "key": _image_blob_lock_key(content_hash)},
+        )
+        migration_task = asyncio.create_task(migrate_image_cache_blobs())
+        try:
+            waiter_pids = await _wait_for_image_blob_lock_waiters(pg_engine, content_hash, 1, tasks=(migration_task,))
+            assert not migration_task.done()
+            assert image_blob_abs_path(content_hash).exists() is False
+            assert waiter_pids
+        finally:
+            await holder.commit()
+            await asyncio.wait_for(asyncio.gather(migration_task, return_exceptions=True), timeout=5)
+
+    assert migration_task.result() == 1
+    async with repository_pg.get_session(read_only=True) as session:
+        row = (await session.execute(select(ImageCacheRow).where(ImageCacheRow.cq_code == "legacy-bytea"))).scalar_one()
+    assert row.content_hash == legacy_hash
+    assert row.blob_path == str(image_blob_rel_path(content_hash))
+    assert image_blob_abs_path(content_hash).read_bytes() == content
+    assert image_blob_abs_path(legacy_hash).read_bytes() == existing_claimed_blob
+
+
+@pytest.mark.asyncio
+async def test_image_cache_migration_preserves_conflicting_actual_hash_blob(pg_engine, tmp_path, monkeypatch):
+    import hashlib
+
+    from sqlalchemy import select
+
+    from pallas.core.foundation.db import blob_store, repository_pg
+    from pallas.core.foundation.db.image_cache_migration import migrate_image_cache_blobs
+    from pallas.core.foundation.db.repository_pg.schema import ImageCacheRow
+
+    _isolate_image_blob_files(tmp_path, monkeypatch)
+    content = b"migration payload A"
+    content_hash = hashlib.sha256(content).hexdigest()
+    legacy_hash = "c" * 64
+    conflicting_blob = b"historical wrong-content file B"
+    blob_store.write_image_blob(content_hash, conflicting_blob)
+    async with repository_pg.get_session() as session:
+        session.add(
+            ImageCacheRow(
+                cq_code="migration-hash-conflict",
+                content_hash=legacy_hash,
+                blob_data=content,
+                blob_path=None,
+                blob_size=len(content),
+                ref_times=1,
+                date=20261103,
+            )
+        )
+        await session.commit()
+
+    with pytest.raises(ValueError, match="existing image blob content does not match"):
+        await migrate_image_cache_blobs()
+
+    assert blob_store.read_image_blob(content_hash) == conflicting_blob
+    async with repository_pg.get_session(read_only=True) as session:
+        row = (
+            await session.execute(select(ImageCacheRow).where(ImageCacheRow.cq_code == "migration-hash-conflict"))
+        ).scalar_one()
+    assert row.content_hash == legacy_hash
+    assert row.blob_data == content
+    assert row.blob_path is None
+
+
+@pytest.mark.asyncio
+async def test_image_cache_migration_releases_each_hash_lock_and_row_before_next(pg_engine, tmp_path, monkeypatch):
+    import hashlib
+
+    from sqlalchemy import text
+
+    from pallas.core.foundation.db import blob_store, repository_pg
+    from pallas.core.foundation.db.image_cache_migration import migrate_image_cache_blobs
+    from pallas.core.foundation.db.repository_pg.schema import ImageCacheRow
+
+    _isolate_image_blob_files(tmp_path, monkeypatch)
+    first_data = b"first legacy bytea"
+    second_data = b"second legacy bytea"
+    second_hash = hashlib.sha256(second_data).hexdigest()
+    async with repository_pg.get_session() as session:
+        first = ImageCacheRow(
+            cq_code="migration-first",
+            content_hash=None,
+            blob_data=first_data,
+            blob_path=None,
+            blob_size=None,
+            ref_times=1,
+            date=20261103,
+        )
+        session.add_all([
+            first,
+            ImageCacheRow(
+                cq_code="migration-second",
+                content_hash=None,
+                blob_data=second_data,
+                blob_path=None,
+                blob_size=None,
+                ref_times=1,
+                date=20261103,
+            ),
+        ])
+        await session.flush()
+        first_id = first.id
+        await session.commit()
+
+    migration_task = None
+    async with repository_pg.get_session() as holder:
+        await holder.execute(
+            text("SELECT pg_advisory_xact_lock(:namespace, :key)"),
+            {"namespace": 0x50414C4C, "key": _image_blob_lock_key(second_hash)},
+        )
+        migration_task = asyncio.create_task(migrate_image_cache_blobs())
+        try:
+            await _wait_for_image_blob_lock_waiters(pg_engine, second_hash, 1, tasks=(migration_task,))
+            assert not migration_task.done()
+            async with repository_pg.get_session() as row_probe:
+                await row_probe.execute(
+                    text("SELECT id FROM image_cache WHERE id = :id FOR UPDATE NOWAIT"), {"id": first_id}
+                )
+                await row_probe.commit()
+        finally:
+            await holder.commit()
+            await asyncio.wait_for(asyncio.gather(migration_task, return_exceptions=True), timeout=5)
+
+    assert migration_task.result() == 2
+    assert blob_store.read_image_blob(hashlib.sha256(first_data).hexdigest()) == first_data
+    assert blob_store.read_image_blob(second_hash) == second_data
+
+
+@pytest.mark.asyncio
+async def test_image_cache_bind_content_hash_locks_hash_before_row_and_validates_file(pg_engine, tmp_path, monkeypatch):
+    import hashlib
+
+    from sqlalchemy import select, text
+
+    from pallas.core.foundation.db import blob_store, repository_pg
+    from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
+    from pallas.core.foundation.db.repository_pg.schema import ImageCacheRow
+
+    _isolate_image_blob_files(tmp_path, monkeypatch)
+    content = b"bind file-backed image"
+    content_hash = hashlib.sha256(content).hexdigest()
+    old_hash = "d" * 64
+    blob_store.write_image_blob(content_hash, content)
+    async with repository_pg.get_session() as session:
+        row = ImageCacheRow(
+            cq_code="bind-file",
+            content_hash=old_hash,
+            blob_data=None,
+            blob_path=str(blob_store.image_blob_rel_path(content_hash)),
+            blob_size=len(content),
+            ref_times=1,
+            date=20261103,
+        )
+        session.add(row)
+        await session.flush()
+        row_id = row.id
+        await session.commit()
+
+    repo = PgImageCacheRepository()
+    bind_task = None
+    probe_task = None
+    async with repository_pg.get_session() as row_holder:
+        await row_holder.execute(select(ImageCacheRow.id).where(ImageCacheRow.id == row_id).with_for_update())
+        bind_task = asyncio.create_task(repo.bind_content_hash("bind-file", content_hash))
+        try:
+            await _wait_for_image_cache_row_lock_waiter(pg_engine, tasks=(bind_task,))
+
+            async def lock_probe():
+                async with repository_pg.get_session() as session:
+                    await session.connection(execution_options={"isolation_level": "READ COMMITTED"})
+                    await session.execute(
+                        text("SELECT pg_advisory_xact_lock(:namespace, :key)"),
+                        {"namespace": 0x50414C4C, "key": _image_blob_lock_key(content_hash)},
+                    )
+                    await session.commit()
+
+            probe_task = asyncio.create_task(lock_probe())
+            await _wait_for_image_blob_lock_waiters(pg_engine, content_hash, 1, tasks=(bind_task, probe_task))
+            assert not bind_task.done()
+            assert not probe_task.done()
+        finally:
+            await row_holder.commit()
+            await asyncio.wait_for(asyncio.gather(bind_task, probe_task, return_exceptions=True), timeout=5)
+
+    bind_task.result()
+    probe_task.result()
+    with pytest.raises(ValueError, match="content_hash"):
+        await repo.bind_content_hash("bind-file", "e" * 64)
+    await repo.bind_content_hash("missing-bind-row", content_hash)
+    bound = await repo.find_by_cq_code("bind-file")
+    assert bound is not None
+    assert bound.content_hash == content_hash
+    assert bound.blob_data == content
+
+
+@pytest.mark.asyncio
+async def test_image_cache_bind_content_hash_validates_bytea_before_update(pg_engine):
+    import hashlib
+
+    from pallas.core.foundation.db import repository_pg
+    from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
+    from pallas.core.foundation.db.repository_pg.schema import ImageCacheRow
+
+    content = b"bind bytea image"
+    content_hash = hashlib.sha256(content).hexdigest()
+    async with repository_pg.get_session() as session:
+        session.add(
+            ImageCacheRow(
+                cq_code="bind-bytea",
+                content_hash="a" * 64,
+                blob_data=content,
+                blob_path=None,
+                blob_size=len(content),
+                ref_times=1,
+                date=20261103,
+            )
+        )
+        await session.commit()
+
+    repo = PgImageCacheRepository()
+    await repo.bind_content_hash("bind-bytea", content_hash)
+    with pytest.raises(ValueError, match="content_hash"):
+        await repo.bind_content_hash("bind-bytea", "b" * 64)
+    bound = await repo.find_by_cq_code("bind-bytea")
+    assert bound is not None
+    assert bound.content_hash == content_hash
+    assert bound.blob_data == content
+
+
+@pytest.mark.asyncio
+async def test_image_cache_save_rejects_blob_hash_mismatch_without_overwrite(pg_engine, tmp_path, monkeypatch):
+    from pallas.core.foundation.db import blob_store
+    from pallas.core.foundation.db.modules import ImageCache
+    from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
+
+    _isolate_image_blob_files(tmp_path, monkeypatch)
+    wrong_hash = "f" * 64
+    original = b"existing blob at a mislabelled key"
+    blob_store.write_image_blob(wrong_hash, original)
+    repo = PgImageCacheRepository()
+    cache = ImageCache.model_construct(
+        cq_code="hash-mismatch",
+        content_hash=wrong_hash,
+        blob_data=b"different payload",
+        ref_times=1,
+        date=20261103,
+    )
+
+    with pytest.raises(ValueError, match="content_hash"):
+        await repo.save(cache)
+
+    assert blob_store.read_image_blob(wrong_hash) == original
+    assert await repo.find_by_cq_code("hash-mismatch") is None
+
+
+@pytest.mark.asyncio
+async def test_image_cache_save_replaces_legacy_bytea_with_new_file_blob(pg_engine, tmp_path, monkeypatch):
+    import hashlib
+
+    from sqlalchemy import select
+
+    from pallas.core.foundation.db import blob_store, repository_pg
+    from pallas.core.foundation.db.modules import ImageCache
+    from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
+    from pallas.core.foundation.db.repository_pg.schema import ImageCacheRow
+
+    _isolate_image_blob_files(tmp_path, monkeypatch)
+    old_data = b"legacy bytea A"
+    new_data = b"replacement blob B"
+    new_hash = hashlib.sha256(new_data).hexdigest()
+    async with repository_pg.get_session() as session:
+        session.add(
+            ImageCacheRow(
+                cq_code="replace-legacy-bytea",
+                content_hash=hashlib.sha256(old_data).hexdigest(),
+                blob_data=old_data,
+                blob_path=None,
+                blob_size=len(old_data),
+                ref_times=1,
+                date=20261103,
+            )
+        )
+        await session.commit()
+
+    repo = PgImageCacheRepository()
+    await repo.save(
+        ImageCache.model_construct(
+            cq_code="replace-legacy-bytea",
+            content_hash=new_hash,
+            blob_data=new_data,
+            ref_times=2,
+            date=20261104,
+        )
+    )
+    found = await repo.find_by_cq_code("replace-legacy-bytea")
+    assert found is not None
+    assert found.blob_data == new_data
+    assert found.content_hash == new_hash
+    assert blob_store.read_image_blob(new_hash) == new_data
+
+    await repo.save(found)
+    async with repository_pg.get_session(read_only=True) as session:
+        row = (
+            await session.execute(select(ImageCacheRow).where(ImageCacheRow.cq_code == "replace-legacy-bytea"))
+        ).scalar_one()
+    assert row.blob_data is None
+    assert row.content_hash == new_hash
+    assert row.blob_path == str(blob_store.image_blob_rel_path(new_hash))
+    assert blob_store.read_image_blob(new_hash) == new_data
+
+
+@pytest.mark.asyncio
+async def test_image_cache_save_preserves_verified_migration_alias_without_overwriting_alias_file(
+    pg_engine, tmp_path, monkeypatch
+):
+    import hashlib
+
+    from sqlalchemy import select
+
+    from pallas.core.foundation.db import blob_store, repository_pg
+    from pallas.core.foundation.db.image_cache_migration import migrate_image_cache_blobs
+    from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
+    from pallas.core.foundation.db.repository_pg.schema import ImageCacheRow
+
+    _isolate_image_blob_files(tmp_path, monkeypatch)
+    data = b"content behind a historical alias"
+    actual_hash = hashlib.sha256(data).hexdigest()
+    alias = "f" * 64
+    assert alias != actual_hash
+    alias_file = b"another row's shared file at the alias path"
+    blob_store.write_image_blob(alias, alias_file)
+    async with repository_pg.get_session() as session:
+        session.add_all([
+            ImageCacheRow(
+                cq_code="legacy-alias",
+                content_hash=alias,
+                blob_data=data,
+                blob_path=None,
+                blob_size=len(data),
+                ref_times=1,
+                date=20261103,
+            ),
+            ImageCacheRow(
+                cq_code="other-alias-path-reference",
+                content_hash="e" * 64,
+                blob_data=None,
+                blob_path=str(blob_store.image_blob_rel_path(alias)),
+                blob_size=len(alias_file),
+                ref_times=1,
+                date=20261103,
+            ),
+        ])
+        await session.commit()
+
+    assert await migrate_image_cache_blobs() == 1
+    repo = PgImageCacheRepository()
+    found = await repo.find_by_cq_code("legacy-alias")
+    assert found is not None
+    assert found.content_hash == alias
+    assert found.blob_data == data
+    await repo.save(found)
+
+    found_again = await repo.find_by_cq_code("legacy-alias")
+    assert found_again is not None
+    assert found_again.content_hash == alias
+    assert found_again.blob_data == data
+    await repo.save(found_again)
+
+    async with repository_pg.get_session(read_only=True) as session:
+        row = (await session.execute(select(ImageCacheRow).where(ImageCacheRow.cq_code == "legacy-alias"))).scalar_one()
+    assert row.content_hash == alias
+    assert row.blob_path == str(blob_store.image_blob_rel_path(actual_hash))
+    assert row.blob_data is None
+    assert blob_store.read_image_blob(actual_hash) == data
+    assert blob_store.read_image_blob(alias) == alias_file
+
+
+@pytest.mark.parametrize("trusted_alias", [False, True], ids=["canonical-hash", "legacy-alias"])
+@pytest.mark.asyncio
+async def test_image_cache_save_preserves_conflicting_actual_hash_blob(pg_engine, tmp_path, monkeypatch, trusted_alias):
+    import hashlib
+
+    from sqlalchemy import select
+
+    from pallas.core.foundation.db import blob_store, repository_pg
+    from pallas.core.foundation.db.modules import ImageCache
+    from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
+    from pallas.core.foundation.db.repository_pg.schema import ImageCacheRow
+
+    _isolate_image_blob_files(tmp_path, monkeypatch)
+    content = b"save payload A"
+    actual_hash = hashlib.sha256(content).hexdigest()
+    stored_hash = "d" * 64 if trusted_alias else actual_hash
+    if trusted_alias:
+        assert stored_hash != actual_hash
+    else:
+        assert stored_hash == actual_hash
+    conflicting_blob = b"historical wrong-content file B"
+    blob_store.write_image_blob(actual_hash, conflicting_blob)
+    if trusted_alias:
+        async with repository_pg.get_session() as session:
+            session.add(
+                ImageCacheRow(
+                    cq_code="save-hash-conflict",
+                    content_hash=stored_hash,
+                    blob_data=content,
+                    blob_path=None,
+                    blob_size=len(content),
+                    ref_times=1,
+                    date=20261103,
+                )
+            )
+            await session.commit()
+
+    repo = PgImageCacheRepository()
+    with pytest.raises(ValueError, match="existing image blob content does not match"):
+        await repo.save(
+            ImageCache.model_construct(
+                cq_code="save-hash-conflict",
+                content_hash=stored_hash,
+                blob_data=content,
+                ref_times=2,
+                date=20261104,
+            )
+        )
+
+    assert blob_store.read_image_blob(actual_hash) == conflicting_blob
+    async with repository_pg.get_session(read_only=True) as session:
+        result = await session.execute(select(ImageCacheRow).where(ImageCacheRow.cq_code == "save-hash-conflict"))
+        row = result.scalar_one_or_none()
+    if trusted_alias:
+        assert row is not None
+        assert row.content_hash == stored_hash
+        assert row.blob_data == content
+        assert row.blob_path is None
+    else:
+        assert row is None
+
+
+@pytest.mark.asyncio
+async def test_image_cache_save_rejects_forged_historical_alias_payload(pg_engine, tmp_path, monkeypatch):
+    import hashlib
+
+    from sqlalchemy import select
+
+    from pallas.core.foundation.db import blob_store, repository_pg
+    from pallas.core.foundation.db.modules import ImageCache
+    from pallas.core.foundation.db.repository_pg import PgImageCacheRepository
+    from pallas.core.foundation.db.repository_pg.schema import ImageCacheRow
+
+    _isolate_image_blob_files(tmp_path, monkeypatch)
+    alias = "f" * 64
+    original = b"row's original payload"
+    forged = b"different caller-supplied payload"
+    alias_file = b"shared file not to overwrite"
+    blob_store.write_image_blob(alias, alias_file)
+    async with repository_pg.get_session() as session:
+        session.add(
+            ImageCacheRow(
+                cq_code="forged-alias",
+                content_hash=alias,
+                blob_data=original,
+                blob_path=None,
+                blob_size=len(original),
+                ref_times=1,
+                date=20261103,
+            )
+        )
+        await session.commit()
+
+    repo = PgImageCacheRepository()
+    with pytest.raises(ValueError, match="content_hash"):
+        await repo.save(
+            ImageCache.model_construct(
+                cq_code="forged-alias",
+                content_hash=alias,
+                blob_data=forged,
+                ref_times=1,
+                date=20261104,
+            )
+        )
+
+    async with repository_pg.get_session(read_only=True) as session:
+        row = (await session.execute(select(ImageCacheRow).where(ImageCacheRow.cq_code == "forged-alias"))).scalar_one()
+    assert row.blob_data == original
+    assert row.content_hash == alias
+    assert blob_store.read_image_blob(alias) == alias_file
+    assert blob_store.read_image_blob(hashlib.sha256(forged).hexdigest()) is None
+
+
+@pytest.mark.asyncio
+async def test_image_cache_clear_blob_verifies_file_under_hash_then_row_lock(pg_engine, tmp_path, monkeypatch):
+    import hashlib
+
+    from sqlalchemy import select, text
+
+    from pallas.core.foundation.db import blob_store, repository_pg
+    from pallas.core.foundation.db.image_cache_migration import migrate_image_cache_blobs
+    from pallas.core.foundation.db.repository_pg.schema import ImageCacheRow
+
+    _isolate_image_blob_files(tmp_path, monkeypatch)
+    good_data = b"bytea with matching file"
+    bad_data = b"bytea whose file disagrees"
+    missing_data = b"bytea whose file is missing"
+    good_hash = hashlib.sha256(good_data).hexdigest()
+    bad_hash = hashlib.sha256(bad_data).hexdigest()
+    missing_hash = hashlib.sha256(missing_data).hexdigest()
+    symlink_data = b"bytea whose verified copy is a symlink"
+    symlink_hash = hashlib.sha256(symlink_data).hexdigest()
+    symlink_target_hash = "e" * 64
+    assert symlink_hash != symlink_target_hash
+    blob_store.write_image_blob(good_hash, good_data)
+    blob_store.write_image_blob(bad_hash, b"different bytes")
+    blob_store.write_image_blob(symlink_target_hash, symlink_data)
+    symlink_path = blob_store.image_blob_abs_path(symlink_hash)
+    symlink_path.parent.mkdir(parents=True)
+    symlink_path.symlink_to(blob_store.image_blob_abs_path(symlink_target_hash))
+    assert blob_store.read_image_blob_at(str(blob_store.image_blob_rel_path(symlink_hash))) == symlink_data
+    async with repository_pg.get_session() as session:
+        rows = [
+            ImageCacheRow(
+                cq_code="clear-good",
+                content_hash="a" * 64,
+                blob_data=good_data,
+                blob_path=str(blob_store.image_blob_rel_path(good_hash)),
+                blob_size=len(good_data),
+                ref_times=1,
+                date=20261103,
+            ),
+            ImageCacheRow(
+                cq_code="clear-mismatch",
+                content_hash="b" * 64,
+                blob_data=bad_data,
+                blob_path=str(blob_store.image_blob_rel_path(bad_hash)),
+                blob_size=len(bad_data),
+                ref_times=1,
+                date=20261103,
+            ),
+            ImageCacheRow(
+                cq_code="clear-missing",
+                content_hash="c" * 64,
+                blob_data=missing_data,
+                blob_path=str(blob_store.image_blob_rel_path(missing_hash)),
+                blob_size=len(missing_data),
+                ref_times=1,
+                date=20261103,
+            ),
+            ImageCacheRow(
+                cq_code="clear-symlink",
+                content_hash="d" * 64,
+                blob_data=symlink_data,
+                blob_path=str(blob_store.image_blob_rel_path(symlink_hash)),
+                blob_size=len(symlink_data),
+                ref_times=1,
+                date=20261103,
+            ),
+        ]
+        session.add_all(rows)
+        await session.flush()
+        good_id = rows[0].id
+        await session.commit()
+
+    async with repository_pg.get_session(read_only=True) as session:
+        symlink_row = (
+            await session.execute(select(ImageCacheRow).where(ImageCacheRow.cq_code == "clear-symlink"))
+        ).scalar_one()
+    assert symlink_row.blob_data == symlink_data
+
+    clear_task = None
+    lock_probe = None
+    async with repository_pg.get_session() as row_holder:
+        await row_holder.execute(select(ImageCacheRow.id).where(ImageCacheRow.id == good_id).with_for_update())
+        clear_task = asyncio.create_task(migrate_image_cache_blobs(clear_blob=True))
+        try:
+            await _wait_for_image_cache_row_lock_waiter(pg_engine, tasks=(clear_task,))
+
+            async def acquire_good_hash_lock():
+                async with repository_pg.get_session() as session:
+                    await session.connection(execution_options={"isolation_level": "READ COMMITTED"})
+                    await session.execute(
+                        text("SELECT pg_advisory_xact_lock(:namespace, :key)"),
+                        {"namespace": 0x50414C4C, "key": _image_blob_lock_key(good_hash)},
+                    )
+                    await session.commit()
+
+            lock_probe = asyncio.create_task(acquire_good_hash_lock())
+            await _wait_for_image_blob_lock_waiters(pg_engine, good_hash, 1, tasks=(lock_probe,))
+            assert not clear_task.done()
+            assert not lock_probe.done()
+        finally:
+            await row_holder.commit()
+            await asyncio.wait_for(asyncio.gather(clear_task, lock_probe, return_exceptions=True), timeout=5)
+
+    clear_task.result()
+    lock_probe.result()
+    async with repository_pg.get_session(read_only=True) as session:
+        rows = (
+            (
+                await session.execute(
+                    select(ImageCacheRow).where(
+                        ImageCacheRow.cq_code.in_(["clear-good", "clear-mismatch", "clear-missing", "clear-symlink"])
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+    found = {row.cq_code: row for row in rows}
+    assert found["clear-good"].blob_data is None
+    assert found["clear-mismatch"].blob_data == bad_data
+    assert found["clear-missing"].blob_data == missing_data
+    assert found["clear-symlink"].blob_data == symlink_data
+    assert symlink_path.is_symlink()
+    assert blob_store.read_image_blob(symlink_target_hash) == symlink_data
+
+
 @pytest.mark.asyncio
 async def test_config_cache_hit_and_invalidate_on_write(pg_engine):
     """读后走 TTL 缓存；一旦 upsert_field 写入必须让缓存失效，下次读能拿到新值。"""

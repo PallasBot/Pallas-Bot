@@ -3,7 +3,7 @@
 
 用法：
   uv run python tools/migrate_image_cache_to_file.py             # 迁移存量（断点续传）
-  uv run python tools/migrate_image_cache_to_file.py --clear-blob  # 迁移完成后清空 blob_data 列
+  uv run python tools/migrate_image_cache_to_file.py --clear-blob  # 仅清理文件校验通过的 blob_data
 """
 
 from __future__ import annotations
@@ -55,9 +55,9 @@ async def run() -> int:
             print(f"待迁移 {pending} 行")
         migrated = await migrate_image_cache_blobs(clear_blob=clear_blob)
         if clear_blob:
-            print(f"迁移完成：文件化 {migrated} 行，已清空 blob_data 列")
+            print(f"迁移完成：文件化 {migrated} 行，已清理文件校验通过的 blob_data；无法验证的内容已保留")
         else:
-            print(f"迁移完成：文件化 {migrated} 行，可加 --clear-blob 清空 DB 大字段")
+            print(f"迁移完成：文件化 {migrated} 行，可加 --clear-blob 清理文件校验通过的 DB 大字段")
         return migrated
     finally:
         await dispose_pg()
