@@ -383,17 +383,23 @@ def infer_behavior_feedback(
 ) -> tuple[BehaviorOutcome | None, dict[str, Any]]:
     if run.final_outcome is not None or int(run.created_at) <= 0:
         return None, {}
+
+    session_user_turns = [item for item in turns if str(getattr(item, "role", "")).strip() == "user"]
+    ambient_user_turns = [
+        item for item in list(ambient_turns or []) if str(getattr(item, "role", "")).strip() == "user"
+    ]
+    # Integer-second timestamps cannot establish whether an equal-time turn came before or after the run.
+    same_second_user_turn = any(
+        int(getattr(item, "created_at", 0) or 0) == int(run.created_at)
+        for item in session_user_turns + ambient_user_turns
+    )
+    if same_second_user_turn:
+        return None, {}
     later_user_turns = [
-        item
-        for item in turns
-        if str(getattr(item, "role", "")).strip() == "user"
-        and int(getattr(item, "created_at", 0) or 0) > int(run.created_at)
+        item for item in session_user_turns if int(getattr(item, "created_at", 0) or 0) > int(run.created_at)
     ]
     ambient_later_turns = [
-        item
-        for item in list(ambient_turns or [])
-        if str(getattr(item, "role", "")).strip() == "user"
-        and int(getattr(item, "created_at", 0) or 0) > int(run.created_at)
+        item for item in ambient_user_turns if int(getattr(item, "created_at", 0) or 0) > int(run.created_at)
     ]
     if not later_user_turns and not ambient_later_turns:
         if int(now) - int(run.created_at) >= max(20, int(window_sec)):

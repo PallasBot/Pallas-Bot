@@ -8,7 +8,12 @@ import pytest
 
 from pallas.core.foundation.db.repository_pg import LlmChatMessageRow, get_session
 from pallas.product.llm.behavior import BehaviorAction, BehaviorOutcome, BehaviorPattern, BehaviorRun, BehaviorScene
-from pallas.product.llm.behavior_store import append_behavior_run, list_behavior_patterns, save_behavior_patterns
+from pallas.product.llm.behavior_store import (
+    append_behavior_run,
+    list_behavior_patterns,
+    list_behavior_runs,
+    save_behavior_patterns,
+)
 from pallas.product.llm.config import LlmConfig, clear_llm_config_cache
 from pallas.product.llm.injection_feedback import apply_negative_outcome
 from pallas.product.llm.session_models import LlmChatTurn
@@ -572,11 +577,22 @@ async def test_llm_history_detail_auto_settles_behavior_outcome(pg_engine, monke
     monkeypatch.setattr("pallas.product.llm.session_store.get_llm_config", lambda: cfg)
     monkeypatch.setattr("pallas.core.foundation.db.runtime.get_db_backend", lambda: "postgresql")
 
+    run_created_at = 1_700_000_000
+    monkeypatch.setattr(
+        "pallas.product.llm.session_store_pg.time",
+        SimpleNamespace(time=lambda: run_created_at - 1),
+    )
     await append_llm_message(10, 100, 200, "user", "你又来这套")
+    monkeypatch.setattr(
+        "pallas.product.llm.session_store_pg.time",
+        SimpleNamespace(time=lambda: run_created_at),
+    )
     await append_llm_message(10, 100, 200, "assistant", "少来。")
     turns = await list_user_llm_messages(10, 100, 200, limit=10)
+    user_turn = next(item for item in turns if item.role == "user")
     assistant_turn = next(item for item in turns if item.role == "assistant")
-    run_created_at = assistant_turn.created_at
+    assert user_turn.created_at == run_created_at - 1
+    assert assistant_turn.created_at == run_created_at
     save_behavior_patterns([
         BehaviorPattern(
             pattern_id="p1",
@@ -613,7 +629,103 @@ async def test_llm_history_detail_auto_settles_behavior_outcome(pg_engine, monke
     assert detail.behavior_runs[-1]["request_id"] == "req-2"
     assert detail.behavior_runs[-1]["final_outcome"] == BehaviorOutcome.ENGAGED
     assert detail.behavior_runs[-1]["score_delta"] == 2
-    assert list_behavior_patterns()[0].success_score == 2
+
+    repeated_detail = await get_llm_history_session_detail(bot_id=10, group_id=100, user_id=200, limit=10)
+    assert repeated_detail is not None
+    assert repeated_detail.behavior_runs[-1]["final_outcome"] == BehaviorOutcome.ENGAGED
+    patterns = list_behavior_patterns()
+    assert patterns[0].success_score == 2
+    assert patterns[0].applied_outcome_ids == ["req-2"]
+    stored_run = next(item for item in list_behavior_runs() if item.request_id == "req-2")
+    assert stored_run.final_outcome == BehaviorOutcome.ENGAGED
+    assert stored_run.score_delta == 2
+    assert stored_run.effects_applied is True
+
+
+@pytest.mark.parametrize(
+    ("followup_scope", "followup_user_id"),
+    [("session", 200), ("ambient", 300)],
+)
+@pytest.mark.asyncio
+async def test_llm_history_detail_does_not_settle_same_second_feedback(
+    pg_engine, monkeypatch, tmp_path, followup_scope: str, followup_user_id: int
+) -> None:
+    clear_llm_config_cache()
+    monkeypatch.setenv("PALLAS_DATA_DIR", str(tmp_path))
+    cfg = LlmConfig(
+        llm_session_enabled=True,
+        llm_session_user_window=20,
+        llm_session_group_window=20,
+        llm_session_group_ambient_enabled=True,
+        llm_session_user_ttl_sec=0,
+    )
+    monkeypatch.setattr("pallas.product.llm.session_store.get_llm_config", lambda: cfg)
+    monkeypatch.setattr("pallas.core.foundation.db.runtime.get_db_backend", lambda: "postgresql")
+    fixed_created_at = 1_700_000_000
+    fixed_clock = SimpleNamespace(time=lambda: fixed_created_at)
+    monkeypatch.setattr("pallas.product.llm.session_store_pg.time", fixed_clock)
+    monkeypatch.setattr("pallas.product.llm.session_store.time", SimpleNamespace(time=lambda: fixed_created_at + 300))
+
+    save_behavior_patterns([
+        BehaviorPattern(
+            pattern_id="p1",
+            scene=BehaviorScene.PROVOCATION,
+            action=BehaviorAction.LIGHT_TEASE_AND_CLOSE,
+            success_score=7,
+            applied_outcome_ids=["prior-request"],
+        )
+    ])
+    await append_llm_message(10, 100, 200, "user", "跑题")
+    await append_llm_message(10, 100, 200, "assistant", "少来。")
+    append_behavior_run(
+        BehaviorRun(
+            request_id=f"req-same-second-{followup_scope}",
+            bot_id=10,
+            group_id=100,
+            user_id=200,
+            created_at=fixed_created_at,
+            scene=BehaviorScene.PROVOCATION,
+            user_text="跑题",
+            reply_text="少来。",
+            selected_pattern_ids=["p1"],
+            selected_actions=[BehaviorAction.LIGHT_TEASE_AND_CLOSE],
+        )
+    )
+    await append_llm_message(10, 100, followup_user_id, "user", "哈哈")
+
+    group_turns = await list_group_ambient_messages(10, 100, limit=10)
+    assert [(turn.user_id, turn.role, turn.content, turn.created_at) for turn in group_turns] == [
+        (200, "user", "跑题", fixed_created_at),
+        (200, "assistant", "少来。", fixed_created_at),
+        (followup_user_id, "user", "哈哈", fixed_created_at),
+    ]
+    session_turns = await list_user_llm_messages(10, 100, 200, limit=10)
+    if followup_scope == "session":
+        assert [turn.content for turn in session_turns] == ["跑题", "少来。", "哈哈"]
+    else:
+        assert [turn.content for turn in session_turns] == ["跑题", "少来。"]
+    assert all(turn.created_at == fixed_created_at for turn in session_turns)
+
+    details = [await get_llm_history_session_detail(bot_id=10, group_id=100, user_id=200, limit=10) for _ in range(2)]
+    assert all(detail is not None for detail in details)
+    assert all(detail.behavior_runs[-1]["request_id"] == f"req-same-second-{followup_scope}" for detail in details)
+    assert all(detail.behavior_runs[-1]["final_outcome"] is None for detail in details)
+    assert all(detail.behavior_runs[-1]["score_delta"] == 0 for detail in details)
+
+    stored_run = next(item for item in list_behavior_runs() if item.request_id == f"req-same-second-{followup_scope}")
+    assert stored_run.final_outcome is None
+    assert stored_run.score_delta == 0
+    assert stored_run.effects_applied is False
+    patterns = list_behavior_patterns()
+    assert patterns == [
+        BehaviorPattern(
+            pattern_id="p1",
+            scene=BehaviorScene.PROVOCATION,
+            action=BehaviorAction.LIGHT_TEASE_AND_CLOSE,
+            success_score=7,
+            applied_outcome_ids=["prior-request"],
+        )
+    ]
 
 
 @pytest.mark.asyncio
@@ -631,11 +743,22 @@ async def test_llm_history_detail_auto_settles_behavior_outcome_from_group_ambie
     monkeypatch.setattr("pallas.product.llm.session_store.get_llm_config", lambda: cfg)
     monkeypatch.setattr("pallas.core.foundation.db.runtime.get_db_backend", lambda: "postgresql")
 
+    run_created_at = 1_700_000_000
+    monkeypatch.setattr(
+        "pallas.product.llm.session_store_pg.time",
+        SimpleNamespace(time=lambda: run_created_at - 1),
+    )
     await append_llm_message(10, 100, 200, "user", "你又来这套")
+    monkeypatch.setattr(
+        "pallas.product.llm.session_store_pg.time",
+        SimpleNamespace(time=lambda: run_created_at),
+    )
     await append_llm_message(10, 100, 200, "assistant", "少来。")
     turns = await list_user_llm_messages(10, 100, 200, limit=10)
+    user_turn = next(item for item in turns if item.role == "user")
     assistant_turn = next(item for item in turns if item.role == "assistant")
-    run_created_at = assistant_turn.created_at
+    assert user_turn.created_at == run_created_at - 1
+    assert assistant_turn.created_at == run_created_at
     save_behavior_patterns([
         BehaviorPattern(
             pattern_id="p1",
@@ -690,11 +813,22 @@ async def test_llm_history_detail_auto_settles_behavior_outcome_from_group_ambie
     monkeypatch.setattr("pallas.product.llm.session_store.get_llm_config", lambda: cfg)
     monkeypatch.setattr("pallas.core.foundation.db.runtime.get_db_backend", lambda: "postgresql")
 
+    run_created_at = 1_700_000_000
+    monkeypatch.setattr(
+        "pallas.product.llm.session_store_pg.time",
+        SimpleNamespace(time=lambda: run_created_at - 1),
+    )
     await append_llm_message(10, 100, 200, "user", "在聊抽卡")
+    monkeypatch.setattr(
+        "pallas.product.llm.session_store_pg.time",
+        SimpleNamespace(time=lambda: run_created_at),
+    )
     await append_llm_message(10, 100, 200, "assistant", "突然去聊庆典。")
     turns = await list_user_llm_messages(10, 100, 200, limit=10)
+    user_turn = next(item for item in turns if item.role == "user")
     assistant_turn = next(item for item in turns if item.role == "assistant")
-    run_created_at = assistant_turn.created_at
+    assert user_turn.created_at == run_created_at - 1
+    assert assistant_turn.created_at == run_created_at
     save_behavior_patterns([
         BehaviorPattern(
             pattern_id="p2",
