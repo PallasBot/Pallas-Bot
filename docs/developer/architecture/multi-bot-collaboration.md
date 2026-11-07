@@ -79,7 +79,7 @@ worker 的 WS 连接状态：
 
 `claim_federate_group_message_ingress` 独立于 multi_bot claim：用 `cross_bot_message_signature` 签名，先查进程内 winner 缓存（TTL 30s、上限 20000）+ inflight future 共享结果，再 Redis `SET NX`（`{fed_prefix}:ingress:{plugin}:{group}:{claim_key}`，TTL 86400）。有 candidate 机制（最小候选号赢，TTL 2s）。`try_claim_cross_federate_message`（`federate/dedup.py`）用于需要彻底无竞争的（复读 fanout 等）。无 peer 对端时直接放行，避免协调 Redis 丢单条。审计 `federate_ingress_audit_summary_sync` 记 `{capability}:{outcome}`（TTL 300s）。
 
-Redis claim 超时默认 0.3s（`PALLAS_FEDERATE_REDIS_CLAIM_TIMEOUT_SEC`），超时默认放行（`PALLAS_FEDERATE_CLAIM_FAIL_OPEN=0` 恢复 fail-closed）：同进程 inflight 跟随本条、不一起放行，避免一次协调端抖动变成本地双处理。门控里的同步 Redis 判定一律经 `fast_path.run_gate_blocking`（专用 4 线程池），既保证不在事件循环上执行，也不与 DB / 文件的同步调用抢默认 executor。
+Redis claim 超时默认 0.3s（`PALLAS_FEDERATE_REDIS_CLAIM_TIMEOUT_SEC`）：**命令默认 fail-closed、闲聊默认 fail-open**，`PALLAS_FEDERATE_CLAIM_FAIL_OPEN` 显式设置时统一覆盖；协调端直接报错与超时同策略。超时/报错结论按消息签名缓存一个 TTL，同签名的重复消息跟随该结论、不再各自重试；同进程 inflight 跟随本条、不一起放行。门控里的同步 Redis 判定一律经 `fast_path.run_gate_blocking`（6 线程专用池，排队超过 `PALLAS_GATE_QUEUE_WARN_MS` 记限频告警），既保证不在事件循环上执行，也不与 DB / 文件的同步调用抢默认 executor。
 
 ## 命令 vs 归属范围
 

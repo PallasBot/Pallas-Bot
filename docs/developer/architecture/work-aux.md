@@ -20,7 +20,7 @@ flowchart LR
 
 PostgreSQL work-job 的单条入队、批量入队与终态重入队共用 JSONB payload 规范化：递归移除实际 NUL，不修改调用方对象；仅接受 JSON 值与字符串键，键清理后碰撞则拒绝，避免静默丢字段。图片采集与复读 outbox 隔离永久无效任务；瞬时写入失败按有上限的退避重试，错误日志只记录批次数量与异常类型。消费者关停时会结清已取出批次的队列记账。
 
-领取（`claim_many`）在事务内设 `statement_timeout`（默认 4s，可用 `PALLAS_WORK_CLAIM_STATEMENT_TIMEOUT_MS` 调整）：慢查询按失败退避重试，不再让单次领取占着连接数十秒。
+领取（`claim_many`）共用一条总预算（默认 4s，可用 `PALLAS_WORK_CLAIM_STATEMENT_TIMEOUT_MS` 调整）：每段查询按剩余预算重设 `SET LOCAL statement_timeout`，慢查询按失败退避重试，不再让单次领取占着连接数十秒。
 
 ## 运行与扩展
 

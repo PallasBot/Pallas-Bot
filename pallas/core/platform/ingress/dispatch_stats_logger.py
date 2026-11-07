@@ -187,7 +187,7 @@ def _loop_lag_watchdog() -> None:
         reported_beat = beat
         _loop_lag_reports += 1
         logger.warning(
-            "[Loop] event loop stalled for [{:.0f}ms]; blocked at: {}; in-flight tasks: {}",
+            "[Loop] event loop stalled for [{:.0f}ms]; blocked at [{}]; in-flight tasks [{}]",
             stale * 1000.0,
             loop_thread_stack_hint(),
             _last_task_hints or "-",

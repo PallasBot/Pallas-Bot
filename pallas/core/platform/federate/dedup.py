@@ -60,7 +60,8 @@ async def try_claim_cross_federate_message(
     *,
     use_plaintext: bool = True,
     include_message_time: bool = False,
-) -> bool:
+) -> bool | None:
+    """协调 Redis 抢占：True 胜出 / False 落败 / None 协调端报错（由调用方决定放行策略）。"""
     """同 federate 池跨 deployment：仅一个 deployment 通过 ingress。"""
     from pallas.core.platform.federate.config import federate_ingress_active
 
@@ -92,14 +93,13 @@ async def try_claim_cross_federate_message(
         include_message_time=include_message_time,
     )
     from pallas.core.platform.federate.redis_claim import try_claim_federate_message_redis_sync
+    from pallas.core.platform.ingress.fast_path import run_gate_blocking
 
-    redis_result = await asyncio.to_thread(
+    # None 表示协调端报错（不是竞争失败），交回调用方按 fail-open / fail-closed 策略处理。
+    return await run_gate_blocking(
         try_claim_federate_message_redis_sync,
         plugin,
         group_id,
         claim_key,
         deployment_id,
     )
-    if redis_result is None:
-        return False
-    return redis_result

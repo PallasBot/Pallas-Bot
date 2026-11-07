@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
-import os
+import math
 import time
 import uuid
 from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, delete, func, or_, select, text, tuple_, update
+
+from pallas.core.foundation.config.repo_settings import repo_env_raw_value
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
@@ -18,15 +20,17 @@ from .store import normalize_priority_tiers
 
 
 def claim_statement_timeout_ms() -> int:
-    """``work_jobs.claim_many`` 的单事务上限；默认 4s，够正常领任务，只砍长尾。"""
-    raw = os.getenv("PALLAS_WORK_CLAIM_STATEMENT_TIMEOUT_MS")
+    """``work_jobs.claim_many`` 的整体预算；默认 4s，够正常领任务，只砍长尾。"""
+    raw = repo_env_raw_value("PALLAS_WORK_CLAIM_STATEMENT_TIMEOUT_MS")
     if raw is None:
         return 4000
     try:
-        value = int(float(str(raw).strip()))
+        value = float(str(raw).strip())
     except ValueError:
         return 4000
-    return max(500, value)
+    if not math.isfinite(value):
+        return 4000
+    return max(500, int(value))
 
 
 def build_requeue_terminal_statement(job: WorkJob, *, now: float):
@@ -296,10 +300,16 @@ class PostgresWorkJobStore:
         )
         now = time.time()
         batch_limit = max(1, int(limit))
+        deadline = time.monotonic() + claim_statement_timeout_ms() / 1000.0
         async with get_session() as session:
-            # 领任务卡在慢查询上没有意义：给本事务一条上限，超时让上层按空批退避，
-            # 而不是让一个 claim 占着连接 30s（见 work_jobs.claim_many 慢路径日志）。
-            await session.execute(text(f"SET LOCAL statement_timeout = {claim_statement_timeout_ms()}"))
+
+            async def apply_remaining_budget() -> None:
+                # statement_timeout 只约束单条 SQL；多段查询共用同一个 deadline，
+                # 避免逐条各耗满预算、把连接占住十几秒。
+                remaining_ms = max(50, int((deadline - time.monotonic()) * 1000))
+                await session.execute(text(f"SET LOCAL statement_timeout = {remaining_ms}"))
+
+            await apply_remaining_budget()
             tiers = normalize_priority_tiers(priority_tiers, kinds=kinds, exclude_kinds=exclude_kinds)
             rows = []
             tier_kinds = frozenset(kind for tier in tiers for kind in tier)
@@ -309,6 +319,7 @@ class PostgresWorkJobStore:
                     tier_limit = batch_limit - len(rows)
                     candidates = []
                     for kind in sorted(tier):
+                        await apply_remaining_budget()
                         candidates.extend(
                             await load_claim_rows(
                                 session,
@@ -324,6 +335,7 @@ class PostgresWorkJobStore:
                         break
                 if len(rows) < batch_limit:
                     fallback_exclude = frozenset((exclude_kinds or set()) | set(tier_kinds))
+                    await apply_remaining_budget()
                     rows.extend(
                         await load_claim_rows(
                             session,
@@ -336,6 +348,7 @@ class PostgresWorkJobStore:
                         )
                     )
             else:
+                await apply_remaining_budget()
                 rows = await load_claim_rows(
                     session,
                     BackgroundJobRow,

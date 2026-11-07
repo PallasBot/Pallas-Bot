@@ -11,14 +11,14 @@
 ### Fixed
 
 - PostgreSQL 消息去重改为跨进程仅执行一次，避免 Bot 与工作辅进程启动时重复扫描消息表。
-- 入站门控的 Redis 判定改走专用 4 线程池，不再与数据库同步调用抢默认 executor；同时新增事件循环卡顿探测，超过阈值（`PALLAS_LOOP_LAG_WARN_MS`，默认 1s）时由 watchdog 线程记录循环线程的阻塞栈与在途协程。
+- 入站门控的 Redis 判定改走专用线程池（默认 6 线程），不再与数据库同步调用抢默认 executor；同时新增事件循环卡顿探测，超过阈值（`PALLAS_LOOP_LAG_WARN_MS`，默认 1s）时由 watchdog 线程记录循环线程的阻塞栈与在途协程。
 - Qwen 的 Chat Completions 请求关闭思考时补齐原生 `enable_thinking` 参数。
 - 语义标注的单条补救再次截断时停止当前任务后续请求，保留已成功结果，减少失败回退消耗。
 - 语义注入观测补计旧版行为策略与 v2 风格块，并明确继续发言指标不等同于语义指导收益。
 
 ### Changed
 
-- 联邦 ingress 抢占超时收紧到 0.3s 且默认放行（`PALLAS_FEDERATE_CLAIM_FAIL_OPEN=0` 恢复 fail-closed），进程内胜出缓存 TTL 由 8s 提到 30s；后台任务领取在事务内设 4s `statement_timeout`，慢查询按失败退避。
+- 联邦 ingress 抢占超时收紧到 0.3s：命令默认 fail-closed、闲聊默认 fail-open（`PALLAS_FEDERATE_CLAIM_FAIL_OPEN` 可统一覆盖），协调端报错与超时同策略，超时/报错结论按签名缓存以免重复消息各自重试；进程内胜出缓存 TTL 由 8s 提到 30s。后台任务领取改为共用 4s 总预算，逐段按剩余时间重设 `statement_timeout`。
 - 方舟剧情/档案检索改为有界执行：metadata 先过滤、按分片单次校验并保留旧排序前 K 条，索引长期缓存仅保留 raw bytes，支持官方快照的完整剧情与档案检索。
 - 历史 `prts_corpus` 本地插件由内建查询接管，语料更新改用 `pallas mcp corpus update` 显式执行，保留原数据目录，不再启动旧插件的自动下载任务。
 - 协议端托管管理插件暂停公开分发，保留已安装本地模块兼容。

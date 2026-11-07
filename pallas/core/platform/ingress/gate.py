@@ -347,13 +347,14 @@ async def ingress_group_message_gate(bot, event) -> None:
 
         if not local_only_federate and not pallas_ats:
             candidate_capability: str | None = None
+            command_lane = command_lane_traffic(plain)
             if alias_target_is_hosted:
                 candidate_capability = "hosted_activity"
             elif self_id in alias_matched_bot_ids:
                 candidate_capability = "llm_alias"
-            elif command_lane_traffic(plain):
+            elif command_lane:
                 candidate_capability = "command"
-            candidate_wait = bool(command_lane_traffic(plain) or alias_matched_bot_ids)
+            candidate_wait = bool(command_lane or alias_matched_bot_ids)
             candidate_wait = candidate_wait or alias_target_is_hosted
             if not await claim_federate_group_message_ingress(
                 event,
@@ -362,6 +363,7 @@ async def ingress_group_message_gate(bot, event) -> None:
                 candidate_capability=candidate_capability,
                 candidate_bot_id=self_id if candidate_capability else None,
                 candidate_wait=candidate_wait and candidate_capability is None,
+                command_traffic=command_lane,
             ):
                 outcome = "federate_lost"
                 if metrics:

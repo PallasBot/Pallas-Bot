@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from concurrent.futures import ThreadPoolExecutor
-from functools import partial
 from typing import TYPE_CHECKING, Any
 
+from nonebot import logger
+
 from pallas.core.foundation.command_prefix import matches_command_prefix
+from pallas.core.foundation.config.repo_settings import repo_env_raw_value
+from pallas.core.foundation.logging import log_rate_limited
 from pallas.core.platform.ingress.dream_host_gate import DREAM_HOST_GATE_PLUGIN
 from pallas.core.platform.ingress.hosted_activity_gate import (
     loaded_hosted_activity_specs,
@@ -20,9 +24,21 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 GATE_EXECUTOR_THREAD_PREFIX = "pallas-ingress-gate"
-_GATE_WORKERS = 4
+_GATE_WORKERS = 6
+_GATE_QUEUE_WARN_MS = 1000.0
 
 _executor: ThreadPoolExecutor | None = None
+
+
+def gate_queue_warn_ms() -> float:
+    """排队超过这个时长就记一条限频告警，用来确认专用池没有被 Redis 停滞拖住。"""
+    raw = repo_env_raw_value("PALLAS_GATE_QUEUE_WARN_MS")
+    if raw is None:
+        return _GATE_QUEUE_WARN_MS
+    try:
+        return max(100.0, float(str(raw).strip()))
+    except ValueError:
+        return _GATE_QUEUE_WARN_MS
 
 
 def gate_executor() -> ThreadPoolExecutor:
@@ -42,7 +58,26 @@ async def run_gate_blocking[T](func: Callable[..., T], /, *args: Any, **kwargs: 
     单独一条通道能让入站请求的 p99 不再跟着 DB 一起抖。
     """
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(gate_executor(), partial(func, *args, **kwargs))
+    submitted = time.monotonic()
+    started: list[float] = []
+
+    def _invoke() -> T:
+        started.append(time.monotonic())
+        return func(*args, **kwargs)
+
+    result = await loop.run_in_executor(gate_executor(), _invoke)
+    if started:
+        queued_ms = (started[0] - submitted) * 1000.0
+        if queued_ms >= gate_queue_warn_ms():
+            log_rate_limited(
+                logger,
+                "warning",
+                "gate_pool_queue",
+                "gate 专用池排队 [{}]ms，任务 [{}]",
+                round(queued_ms),
+                getattr(func, "__name__", "?"),
+            )
+    return result
 
 
 def shutdown_gate_executor() -> None:
