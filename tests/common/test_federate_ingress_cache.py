@@ -286,7 +286,7 @@ async def test_federate_ingress_failed_claim_releases_for_recovery(
     monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.federate.ingress.load_or_create_deployment_id", lambda: "deploy-test")
     if failure is TimeoutError:
-        monkeypatch.setattr(fed_ingress, "_REDIS_CLAIM_TIMEOUT_SEC", 0.01)
+        monkeypatch.setattr(fed_ingress, "redis_claim_timeout_sec", lambda: 0.01)
 
     calls = 0
 
@@ -316,11 +316,134 @@ async def test_federate_ingress_failed_claim_releases_for_recovery(
     if failure is ConnectionError:
         with pytest.raises(ConnectionError):
             await fed_ingress.claim_federate_group_message_ingress(event)
+        assert fed_ingress._inflight_claims == {}
+        assert await fed_ingress.claim_federate_group_message_ingress(event) is True
+        assert calls == 2
     else:
+        # 协调端超时默认 fail-open：先放行，避免一条消息把入站链路卡住数秒。
+        assert await fed_ingress.claim_federate_group_message_ingress(event) is True
+        assert fed_ingress._inflight_claims == {}
+        # 同签名的重复消息跟随缓存决策，不再各自重试，避免本地双处理。
         assert await fed_ingress.claim_federate_group_message_ingress(event) is False
+        assert calls == 1
+        # 换一条消息（签名不同）仍可正常抢占。
+        other = GroupMessageEvent.model_construct(
+            time=101,
+            self_id=111,
+            post_type="message",
+            message_type="group",
+            sub_type="normal",
+            user_id=999,
+            group_id=12345,
+            message_id=2,
+            message=Message("hi"),
+            raw_message="hi",
+        )
+        assert await fed_ingress.claim_federate_group_message_ingress(other) is True
+        assert calls == 2
+
+
+@pytest.mark.asyncio
+async def test_federate_ingress_timeout_fail_closed_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    fed_ingress.reset_federate_ingress_win_cache_for_tests()
+    monkeypatch.setenv("PALLAS_FEDERATE_CLAIM_FAIL_OPEN", "0")
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_bypass_unified", lambda: False)
+    monkeypatch.setattr(fed_ingress.shard_ctx, "sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.load_or_create_deployment_id", lambda: "deploy-test")
+    monkeypatch.setattr(fed_ingress, "redis_claim_timeout_sec", lambda: 0.01)
+
+    async def never_returns(*_args, **_kwargs) -> bool:
+        await asyncio.Event().wait()
+        return True
+
+    monkeypatch.setattr(fed_ingress, "try_claim_cross_federate_message", never_returns)
+    event = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=12345,
+        message_id=1,
+        message=Message("hi"),
+        raw_message="hi",
+    )
+
+    assert await fed_ingress.claim_federate_group_message_ingress(event) is False
     assert fed_ingress._inflight_claims == {}
+
+
+@pytest.mark.asyncio
+async def test_federate_ingress_command_timeout_stays_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    fed_ingress.reset_federate_ingress_win_cache_for_tests()
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_bypass_unified", lambda: False)
+    monkeypatch.setattr(fed_ingress.shard_ctx, "sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.load_or_create_deployment_id", lambda: "deploy-test")
+    monkeypatch.setattr(fed_ingress, "redis_claim_timeout_sec", lambda: 0.01)
+
+    async def never_returns(*_args, **_kwargs) -> bool:
+        await asyncio.Event().wait()
+        return True
+
+    monkeypatch.setattr(fed_ingress, "try_claim_cross_federate_message", never_returns)
+    event = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=12345,
+        message_id=1,
+        message=Message("/签到"),
+        raw_message="/签到",
+    )
+
+    # 命令有副作用：超时时默认不放行，避免多个部署各执行一次。
+    assert await fed_ingress.claim_federate_group_message_ingress(event, command_traffic=True) is False
+
+
+@pytest.mark.asyncio
+async def test_federate_ingress_redis_error_applies_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_bypass_unified", lambda: False)
+    monkeypatch.setattr(fed_ingress.shard_ctx, "sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.load_or_create_deployment_id", lambda: "deploy-test")
+    monkeypatch.setattr(fed_ingress, "try_claim_cross_federate_message", AsyncMock(return_value=None))
+
+    event = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=12345,
+        message_id=1,
+        message=Message("hi"),
+        raw_message="hi",
+    )
+
+    fed_ingress.reset_federate_ingress_win_cache_for_tests()
     assert await fed_ingress.claim_federate_group_message_ingress(event) is True
-    assert calls == 2
+
+    fed_ingress.reset_federate_ingress_win_cache_for_tests()
+    command = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=12345,
+        message_id=2,
+        message=Message("/签到"),
+        raw_message="/签到",
+    )
+    assert await fed_ingress.claim_federate_group_message_ingress(command, command_traffic=True) is False
 
 
 @pytest.mark.asyncio

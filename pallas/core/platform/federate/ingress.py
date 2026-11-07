@@ -3,48 +3,124 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import time
 from typing import TYPE_CHECKING
 
+from pallas.core.foundation.config.repo_settings import repo_env_raw_value
+from pallas.core.foundation.logging import log_rate_limited
 from pallas.core.platform.federate.config import (
     federate_ingress_active,
     federate_ingress_bypass_unified,
 )
 from pallas.core.platform.federate.deployment import load_or_create_deployment_id
+from pallas.core.platform.ingress.fast_path import run_gate_blocking
 from pallas.core.platform.observability import SlowPathTimer, slow_path_threshold_ms
 from pallas.core.platform.shard import context as shard_ctx
 
 if TYPE_CHECKING:
     from nonebot.adapters.onebot.v11 import GroupMessageEvent
+
+from nonebot import logger
+
 from pallas.core.platform.federate.dedup import try_claim_cross_federate_message
 from pallas.core.platform.federate.ingress_audit import record_federate_ingress_audit
 from pallas.core.platform.multi_bot.dedup import cross_bot_message_signature
 
 FEDERATE_INGRESS_CLAIM_PLUGIN = "federate_ingress"
 FEDERATE_INGRESS_V2_CLAIM_PLUGIN = "federate_ingress_v2"
-_WIN_CACHE_TTL_SEC = float(os.getenv("PALLAS_FEDERATE_WIN_CACHE_SEC", "8"))
 _WIN_CACHE_MAX = 20_000
+_CLAIM_DECISION_MAX = 4_096
 _CANDIDATE_WAIT_SEC = 0.15
 _INFLIGHT_CLAIM_WAIT_SEC = 0.5
-_REDIS_CLAIM_TIMEOUT_SEC = float(os.getenv("PALLAS_FEDERATE_REDIS_CLAIM_TIMEOUT_SEC", "3.0"))
 _win_cache: dict[tuple[str, tuple[int, int, str] | tuple[int, int, str, int], str], float] = {}
 _inflight_claims: dict[
     tuple[str, tuple[int, int, str] | tuple[int, int, str, int], str],
     asyncio.Future[bool],
 ] = {}
+_claim_decisions: dict[tuple[str, tuple[int, int, str] | tuple[int, int, str, int], str], tuple[float, bool]] = {}
 _win_lock = asyncio.Lock()
+
+
+def _env_float(name: str, default: float, *, minimum: float, maximum: float) -> float:
+    raw = repo_env_raw_value(name)
+    if raw is None:
+        return default
+    try:
+        value = float(str(raw).strip())
+    except ValueError:
+        return default
+    if value != value or value in (float("inf"), float("-inf")):
+        return default
+    return min(maximum, max(minimum, value))
+
+
+def win_cache_ttl_sec() -> float:
+    """进程内胜出缓存 TTL；30s 覆盖同一条消息的重复投递。"""
+    return _env_float("PALLAS_FEDERATE_WIN_CACHE_SEC", 30.0, minimum=1.0, maximum=300.0)
+
+
+def redis_claim_timeout_sec() -> float:
+    """协调 Redis claim 的等待上限；超时按 fail-open 策略处理。"""
+    return _env_float("PALLAS_FEDERATE_REDIS_CLAIM_TIMEOUT_SEC", 0.3, minimum=0.05, maximum=10.0)
+
+
+def claim_decision_ttl_sec() -> float:
+    """超时/错误决策的记忆时长，供同签名的重复消息跟随，不再各自重试。"""
+    return min(60.0, win_cache_ttl_sec())
+
+
+def _remember_claim_decision(
+    cache_key: tuple[str, tuple[int, int, str] | tuple[int, int, str, int], str],
+    *,
+    allow: bool,
+) -> None:
+    """记住本次超时/错误结论；重复消息一律判负，避免同一进程双处理。"""
+    now = time.monotonic()
+    _claim_decisions[cache_key] = (now + claim_decision_ttl_sec(), allow)
+    if len(_claim_decisions) > _CLAIM_DECISION_MAX:
+        stale = [key for key, (exp, _allow) in _claim_decisions.items() if now >= exp]
+        for key in stale:
+            _claim_decisions.pop(key, None)
+        if len(_claim_decisions) > _CLAIM_DECISION_MAX:
+            _claim_decisions.clear()
+
+
+def _cached_claim_decision(
+    cache_key: tuple[str, tuple[int, int, str] | tuple[int, int, str, int], str],
+) -> bool | None:
+    hit = _claim_decisions.get(cache_key)
+    if hit is None:
+        return None
+    exp, allow = hit
+    if time.monotonic() >= exp:
+        _claim_decisions.pop(cache_key, None)
+        return None
+    return allow
 
 
 def reset_federate_ingress_win_cache_for_tests() -> None:
     global _win_lock
     _win_cache.clear()
     _inflight_claims.clear()
+    _claim_decisions.clear()
     _win_lock = asyncio.Lock()
 
 
 def bypass_federate_ingress_for_current_mode() -> bool:
     return federate_ingress_bypass_unified() and not shard_ctx.sharding_active()
+
+
+def federate_claim_fail_open(*, command_traffic: bool) -> bool:
+    """协调 Redis 超时/报错后是否放行本条消息。
+
+    命令默认 fail-closed：多个部署同时执行有副作用的命令代价更大；
+    闲聊默认 fail-open：丢一条比把整条入站链路卡住好。
+    ``PALLAS_FEDERATE_CLAIM_FAIL_OPEN`` 显式设置时统一覆盖两种流量。
+    """
+    raw = repo_env_raw_value("PALLAS_FEDERATE_CLAIM_FAIL_OPEN")
+    if raw is None:
+        return not command_traffic
+    return str(raw).strip().lower() not in {"0", "false", "no", "off"}
 
 
 def federate_ingress_cached_win(
@@ -89,6 +165,7 @@ async def claim_federate_group_message_ingress(
     candidate_capability: str | None = None,
     candidate_bot_id: int | None = None,
     candidate_wait: bool = False,
+    command_traffic: bool = False,
 ) -> bool:
     """未启用联邦 ingress 或本 deployment 抢占成功时返回 True。"""
     timer = SlowPathTimer(
@@ -108,7 +185,7 @@ async def claim_federate_group_message_ingress(
 
     if candidate_capability and candidate_bot_id is not None:
         record_federate_ingress_audit(capability=candidate_capability, outcome="eligible")
-        registered = await asyncio.to_thread(
+        registered = await run_gate_blocking(
             candidates.register_federate_ingress_candidate_sync,
             group_id=int(event.group_id),
             user_id=int(event.user_id),
@@ -127,7 +204,7 @@ async def claim_federate_group_message_ingress(
             return False
         record_federate_ingress_audit(capability=candidate_capability, outcome="candidate_registered")
         await asyncio.sleep(_CANDIDATE_WAIT_SEC)
-        candidate_ids = await asyncio.to_thread(
+        candidate_ids = await run_gate_blocking(
             candidates.read_federate_ingress_candidate_bot_ids_sync,
             group_id=int(event.group_id),
             user_id=int(event.user_id),
@@ -141,7 +218,7 @@ async def claim_federate_group_message_ingress(
             return False
         plugin = FEDERATE_INGRESS_V2_CLAIM_PLUGIN
     elif candidate_wait:
-        candidate_ids = await asyncio.to_thread(
+        candidate_ids = await run_gate_blocking(
             candidates.read_federate_ingress_candidate_bot_ids_sync,
             group_id=int(event.group_id),
             user_id=int(event.user_id),
@@ -166,6 +243,15 @@ async def claim_federate_group_message_ingress(
         include_message_time=include_message_time,
     )
     cache_key = (plugin, sig, deployment_id)
+    cached_decision = _cached_claim_decision(cache_key)
+    if cached_decision is not None:
+        timer.finish(
+            outcome="cached_claim_decision",
+            cache_hit=True,
+            group_id=int(event.group_id),
+            user_id=int(event.user_id),
+        )
+        return cached_decision
     now = time.monotonic()
     wait_for: asyncio.Future[bool] | None = None
     claim_owner = False
@@ -210,7 +296,7 @@ async def claim_federate_group_message_ingress(
             group_id=int(event.group_id),
             user_id=int(event.user_id),
         )
-        return won
+        return bool(won)
 
     try:
         won = await asyncio.wait_for(
@@ -224,22 +310,28 @@ async def claim_federate_group_message_ingress(
                 use_plaintext=True,
                 include_message_time=include_message_time,
             ),
-            timeout=_REDIS_CLAIM_TIMEOUT_SEC,
+            timeout=redis_claim_timeout_sec(),
         )
     except TimeoutError:
         async with _win_lock:
             if _inflight_claims.get(cache_key) is wait_for:
                 _inflight_claims.pop(cache_key)
         if not wait_for.done():
+            # 同进程的重复事件跟着本条走：本条放行时它们仍判负，避免一次抖动变成本地双处理。
             wait_for.set_result(False)
+        fail_open = federate_claim_fail_open(command_traffic=command_traffic)
+        _remember_claim_decision(cache_key, allow=False)
         timer.finish(
-            outcome="claim_timeout",
+            outcome="claim_timeout_open" if fail_open else "claim_timeout",
             cache_hit=False,
             group_id=int(event.group_id),
             user_id=int(event.user_id),
         )
-        record_federate_ingress_audit(capability=candidate_capability, outcome="claim_timeout")
-        return False
+        record_federate_ingress_audit(
+            capability=candidate_capability,
+            outcome="claim_timeout_open" if fail_open else "claim_timeout",
+        )
+        return fail_open
     except BaseException as exc:
         async with _win_lock:
             if _inflight_claims.get(cache_key) is wait_for:
@@ -252,11 +344,40 @@ async def claim_federate_group_message_ingress(
                 wait_for.exception()
         raise
 
+    if won is None:
+        # 协调端明确报错（不是竞争失败）：与超时同策略，命令保持拒绝。
+        async with _win_lock:
+            if _inflight_claims.get(cache_key) is wait_for:
+                _inflight_claims.pop(cache_key)
+        if not wait_for.done():
+            wait_for.set_result(False)
+        fail_open = federate_claim_fail_open(command_traffic=command_traffic)
+        _remember_claim_decision(cache_key, allow=False)
+        timer.finish(
+            outcome="claim_error_open" if fail_open else "claim_error",
+            cache_hit=False,
+            group_id=int(event.group_id),
+            user_id=int(event.user_id),
+        )
+        record_federate_ingress_audit(
+            capability=candidate_capability,
+            outcome="claim_error_open" if fail_open else "claim_error",
+        )
+        log_rate_limited(
+            logger,
+            "debug",
+            "federate_claim_error",
+            "联邦 ingress 协调端报错，按 [{}] 处理：group [{}]",
+            "fail-open" if fail_open else "fail-closed",
+            int(event.group_id),
+        )
+        return fail_open
+
     timer.mark("redis_claim")
     async with _win_lock:
         if _inflight_claims.get(cache_key) is wait_for:
             if won:
-                _win_cache[cache_key] = time.monotonic() + _WIN_CACHE_TTL_SEC
+                _win_cache[cache_key] = time.monotonic() + win_cache_ttl_sec()
             _inflight_claims.pop(cache_key)
     if not wait_for.done():
         wait_for.set_result(won)
