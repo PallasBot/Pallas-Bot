@@ -1,10 +1,56 @@
 from __future__ import annotations
 
+import asyncio
+import time
+
+import pytest
+
+from pallas.core.platform.ingress import dispatch_stats_logger as stats_logger
 from pallas.core.platform.ingress.dispatch_stats_logger import (
     _dispatch_stats_text,
     dispatch_stats_tick_notable,
+    loop_thread_stack_hint,
+    stalled_task_hints,
+    start_loop_lag_probe,
+    stop_loop_lag_probe,
 )
 from pallas.core.platform.ingress.message_load import reset_message_load_for_tests, signal_overload
+
+
+@pytest.mark.asyncio
+async def test_loop_lag_watchdog_detects_blocked_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(stats_logger, "loop_lag_warn_ms", lambda: 200.0)
+    before = stats_logger.loop_lag_report_count()
+    assert stats_logger.start_loop_lag_probe() is True
+    time.sleep(1.0)  # noqa: ASYNC251 - 故意阻塞事件循环，watchdog 应该看到心跳停摆
+    await asyncio.sleep(0.1)
+    await stats_logger.stop_loop_lag_probe()
+    assert stats_logger.loop_lag_report_count() > before
+
+
+@pytest.mark.asyncio
+async def test_loop_lag_probe_start_is_idempotent() -> None:
+    assert start_loop_lag_probe() is True
+    assert "test_loop_lag_probe_start_is_idempotent" in loop_thread_stack_hint()
+    assert start_loop_lag_probe() is False
+    await stop_loop_lag_probe()
+    assert start_loop_lag_probe() is True
+    await stop_loop_lag_probe()
+
+
+@pytest.mark.asyncio
+async def test_stalled_task_hints_include_pending_coroutine() -> None:
+    release = asyncio.Event()
+
+    async def waiter() -> None:
+        await release.wait()
+
+    task = asyncio.create_task(waiter(), name="probe-waiter")
+    await asyncio.sleep(0)
+    hints = stalled_task_hints()
+    release.set()
+    await task
+    assert any("probe-waiter" in hint for hint in hints)
 
 
 def _base(**overrides):

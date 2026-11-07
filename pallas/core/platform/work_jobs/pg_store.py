@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from typing import TYPE_CHECKING
 
-from sqlalchemy import and_, delete, func, or_, select, tuple_, update
+from sqlalchemy import and_, delete, func, or_, select, text, tuple_, update
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable, Mapping
@@ -14,6 +15,18 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from .models import WorkJob, normalize_work_job_payload
 from .store import normalize_priority_tiers
+
+
+def claim_statement_timeout_ms() -> int:
+    """``work_jobs.claim_many`` 的单事务上限；默认 4s，够正常领任务，只砍长尾。"""
+    raw = os.getenv("PALLAS_WORK_CLAIM_STATEMENT_TIMEOUT_MS")
+    if raw is None:
+        return 4000
+    try:
+        value = int(float(str(raw).strip()))
+    except ValueError:
+        return 4000
+    return max(500, value)
 
 
 def build_requeue_terminal_statement(job: WorkJob, *, now: float):
@@ -284,6 +297,9 @@ class PostgresWorkJobStore:
         now = time.time()
         batch_limit = max(1, int(limit))
         async with get_session() as session:
+            # 领任务卡在慢查询上没有意义：给本事务一条上限，超时让上层按空批退避，
+            # 而不是让一个 claim 占着连接 30s（见 work_jobs.claim_many 慢路径日志）。
+            await session.execute(text(f"SET LOCAL statement_timeout = {claim_statement_timeout_ms()}"))
             tiers = normalize_priority_tiers(priority_tiers, kinds=kinds, exclude_kinds=exclude_kinds)
             rows = []
             tier_kinds = frozenset(kind for tier in tiers for kind in tier)

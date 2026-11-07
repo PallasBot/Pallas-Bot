@@ -20,13 +20,17 @@ flowchart LR
 
 PostgreSQL work-job 的单条入队、批量入队与终态重入队共用 JSONB payload 规范化：递归移除实际 NUL，不修改调用方对象；仅接受 JSON 值与字符串键，键清理后碰撞则拒绝，避免静默丢字段。图片采集与复读 outbox 隔离永久无效任务；瞬时写入失败按有上限的退避重试，错误日志只记录批次数量与异常类型。消费者关停时会结清已取出批次的队列记账。
 
+领取（`claim_many`）在事务内设 `statement_timeout`（默认 4s，可用 `PALLAS_WORK_CLAIM_STATEMENT_TIMEOUT_MS` 调整）：慢查询按失败退避重试，不再让单次领取占着连接数十秒。
+
 ## 运行与扩展
 
 `uv run pallas`、`uv run pallas run unified` 会同时维护消息实例与一个 `work aux`；`uv run pallas status` 显示它的 pid 和日志。完整分片启动也只维护一个 aux，避免每个 worker 重复拉起消费者。
 
-当至少有两个并发槽且两类 handler 都存在时，work aux 将同一总预算静态分池：向上取整的一半留给 `repeater.message`、`repeater.learn`、`image_cache.capture`，其余槽处理其他任务。短链路池通过 `kinds` 限定，另一池用 `exclude_kinds` 排除短链路 kind，同时仍可消费外部 handler 与未知 kind；`bot_action.send` 等显式排除对两池都生效。不会动态借出保留槽，也不会增加总容量。
+当并发槽至少为 2、且首个 `priority_tiers` 分桶中存在可运行的非短链路 handler 时，work aux 会为交互任务保留一个独立消费者。该 lane 只通过 `kinds` 领取首个 priority tier 中的 kind（生产入口为 `sing.submit`、`sing.request_song`、`tts.submit`），使用单任务批次；普通后台任务通过 `exclude_kinds` 排除这些 kind，不能占用该 lane。默认并发 4 时容量拆为交互 1、短链路 2、通用 1；并发 3 时各 1。若并发只有 2 且三类 handler 都存在，无法同时隔离三条 lane，则保留 1 个交互槽，剩余槽在短链路与其他任务间共享，并让短链路通过 priority tier 优先。
 
-短链路池按 `created_at` FIFO，不使用严格优先级，避免持续消息/学习积压令图片采集永远排在后面。其他池继续使用 `priority_tiers`，例如交互任务优先于其余派生工作。单槽或缺少任一类 handler 时不分池；存在短链路 handler 时回退 FIFO，避免严格优先级长期饿死某类任务，也不为不存在的 handler 空留槽。单槽无法隔离正在执行的长任务；`image_cache.capture` 还需下载外部图片，因此分池不保证任务必在图片 TTL 内完成，现有 TTL 和超时保持不变。
+其余容量继续静态分池：向上取整的一半留给 `repeater.message`、`repeater.learn`、`image_cache.capture`，其余槽处理其他任务。短链路池通过 `kinds` 限定，通用池用 `exclude_kinds` 排除短链路与交互 kind，同时仍可消费外部 handler 与未知 kind；`bot_action.send` 等显式排除对所有池生效。不会动态借出保留槽，也不会增加总容量。
+
+短链路池按 `created_at` FIFO，不使用严格优先级，避免持续消息/学习积压令图片采集永远排在后面。若首个 priority tier 没有可运行的非短链路 handler，或不存在两类以上任务，则退回原有的两池/单池逻辑；单槽或缺少任一类 handler 时不分池，存在短链路 handler 时回退 FIFO，避免严格优先级长期饿死某类任务，也不为不存在的 handler 空留槽。独立通道只能避免普通任务阻塞交互任务，不能抢占已经卡死的 handler；发现租约长期续期时仍需清理卡死任务并重启 work aux，参考 `docs/agents/playbooks/sing-work-aux-stuck.md`。`image_cache.capture` 还需下载外部图片，因此分池不保证任务必在图片 TTL 内完成，现有 TTL 和超时保持不变。
 
 消费者池和状态发布器由 `asyncio.TaskGroup` 托管；服务取消或任一子任务异常时，会取消并等待所有同级任务清理后再退出。
 

@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-from threading import Event, Thread, get_ident
+from threading import Event, Thread, current_thread, get_ident
 from unittest.mock import AsyncMock
 
 import pytest
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 
 from pallas.core.platform.ingress import gate
+from pallas.core.platform.ingress.fast_path import GATE_EXECUTOR_THREAD_PREFIX
 from pallas.core.platform.ingress.group_admin_owner import GroupAdminOwnerIngressDecision
 
 
@@ -16,9 +17,11 @@ class BlockingRedis:
         self.started = Event()
         self.release = Event()
         self.thread_id: int | None = None
+        self.thread_name: str | None = None
 
     def get(self, _key: str) -> int:
         self.thread_id = get_ident()
+        self.thread_name = current_thread().name
         self.started.set()
         self.release.wait()
         return 0
@@ -122,6 +125,7 @@ async def test_ingress_redis_decisions_leave_event_loop_responsive(
 
     assert released_after_heartbeat.is_set()
     assert redis.thread_id != get_ident()
+    assert (redis.thread_name or "").startswith(GATE_EXECUTOR_THREAD_PREFIX)
 
 
 @pytest.mark.asyncio

@@ -23,11 +23,11 @@ from pallas.core.platform.multi_bot.dedup import cross_bot_message_signature
 
 FEDERATE_INGRESS_CLAIM_PLUGIN = "federate_ingress"
 FEDERATE_INGRESS_V2_CLAIM_PLUGIN = "federate_ingress_v2"
-_WIN_CACHE_TTL_SEC = float(os.getenv("PALLAS_FEDERATE_WIN_CACHE_SEC", "8"))
+_WIN_CACHE_TTL_SEC = float(os.getenv("PALLAS_FEDERATE_WIN_CACHE_SEC", "30"))
 _WIN_CACHE_MAX = 20_000
 _CANDIDATE_WAIT_SEC = 0.15
 _INFLIGHT_CLAIM_WAIT_SEC = 0.5
-_REDIS_CLAIM_TIMEOUT_SEC = float(os.getenv("PALLAS_FEDERATE_REDIS_CLAIM_TIMEOUT_SEC", "3.0"))
+_REDIS_CLAIM_TIMEOUT_SEC = float(os.getenv("PALLAS_FEDERATE_REDIS_CLAIM_TIMEOUT_SEC", "0.3"))
 _win_cache: dict[tuple[str, tuple[int, int, str] | tuple[int, int, str, int], str], float] = {}
 _inflight_claims: dict[
     tuple[str, tuple[int, int, str] | tuple[int, int, str, int], str],
@@ -45,6 +45,18 @@ def reset_federate_ingress_win_cache_for_tests() -> None:
 
 def bypass_federate_ingress_for_current_mode() -> bool:
     return federate_ingress_bypass_unified() and not shard_ctx.sharding_active()
+
+
+def federate_claim_fail_open() -> bool:
+    """协调 Redis 超时后是否放行本条消息。
+
+    默认放行：把一次 ingress 卡在协调端上的代价（数秒到数十秒）远大于偶发重复处理；
+    确需严格"只有一台处理"时用 ``PALLAS_FEDERATE_CLAIM_FAIL_OPEN=0`` 恢复 fail-closed。
+    """
+    raw = os.getenv("PALLAS_FEDERATE_CLAIM_FAIL_OPEN")
+    if raw is None:
+        return True
+    return str(raw).strip().lower() not in {"0", "false", "no", "off"}
 
 
 def federate_ingress_cached_win(
@@ -231,15 +243,20 @@ async def claim_federate_group_message_ingress(
             if _inflight_claims.get(cache_key) is wait_for:
                 _inflight_claims.pop(cache_key)
         if not wait_for.done():
+            # 同进程的重复事件跟着本条走：本条放行时它们仍判负，避免一次抖动变成本地双处理。
             wait_for.set_result(False)
+        fail_open = federate_claim_fail_open()
         timer.finish(
-            outcome="claim_timeout",
+            outcome="claim_timeout_open" if fail_open else "claim_timeout",
             cache_hit=False,
             group_id=int(event.group_id),
             user_id=int(event.user_id),
         )
-        record_federate_ingress_audit(capability=candidate_capability, outcome="claim_timeout")
-        return False
+        record_federate_ingress_audit(
+            capability=candidate_capability,
+            outcome="claim_timeout_open" if fail_open else "claim_timeout",
+        )
+        return fail_open
     except BaseException as exc:
         async with _win_lock:
             if _inflight_claims.get(cache_key) is wait_for:

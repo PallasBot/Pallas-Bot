@@ -317,10 +317,43 @@ async def test_federate_ingress_failed_claim_releases_for_recovery(
         with pytest.raises(ConnectionError):
             await fed_ingress.claim_federate_group_message_ingress(event)
     else:
-        assert await fed_ingress.claim_federate_group_message_ingress(event) is False
+        # 协调端超时默认 fail-open：先放行，避免一条消息把入站链路卡住数秒。
+        assert await fed_ingress.claim_federate_group_message_ingress(event) is True
     assert fed_ingress._inflight_claims == {}
     assert await fed_ingress.claim_federate_group_message_ingress(event) is True
     assert calls == 2
+
+
+@pytest.mark.asyncio
+async def test_federate_ingress_timeout_fail_closed_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    fed_ingress.reset_federate_ingress_win_cache_for_tests()
+    monkeypatch.setenv("PALLAS_FEDERATE_CLAIM_FAIL_OPEN", "0")
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_bypass_unified", lambda: False)
+    monkeypatch.setattr(fed_ingress.shard_ctx, "sharding_active", lambda: False)
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.federate.ingress.load_or_create_deployment_id", lambda: "deploy-test")
+    monkeypatch.setattr(fed_ingress, "_REDIS_CLAIM_TIMEOUT_SEC", 0.01)
+
+    async def never_returns(*_args, **_kwargs) -> bool:
+        await asyncio.Event().wait()
+        return True
+
+    monkeypatch.setattr(fed_ingress, "try_claim_cross_federate_message", never_returns)
+    event = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=12345,
+        message_id=1,
+        message=Message("hi"),
+        raw_message="hi",
+    )
+
+    assert await fed_ingress.claim_federate_group_message_ingress(event) is False
+    assert fed_ingress._inflight_claims == {}
 
 
 @pytest.mark.asyncio
