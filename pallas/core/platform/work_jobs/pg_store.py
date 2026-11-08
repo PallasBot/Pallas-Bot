@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import math
 import time
 import uuid
@@ -300,72 +301,76 @@ class PostgresWorkJobStore:
         )
         now = time.time()
         batch_limit = max(1, int(limit))
-        deadline = time.monotonic() + claim_statement_timeout_ms() / 1000.0
-        async with get_session() as session:
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + claim_statement_timeout_ms() / 1000.0
+        async with asyncio.timeout_at(deadline):
+            async with get_session() as session:
 
-            async def apply_remaining_budget() -> None:
-                # statement_timeout 只约束单条 SQL；多段查询共用同一个 deadline，
-                # 避免逐条各耗满预算、把连接占住十几秒。
-                remaining_ms = max(50, int((deadline - time.monotonic()) * 1000))
-                await session.execute(text(f"SET LOCAL statement_timeout = {remaining_ms}"))
+                async def apply_remaining_budget() -> None:
+                    # statement_timeout 约束单条 SQL；asyncio deadline 还覆盖连接、flush 和 commit。
+                    remaining_ms = int((deadline - loop.time()) * 1000)
+                    if remaining_ms <= 0:
+                        raise TimeoutError("work job claim budget exhausted")
+                    await session.execute(text(f"SET LOCAL statement_timeout = {remaining_ms}"))
 
-            await apply_remaining_budget()
-            tiers = normalize_priority_tiers(priority_tiers, kinds=kinds, exclude_kinds=exclude_kinds)
-            rows = []
-            tier_kinds = frozenset(kind for tier in tiers for kind in tier)
-            if tiers:
-                # 每个 kind 单独取候选，再在内存合并，避免跨 kind ORDER BY 触发全量排序。
-                for tier in tiers:
-                    tier_limit = batch_limit - len(rows)
-                    candidates = []
-                    for kind in sorted(tier):
+                await apply_remaining_budget()
+                tiers = normalize_priority_tiers(priority_tiers, kinds=kinds, exclude_kinds=exclude_kinds)
+                rows = []
+                tier_kinds = frozenset(kind for tier in tiers for kind in tier)
+                if tiers:
+                    # 每个 kind 单独取候选，再在内存合并，避免跨 kind ORDER BY 触发全量排序。
+                    for tier in tiers:
+                        tier_limit = batch_limit - len(rows)
+                        candidates = []
+                        for kind in sorted(tier):
+                            await apply_remaining_budget()
+                            candidates.extend(
+                                await load_claim_rows(
+                                    session,
+                                    BackgroundJobRow,
+                                    now=now,
+                                    limit=tier_limit,
+                                    kinds=frozenset({kind}),
+                                    bot_owner_ids=bot_owner_ids,
+                                )
+                            )
+                        rows.extend(sorted(candidates, key=lambda row: (row.created_at, row.id))[:tier_limit])
+                        if len(rows) >= batch_limit:
+                            break
+                    if len(rows) < batch_limit:
+                        fallback_exclude = frozenset((exclude_kinds or set()) | set(tier_kinds))
                         await apply_remaining_budget()
-                        candidates.extend(
+                        rows.extend(
                             await load_claim_rows(
                                 session,
                                 BackgroundJobRow,
                                 now=now,
-                                limit=tier_limit,
-                                kinds=frozenset({kind}),
+                                limit=batch_limit - len(rows),
+                                kinds=kinds,
+                                exclude_kinds=fallback_exclude,
                                 bot_owner_ids=bot_owner_ids,
                             )
                         )
-                    rows.extend(sorted(candidates, key=lambda row: (row.created_at, row.id))[:tier_limit])
-                    if len(rows) >= batch_limit:
-                        break
-                if len(rows) < batch_limit:
-                    fallback_exclude = frozenset((exclude_kinds or set()) | set(tier_kinds))
+                else:
                     await apply_remaining_budget()
-                    rows.extend(
-                        await load_claim_rows(
-                            session,
-                            BackgroundJobRow,
-                            now=now,
-                            limit=batch_limit - len(rows),
-                            kinds=kinds,
-                            exclude_kinds=fallback_exclude,
-                            bot_owner_ids=bot_owner_ids,
-                        )
+                    rows = await load_claim_rows(
+                        session,
+                        BackgroundJobRow,
+                        now=now,
+                        limit=batch_limit,
+                        kinds=kinds,
+                        exclude_kinds=exclude_kinds,
+                        bot_owner_ids=bot_owner_ids,
                     )
-            else:
+                timer.mark("query")
                 await apply_remaining_budget()
-                rows = await load_claim_rows(
-                    session,
-                    BackgroundJobRow,
-                    now=now,
-                    limit=batch_limit,
-                    kinds=kinds,
-                    exclude_kinds=exclude_kinds,
-                    bot_owner_ids=bot_owner_ids,
-                )
-            timer.mark("query")
-            for row in rows:
-                row.status = "leased"
-                row.lease_owner = str(owner)
-                row.lease_id = uuid.uuid4().hex
-                row.leased_until = now + max(1.0, float(lease_sec))
-                row.attempts += 1
-            await session.commit()
+                for row in rows:
+                    row.status = "leased"
+                    row.lease_owner = str(owner)
+                    row.lease_id = uuid.uuid4().hex
+                    row.leased_until = now + max(1.0, float(lease_sec))
+                    row.attempts += 1
+                await session.commit()
         timer.finish(owner=owner, limit=batch_limit, rows=len(rows))
         return [
             WorkJob(

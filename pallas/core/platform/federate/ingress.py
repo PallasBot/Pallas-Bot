@@ -31,7 +31,6 @@ FEDERATE_INGRESS_V2_CLAIM_PLUGIN = "federate_ingress_v2"
 _WIN_CACHE_MAX = 20_000
 _CLAIM_DECISION_MAX = 4_096
 _CANDIDATE_WAIT_SEC = 0.15
-_INFLIGHT_CLAIM_WAIT_SEC = 0.5
 _win_cache: dict[tuple[str, tuple[int, int, str] | tuple[int, int, str, int], str], float] = {}
 _inflight_claims: dict[
     tuple[str, tuple[int, int, str] | tuple[int, int, str, int], str],
@@ -61,7 +60,7 @@ def win_cache_ttl_sec() -> float:
 
 def redis_claim_timeout_sec() -> float:
     """协调 Redis claim 的等待上限；超时按 fail-open 策略处理。"""
-    return _env_float("PALLAS_FEDERATE_REDIS_CLAIM_TIMEOUT_SEC", 0.3, minimum=0.05, maximum=10.0)
+    return _env_float("PALLAS_FEDERATE_REDIS_CLAIM_TIMEOUT_SEC", 3.0, minimum=0.05, maximum=10.0)
 
 
 def claim_decision_ttl_sec() -> float:
@@ -277,7 +276,7 @@ async def claim_federate_group_message_ingress(
 
     if not claim_owner:
         try:
-            won = await asyncio.wait_for(asyncio.shield(wait_for), timeout=_INFLIGHT_CLAIM_WAIT_SEC)
+            won = await asyncio.wait_for(asyncio.shield(wait_for), timeout=redis_claim_timeout_sec())
         except TimeoutError:
             timer.finish(
                 outcome="claim_timeout",

@@ -77,9 +77,11 @@ worker 的 WS 连接状态：
 
 ### 联邦 ingress 抢占
 
-`claim_federate_group_message_ingress` 独立于 multi_bot claim：用 `cross_bot_message_signature` 签名，先查进程内 winner 缓存（TTL 30s、上限 20000）+ inflight future 共享结果，再 Redis `SET NX`（`{fed_prefix}:ingress:{plugin}:{group}:{claim_key}`，TTL 86400）。有 candidate 机制（最小候选号赢，TTL 2s）。`try_claim_cross_federate_message`（`federate/dedup.py`）用于需要彻底无竞争的（复读 fanout 等）。无 peer 对端时直接放行，避免协调 Redis 丢单条。审计 `federate_ingress_audit_summary_sync` 记 `{capability}:{outcome}`（TTL 300s）。
+`claim_federate_group_message_ingress` 独立于 multi_bot claim：用 `cross_bot_message_signature` 签名，先查进程内 winner 缓存（TTL 30s、上限 20000）+ inflight future 共享结果，再 Redis `SET NX`（`{fed_prefix}:ingress:{plugin}:{group}:{claim_key}`，TTL 86400）。有 candidate 机制（最小候选号赢，TTL 2s），候选集写入用 Lua 原子执行 `SADD` + `EXPIRE`，避免两条命令间中断留下无 TTL key。`try_claim_cross_federate_message`（`federate/dedup.py`）用于需要彻底无竞争的（复读 fanout 等）。无 peer 对端时直接放行，避免协调 Redis 丢单条。审计 `federate_ingress_audit_summary_sync` 记 `{capability}:{outcome}`（TTL 300s）。
 
-Redis claim 超时默认 0.3s（`PALLAS_FEDERATE_REDIS_CLAIM_TIMEOUT_SEC`）：**命令默认 fail-closed、闲聊默认 fail-open**，`PALLAS_FEDERATE_CLAIM_FAIL_OPEN` 显式设置时统一覆盖；协调端直接报错与超时同策略。超时/报错结论按消息签名缓存一个 TTL，同签名的重复消息跟随该结论、不再各自重试；同进程 inflight 跟随本条、不一起放行。门控里的同步 Redis 判定一律经 `fast_path.run_gate_blocking`（6 线程专用池，排队超过 `PALLAS_GATE_QUEUE_WARN_MS` 记限频告警），既保证不在事件循环上执行，也不与 DB / 文件的同步调用抢默认 executor。
+Redis claim 超时默认 3s（`PALLAS_FEDERATE_REDIS_CLAIM_TIMEOUT_SEC`，可配置）：**命令默认 fail-closed、闲聊默认 fail-open**，`PALLAS_FEDERATE_CLAIM_FAIL_OPEN` 显式设置时统一覆盖；协调端直接报错与超时同策略。超时/报错结论按消息签名缓存一个 TTL，同签名的重复消息跟随该结论、不再各自重试；同进程 inflight 等待使用相同超时上限并跟随本条结果。门控里的同步 Redis 判定一律经 `fast_path.run_gate_blocking`（6 线程专用池，排队超过 `PALLAS_GATE_QUEUE_WARN_MS` 记限频告警），既保证不在事件循环上执行，也不与 DB / 文件的同步调用抢默认 executor。
+
+该超时只限制异步调用的等待时间，不能终止已经在线程池中开始的同步 Redis 操作。超时返回后，后台操作仍可能成功并写入 claim；因此不能把超时等同于 Redis 命令取消或回滚，也不保证极端 Redis 故障下完全 fail-closed。
 
 ## 命令 vs 归属范围
 

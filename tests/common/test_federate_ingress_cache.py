@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from threading import Event
 from unittest.mock import AsyncMock
 
 import pytest
@@ -8,6 +9,11 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 
 from pallas.core.platform.federate import ingress as fed_ingress
 from pallas.core.platform.federate import ingress_audit
+
+
+def test_redis_claim_timeout_defaults_to_three_seconds(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(fed_ingress, "repo_env_raw_value", lambda _name: None)
+    assert fed_ingress.redis_claim_timeout_sec() == 3.0
 
 
 @pytest.fixture(autouse=True)
@@ -183,13 +189,13 @@ async def test_federate_ingress_old_owner_does_not_cache_replacement_claim(
 
 
 @pytest.mark.asyncio
-async def test_federate_ingress_follower_timeout_keeps_owner_claim(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_federate_ingress_follower_joins_owner_with_same_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
     fed_ingress.reset_federate_ingress_win_cache_for_tests()
     monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_bypass_unified", lambda: False)
     monkeypatch.setattr(fed_ingress.shard_ctx, "sharding_active", lambda: False)
     monkeypatch.setattr("pallas.core.platform.federate.ingress.federate_ingress_active", lambda: True)
     monkeypatch.setattr("pallas.core.platform.federate.ingress.load_or_create_deployment_id", lambda: "deploy-test")
-    monkeypatch.setattr(fed_ingress, "_INFLIGHT_CLAIM_WAIT_SEC", 0.01)
+    monkeypatch.setattr(fed_ingress, "redis_claim_timeout_sec", lambda: 0.5)
     started = asyncio.Event()
     release = asyncio.Event()
 
@@ -215,13 +221,10 @@ async def test_federate_ingress_follower_timeout_keeps_owner_claim(monkeypatch: 
     owner = asyncio.create_task(fed_ingress.claim_federate_group_message_ingress(event))
     await started.wait()
 
-    assert await fed_ingress.claim_federate_group_message_ingress(event) is False
+    follower = asyncio.create_task(fed_ingress.claim_federate_group_message_ingress(event))
     assert len(fed_ingress._inflight_claims) == 1
 
-    # A later follower still joins the original owner instead of starting a duplicate claim.
-    monkeypatch.setattr(fed_ingress, "_INFLIGHT_CLAIM_WAIT_SEC", 1.0)
-    follower = asyncio.create_task(fed_ingress.claim_federate_group_message_ingress(event))
-    await asyncio.sleep(0)
+    await asyncio.sleep(0.01)
     release.set()
     assert await owner is True
     assert await follower is True
@@ -404,6 +407,68 @@ async def test_federate_ingress_command_timeout_stays_closed(monkeypatch: pytest
 
     # 命令有副作用：超时时默认不放行，避免多个部署各执行一次。
     assert await fed_ingress.claim_federate_group_message_ingress(event, command_traffic=True) is False
+
+
+@pytest.mark.asyncio
+async def test_fail_open_timeout_does_not_release_a_late_redis_claim(monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.platform.federate import dedup, redis_claim
+
+    fed_ingress.reset_federate_ingress_win_cache_for_tests()
+    monkeypatch.setattr(fed_ingress, "federate_ingress_bypass_unified", lambda: False)
+    monkeypatch.setattr(fed_ingress.shard_ctx, "sharding_active", lambda: False)
+    monkeypatch.setattr(fed_ingress, "federate_ingress_active", lambda: True)
+    monkeypatch.setattr(fed_ingress, "load_or_create_deployment_id", lambda: "dep-local")
+    monkeypatch.setattr(fed_ingress, "redis_claim_timeout_sec", lambda: 0.01)
+    monkeypatch.setattr("pallas.core.platform.federate.config.federate_ingress_active", lambda: True)
+    monkeypatch.setattr("pallas.core.platform.federate.peer_bots.get_federate_peer_bot_ids", lambda: {1})
+    monkeypatch.setattr(redis_claim, "federate_redis_prefix", lambda: "pallas:fed:test")
+    monkeypatch.setattr(redis_claim, "federate_claim_ttl_sec", lambda: 60)
+
+    class BlockingClaimRedis:
+        def __init__(self) -> None:
+            self.started = Event()
+            self.release = Event()
+            self.finished = Event()
+            self.values: dict[str, str] = {}
+
+        def set(self, key: str, value: str, *, nx: bool, ex: int) -> bool:
+            self.started.set()
+            self.release.wait(2)
+            if nx and key in self.values:
+                self.finished.set()
+                return False
+            self.values[key] = value
+            self.finished.set()
+            return True
+
+        def get(self, key: str) -> str | None:
+            return self.values.get(key)
+
+    redis = BlockingClaimRedis()
+    monkeypatch.setattr(redis_claim, "get_federate_redis_client", lambda: redis)
+
+    async def claim(*args, **kwargs):
+        return await dedup.try_claim_cross_federate_message(*args, **kwargs)
+
+    monkeypatch.setattr(fed_ingress, "try_claim_cross_federate_message", claim)
+    event = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=12345,
+        message_id=1,
+        message=Message("hi"),
+        raw_message="hi",
+    )
+
+    assert await fed_ingress.claim_federate_group_message_ingress(event) is True
+    await asyncio.wait_for(asyncio.to_thread(redis.started.wait), timeout=1)
+    redis.release.set()
+    assert await asyncio.wait_for(asyncio.to_thread(redis.finished.wait), timeout=1)
+    assert list(redis.values.values()) == ["dep-local"]
 
 
 @pytest.mark.asyncio

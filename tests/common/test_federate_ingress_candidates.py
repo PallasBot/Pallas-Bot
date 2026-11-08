@@ -27,11 +27,13 @@ def test_candidate_registry_writes_capable_bot_without_message_body(monkeypatch)
         is True
     )
 
-    key, member = client.sadd.call_args.args
+    script, numkeys, key, member, ttl = client.eval.call_args.args
     assert key.startswith("pallas:fed:pool-1:ingress_candidates:733291779:")
     assert "漂亮牛" not in key
     assert member == "llm_alias:2357682124"
-    client.expire.assert_called_once_with(key, candidates.CANDIDATE_TTL_SEC)
+    assert numkeys == 1
+    assert "SADD" in script and "EXPIRE" in script
+    assert ttl == candidates.CANDIDATE_TTL_SEC
 
 
 def test_candidate_registry_reads_registered_bots(monkeypatch) -> None:
@@ -104,6 +106,25 @@ async def test_candidate_registers_before_federate_claim(monkeypatch: pytest.Mon
         is True
     )
     assert calls == ["candidate", "claim"]
+
+
+@pytest.mark.asyncio
+async def test_candidate_wait_does_not_consume_redis_claim_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ingress, "_CANDIDATE_WAIT_SEC", 0.06)
+    monkeypatch.setattr(ingress, "redis_claim_timeout_sec", lambda: 0.05)
+    monkeypatch.setattr(candidates, "register_federate_ingress_candidate_sync", lambda **_kwargs: True)
+    monkeypatch.setattr(
+        candidates,
+        "read_federate_ingress_candidate_bot_ids_sync",
+        lambda **_kwargs: frozenset({2357682124}),
+    )
+    claim = AsyncMock(return_value=True)
+    monkeypatch.setattr(ingress, "try_claim_cross_federate_message", claim)
+
+    assert await ingress.claim_federate_group_message_ingress(
+        make_event(), candidate_capability="llm_alias", candidate_bot_id=2357682124
+    ) is True
+    claim.assert_awaited_once()
 
 
 @pytest.mark.asyncio

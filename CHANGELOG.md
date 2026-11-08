@@ -18,7 +18,7 @@
 
 ### Changed
 
-- 联邦 ingress 抢占超时收紧到 0.3s：命令默认 fail-closed、闲聊默认 fail-open（`PALLAS_FEDERATE_CLAIM_FAIL_OPEN` 可统一覆盖），协调端报错与超时同策略，超时/报错结论按签名缓存以免重复消息各自重试；进程内胜出缓存 TTL 由 8s 提到 30s。后台任务领取改为共用 4s 总预算，逐段按剩余时间重设 `statement_timeout`。
+- 联邦 ingress 抢占按命令/闲聊区分 fail-closed 与 fail-open（`PALLAS_FEDERATE_CLAIM_FAIL_OPEN` 可统一覆盖），协调端报错与超时同策略，超时/报错结论按签名缓存以免重复消息各自重试；保留 3s 默认 claim 超时，进程内胜出缓存 TTL 由 8s 提到 30s。后台任务领取改为共用 4s 总预算，逐段按剩余时间重设 `statement_timeout`。
 - 方舟剧情/档案检索改为有界执行：metadata 先过滤、按分片单次校验并保留旧排序前 K 条，索引长期缓存仅保留 raw bytes，支持官方快照的完整剧情与档案检索。
 - 历史 `prts_corpus` 本地插件由内建查询接管，语料更新改用 `pallas mcp corpus update` 显式执行，保留原数据目录，不再启动旧插件的自动下载任务。
 - 协议端托管管理插件暂停公开分发，保留已安装本地模块兼容。

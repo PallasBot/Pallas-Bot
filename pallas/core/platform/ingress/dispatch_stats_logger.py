@@ -224,7 +224,7 @@ async def stop_loop_lag_probe() -> None:
     watchdog = _loop_lag_watchdog_thread
     _loop_lag_watchdog_thread = None
     if watchdog is not None:
-        await asyncio.to_thread(watchdog.join, 1.0)
+        watchdog.join(1.0)
 
 
 async def dispatch_stats_log_loop() -> None:

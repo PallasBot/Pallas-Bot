@@ -39,6 +39,26 @@ async def test_loop_lag_probe_start_is_idempotent() -> None:
 
 
 @pytest.mark.asyncio
+async def test_stopping_watchdog_does_not_queue_join_on_default_executor(monkeypatch: pytest.MonkeyPatch) -> None:
+    class Watchdog:
+        def is_alive(self) -> bool:
+            return False
+
+        def join(self, timeout: float) -> None:
+            assert timeout == 1.0
+
+    monkeypatch.setattr(stats_logger, "_loop_lag_beat_task", None)
+    monkeypatch.setattr(stats_logger, "_loop_lag_watchdog_thread", Watchdog())
+
+    def default_executor_must_not_be_used(*_args, **_kwargs):
+        raise AssertionError("watchdog shutdown must not wait behind the default executor")
+
+    monkeypatch.setattr(asyncio, "to_thread", default_executor_must_not_be_used)
+
+    await stop_loop_lag_probe()
+
+
+@pytest.mark.asyncio
 async def test_stalled_task_hints_include_pending_coroutine() -> None:
     release = asyncio.Event()
 

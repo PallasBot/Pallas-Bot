@@ -52,8 +52,12 @@ def register_federate_ingress_candidate_sync(
         capability=capability,
     )
     try:
-        client.sadd(key, f"{capability}:{int(bot_id)}")
-        client.expire(key, CANDIDATE_TTL_SEC)
+        script = """
+        redis.call('SADD', KEYS[1], ARGV[1])
+        redis.call('EXPIRE', KEYS[1], ARGV[2])
+        return 1
+        """
+        client.eval(script, 1, key, f"{capability}:{int(bot_id)}", CANDIDATE_TTL_SEC)
     except Exception:
         return False
     return True
