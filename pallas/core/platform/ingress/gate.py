@@ -32,6 +32,7 @@ from pallas.core.platform.ingress.dispatch_stats_logger import start_loop_lag_pr
 from pallas.core.platform.ingress.dream_host_gate import dream_session_ingress_passes
 from pallas.core.platform.ingress.fanout_bypass import ingress_fanout_bypasses_claim
 from pallas.core.platform.ingress.fast_path import (
+    GateNotStarted,
     ingress_once_claim_safe_before_host_gates,
     run_gate_blocking,
     shutdown_gate_executor,
@@ -282,6 +283,9 @@ async def ingress_group_message_gate(bot, event) -> None:
             plain,
             at_fleet_bot=at_fleet,
         )
+        if isinstance(host_snapshot, GateNotStarted):
+            outcome = "gate_capacity_reject"
+            raise IgnoredException("ingress gate capacity unavailable")
         safe_before_host_gates = host_snapshot.safe_before_host_gates
         alias_target_is_hosted = host_snapshot.alias_target_is_hosted
         if not alias_target_is_hosted and should_yield_ingress_for_peer_alias(self_id=self_id, plain_text=plain):
@@ -307,13 +311,17 @@ async def ingress_group_message_gate(bot, event) -> None:
                     record_ingress_claim(won=False)
                 raise IgnoredException(str(err)) from err
 
-        if not await run_gate_blocking(
+        hosted_activity_passes = await run_gate_blocking(
             hosted_activity_ingress_passes,
             self_id,
             int(event.group_id),
             plain,
             at_fleet_bot=at_fleet,
-        ):
+        )
+        if isinstance(hosted_activity_passes, GateNotStarted):
+            outcome = "gate_capacity_reject"
+            raise IgnoredException("ingress gate capacity unavailable")
+        if not hosted_activity_passes:
             outcome = "spy_host_gate"
             if metrics:
                 record_ingress_early_discard("spy_host")

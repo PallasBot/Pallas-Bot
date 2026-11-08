@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+from typing import TYPE_CHECKING
 
 from pallas.core.platform.multi_bot.dedup import cross_bot_group_message_key, cross_bot_message_signature
+
+if TYPE_CHECKING:
+    from pallas.core.platform.ingress.fast_path import GateExecutionTimeout, GateNotStarted
 
 _CROSS_FEDERATE_CLAIM_MAX = 4000
 _cross_federate_claim_lock = asyncio.Lock()
@@ -60,9 +64,9 @@ async def try_claim_cross_federate_message(
     *,
     use_plaintext: bool = True,
     include_message_time: bool = False,
-) -> bool | None:
-    """协调 Redis 抢占：True 胜出 / False 落败 / None 协调端报错（由调用方决定放行策略）。"""
-    """同 federate 池跨 deployment：仅一个 deployment 通过 ingress。"""
+    redis_timeout_sec: float | None = None,
+) -> bool | None | GateNotStarted | GateExecutionTimeout:
+    """同 federate 池跨 deployment 抢占；未启动或运行超时结果须保守拒绝。"""
     from pallas.core.platform.federate.config import federate_ingress_active
 
     if not federate_ingress_active():
@@ -102,4 +106,5 @@ async def try_claim_cross_federate_message(
         group_id,
         claim_key,
         deployment_id,
+        _running_timeout_sec=redis_timeout_sec,
     )

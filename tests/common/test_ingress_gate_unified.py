@@ -9,6 +9,8 @@ from nonebot.exception import IgnoredException
 from pallas.core.platform.ingress.group_admin_owner import GroupAdminOwnerIngressDecision
 from pallas.core.platform.shard.registry import config as shard_cfg
 
+pytestmark = pytest.mark.usefixtures("isolated_gate_pool")
+
 
 @pytest.mark.asyncio
 async def test_unified_ingress_once_discards_second_bot(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -45,6 +47,73 @@ async def test_unified_ingress_once_discards_second_bot(monkeypatch: pytest.Monk
     await ingress_group_message_gate(bot_a, event)
     with pytest.raises(IgnoredException):
         await ingress_group_message_gate(bot_b, event)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("saturated_call", ["host_snapshot", "hosted_activity"])
+async def test_host_gate_capacity_rejection_is_explicit_and_conservative(
+    monkeypatch: pytest.MonkeyPatch,
+    saturated_call: str,
+) -> None:
+    from pallas.core.platform.ingress import alias_route, gate
+    from pallas.core.platform.ingress.fast_path import GateNotStarted
+
+    monkeypatch.setattr("pallas.core.platform.shard.context.sharding_active", lambda: False)
+    monkeypatch.setattr(gate, "ingress_gate_active", lambda: True)
+    monkeypatch.setattr(gate, "fleet_bot_ids_contains", lambda _uid: False)
+    monkeypatch.setattr(gate, "known_bot_sender", lambda **_kwargs: False)
+    monkeypatch.setattr(gate, "pallas_at_targets", lambda _event: frozenset())
+    monkeypatch.setattr(gate, "touch_federate_present_group", lambda *_args: None)
+    monkeypatch.setattr(gate, "should_yield_federate_ingress_for_peer_command", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(gate, "should_process_federate_group_on_current_deployment", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(gate, "message_at_fleet_bot", lambda _event: False)
+    monkeypatch.setattr(gate, "command_lane_traffic", lambda _plain: False)
+    monkeypatch.setattr(gate, "ingress_fanout_bypasses_claim", lambda _plain: False)
+    monkeypatch.setattr(gate, "remember_local_group_bot", lambda *_args: None)
+    monkeypatch.setattr(gate, "should_record_ingress_metrics", lambda _bot: False)
+    monkeypatch.setattr(
+        gate,
+        "group_admin_owner_ingress_decision",
+        AsyncMock(return_value=GroupAdminOwnerIngressDecision(passes=True)),
+    )
+    local_claim = AsyncMock(return_value=[])
+    monkeypatch.setattr(gate, "run_ingress_message_claim", local_claim)
+    monkeypatch.setattr(gate, "dream_session_ingress_passes", AsyncMock(return_value=True))
+    monkeypatch.setattr(gate, "claim_federate_group_message_ingress", AsyncMock(return_value=True))
+    monkeypatch.setattr(alias_route, "fleet_bots_matching_plain", lambda _plain: frozenset())
+    monkeypatch.setattr(alias_route, "should_yield_ingress_for_peer_alias", lambda **_kwargs: False)
+
+    calls = 0
+
+    async def run_blocking(func, *_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        if saturated_call == "host_snapshot" or calls == 2:
+            return GateNotStarted.WAIT_TIMEOUT
+        return gate.HostGateSnapshot(safe_before_host_gates=True, alias_target_is_hosted=False)
+
+    monkeypatch.setattr(gate, "run_gate_blocking", run_blocking)
+    event = GroupMessageEvent.model_construct(
+        time=100,
+        self_id=111,
+        post_type="message",
+        message_type="group",
+        sub_type="normal",
+        user_id=999,
+        group_id=12345,
+        message_id=1,
+        message=Message("hello"),
+        raw_message="hello",
+    )
+
+    with pytest.raises(IgnoredException, match="capacity"):
+        await gate.ingress_group_message_gate(type("Bot", (), {"self_id": "111"})(), event)
+
+    assert calls == (1 if saturated_call == "host_snapshot" else 2)
+    if saturated_call == "host_snapshot":
+        local_claim.assert_not_awaited()
+    else:
+        local_claim.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -4,6 +4,10 @@ Pytest configuration and fixtures for beanie ODM testing.
 Uses mongomock_motor to provide in-memory MongoDB for async tests.
 """
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
+
 import pytest
 
 
@@ -23,6 +27,25 @@ def _reset_embedding_runtime_state() -> None:
         embedding_client._last_embedding_error = ""
     except Exception:
         pass
+
+
+@pytest.fixture
+def isolated_gate_pool(monkeypatch: pytest.MonkeyPatch):
+    from pallas.core.platform.ingress import fast_path
+
+    executor = ThreadPoolExecutor(
+        max_workers=fast_path._GATE_WORKERS,
+        thread_name_prefix=fast_path.GATE_EXECUTOR_THREAD_PREFIX,
+    )
+    monkeypatch.setattr(fast_path, "_executor", executor)
+    monkeypatch.setattr(fast_path, "_executor_closed", False)
+    monkeypatch.setattr(fast_path, "_owner_loop", None)
+    monkeypatch.setattr(fast_path, "_gate_slots", asyncio.BoundedSemaphore(fast_path._GATE_QUEUE_CAPACITY))
+    monkeypatch.setattr(fast_path, "_gate_waiters", 0)
+    monkeypatch.setattr(fast_path, "_submitted_work", set())
+    monkeypatch.setattr(fast_path, "_submitted_work_lock", Lock())
+    yield
+    executor.shutdown(wait=True)
 
 
 @pytest.fixture

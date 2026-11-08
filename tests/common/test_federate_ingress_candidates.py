@@ -9,6 +9,8 @@ from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 from pallas.core.platform.federate import candidates, ingress
 from pallas.core.platform.federate import ingress_audit
 
+pytestmark = pytest.mark.usefixtures("isolated_gate_pool")
+
 
 def test_candidate_registry_writes_capable_bot_without_message_body(monkeypatch) -> None:
     client = MagicMock()
@@ -121,10 +123,43 @@ async def test_candidate_wait_does_not_consume_redis_claim_timeout(monkeypatch: 
     claim = AsyncMock(return_value=True)
     monkeypatch.setattr(ingress, "try_claim_cross_federate_message", claim)
 
-    assert await ingress.claim_federate_group_message_ingress(
-        make_event(), candidate_capability="llm_alias", candidate_bot_id=2357682124
-    ) is True
+    assert (
+        await ingress.claim_federate_group_message_ingress(
+            make_event(), candidate_capability="llm_alias", candidate_bot_id=2357682124
+        )
+        is True
+    )
     claim.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("busy_stage", ["register", "candidate_read", "candidate_wait_read"])
+async def test_candidate_capacity_rejection_never_uses_empty_or_missing_candidate_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+    busy_stage: str,
+) -> None:
+    from pallas.core.platform.ingress.fast_path import GateNotStarted
+
+    result = GateNotStarted.SATURATED
+    if busy_stage == "candidate_read":
+        results = [True, result]
+    else:
+        results = [result]
+    run_blocking = AsyncMock(side_effect=results)
+    claim = AsyncMock(return_value=True)
+    monkeypatch.setattr(ingress, "run_gate_blocking", run_blocking)
+    monkeypatch.setattr(ingress, "try_claim_cross_federate_message", claim)
+
+    kwargs = (
+        {"candidate_wait": True}
+        if busy_stage == "candidate_wait_read"
+        else {
+            "candidate_capability": "llm_alias",
+            "candidate_bot_id": 2357682124,
+        }
+    )
+    assert await ingress.claim_federate_group_message_ingress(make_event(), **kwargs) is False
+    claim.assert_not_awaited()
 
 
 @pytest.mark.asyncio

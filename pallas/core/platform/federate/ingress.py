@@ -13,7 +13,7 @@ from pallas.core.platform.federate.config import (
     federate_ingress_bypass_unified,
 )
 from pallas.core.platform.federate.deployment import load_or_create_deployment_id
-from pallas.core.platform.ingress.fast_path import run_gate_blocking
+from pallas.core.platform.ingress.fast_path import GateExecutionTimeout, GateNotStarted, run_gate_blocking
 from pallas.core.platform.observability import SlowPathTimer, slow_path_threshold_ms
 from pallas.core.platform.shard import context as shard_ctx
 
@@ -59,7 +59,7 @@ def win_cache_ttl_sec() -> float:
 
 
 def redis_claim_timeout_sec() -> float:
-    """协调 Redis claim 的等待上限；超时按 fail-open 策略处理。"""
+    """协调 Redis claim 的运行等待上限。"""
     return _env_float("PALLAS_FEDERATE_REDIS_CLAIM_TIMEOUT_SEC", 3.0, minimum=0.05, maximum=10.0)
 
 
@@ -110,7 +110,7 @@ def bypass_federate_ingress_for_current_mode() -> bool:
 
 
 def federate_claim_fail_open(*, command_traffic: bool) -> bool:
-    """协调 Redis 超时/报错后是否放行本条消息。
+    """Redis 协调错误后是否放行；gate 运行超时始终保守拒绝。
 
     命令默认 fail-closed：多个部署同时执行有副作用的命令代价更大；
     闲聊默认 fail-open：丢一条比把整条入站链路卡住好。
@@ -193,6 +193,14 @@ async def claim_federate_group_message_ingress(
             capability=candidate_capability,
             bot_id=int(candidate_bot_id),
         )
+        if isinstance(registered, GateNotStarted):
+            record_federate_ingress_audit(capability=candidate_capability, outcome="gate_capacity_reject")
+            timer.finish(
+                outcome="gate_capacity_reject",
+                group_id=int(event.group_id),
+                user_id=int(event.user_id),
+            )
+            return False
         if not registered:
             record_federate_ingress_audit(capability=candidate_capability, outcome="candidate_registration_failed")
             timer.finish(
@@ -211,6 +219,14 @@ async def claim_federate_group_message_ingress(
             message_time=int(event.time),
             capability="",
         )
+        if isinstance(candidate_ids, GateNotStarted):
+            record_federate_ingress_audit(capability=candidate_capability, outcome="gate_capacity_reject")
+            timer.finish(
+                outcome="gate_capacity_reject",
+                group_id=int(event.group_id),
+                user_id=int(event.user_id),
+            )
+            return False
         if candidate_ids and int(candidate_bot_id) != min(candidate_ids):
             record_federate_ingress_audit(capability=candidate_capability, outcome="candidate_yield")
             timer.finish(outcome="candidate_yield", group_id=int(event.group_id), user_id=int(event.user_id))
@@ -225,6 +241,14 @@ async def claim_federate_group_message_ingress(
             message_time=int(event.time),
             capability="",
         )
+        if isinstance(candidate_ids, GateNotStarted):
+            record_federate_ingress_audit(capability=None, outcome="gate_capacity_reject")
+            timer.finish(
+                outcome="gate_capacity_reject",
+                group_id=int(event.group_id),
+                user_id=int(event.user_id),
+            )
+            return False
         if candidate_ids:
             record_federate_ingress_audit(capability=None, outcome="candidate_yield")
             timer.finish(outcome="candidate_yield", group_id=int(event.group_id), user_id=int(event.user_id))
@@ -298,18 +322,16 @@ async def claim_federate_group_message_ingress(
         return bool(won)
 
     try:
-        won = await asyncio.wait_for(
-            try_claim_cross_federate_message(
-                plugin,
-                int(event.group_id),
-                int(event.user_id),
-                body,
-                event.time,
-                deployment_id,
-                use_plaintext=True,
-                include_message_time=include_message_time,
-            ),
-            timeout=redis_claim_timeout_sec(),
+        won = await try_claim_cross_federate_message(
+            plugin,
+            int(event.group_id),
+            int(event.user_id),
+            body,
+            event.time,
+            deployment_id,
+            use_plaintext=True,
+            include_message_time=include_message_time,
+            redis_timeout_sec=redis_claim_timeout_sec(),
         )
     except TimeoutError:
         async with _win_lock:
@@ -343,8 +365,25 @@ async def claim_federate_group_message_ingress(
                 wait_for.exception()
         raise
 
+    if isinstance(won, (GateNotStarted, GateExecutionTimeout)):
+        async with _win_lock:
+            if _inflight_claims.get(cache_key) is wait_for:
+                _inflight_claims.pop(cache_key)
+        if not wait_for.done():
+            wait_for.set_result(False)
+        _remember_claim_decision(cache_key, allow=False)
+        outcome = "claim_timeout" if isinstance(won, GateExecutionTimeout) else "gate_capacity_reject"
+        timer.finish(
+            outcome=outcome,
+            cache_hit=False,
+            group_id=int(event.group_id),
+            user_id=int(event.user_id),
+        )
+        record_federate_ingress_audit(capability=candidate_capability, outcome=outcome)
+        return False
+
     if won is None:
-        # 协调端明确报错（不是竞争失败）：与超时同策略，命令保持拒绝。
+        # 协调端明确报错（不是竞争失败）：命令默认拒绝，闲聊默认放行。
         async with _win_lock:
             if _inflight_claims.get(cache_key) is wait_for:
                 _inflight_claims.pop(cache_key)
