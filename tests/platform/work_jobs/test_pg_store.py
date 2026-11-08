@@ -166,6 +166,103 @@ async def test_postgres_job_writes_normalize_nested_nuls_without_mutating_input(
     assert job.payload == original_payload
 
 
+@pytest.mark.asyncio
+async def test_claim_budget_exhaustion_does_not_start_a_claim_query(monkeypatch) -> None:
+    import asyncio
+
+    from pallas.core.foundation.db import repository_pg
+    from pallas.core.platform.work_jobs import pg_store
+    from pallas.core.platform.work_jobs.pg_store import PostgresWorkJobStore
+
+    monkeypatch.setattr(pg_store, "claim_statement_timeout_ms", lambda: 500)
+    loaded = False
+
+    async def slow_set_local(_statement):
+        await asyncio.sleep(1)
+
+    class Session:
+        def __init__(self):
+            self.statements = []
+
+        async def execute(self, statement):
+            self.statements.append(statement)
+            if len(self.statements) == 1:
+                await slow_set_local(statement)
+
+        async def commit(self):
+            raise AssertionError("claim must not commit after its budget expires")
+
+    session = Session()
+
+    class SessionContext:
+        async def __aenter__(self):
+            return session
+
+        async def __aexit__(self, *_args):
+            pass
+
+    async def load_rows(*_args, **_kwargs):
+        nonlocal loaded
+        loaded = True
+        return []
+
+    monkeypatch.setattr(repository_pg, "get_session", lambda: SessionContext())
+    monkeypatch.setattr(pg_store, "load_claim_rows", load_rows)
+
+    with pytest.raises(TimeoutError):
+        await PostgresWorkJobStore().claim_many(owner="worker", lease_sec=10, limit=1)
+
+    assert loaded is False
+    assert len(session.statements) == 1
+
+
+@pytest.mark.asyncio
+async def test_claim_budget_covers_flush_and_commit(monkeypatch) -> None:
+    import asyncio
+
+    from pallas.core.foundation.db import repository_pg
+    from pallas.core.platform.work_jobs import pg_store
+    from pallas.core.platform.work_jobs.pg_store import PostgresWorkJobStore
+
+    monkeypatch.setattr(pg_store, "claim_statement_timeout_ms", lambda: 500)
+    row = SimpleNamespace(
+        id="job-1",
+        kind="test.job",
+        payload={},
+        idempotency_key="job:1",
+        created_at=1.0,
+        attempts=0,
+        lease_id=None,
+        status="pending",
+        lease_owner=None,
+        leased_until=None,
+    )
+
+    class Session:
+        async def execute(self, _statement):
+            return None
+
+        async def commit(self):
+            await asyncio.sleep(1)
+
+    class SessionContext:
+        async def __aenter__(self):
+            return Session()
+
+        async def __aexit__(self, *_args):
+            pass
+
+    monkeypatch.setattr(repository_pg, "get_session", lambda: SessionContext())
+
+    async def load_rows(*_args, **_kwargs):
+        return [row]
+
+    monkeypatch.setattr(pg_store, "load_claim_rows", load_rows)
+
+    with pytest.raises(TimeoutError):
+        await PostgresWorkJobStore().claim_many(owner="worker", lease_sec=10, limit=1)
+
+
 @pytest.mark.parametrize(
     "payload",
     [

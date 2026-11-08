@@ -9,6 +9,8 @@ from nonebot.exception import IgnoredException
 from pallas.core.platform.ingress.claim_gate import IngressClaimError
 from pallas.core.platform.shard.registry import config as shard_cfg
 
+pytestmark = pytest.mark.usefixtures("isolated_gate_pool")
+
 
 @pytest.mark.asyncio
 async def test_shard_claim_lost_skips_host_gates(monkeypatch: pytest.MonkeyPatch) -> None:

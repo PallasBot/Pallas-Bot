@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-from threading import Event, Thread, get_ident
+from threading import Event, Thread, current_thread, get_ident
 from unittest.mock import AsyncMock
 
 import pytest
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, Message
 
 from pallas.core.platform.ingress import gate
+from pallas.core.platform.ingress.fast_path import GATE_EXECUTOR_THREAD_PREFIX
 from pallas.core.platform.ingress.group_admin_owner import GroupAdminOwnerIngressDecision
 
 
@@ -16,11 +17,14 @@ class BlockingRedis:
         self.started = Event()
         self.release = Event()
         self.thread_id: int | None = None
+        self.thread_name: str | None = None
 
     def get(self, _key: str) -> int:
         self.thread_id = get_ident()
+        self.thread_name = current_thread().name
         self.started.set()
-        self.release.wait()
+        if not self.release.wait(3):
+            raise TimeoutError("test Redis wait was not released")
         return 0
 
 
@@ -86,6 +90,9 @@ def _prepare_gate(monkeypatch: pytest.MonkeyPatch, redis: BlockingRedis, decisio
     return claim
 
 
+pytestmark = pytest.mark.usefixtures("isolated_gate_pool")
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("decision", ["once", "hosted_claim", "hosted_pass"])
 async def test_ingress_redis_decisions_leave_event_loop_responsive(
@@ -98,8 +105,7 @@ async def test_ingress_redis_decisions_leave_event_loop_responsive(
     released_after_heartbeat = Event()
 
     def release_guard() -> None:
-        redis.started.wait(5)
-        if heartbeat.wait(2):
+        if redis.started.wait(5) and heartbeat.wait(2):
             released_after_heartbeat.set()
         redis.release.set()
 
@@ -115,13 +121,23 @@ async def test_ingress_redis_decisions_leave_event_loop_responsive(
 
     task = asyncio.create_task(gate.ingress_group_message_gate(Bot(), _event()))
     heartbeat_task = asyncio.create_task(pulse())
-    await asyncio.wait_for(asyncio.to_thread(redis.started.wait), timeout=5)
-    await heartbeat_task
-    await task
-    await asyncio.to_thread(guard.join, 5)
+    try:
+        assert await asyncio.wait_for(asyncio.to_thread(redis.started.wait, 5), timeout=6)
+        await heartbeat_task
+        await task
+    finally:
+        redis.release.set()
+        if not task.done():
+            task.cancel()
+        if not heartbeat_task.done():
+            heartbeat_task.cancel()
+        await asyncio.gather(task, heartbeat_task, return_exceptions=True)
+        await asyncio.to_thread(guard.join, 8)
 
+    assert not guard.is_alive()
     assert released_after_heartbeat.is_set()
     assert redis.thread_id != get_ident()
+    assert (redis.thread_name or "").startswith(GATE_EXECUTOR_THREAD_PREFIX)
 
 
 @pytest.mark.asyncio
@@ -146,18 +162,25 @@ async def test_cancelled_ingress_does_not_continue_to_claim(
     task.add_done_callback(lambda _task: task_done.set())
 
     def cancel_guard() -> None:
-        redis.started.wait(5)
-        loop.call_soon_threadsafe(task.cancel)
-        if task_done.wait(2):
-            cancelled_before_release.set()
+        if redis.started.wait(5):
+            loop.call_soon_threadsafe(task.cancel)
+            if task_done.wait(2):
+                cancelled_before_release.set()
         redis.release.set()
 
     guard = Thread(target=cancel_guard, daemon=True)
     guard.start()
-    await asyncio.wait_for(asyncio.to_thread(redis.started.wait), timeout=5)
-    with pytest.raises(asyncio.CancelledError):
-        await task
-    await asyncio.to_thread(guard.join, 5)
+    try:
+        assert await asyncio.wait_for(asyncio.to_thread(redis.started.wait, 5), timeout=6)
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    finally:
+        redis.release.set()
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+        await asyncio.to_thread(guard.join, 8)
 
+    assert not guard.is_alive()
     assert cancelled_before_release.is_set()
     claim.assert_not_called()

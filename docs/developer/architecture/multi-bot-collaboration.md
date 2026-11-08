@@ -77,7 +77,13 @@ worker 的 WS 连接状态：
 
 ### 联邦 ingress 抢占
 
-`claim_federate_group_message_ingress` 独立于 multi_bot claim：用 `cross_bot_message_signature` 签名，先查进程内 winner 缓存（TTL 8s、上限 20000）+ inflight future 共享结果，再 Redis `SET NX`（`{fed_prefix}:ingress:{plugin}:{group}:{claim_key}`，TTL 86400）。有 candidate 机制（最小候选号赢，TTL 2s）。`try_claim_cross_federate_message`（`federate/dedup.py`）用于需要彻底无竞争的（复读 fanout 等）。无 peer 对端时直接放行，避免协调 Redis 丢单条。审计 `federate_ingress_audit_summary_sync` 记 `{capability}:{outcome}`（TTL 300s）。
+`claim_federate_group_message_ingress` 独立于 multi_bot claim：用 `cross_bot_message_signature` 签名，先查进程内 winner 缓存（TTL 30s、上限 20000）+ inflight future 共享结果，再 Redis `SET NX`（`{fed_prefix}:ingress:{plugin}:{group}:{claim_key}`，TTL 86400）。有 candidate 机制（最小候选号赢，TTL 2s），候选集写入用 Lua 原子执行 `SADD` + `EXPIRE`，避免两条命令间中断留下无 TTL key。`try_claim_cross_federate_message`（`federate/dedup.py`）用于需要彻底无竞争的（复读 fanout 等）。无 peer 对端时直接放行，避免协调 Redis 丢单条。审计 `federate_ingress_audit_summary_sync` 记 `{capability}:{outcome}`（TTL 300s）。
+
+联邦 Redis claim 的运行超时默认 3s（`PALLAS_FEDERATE_REDIS_CLAIM_TIMEOUT_SEC`，可配置），从同步 Redis 操作实际开始时计时；运行超时总是保守拒绝，操作本身仍可能在后台完成。Redis 协调错误（非运行超时）按策略处理：**命令默认 fail-closed、闲聊默认 fail-open**，`PALLAS_FEDERATE_CLAIM_FAIL_OPEN` 显式设置时统一覆盖。超时/报错结论按消息签名缓存一个 TTL，同签名的重复消息跟随该结论、不再各自重试；同进程 inflight 等待使用相同上限并跟随本条结果。门控里的同步 Redis 判定一律经 `fast_path.run_gate_blocking`，使用 6 个 worker 的专用池，最多排队 12 个任务；最多 64 个调用等待准入。250ms 初始 deadline 从调用开始计时，覆盖准入等待与 executor 排队；到期时任务尚未开始则返回 `GateNotStarted.WAIT_TIMEOUT` 并在出队时跳过。超时或取消不会提前释放排队槽；排队任务保留在 executor 队列中，真正出队时才跳过并释放容量。排队超过 `PALLAS_GATE_QUEUE_WARN_MS` 仍会记限频告警，既保证不在事件循环上执行，也不与 DB / 文件的同步调用抢默认 executor。
+
+池满或 deadline 到期时任务尚未开始，会返回独立的 `GateNotStarted` 结果；宿主门控、候选读写与 claim 均保守拒绝，不套用 Redis 错误的闲聊 fail-open 策略。已开始的 claim 超过其运行时限会返回 `GateExecutionTimeout.RUNNING` 并保守拒绝。这能限制过载时的线程池排队与入口等待，但可能丢弃本条消息。gate 池绑定进程中首个使用它的 event loop，其他 loop 会以 `LOOP_MISMATCH` 保守拒绝，关闭后不会迁移资源或重建池。取消或关闭会跳过尚未开始的任务；已经在线程中运行的同步操作不能强制取消，仍可能完成并写入 claim，也不会回滚。
+
+Redis claim 运行超时只限制调用方等待，不能终止已经在线程池中开始的同步 Redis 操作。超时返回后，后台操作仍可能成功并写入 claim；因此不能把超时等同于 Redis 命令取消或回滚，也不保证极端 Redis 故障下完全 fail-closed。
 
 ## 命令 vs 归属范围
 

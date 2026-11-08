@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from contextvars import ContextVar, Token
+from dataclasses import dataclass
 
 from nonebot import get_bots, logger
 from nonebot.adapters.onebot.v11 import GroupMessageEvent, NoticeEvent
@@ -27,9 +28,15 @@ from pallas.core.platform.ingress.claim_gate import (
     ingress_gate_runtime_active,
     run_ingress_message_claim,
 )
+from pallas.core.platform.ingress.dispatch_stats_logger import start_loop_lag_probe, stop_loop_lag_probe
 from pallas.core.platform.ingress.dream_host_gate import dream_session_ingress_passes
 from pallas.core.platform.ingress.fanout_bypass import ingress_fanout_bypasses_claim
-from pallas.core.platform.ingress.fast_path import ingress_once_claim_safe_before_host_gates
+from pallas.core.platform.ingress.fast_path import (
+    GateNotStarted,
+    ingress_once_claim_safe_before_host_gates,
+    run_gate_blocking,
+    shutdown_gate_executor,
+)
 from pallas.core.platform.ingress.group_admin_owner import group_admin_owner_ingress_decision
 from pallas.core.platform.ingress.hosted_activity_gate import (
     hosted_activity_claim_is_hosted,
@@ -82,6 +89,30 @@ def pallas_at_targets(event: GroupMessageEvent) -> frozenset[int]:
     # 本机不应因「本地 fleet 没有该号」而把消息当闲聊接走。
     bot_ids = get_fleet_bot_ids() | get_federate_peer_bot_ids()
     return ats & bot_ids
+
+
+@dataclass(frozen=True, slots=True)
+class HostGateSnapshot:
+    """主持活动门控的两个结论；同一次线程跳转里一起算出，避免重复遍历同一批 spec。"""
+
+    safe_before_host_gates: bool
+    alias_target_is_hosted: bool
+
+
+def host_gate_snapshot(group_id: int, plain: str, *, at_fleet_bot: bool) -> HostGateSnapshot:
+    """分片模式下两项判定都会读 coord Redis，调用方须放到 gate 专用线程池执行。"""
+    return HostGateSnapshot(
+        safe_before_host_gates=ingress_once_claim_safe_before_host_gates(
+            group_id,
+            plain,
+            at_fleet_bot=at_fleet_bot,
+        ),
+        alias_target_is_hosted=hosted_activity_claim_is_hosted(
+            group_id,
+            plain,
+            at_fleet_bot=at_fleet_bot,
+        ),
+    )
 
 
 def ingress_fanout_early_exit(
@@ -240,25 +271,23 @@ async def ingress_group_message_gate(bot, event) -> None:
                 record_ingress_early_discard("not_at_target")
             raise IgnoredException("not at-target bot")
 
-        safe_before_host_gates = await asyncio.to_thread(
-            ingress_once_claim_safe_before_host_gates,
-            int(event.group_id),
-            plain,
-            at_fleet_bot=at_fleet,
-        )
-
         from pallas.core.platform.ingress.alias_route import (
             fleet_bots_matching_plain,
             should_yield_ingress_for_peer_alias,
         )
 
         alias_matched_bot_ids = fleet_bots_matching_plain(plain)
-        alias_target_is_hosted = await asyncio.to_thread(
-            hosted_activity_claim_is_hosted,
+        host_snapshot = await run_gate_blocking(
+            host_gate_snapshot,
             int(event.group_id),
             plain,
             at_fleet_bot=at_fleet,
         )
+        if isinstance(host_snapshot, GateNotStarted):
+            outcome = "gate_capacity_reject"
+            raise IgnoredException("ingress gate capacity unavailable")
+        safe_before_host_gates = host_snapshot.safe_before_host_gates
+        alias_target_is_hosted = host_snapshot.alias_target_is_hosted
         if not alias_target_is_hosted and should_yield_ingress_for_peer_alias(self_id=self_id, plain_text=plain):
             outcome = "peer_alias_yield"
             if metrics:
@@ -282,13 +311,17 @@ async def ingress_group_message_gate(bot, event) -> None:
                     record_ingress_claim(won=False)
                 raise IgnoredException(str(err)) from err
 
-        if not await asyncio.to_thread(
+        hosted_activity_passes = await run_gate_blocking(
             hosted_activity_ingress_passes,
             self_id,
             int(event.group_id),
             plain,
             at_fleet_bot=at_fleet,
-        ):
+        )
+        if isinstance(hosted_activity_passes, GateNotStarted):
+            outcome = "gate_capacity_reject"
+            raise IgnoredException("ingress gate capacity unavailable")
+        if not hosted_activity_passes:
             outcome = "spy_host_gate"
             if metrics:
                 record_ingress_early_discard("spy_host")
@@ -322,13 +355,14 @@ async def ingress_group_message_gate(bot, event) -> None:
 
         if not local_only_federate and not pallas_ats:
             candidate_capability: str | None = None
+            command_lane = command_lane_traffic(plain)
             if alias_target_is_hosted:
                 candidate_capability = "hosted_activity"
             elif self_id in alias_matched_bot_ids:
                 candidate_capability = "llm_alias"
-            elif command_lane_traffic(plain):
+            elif command_lane:
                 candidate_capability = "command"
-            candidate_wait = bool(command_lane_traffic(plain) or alias_matched_bot_ids)
+            candidate_wait = bool(command_lane or alias_matched_bot_ids)
             candidate_wait = candidate_wait or alias_target_is_hosted
             if not await claim_federate_group_message_ingress(
                 event,
@@ -337,6 +371,7 @@ async def ingress_group_message_gate(bot, event) -> None:
                 candidate_capability=candidate_capability,
                 candidate_bot_id=self_id if candidate_capability else None,
                 candidate_wait=candidate_wait and candidate_capability is None,
+                command_traffic=command_lane,
             ):
                 outcome = "federate_lost"
                 if metrics:
@@ -471,9 +506,12 @@ def register_ingress_gate_runtime() -> None:
     @driver.on_startup
     async def ingress_gate_startup_log() -> None:
         await log_ingress_gate_startup()
+        start_loop_lag_probe()
 
     @driver.on_shutdown
     async def federate_peer_sync_shutdown() -> None:
+        await stop_loop_lag_probe()
         await stop_federate_peer_bot_sync_loop()
+        shutdown_gate_executor()
 
     _GATE_REGISTERED = True
