@@ -97,6 +97,7 @@ FIELD_LABELS: dict[str, str] = {
     "federate_id": "本站在社区中的编号",
     "deployment_name": "部署显示名",
     "federate_ingress_enabled": "多机部署时过滤重复群消息",
+    "gate_queue_warn_ms": "gate 排队告警阈值（毫秒）",
     "prefer_local_owner": "命令群归属优先本机",
     "federate_redis_prefix": "去重键前缀",
     "find_cache_max": "查询缓存条数上限",

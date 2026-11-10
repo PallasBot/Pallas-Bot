@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import time
 from concurrent.futures import ThreadPoolExecutor
 from enum import Enum
@@ -31,6 +32,13 @@ _GATE_QUEUE_CAPACITY = 12
 _GATE_MAX_WAITERS = 64
 _GATE_ADMISSION_WAIT_SEC = 0.25
 _GATE_QUEUE_WARN_MS = 1000.0
+_GATE_CONFIG_REFRESH_INTERVAL_SEC = 1.0
+_gate_metrics_lock = Lock()
+_active_gate_calls: dict[_GateCall, tuple[str, float]] = {}
+_gate_queue_warn_ms_lock = Lock()
+_gate_queue_warn_ms = _GATE_QUEUE_WARN_MS
+_gate_queue_warn_ms_generation = 0
+_gate_config_refresh_task: asyncio.Task[None] | None = None
 
 _executor: ThreadPoolExecutor | None = None
 _executor_closed = False
@@ -75,6 +83,10 @@ class _GateCall:
         self._lock = Lock()
         self._started = False
         self._started_at: float | None = None
+        self._executed = False
+        self._finished_at: float | None = None
+        self._running_at_start: int | None = None
+        self._queue_warning_logged = False
         self._skip_result: GateNotStarted | None = None
 
     def skip_if_not_started(self, result: GateNotStarted) -> GateNotStarted | None:
@@ -96,6 +108,19 @@ class _GateCall:
         with self._lock:
             return self._started, self._started_at
 
+    def execution_details(self) -> tuple[float | None, float | None, int | None]:
+        with self._lock:
+            if not self._executed:
+                return None, None, None
+            return self._started_at, self._finished_at, self._running_at_start
+
+    def claim_queue_warning(self) -> bool:
+        with self._lock:
+            if self._queue_warning_logged:
+                return False
+            self._queue_warning_logged = True
+            return True
+
     def notify_started(self, started_at: float) -> None:
         if not self.started_future.done():
             self.started_future.set_result(started_at)
@@ -107,8 +132,8 @@ class _GateCall:
             result = self._skip_result
             if result is None and started_at >= self.deadline:
                 result = self._skip_result = GateNotStarted.WAIT_TIMEOUT
-            self._started = True
             if result is None:
+                self._started = True
                 self._started_at = started_at
         try:
             self.loop.call_soon_threadsafe(_release_gate_slot, self.slots)
@@ -118,7 +143,21 @@ class _GateCall:
             return GateNotStarted.SHUTDOWN
         if result is not None:
             return result
-        return self.func(*self.args, **self.kwargs)
+        with _gate_metrics_lock:
+            name = getattr(self.func, "__name__", "?")
+            _active_gate_calls[self] = (name, started_at)
+            running_at_start = len(_active_gate_calls)
+        with self._lock:
+            self._executed = True
+            self._running_at_start = running_at_start
+        try:
+            return self.func(*self.args, **self.kwargs)
+        finally:
+            finished_at = time.monotonic()
+            with self._lock:
+                self._finished_at = finished_at
+            with _gate_metrics_lock:
+                _active_gate_calls.pop(self, None)
 
 
 def _release_gate_slot(slots: asyncio.BoundedSemaphore) -> None:
@@ -131,26 +170,123 @@ def _consume_future_exception(future: asyncio.Future[Any]) -> None:
 
 
 def _log_gate_not_started(result: GateNotStarted, func: Any) -> GateNotStarted:
+    now = time.monotonic()
+    with _gate_metrics_lock:
+        active = tuple(_active_gate_calls.values())
+    active_tasks = ", ".join(f"{name} ({round((now - started_at) * 1000)} ms)" for name, started_at in active)
     log_rate_limited(
         logger,
         "warning",
         "gate_pool_not_started",
-        "Ingress gate task [{}] was not started because admission was [{}].",
+        "Ingress gate task [{}] was not started because admission was [{}]; running tasks [{}]: [{}].",
         getattr(func, "__name__", "?"),
         result.value,
+        len(active),
+        active_tasks or "none",
     )
     return result
 
 
-def gate_queue_warn_ms() -> float:
-    """排队超过这个时长就记一条限频告警，用来确认专用池没有被 Redis 停滞拖住。"""
+def _read_gate_queue_warn_ms() -> float:
     raw = repo_env_raw_value("PALLAS_GATE_QUEUE_WARN_MS")
     if raw is None:
         return _GATE_QUEUE_WARN_MS
     try:
-        return max(100.0, float(str(raw).strip()))
+        value = float(str(raw).strip())
+        return max(100.0, value) if math.isfinite(value) else _GATE_QUEUE_WARN_MS
     except ValueError:
         return _GATE_QUEUE_WARN_MS
+
+
+_gate_queue_warn_ms = _read_gate_queue_warn_ms()
+
+
+def gate_queue_warn_ms() -> float:
+    """排队告警阈值由配置加载/热载路径维护，避免在 gate 调用中同步检查磁盘。"""
+    with _gate_queue_warn_ms_lock:
+        return _gate_queue_warn_ms
+
+
+def set_gate_queue_warn_ms(value: float) -> None:
+    global _gate_queue_warn_ms, _gate_queue_warn_ms_generation
+    parsed = float(value)
+    if not math.isfinite(parsed):
+        parsed = _GATE_QUEUE_WARN_MS
+    with _gate_queue_warn_ms_lock:
+        _gate_queue_warn_ms = max(100.0, parsed)
+        _gate_queue_warn_ms_generation += 1
+
+
+def _apply_gate_queue_warn_ms_snapshot(value: float, generation: int) -> None:
+    global _gate_queue_warn_ms
+    with _gate_queue_warn_ms_lock:
+        if generation != _gate_queue_warn_ms_generation:
+            return
+        _gate_queue_warn_ms = max(100.0, value)
+
+
+async def _gate_queue_config_refresh_loop() -> None:
+    while True:
+        with _gate_queue_warn_ms_lock:
+            generation = _gate_queue_warn_ms_generation
+        try:
+            value = await asyncio.to_thread(_read_gate_queue_warn_ms)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log_rate_limited(
+                logger,
+                "warning",
+                "gate_config_refresh",
+                "Gate queue warning configuration refresh failed.",
+            )
+        else:
+            _apply_gate_queue_warn_ms_snapshot(value, generation)
+        await asyncio.sleep(_GATE_CONFIG_REFRESH_INTERVAL_SEC)
+
+
+def start_gate_queue_config_refresh_loop() -> None:
+    global _gate_config_refresh_task
+    if _gate_config_refresh_task is None or _gate_config_refresh_task.done():
+        _gate_config_refresh_task = asyncio.create_task(
+            _gate_queue_config_refresh_loop(),
+            name="ingress_gate_config_refresh",
+        )
+
+
+async def stop_gate_queue_config_refresh_loop() -> None:
+    global _gate_config_refresh_task
+    task = _gate_config_refresh_task
+    if task is None:
+        return
+    _gate_config_refresh_task = None
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
+def _log_gate_queue_warning(call: _GateCall, submitted: float, func: Any) -> None:
+    started_at, finished_at, running_at_start = call.execution_details()
+    if started_at is None or running_at_start is None:
+        return
+    queued_ms = (started_at - submitted) * 1000.0
+    if queued_ms < gate_queue_warn_ms():
+        return
+    if not call.claim_queue_warning():
+        return
+    execution_elapsed_ms = ((finished_at or time.monotonic()) - started_at) * 1000.0
+    log_rate_limited(
+        logger,
+        "warning",
+        "gate_pool_queue",
+        "Ingress gate pool queued task [{}] for [{}] ms (running at start [{}], execution elapsed [{}] ms).",
+        getattr(func, "__name__", "?"),
+        round(queued_ms),
+        running_at_start,
+        round(execution_elapsed_ms),
+    )
 
 
 def gate_executor() -> ThreadPoolExecutor:
@@ -216,10 +352,8 @@ async def run_gate_blocking[T](
         return _log_gate_not_started(result, func)
 
     submitted = time.monotonic()
-    started: list[float] = []
 
     def _invoke(call: _GateCall) -> T | GateNotStarted:
-        started.append(time.monotonic())
         try:
             return call()
         finally:
@@ -259,6 +393,13 @@ async def run_gate_blocking[T](
         slots.release()
         return _log_gate_not_started(submission_error, func)
 
+    def log_when_gate_call_completes(_future: Any) -> None:
+        try:
+            loop.call_soon_threadsafe(_log_gate_queue_warning, call, submitted, func)
+        except RuntimeError:
+            pass
+
+    future.add_done_callback(log_when_gate_call_completes)
     wrapped = asyncio.wrap_future(future, loop=loop)
     try:
         while not wrapped.done():
@@ -271,10 +412,12 @@ async def run_gate_blocking[T](
                     if wrapped.done():
                         break
                     wrapped.add_done_callback(_consume_future_exception)
+                    _log_gate_queue_warning(call, submitted, func)
                     return GateExecutionTimeout.RUNNING
                 done, _ = await asyncio.wait((wrapped,), timeout=remaining)
                 if not done and not wrapped.done():
                     wrapped.add_done_callback(_consume_future_exception)
+                    _log_gate_queue_warning(call, submitted, func)
                     return GateExecutionTimeout.RUNNING
                 continue
 
@@ -299,18 +442,12 @@ async def run_gate_blocking[T](
     except asyncio.CancelledError:
         call.skip_if_not_started(GateNotStarted.CANCELLED)
         wrapped.add_done_callback(_consume_future_exception)
+        _log_gate_queue_warning(call, submitted, func)
         raise
-    if started:
-        queued_ms = (started[0] - submitted) * 1000.0
-        if queued_ms >= gate_queue_warn_ms():
-            log_rate_limited(
-                logger,
-                "warning",
-                "gate_pool_queue",
-                "gate 专用池排队 [{}]ms，任务 [{}]",
-                round(queued_ms),
-                getattr(func, "__name__", "?"),
-            )
+    except Exception:
+        _log_gate_queue_warning(call, submitted, func)
+        raise
+    _log_gate_queue_warning(call, submitted, func)
     return result
 
 

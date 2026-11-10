@@ -36,6 +36,8 @@ from pallas.core.platform.ingress.fast_path import (
     ingress_once_claim_safe_before_host_gates,
     run_gate_blocking,
     shutdown_gate_executor,
+    start_gate_queue_config_refresh_loop,
+    stop_gate_queue_config_refresh_loop,
 )
 from pallas.core.platform.ingress.group_admin_owner import group_admin_owner_ingress_decision
 from pallas.core.platform.ingress.hosted_activity_gate import (
@@ -411,6 +413,7 @@ def reset_pre_schedule_ingress_group_message_gate(token: Token[bool] | None) -> 
 
 
 async def log_ingress_gate_startup() -> None:
+    start_gate_queue_config_refresh_loop()
     if not ingress_gate_active():
         return
     from pallas.core.platform.federate.config import federate_ingress_active, resolved_federate_id
@@ -512,6 +515,7 @@ def register_ingress_gate_runtime() -> None:
     async def federate_peer_sync_shutdown() -> None:
         await stop_loop_lag_probe()
         await stop_federate_peer_bot_sync_loop()
+        await stop_gate_queue_config_refresh_loop()
         shutdown_gate_executor()
 
     _GATE_REGISTERED = True

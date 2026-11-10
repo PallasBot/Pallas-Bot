@@ -71,6 +71,13 @@ def test_dispatch_env_float_applies_minimum(monkeypatch: pytest.MonkeyPatch) -> 
     assert config.dispatch_env_float("PALLAS_X", default=1.0, minimum=0.5) == 0.5
 
 
+@pytest.mark.parametrize("raw", ["inf", "-inf", "nan"])
+def test_dispatch_env_float_rejects_non_finite_values(monkeypatch: pytest.MonkeyPatch, raw: str) -> None:
+    monkeypatch.setattr(config, "dispatch_env_raw", lambda _key: raw)
+
+    assert config.dispatch_env_float("PALLAS_X", default=1.0, minimum=0.5) == 1.0
+
+
 def test_lane_defaults_follow_fleet_scale_and_pool_budget(monkeypatch: pytest.MonkeyPatch) -> None:
     env_values = {"PG_POOL_SIZE": "12", "PG_MAX_OVERFLOW": "8"}
     monkeypatch.setattr(config, "dispatch_env_raw", env_values.get)

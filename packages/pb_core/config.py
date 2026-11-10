@@ -35,6 +35,7 @@ _INGRESS_DISPATCH_FIELDS = frozenset({
     "dispatch_lanes_enabled",
     "lane_chat_adaptive_max",
     "send_queue_enabled",
+    "gate_queue_warn_ms",
 })
 
 _PB_CORE_SECTION_ORDER: tuple[tuple[str, frozenset[str]], ...] = (

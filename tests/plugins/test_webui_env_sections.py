@@ -87,6 +87,8 @@ def test_ingress_dispatch_section_payload_has_field_groups():
     field_names = {f["name"] for f in data["fields"]}
     assert "matcher_dispatch_enabled" in field_names
     assert "send_queue_enabled" in field_names
+    assert "gate_queue_warn_ms" in field_names
+    assert "gate_queue_warn_ms" in next(group["field_names"] for group in groups if group["id"] == "gate_queue")
     assert "send_queue_max_depth" not in field_names
 
 

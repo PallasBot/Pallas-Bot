@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from threading import Lock
 from typing import Self
 
@@ -80,7 +81,8 @@ def dispatch_env_float(name_upper: str, *, default: float, minimum: float) -> fl
     if raw is None:
         return default
     try:
-        return max(minimum, float(raw))
+        value = float(raw)
+        return max(minimum, value) if math.isfinite(value) else default
     except ValueError:
         return default
 
@@ -382,6 +384,16 @@ class IngressDispatchRuntimeConfig(BaseModel):
             "超时则放弃该次发送",
         ),
     )
+    gate_queue_warn_ms: float = Field(
+        default=1000.0,
+        ge=100.0,
+        allow_inf_nan=False,
+        description=field_help(
+            "gate 专用线程池排队多久后记录限频诊断",
+            "填毫秒，默认 1000，最小 100",
+            "仅影响日志；保存后立即生效",
+        ),
+    )
 
     @classmethod
     def from_env(cls) -> Self:
@@ -517,6 +529,11 @@ class IngressDispatchRuntimeConfig(BaseModel):
                 "PALLAS_SEND_QUEUE_ENQUEUE_TIMEOUT_SEC",
                 default=2.0,
                 minimum=0.0,
+            ),
+            gate_queue_warn_ms=dispatch_env_float(
+                "PALLAS_GATE_QUEUE_WARN_MS",
+                default=1000.0,
+                minimum=100.0,
             ),
         )
 

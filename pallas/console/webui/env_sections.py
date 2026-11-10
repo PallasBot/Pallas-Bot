@@ -198,6 +198,7 @@ def _ingress_dispatch_section() -> WebuiEnvSection:
             "send_queue_max_depth": "PALLAS_SEND_QUEUE_MAX_DEPTH",
             "send_queue_min_interval_ms": "PALLAS_SEND_QUEUE_MIN_INTERVAL_MS",
             "send_queue_enqueue_timeout_sec": "PALLAS_SEND_QUEUE_ENQUEUE_TIMEOUT_SEC",
+            "gate_queue_warn_ms": "PALLAS_GATE_QUEUE_WARN_MS",
         },
         skip_fields=_INGRESS_DISPATCH_SKIP,
     )
@@ -628,6 +629,11 @@ def _ingress_dispatch_payload_extras() -> dict[str, Any]:
                     "send_queue_enqueue_timeout_sec",
                 ],
             },
+            {
+                "id": "gate_queue",
+                "title": "门控线程池诊断",
+                "field_names": ["gate_queue_warn_ms"],
+            },
         ],
     }
 
@@ -694,11 +700,13 @@ def apply_webui_env_section_patch(section_id: str, patch: dict[str, Any]) -> dic
         try:
             from pallas.core.platform.ingress.dispatch_lanes import clear_dispatch_lanes_cache
             from pallas.core.platform.ingress.dispatch_runtime_config import clear_ingress_dispatch_runtime_config_cache
+            from pallas.core.platform.ingress.fast_path import set_gate_queue_warn_ms
             from pallas.core.platform.ingress.route_index import clear_route_index_cache
 
             clear_ingress_dispatch_runtime_config_cache()
             clear_dispatch_lanes_cache()
             clear_route_index_cache()
+            set_gate_queue_warn_ms(validated["gate_queue_warn_ms"])
         except Exception as e:
             logger.warning("配置保存后 ingress_dispatch 缓存刷新失败: {}", e)
     elif section_id == "llm":

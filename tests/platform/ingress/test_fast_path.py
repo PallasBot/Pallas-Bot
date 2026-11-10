@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import gc
+import time
 from queue import Queue
-from threading import Event, Thread
+from threading import Event, Thread, get_ident
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -88,6 +89,364 @@ async def test_gate_queue_wait_timeout_returns_not_started(isolated_gate_pool) -
     finally:
         release.set()
         await asyncio.gather(*submitted, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_gate_queue_warning_threshold_is_not_read_for_each_call(
+    isolated_gate_pool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reads = 0
+
+    def read_repo_setting(_key: str) -> str:
+        nonlocal reads
+        reads += 1
+        return "1000"
+
+    monkeypatch.setattr(fast_path, "repo_env_raw_value", read_repo_setting)
+
+    await fast_path.run_gate_blocking(lambda: None)
+    await fast_path.run_gate_blocking(lambda: None)
+
+    assert reads == 0
+
+
+@pytest.mark.asyncio
+async def test_gate_queue_tombstone_does_not_emit_slow_execution_warning(
+    isolated_gate_pool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(fast_path, "_GATE_ADMISSION_WAIT_SEC", 0.05)
+    monkeypatch.setattr(fast_path, "gate_queue_warn_ms", lambda: 100.0)
+    warnings: list[tuple] = []
+    monkeypatch.setattr(fast_path, "log_rate_limited", lambda *args, **kwargs: warnings.append(args))
+
+    started: Queue[None] = Queue()
+    release = Event()
+    executed: list[bool] = []
+
+    def blocked_call() -> None:
+        started.put(None)
+        if not release.wait(3):
+            raise TimeoutError("test gate worker was not released")
+
+    blockers = [asyncio.create_task(fast_path.run_gate_blocking(blocked_call)) for _ in range(6)]
+    queued = None
+    release_thread = None
+    try:
+        await wait_until(lambda: started.qsize() == fast_path._GATE_WORKERS)
+        queued = asyncio.create_task(fast_path.run_gate_blocking(lambda: executed.append(True)))
+        await wait_until(lambda: len(fast_path._submitted_work) == 7)
+
+        release_thread = Thread(target=lambda: (time.sleep(0.2), release.set()))
+        release_thread.start()
+        time.sleep(0.25)  # noqa: ASYNC251 - hold the loop so the worker can consume an expired tombstone.
+        assert await queued is fast_path.GateNotStarted.WAIT_TIMEOUT
+    finally:
+        release.set()
+        await asyncio.gather(*blockers, return_exceptions=True)
+        if queued is not None:
+            await asyncio.gather(queued, return_exceptions=True)
+        if release_thread is not None:
+            release_thread.join(timeout=1)
+
+    assert executed == []
+    assert not any(len(args) > 2 and args[2] == "gate_pool_queue" for args in warnings)
+
+
+@pytest.mark.asyncio
+async def test_saturated_gate_logs_active_task_types_and_ages(
+    isolated_gate_pool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(fast_path, "_GATE_ADMISSION_WAIT_SEC", 0.05)
+    warnings: list[tuple] = []
+    monkeypatch.setattr(fast_path, "log_rate_limited", lambda *args, **kwargs: warnings.append(args))
+
+    started: Queue[None] = Queue()
+    release = Event()
+
+    def blocked_call() -> None:
+        started.put(None)
+        if not release.wait(3):
+            raise TimeoutError("test gate worker was not released")
+
+    blockers = [asyncio.create_task(fast_path.run_gate_blocking(blocked_call)) for _ in range(6)]
+    rejected = None
+    executed: list[str] = []
+
+    def should_not_run(secret: str) -> None:
+        executed.append(secret)
+
+    try:
+        await wait_until(lambda: started.qsize() == fast_path._GATE_WORKERS)
+        rejected = asyncio.create_task(fast_path.run_gate_blocking(should_not_run, "private-payload"))
+        assert await rejected is fast_path.GateNotStarted.WAIT_TIMEOUT
+    finally:
+        release.set()
+        await asyncio.gather(*blockers, return_exceptions=True)
+        if rejected is not None:
+            await asyncio.gather(rejected, return_exceptions=True)
+
+    diagnostic = next(args for args in warnings if len(args) > 2 and args[2] == "gate_pool_not_started")
+    assert "running tasks [{}]" in diagnostic[3]
+    assert diagnostic[6] == fast_path._GATE_WORKERS
+    assert diagnostic[7].count("blocked_call") == fast_path._GATE_WORKERS
+    assert "ms" in diagnostic[7]
+    assert "private-payload" not in repr(diagnostic)
+    assert executed == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("outcome", ["cancel", "exception"])
+async def test_slow_queued_execution_logs_once_on_cancel_or_exception(
+    isolated_gate_pool,
+    monkeypatch: pytest.MonkeyPatch,
+    outcome: str,
+) -> None:
+    monkeypatch.setattr(fast_path, "_GATE_ADMISSION_WAIT_SEC", 2.0)
+    monkeypatch.setattr(fast_path, "gate_queue_warn_ms", lambda: 50.0)
+    warnings: list[tuple] = []
+    monkeypatch.setattr(fast_path, "log_rate_limited", lambda *args, **kwargs: warnings.append(args))
+
+    blocker_started: Queue[None] = Queue()
+    release_blockers = Event()
+    release_queued_call = Event()
+    queued_started = Event()
+
+    def blocked_call() -> None:
+        blocker_started.put(None)
+        if not release_blockers.wait(3):
+            raise TimeoutError("test gate worker was not released")
+
+    def queued_call() -> None:
+        queued_started.set()
+        if outcome == "cancel":
+            if not release_queued_call.wait(3):
+                raise TimeoutError("test queued call was not released")
+            return
+        raise RuntimeError("injected queued call failure")
+
+    blockers = [asyncio.create_task(fast_path.run_gate_blocking(blocked_call)) for _ in range(6)]
+    queued = None
+    try:
+        await wait_until(lambda: blocker_started.qsize() == fast_path._GATE_WORKERS)
+        queued = asyncio.create_task(fast_path.run_gate_blocking(queued_call))
+        await wait_until(lambda: len(fast_path._submitted_work) == fast_path._GATE_WORKERS + 1)
+        await asyncio.sleep(0.08)
+        release_blockers.set()
+
+        if outcome == "cancel":
+            await wait_until(queued_started.is_set)
+            queued.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await queued
+        else:
+            with pytest.raises(RuntimeError, match="injected queued call failure"):
+                await queued
+    finally:
+        release_blockers.set()
+        release_queued_call.set()
+        await asyncio.gather(*blockers, return_exceptions=True)
+        if queued is not None:
+            await asyncio.gather(queued, return_exceptions=True)
+        await wait_until(lambda: not fast_path._active_gate_calls)
+
+    diagnostics = [
+        args for args in warnings if len(args) > 4 and args[2] == "gate_pool_queue" and args[4] == "queued_call"
+    ]
+    assert len(diagnostics) == 1
+    assert diagnostics[0][5] >= 50
+
+
+@pytest.mark.asyncio
+async def test_cancel_during_start_notification_logs_after_execution_completes(
+    isolated_gate_pool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(fast_path, "_GATE_ADMISSION_WAIT_SEC", 2.0)
+    monkeypatch.setattr(fast_path, "gate_queue_warn_ms", lambda: 50.0)
+    main_thread_id = get_ident()
+    warnings: list[tuple[tuple, int]] = []
+    monkeypatch.setattr(
+        fast_path,
+        "log_rate_limited",
+        lambda *args, **kwargs: warnings.append((args, get_ident())),
+    )
+
+    loop = asyncio.get_running_loop()
+    call_soon_threadsafe = loop.call_soon_threadsafe
+    notification_scheduled = Event()
+    allow_worker_to_continue = Event()
+    queued_started = Event()
+    release_queued_call = Event()
+    blocker_started: Queue[None] = Queue()
+    release_blockers = Event()
+
+    def blocked_call() -> None:
+        blocker_started.put(None)
+        if not release_blockers.wait(3):
+            raise TimeoutError("test gate worker was not released")
+
+    def queued_call() -> None:
+        queued_started.set()
+        if not release_queued_call.wait(3):
+            raise TimeoutError("test queued call was not released")
+
+    def pause_after_start_notification(callback, *args, **kwargs):
+        handle = call_soon_threadsafe(callback, *args, **kwargs)
+        owner = getattr(callback, "__self__", None)
+        if isinstance(owner, fast_path._GateCall) and owner.func is queued_call:
+            notification_scheduled.set()
+            if not allow_worker_to_continue.wait(3):
+                raise TimeoutError("test gate worker was not released after notification")
+        return handle
+
+    monkeypatch.setattr(loop, "call_soon_threadsafe", pause_after_start_notification)
+    blockers = [asyncio.create_task(fast_path.run_gate_blocking(blocked_call)) for _ in range(6)]
+    queued = None
+    target_call = None
+    try:
+        await wait_until(lambda: blocker_started.qsize() == fast_path._GATE_WORKERS)
+        queued = asyncio.create_task(fast_path.run_gate_blocking(queued_call))
+        await wait_until(lambda: len(fast_path._submitted_work) == fast_path._GATE_WORKERS + 1)
+        target_call = next(call for call in fast_path._submitted_work if call.func is queued_call)
+        await asyncio.sleep(0.08)
+        release_blockers.set()
+
+        assert await asyncio.wait_for(asyncio.to_thread(notification_scheduled.wait), timeout=1)
+        await wait_until(lambda: target_call.started_future.done())
+        await asyncio.sleep(0)
+        queued.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await queued
+        assert not any(args[2] == "gate_pool_queue" and args[4] == "queued_call" for args, _ in warnings)
+
+        allow_worker_to_continue.set()
+        await wait_until(queued_started.is_set)
+        release_queued_call.set()
+        await wait_until(lambda: target_call.execution_details()[1] is not None)
+        await wait_until(lambda: any(args[2] == "gate_pool_queue" for args, _ in warnings))
+    finally:
+        release_blockers.set()
+        allow_worker_to_continue.set()
+        release_queued_call.set()
+        await asyncio.gather(*blockers, return_exceptions=True)
+        if queued is not None:
+            await asyncio.gather(queued, return_exceptions=True)
+        await wait_until(lambda: not fast_path._active_gate_calls)
+
+    diagnostics = [
+        (args, thread_id)
+        for args, thread_id in warnings
+        if len(args) > 4 and args[2] == "gate_pool_queue" and args[4] == "queued_call"
+    ]
+    assert len(diagnostics) == 1
+    assert diagnostics[0][0][5] >= 50
+    assert diagnostics[0][1] == main_thread_id
+
+
+@pytest.mark.asyncio
+async def test_cancelled_queued_gate_tombstone_does_not_emit_execution_warning(
+    isolated_gate_pool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(fast_path, "_GATE_ADMISSION_WAIT_SEC", 2.0)
+    monkeypatch.setattr(fast_path, "gate_queue_warn_ms", lambda: 50.0)
+    warnings: list[tuple] = []
+    monkeypatch.setattr(fast_path, "log_rate_limited", lambda *args, **kwargs: warnings.append(args))
+
+    blocker_started: Queue[None] = Queue()
+    release = Event()
+    executed: list[bool] = []
+
+    def blocked_call() -> None:
+        blocker_started.put(None)
+        if not release.wait(3):
+            raise TimeoutError("test gate worker was not released")
+
+    def tombstone_call() -> None:
+        executed.append(True)
+
+    blockers = [asyncio.create_task(fast_path.run_gate_blocking(blocked_call)) for _ in range(6)]
+    queued = None
+    try:
+        await wait_until(lambda: blocker_started.qsize() == fast_path._GATE_WORKERS)
+        queued = asyncio.create_task(fast_path.run_gate_blocking(tombstone_call))
+        await wait_until(lambda: len(fast_path._submitted_work) == fast_path._GATE_WORKERS + 1)
+        queued.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await queued
+    finally:
+        release.set()
+        await asyncio.gather(*blockers, return_exceptions=True)
+        if queued is not None:
+            await asyncio.gather(queued, return_exceptions=True)
+        await wait_until(lambda: not fast_path._submitted_work)
+
+    assert executed == []
+    assert not any(len(args) > 4 and args[2] == "gate_pool_queue" and args[4] == "tombstone_call" for args in warnings)
+
+
+@pytest.mark.asyncio
+async def test_worker_config_refresh_picks_up_shared_settings_change(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from pallas.core.foundation.config import repo_settings, webui_export_toml
+
+    original = fast_path.gate_queue_warn_ms()
+    webui_path = tmp_path / "webui.json"
+    monkeypatch.setattr(repo_settings, "repo_webui_settings_path", lambda: webui_path)
+    monkeypatch.setattr(webui_export_toml, "export_webui_inspection_toml", lambda *_args: None)
+    monkeypatch.delenv("PALLAS_GATE_QUEUE_WARN_MS", raising=False)
+    repo_settings.clear_merged_repo_settings_cache()
+    repo_settings.upsert_repo_settings_items({"PALLAS_GATE_QUEUE_WARN_MS": "1000"})
+    worker_snapshot = repo_settings.merged_repo_settings_upper()
+    worker_revision = repo_settings._merged_settings_cache_rev
+    monkeypatch.setattr(fast_path, "_GATE_CONFIG_REFRESH_INTERVAL_SEC", 0.01, raising=False)
+    fast_path.set_gate_queue_warn_ms(1000.0)
+
+    fast_path.start_gate_queue_config_refresh_loop()
+    try:
+        await asyncio.sleep(0.03)
+        repo_settings.upsert_repo_settings_items({"PALLAS_GATE_QUEUE_WARN_MS": "2300.0"})
+        repo_settings._merged_settings_cache = worker_snapshot
+        repo_settings._merged_settings_cache_rev = worker_revision
+        fast_path.set_gate_queue_warn_ms(1000.0)
+        await wait_until(lambda: fast_path.gate_queue_warn_ms() == 2300.0)
+    finally:
+        await fast_path.stop_gate_queue_config_refresh_loop()
+        fast_path.set_gate_queue_warn_ms(original)
+        repo_settings.clear_merged_repo_settings_cache()
+
+
+@pytest.mark.asyncio
+async def test_active_gate_diagnostics_clean_up_after_cancel_and_exception(isolated_gate_pool) -> None:
+    started = Event()
+    release = Event()
+
+    def blocked_call() -> None:
+        started.set()
+        if not release.wait(3):
+            raise TimeoutError("test gate worker was not released")
+
+    task = asyncio.create_task(fast_path.run_gate_blocking(blocked_call))
+    try:
+        await wait_until(started.is_set)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert len(fast_path._active_gate_calls) == 1
+    finally:
+        release.set()
+        await asyncio.gather(task, return_exceptions=True)
+
+    await wait_until(lambda: not fast_path._active_gate_calls)
+
+    def fail_after_start() -> None:
+        raise RuntimeError("injected gate task failure")
+
+    with pytest.raises(RuntimeError, match="injected gate task failure"):
+        await fast_path.run_gate_blocking(fail_after_start)
+    assert not fast_path._active_gate_calls
 
 
 @pytest.mark.asyncio
