@@ -82,6 +82,64 @@ def test_merged_repo_settings_cache_by_disk_revision(tmp_path: Path, monkeypatch
     assert third["FOO"] == "v2_extra"
 
 
+def test_repo_settings_revision_stats_each_path_once_and_keeps_file_semantics(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = tmp_path / "pallas.toml"
+    config.write_text("x", encoding="utf-8")
+    webui_dir = tmp_path / "webui"
+    webui_dir.mkdir()
+    dotenv_link = tmp_path / ".env"
+    dotenv_link.symlink_to(config)
+    monkeypatch.setattr(rs, "repo_config_path", lambda: config)
+    monkeypatch.setattr(rs, "repo_webui_settings_path", lambda: webui_dir)
+    monkeypatch.setattr(rs, "repo_env_path", lambda: dotenv_link)
+    monkeypatch.setattr(rs, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(rs, "nonebot_repo_dotenv_environment", lambda: "prod")
+
+    original_stat = Path.stat
+    calls: dict[Path, int] = {}
+
+    def counted_stat(path: Path, *args, **kwargs):
+        calls[path] = calls.get(path, 0) + 1
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", counted_stat)
+    revision = rs.repo_settings_disk_revision()
+
+    assert all(calls.get(path) == 1 for path in (config, webui_dir, dotenv_link, tmp_path / ".env.prod"))
+    assert len(revision) == 2
+    assert revision[0] == revision[1]
+
+    stat_result = original_stat(config)
+    config.write_text("y", encoding="utf-8")
+    os.utime(config, ns=(stat_result.st_atime_ns, stat_result.st_mtime_ns + 1_000_000))
+    assert rs.repo_settings_disk_revision() != revision
+
+
+def test_repo_settings_revision_propagates_non_ignored_stat_errors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = tmp_path / "pallas.toml"
+    original_stat = Path.stat
+
+    def denied_stat(path: Path, *args, **kwargs):
+        if path == config:
+            raise PermissionError("permission denied")
+        return original_stat(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", denied_stat)
+    monkeypatch.setattr(rs, "repo_config_path", lambda: config)
+    monkeypatch.setattr(rs, "repo_webui_settings_path", lambda: tmp_path / "webui.json")
+    monkeypatch.setattr(rs, "repo_env_path", lambda: tmp_path / ".env")
+    monkeypatch.setattr(rs, "_REPO_ROOT", tmp_path)
+
+    with pytest.raises(PermissionError, match="permission denied"):
+        rs.repo_settings_disk_revision()
+
+
 def test_bootstrap_flatten(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     cfg = tmp_path / "pallas.toml"
     cfg.write_text(

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import logging
 import os
+import stat
 import tomllib
 from typing import TYPE_CHECKING, Any
 
@@ -343,8 +345,17 @@ def repo_settings_disk_revision() -> tuple[tuple[int, int], ...]:
         repo_env_path(),
         _REPO_ROOT / f".env.{nonebot_repo_dotenv_environment()}",
     ):
-        if path.is_file():
+        try:
             st = path.stat()
+        except OSError as exc:
+            if exc.errno not in (errno.ENOENT, errno.ENOTDIR, errno.EBADF, errno.ELOOP) and getattr(
+                exc, "winerror", None
+            ) not in (21, 123, 1921):
+                raise
+            continue
+        except ValueError:
+            continue
+        if stat.S_ISREG(st.st_mode):
             parts.append((st.st_mtime_ns, st.st_size))
     return tuple(parts)
 
