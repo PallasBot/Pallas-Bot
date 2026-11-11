@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import operator
 from typing import Any
@@ -472,7 +473,8 @@ async def enrich_system_with_person_facts(
 ) -> PersonFactsInjectionResult:
     if not group_id or not user_id:
         return PersonFactsInjectionResult(system_prompt=system_prompt)
-    facts = retrieve_person_facts_for_prompt(
+    facts = await asyncio.to_thread(
+        retrieve_person_facts_for_prompt,
         bot_id=bot_id,
         group_id=group_id,
         user_id=user_id,

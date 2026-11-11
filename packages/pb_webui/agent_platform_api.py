@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Header, HTTPException, Query
@@ -49,7 +50,9 @@ def register_agent_platform_router(
     ) -> JSONResponse:
         from pallas.product.llm.memory.person_facts import list_person_facts
 
-        items = list_person_facts(bot_id=bot_id, group_id=group_id, user_id=user_id, limit=limit)
+        items = await asyncio.to_thread(
+            list_person_facts, bot_id=bot_id, group_id=group_id, user_id=user_id, limit=limit
+        )
         return JSONResponse({"ok": True, "data": {"items": [item.model_dump() for item in items], "count": len(items)}})
 
     @router.post(f"{x}/llm/agent-platform/person-facts", include_in_schema=True)
@@ -67,7 +70,8 @@ def register_agent_platform_router(
         if bot_id <= 0 or user_id <= 0 or not content:
             raise HTTPException(status_code=400, detail="bot_id, user_id, content required")
         try:
-            item = save_person_fact(
+            item = await asyncio.to_thread(
+                save_person_fact,
                 bot_id=bot_id,
                 group_id=int(body.get("group_id") or 0),
                 user_id=user_id,
@@ -87,9 +91,14 @@ def register_agent_platform_router(
         x_pallas_token: str | None = Header(default=None, alias="X-Pallas-Token"),
     ) -> JSONResponse:
         check_write_token(plugin_config, x_pallas_token=x_pallas_token, token=token)
-        from pallas.product.llm.memory.person_facts import correct_person_fact
+        from pallas.product.llm.memory.person_facts import PersonFactsStoreError, correct_person_fact
 
-        item = correct_person_fact(str(body.get("fact_id") or ""), str(body.get("content") or ""))
+        try:
+            item = await asyncio.to_thread(
+                correct_person_fact, str(body.get("fact_id") or ""), str(body.get("content") or "")
+            )
+        except PersonFactsStoreError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
         if item is None:
             raise HTTPException(status_code=404, detail="fact not found")
         return JSONResponse({"ok": True, "data": item.model_dump()})

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any
 
 from pallas.product.llm.memory.person_facts import list_person_facts
@@ -52,10 +53,14 @@ async def handle_person_profile_query(
     if context is None or context.group_id is None:
         return {"ok": False, "error": "group_context_required"}
     user_id = int((arguments or {}).get("user_id") or context.user_id)
-    facts = [
-        fact.content
-        for fact in list_person_facts(bot_id=context.bot_id, group_id=context.group_id, user_id=user_id, limit=8)
-    ]
+    person_facts = await asyncio.to_thread(
+        list_person_facts,
+        bot_id=context.bot_id,
+        group_id=context.group_id,
+        user_id=user_id,
+        limit=8,
+    )
+    facts = [fact.content for fact in person_facts]
     profile = await retrieve_relationship_profile(context.bot_id, context.group_id, user_id)
     if profile is None:
         return {"ok": True, "result": {"user_id": user_id, "facts": facts}}

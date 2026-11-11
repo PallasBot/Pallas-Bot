@@ -27,11 +27,7 @@ from pallas.core.foundation.db import (
 from pallas.core.foundation.fs_lock import atomic_write_text
 from pallas.core.foundation.startup_report import register_startup_scheduled
 from pallas.core.platform.bot_runtime.roles import is_sharded_worker
-from pallas.product.llm.memory.person_facts import (
-    forget_group_person_facts_by_source,
-    forget_person_facts_by_source,
-    replace_person_fact_by_source,
-)
+from pallas.product.llm.memory.person_facts import replace_person_facts_by_scope_batch
 from pallas.product.llm.sender_identity import sender_kind
 
 if TYPE_CHECKING:
@@ -158,23 +154,34 @@ async def _scan_group_messages(
         )
         if not batch:
             break
-        for item in batch:
-            row_time = int(getattr(item, "time", 0) or 0)
-            message_id = int(getattr(item, "message_id", 0) or 0)
-            key = (row_time, message_id)
-            if key <= last_key:
-                continue
-            last_key = key
-            scanned += 1
-            raw = str(getattr(item, "raw_message", "") or "")
-            if "[CQ:image" not in raw:
-                continue
-            user_id = int(getattr(item, "user_id", 0) or 0)
-            if user_id <= 0 or sender_kind(user_id, self_bot_id=0) != "human":
-                continue
-            events.extend((user_id, code, row_time) for code in extract_image_cq_codes(raw))
+        last_key, batch_events, batch_scanned = await asyncio.to_thread(_scan_message_batch, batch, last_key)
+        events.extend(batch_events)
+        scanned += batch_scanned
         if len(batch) < batch_limit:
             break
+    return last_key, events, scanned
+
+
+def _scan_message_batch(
+    batch: list[object], last_key: tuple[int, int]
+) -> tuple[tuple[int, int], list[tuple[int, str, int]], int]:
+    events: list[tuple[int, str, int]] = []
+    scanned = 0
+    for item in batch:
+        row_time = int(getattr(item, "time", 0) or 0)
+        message_id = int(getattr(item, "message_id", 0) or 0)
+        key = (row_time, message_id)
+        if key <= last_key:
+            continue
+        last_key = key
+        scanned += 1
+        raw = str(getattr(item, "raw_message", "") or "")
+        if "[CQ:image" not in raw:
+            continue
+        user_id = int(getattr(item, "user_id", 0) or 0)
+        if user_id <= 0 or sender_kind(user_id, self_bot_id=0) != "human":
+            continue
+        events.extend((user_id, code, row_time) for code in extract_image_cq_codes(raw))
     return last_key, events, scanned
 
 
@@ -275,8 +282,13 @@ async def _project_group_habits(
     cfg,
     bot_cache: dict[int, int],
     label_quota: int,
-) -> tuple[int, int]:
-    """把跨阈值的最爱表情包投影为人物事实（每人最多 top_k 条）；返回 (写入事实数, 补标入队数)。
+) -> tuple[
+    int,
+    int,
+    list[tuple[int, int, int, str, str, float]],
+    dict[tuple[int, int, int | None], list[str]],
+]:
+    """Return this group's fact projection plan after all its async lookups finish.
 
     投影输入 = 本轮有增量的键 ∪ 群内跨阈值候选（按群查询），按 user 取
     send_count 前 top_k；未标注的键主动借用 realtime 补标，下轮自愈。
@@ -302,24 +314,27 @@ async def _project_group_habits(
     candidates = await stat_repo.list_group_candidates(group_id=group_id, min_count=min_count, limit=None)
     for row in candidates:
         _consider(int(row.user_id), str(row.content_hash), int(row.send_count))
-    if not ranked:
-        bot_id = await _resolve_group_bot(group_id, bot_cache)
-        if bot_id > 0:
-            forget_group_person_facts_by_source(
-                bot_id=bot_id,
-                group_id=group_id,
-                sources=[_habit_fact_source(rank) for rank in range(1, _MAX_TOP_K + 1)],
-            )
-        return 0, 0
-
     bot_id = await _resolve_group_bot(group_id, bot_cache)
-    from pallas.product.llm.availability import llm_plugin_disabled_for_scope
+    if bot_id > 0:
+        from pallas.product.llm.availability import llm_plugin_disabled_for_scope
 
-    if bot_id > 0 and await llm_plugin_disabled_for_scope(bot_id, group_id):
-        return 0, 0
+        if await llm_plugin_disabled_for_scope(bot_id, group_id):
+            return 0, 0, [], {}
+    if not ranked:
+        if bot_id > 0:
+            return (
+                0,
+                0,
+                [],
+                {(bot_id, group_id, None): [_habit_fact_source(rank) for rank in range(1, _MAX_TOP_K + 1)]},
+            )
+        return 0, 0, [], {}
+
     facts = 0
     label_queued = 0
     label_cache: dict[str, object] = {}
+    replacements: list[tuple[int, int, int, str, str, float]] = []
+    forget_sources_by_scope: dict[tuple[int, int, int | None], list[str]] = {}
     for user_id in sorted(ranked):
         entries = sorted(ranked[user_id], key=lambda item: (-item[0], item[1]))[:top_k]
         for rank, (_count, content_hash) in enumerate(entries, start=1):
@@ -334,24 +349,14 @@ async def _project_group_habits(
                 continue
             content = f"常用表情包：{caption}" if rank <= 1 else f"也常发表情包：{caption}"
             if bot_id > 0:
-                replace_person_fact_by_source(
-                    bot_id=bot_id,
-                    group_id=group_id,
-                    user_id=user_id,
-                    source=_habit_fact_source(rank),
-                    content=content[:_MAX_FACT_LEN],
-                    confidence=0.8,
-                )
+                replacements.append((bot_id, group_id, user_id, _habit_fact_source(rank), content[:_MAX_FACT_LEN], 0.8))
                 facts += 1
         if bot_id > 0 and len(entries) < _MAX_TOP_K:
             # 产出缩水（阈值/K 调整）时清理多余的键控事实
-            forget_person_facts_by_source(
-                bot_id=bot_id,
-                group_id=group_id,
-                user_id=user_id,
-                sources=[_habit_fact_source(rank) for rank in range(len(entries) + 1, _MAX_TOP_K + 1)],
-            )
-    return facts, label_queued
+            forget_sources_by_scope[(bot_id, group_id, user_id)] = [
+                _habit_fact_source(rank) for rank in range(len(entries) + 1, _MAX_TOP_K + 1)
+            ]
+    return facts, label_queued, replacements, forget_sources_by_scope
 
 
 async def run_sticker_habit_pass() -> dict[str, int]:
@@ -370,13 +375,26 @@ async def run_sticker_habit_pass() -> dict[str, int]:
     stat_repo = make_user_sticker_stat_repository()
     image_repo = make_image_cache_repository()
     now_ts = int(time.time())
-    cursors = _load_sticker_habit_cursors()
+    cursors = await asyncio.to_thread(_load_sticker_habit_cursors)
     initial_cursor = _initial_sticker_habit_cursor(now_ts)
     group_ids = await _active_group_ids(repo, now_ts=now_ts, cursors=cursors)
 
     totals = {"groups": 0, "messages": 0, "images": 0, "facts": 0, "label_queued": 0}
     label_quota = _LABEL_ENQUEUE_GLOBAL_PER_PASS
     bot_cache: dict[int, int] = {}
+    fact_replacements: list[tuple[int, int, int, str, str, float]] = []
+    fact_forgets: dict[tuple[int, int, int | None], list[str]] = {}
+    planned_facts = 0
+
+    def _collect_projection(plan) -> None:
+        nonlocal planned_facts
+        facts, label_queued, replacements, forgets = plan
+        planned_facts += facts
+        totals["label_queued"] += label_queued
+        fact_replacements.extend(replacements)
+        for scope, sources in forgets.items():
+            fact_forgets.setdefault(scope, []).extend(sources)
+
     for group_id in sorted(group_ids):
         try:
             cursor = cursors.get(group_id)
@@ -387,7 +405,7 @@ async def run_sticker_habit_pass() -> dict[str, int]:
                 cursor = initial_cursor
             new_cursor, events, scanned = await _scan_group_messages(group_id=group_id, cursor=cursor, repo=repo)
             if scanned <= 0:
-                facts, label_queued = await _project_group_habits(
+                plan = await _project_group_habits(
                     group_id=group_id,
                     delta_pairs=set(),
                     stat_repo=stat_repo,
@@ -395,9 +413,8 @@ async def run_sticker_habit_pass() -> dict[str, int]:
                     bot_cache=bot_cache,
                     label_quota=label_quota,
                 )
-                totals["facts"] += facts
-                totals["label_queued"] += label_queued
-                label_quota -= label_queued
+                _collect_projection(plan)
+                label_quota -= plan[1]
                 continue
             totals["groups"] += 1
             totals["messages"] += scanned
@@ -407,8 +424,8 @@ async def run_sticker_habit_pass() -> dict[str, int]:
             totals["images"] += sum(count for count, _last in deltas.values())
             # 游标先于投影落盘：投影失败靠下轮 candidates 自愈，统计不能重复计数
             cursors[group_id] = new_cursor
-            _save_sticker_habit_cursors(cursors)
-            facts, label_queued = await _project_group_habits(
+            await asyncio.to_thread(_save_sticker_habit_cursors, cursors)
+            plan = await _project_group_habits(
                 group_id=group_id,
                 delta_pairs=set(deltas.keys()),
                 stat_repo=stat_repo,
@@ -416,11 +433,21 @@ async def run_sticker_habit_pass() -> dict[str, int]:
                 bot_cache=bot_cache,
                 label_quota=label_quota,
             )
-            totals["facts"] += facts
-            totals["label_queued"] += label_queued
-            label_quota -= label_queued
+            _collect_projection(plan)
+            label_quota -= plan[1]
         except Exception as exc:
             logger.warning("表情包习惯扫描群 [{}] 失败：{}", group_id, exc)
+    if fact_replacements or fact_forgets:
+        try:
+            await asyncio.to_thread(
+                replace_person_facts_by_scope_batch,
+                replacements=fact_replacements,
+                forget_sources_by_scope=fact_forgets,
+            )
+        except Exception as exc:
+            logger.warning("表情包习惯人物事实批量投影失败：{}", exc)
+        else:
+            totals["facts"] = planned_facts
     await _prune_sticker_habit_stats(now_ts=now_ts, stat_repo=stat_repo)
     if totals["messages"] > 0:
         logger.info(
@@ -461,11 +488,11 @@ def _mark_sticker_habit_prune_done(now_ts: int) -> None:
 
 async def _prune_sticker_habit_stats(*, now_ts: int, stat_repo) -> int:
     """每天清理一次冷数据：只发过一两次、且长期未再发送的统计行。"""
-    if not _should_run_sticker_habit_prune(now_ts):
+    if not await asyncio.to_thread(_should_run_sticker_habit_prune, now_ts):
         return 0
     try:
         deleted = await stat_repo.delete_cold(before_ts=now_ts - _PRUNE_AFTER_DAYS * 86400, max_count=_PRUNE_MAX_COUNT)
-        _mark_sticker_habit_prune_done(now_ts)
+        await asyncio.to_thread(_mark_sticker_habit_prune_done, now_ts)
         if deleted > 0:
             logger.info("表情包习惯统计清理完成，移除 [{}] 条冷数据", deleted)
         return int(deleted)

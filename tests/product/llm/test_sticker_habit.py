@@ -92,7 +92,6 @@ class _DummyStatRepo:
         ]
 
 
-
 class _DummyImageRepo:
     def __init__(self, hash_by_code):
         self._hash_by_code = hash_by_code
@@ -194,6 +193,65 @@ async def test_scan_group_pays_attention_to_cursor_budget(habit_env) -> None:
     # 游标 (now-996, 0) 之后：time > 游标秒的 7 行 + 同秒 mid>0 的 1 行
     assert scanned == 8
     assert events == []
+
+
+@pytest.mark.asyncio
+async def test_scan_message_parsing_does_not_block_event_loop(habit_env, monkeypatch) -> None:
+    import asyncio
+    from threading import Event
+
+    mod = habit_env.mod
+    callback_ran = Event()
+    callback_observed_during_parse: list[bool] = []
+    loop = asyncio.get_running_loop()
+    loop.call_later(0.01, callback_ran.set)
+
+    def slow_extract(_raw_message: str) -> list[str]:
+        time.sleep(0.05)
+        callback_observed_during_parse.append(callback_ran.is_set())
+        return [CAT_CODE]
+
+    monkeypatch.setattr(mod, "extract_image_cq_codes", slow_extract)
+    repo = _DummyMessageRepo([_msg(1, 100, CAT_CQ, time_ts=int(time.time()))])
+
+    _cursor, events, scanned = await mod._scan_group_messages(group_id=1, cursor=(0, 0), repo=repo)
+
+    assert callback_observed_during_parse == [True]
+    assert scanned == 1
+    assert events[0][:2] == (100, CAT_CODE)
+
+
+@pytest.mark.asyncio
+async def test_run_pass_cursor_read_does_not_block_event_loop(habit_env, monkeypatch) -> None:
+    import asyncio
+    from threading import Event
+
+    mod = habit_env.mod
+    callback_ran = Event()
+    callback_observed_during_read: list[bool] = []
+    loop = asyncio.get_running_loop()
+    loop.call_later(0.01, callback_ran.set)
+
+    def slow_load() -> dict[int, tuple[int, int]]:
+        time.sleep(0.05)
+        callback_observed_during_read.append(callback_ran.is_set())
+        return {}
+
+    async def no_groups(*_args, **_kwargs) -> set[int]:
+        return set()
+
+    async def no_prune(*_args, **_kwargs) -> int:
+        return 0
+
+    monkeypatch.setattr(mod, "_load_sticker_habit_cursors", slow_load)
+    monkeypatch.setattr(mod, "_active_group_ids", no_groups)
+    monkeypatch.setattr(mod, "_prune_sticker_habit_stats", no_prune)
+    monkeypatch.setattr(mod, "make_message_repository", lambda: _DummyMessageRepo([]))
+    monkeypatch.setattr("pallas.product.llm.availability.llm_calls_enabled", lambda *_args: True)
+
+    await mod.run_sticker_habit_pass()
+
+    assert callback_observed_during_read == [True]
 
 
 @pytest.mark.asyncio
@@ -386,6 +444,237 @@ async def test_project_group_habits_does_not_starve_other_users(habit_env, monke
 
 
 @pytest.mark.asyncio
+async def test_run_pass_reads_person_facts_once_for_many_users(habit_env, monkeypatch) -> None:
+    from pallas.product.llm.memory import person_facts
+
+    mod = habit_env.mod
+    now = int(time.time())
+    habit_env.tmp_path.joinpath("group_cursors.json").write_text(json.dumps({"777": [now - 1000, 0]}), encoding="utf-8")
+    messages = [
+        _msg((user_id - 100) * 10 + message_id, user_id, CAT_CQ, time_ts=now - 100 + (user_id - 100) * 10 + message_id)
+        for user_id in range(100, 110)
+        for message_id in range(1, 6)
+    ]
+    monkeypatch.setattr(mod, "make_message_repository", lambda: _DummyMessageRepo(messages))
+
+    fact_path = habit_env.tmp_path / "person_facts.json"
+    original_read = person_facts._read_fact_items_unlocked
+    fact_reads = 0
+
+    def count_fact_reads(path, *args, **kwargs):
+        nonlocal fact_reads
+        if path == fact_path:
+            fact_reads += 1
+        return original_read(path, *args, **kwargs)
+
+    monkeypatch.setattr(person_facts, "_read_fact_items_unlocked", count_fact_reads)
+
+    totals = await mod.run_sticker_habit_pass()
+
+    assert totals["facts"] == 10
+    assert fact_reads == 1
+
+
+@pytest.mark.asyncio
+async def test_run_pass_batches_noop_projection_for_300_groups_and_large_store(habit_env, monkeypatch) -> None:
+    from pallas.product.llm.memory import person_facts
+
+    now = int(time.time())
+    group_ids = range(1, 301)
+    facts = [
+        person_facts.PersonFact(
+            bot_id=101,
+            group_id=group_id,
+            user_id=100,
+            content="常用表情包：一只歪头的橘猫",
+            source="sticker_habit",
+        )
+        for group_id in group_ids
+    ]
+    facts.extend(
+        person_facts.PersonFact(
+            bot_id=999,
+            group_id=999,
+            user_id=1000 + index,
+            content=f"filler-{index}",
+            source="conversation",
+        )
+        for index in range(6561 - len(facts))
+    )
+    facts_path = habit_env.tmp_path / "person_facts.json"
+    facts_path.write_text(
+        json.dumps({"items": [fact.model_dump(mode="json") for fact in facts]}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    before = facts_path.read_bytes()
+    monkeypatch.setattr(person_facts, "_store_path", lambda: facts_path)
+    monkeypatch.setattr(
+        habit_env.mod,
+        "make_message_repository",
+        lambda: _DummyMessageRepo([]),
+    )
+    habit_env.tmp_path.joinpath("group_cursors.json").write_text(
+        json.dumps({str(group_id): [now - 100, 0] for group_id in group_ids}), encoding="utf-8"
+    )
+    for group_id in group_ids:
+        habit_env.stat_repo.rows[(group_id, 100, CAT_HASH)] = {"send_count": 5, "last_sent_at": now - 1}
+
+    async def scope_enabled(*_args) -> bool:
+        return False
+
+    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", scope_enabled)
+    original_read = person_facts._read_fact_items_unlocked
+    fact_reads = 0
+
+    def count_fact_reads(path):
+        nonlocal fact_reads
+        if path == facts_path:
+            fact_reads += 1
+        return original_read(path)
+
+    monkeypatch.setattr(person_facts, "_read_fact_items_unlocked", count_fact_reads)
+
+    totals = await habit_env.mod.run_sticker_habit_pass()
+
+    assert totals["facts"] == 300
+    assert totals["messages"] == 0
+    assert fact_reads == 1
+    assert facts_path.read_bytes() == before
+
+
+@pytest.mark.asyncio
+async def test_run_pass_keeps_group_failure_isolated_with_batched_fact_write(habit_env, monkeypatch) -> None:
+    mod = habit_env.mod
+    now = int(time.time())
+    habit_env.tmp_path.joinpath("group_cursors.json").write_text(
+        json.dumps({"777": [now - 100, 0], "778": [now - 100, 0]}), encoding="utf-8"
+    )
+    habit_env.stat_repo.rows[(777, 100, CAT_HASH)] = {"send_count": 5, "last_sent_at": now}
+    habit_env.stat_repo.rows[(778, 200, CAT_HASH)] = {"send_count": 5, "last_sent_at": now}
+    original_list_candidates = habit_env.stat_repo.list_group_candidates
+
+    async def fail_one_group(*, group_id, min_count, limit=5):
+        if group_id == 777:
+            raise RuntimeError("simulated group query failure")
+        return await original_list_candidates(group_id=group_id, min_count=min_count, limit=limit)
+
+    monkeypatch.setattr(habit_env.stat_repo, "list_group_candidates", fail_one_group)
+
+    async def scope_enabled(*_args) -> bool:
+        return False
+
+    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", scope_enabled)
+    monkeypatch.setattr(mod, "make_message_repository", lambda: _DummyMessageRepo([]))
+
+    totals = await mod.run_sticker_habit_pass()
+
+    from pallas.product.llm.memory.person_facts import list_person_facts
+
+    assert totals["facts"] == 1
+    assert list_person_facts(bot_id=101, group_id=777) == []
+    assert list_person_facts(bot_id=101, group_id=778, user_id=200)[0].content == "常用表情包：一只歪头的橘猫"
+
+
+@pytest.mark.asyncio
+async def test_run_pass_reports_no_facts_when_final_batch_write_fails(habit_env, monkeypatch) -> None:
+    mod = habit_env.mod
+    now = int(time.time())
+    habit_env.tmp_path.joinpath("group_cursors.json").write_text(
+        json.dumps({"777": [now - 100, 0], "778": [now - 100, 0]}), encoding="utf-8"
+    )
+    habit_env.stat_repo.rows[(777, 100, CAT_HASH)] = {"send_count": 5, "last_sent_at": now}
+    habit_env.stat_repo.rows[(778, 200, CAT_HASH)] = {"send_count": 5, "last_sent_at": now}
+    monkeypatch.setattr(mod, "make_message_repository", lambda: _DummyMessageRepo([]))
+
+    async def scope_enabled(*_args) -> bool:
+        return False
+
+    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", scope_enabled)
+    writes: list[dict] = []
+
+    def fail_batch_write(**kwargs):
+        writes.append(kwargs)
+        raise OSError("simulated final batch failure")
+
+    monkeypatch.setattr(mod, "replace_person_facts_by_scope_batch", fail_batch_write)
+
+    totals = await mod.run_sticker_habit_pass()
+
+    assert totals["facts"] == 0
+    assert len(writes) == 1
+    assert {replacement[1] for replacement in writes[0]["replacements"]} == {777, 778}
+
+
+@pytest.mark.asyncio
+async def test_run_pass_does_not_clear_facts_for_disabled_empty_group(habit_env, monkeypatch) -> None:
+    from pallas.product.llm.memory.person_facts import list_person_facts, save_person_fact
+
+    now = int(time.time())
+    habit_env.tmp_path.joinpath("group_cursors.json").write_text(json.dumps({"777": [now - 100, 0]}), encoding="utf-8")
+    saved = save_person_fact(
+        bot_id=101,
+        group_id=777,
+        user_id=100,
+        source="sticker_habit",
+        content="常用表情包：一只歪头的橘猫",
+    )
+    monkeypatch.setattr(habit_env.mod, "make_message_repository", lambda: _DummyMessageRepo([]))
+
+    async def disabled(*_args) -> bool:
+        return True
+
+    monkeypatch.setattr("pallas.product.llm.availability.llm_plugin_disabled_for_scope", disabled)
+
+    totals = await habit_env.mod.run_sticker_habit_pass()
+
+    assert totals["facts"] == 0
+    fact = next(
+        fact for fact in list_person_facts(bot_id=101, group_id=777, user_id=100) if fact.fact_id == saved.fact_id
+    )
+    assert fact.status == "active"
+
+
+@pytest.mark.asyncio
+async def test_run_pass_recovers_projection_after_cancel_without_new_messages(habit_env, monkeypatch) -> None:
+    import asyncio
+
+    from pallas.product.llm.memory.person_facts import list_person_facts
+
+    mod = habit_env.mod
+    now = int(time.time())
+    habit_env.tmp_path.joinpath("group_cursors.json").write_text(json.dumps({"777": [now - 1000, 0]}), encoding="utf-8")
+    messages = [_msg(index + 1, 100, CAT_CQ, time_ts=now - 100 + index, bot_id=1) for index in range(5)]
+    monkeypatch.setattr(mod, "make_message_repository", lambda: _DummyMessageRepo(messages))
+    original_candidates = habit_env.stat_repo.list_group_candidates
+    candidates_started = asyncio.Event()
+
+    async def wait_before_projection(*, group_id, min_count, limit=5):
+        candidates_started.set()
+        await asyncio.Event().wait()
+        return await original_candidates(group_id=group_id, min_count=min_count, limit=limit)
+
+    monkeypatch.setattr(habit_env.stat_repo, "list_group_candidates", wait_before_projection)
+    task = asyncio.create_task(mod.run_sticker_habit_pass())
+    await asyncio.wait_for(candidates_started.wait(), timeout=2)
+    cursor = json.loads(habit_env.tmp_path.joinpath("group_cursors.json").read_text(encoding="utf-8"))
+    assert cursor["777"] == [now - 96, 5]
+
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    monkeypatch.setattr(habit_env.stat_repo, "list_group_candidates", original_candidates)
+    monkeypatch.setattr(mod, "make_message_repository", lambda: _DummyMessageRepo([]))
+    totals = await mod.run_sticker_habit_pass()
+
+    assert totals["messages"] == 0
+    assert totals["facts"] == 1
+    assert [fact.content for fact in list_person_facts(bot_id=101, group_id=777, user_id=100)] == [
+        "常用表情包：一只歪头的橘猫"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_run_pass_clears_habits_when_threshold_rises(habit_env, monkeypatch) -> None:
     mod = habit_env.mod
     now = int(time.time())
@@ -434,6 +723,7 @@ async def test_enqueue_label_respects_gates(monkeypatch) -> None:
     monkeypatch.setattr(jobs_mod, "lazy_sticker_labels_paused", lambda: False)
     monkeypatch.setattr(jobs_mod, "sticker_label_circuit_open", lambda: False)
     monkeypatch.setattr(jobs_mod, "sticker_label_realtime_budget_ok", lambda: True)
+    monkeypatch.setattr("pallas.product.llm.availability.llm_calls_enabled", lambda *_args: True)
     monkeypatch.setattr("pallas.core.platform.work_jobs.runtime.build_work_job_store", lambda: _FakeStore())
     monkeypatch.setattr("pallas.product.llm.task_metrics.record_bot_llm_task", lambda *a, **k: None)
 

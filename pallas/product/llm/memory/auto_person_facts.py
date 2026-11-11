@@ -163,13 +163,14 @@ async def maybe_auto_save_person_facts(
         facts = _parse_facts(str(message.get("content") or "") if isinstance(message, dict) else "")
         if not facts:
             return 0
-        existing = _existing_contents(bot_id=bid, group_id=gid, user_id=uid)
+        existing = await asyncio.to_thread(_existing_contents, bot_id=bid, group_id=gid, user_id=uid)
         saved = 0
         for content in facts:
             if content.casefold() in existing:
                 continue
             try:
-                save_person_fact(
+                await asyncio.to_thread(
+                    save_person_fact,
                     bot_id=bid,
                     group_id=gid,
                     user_id=uid,
